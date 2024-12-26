@@ -75,3 +75,7 @@ Server/
 .vscode/c_cpp_properties.json
 
 .DS_Store
+
+bin/ReShade.log
+
+bin/ReShade.log1
