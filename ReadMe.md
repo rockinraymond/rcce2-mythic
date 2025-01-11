@@ -96,3 +96,6 @@ We have included an audio converter called Freemake in the extras folder. This t
 
 ### Visual Studio
 In order to edit and compile the BlitzBasic compilers you will need to open their solutions in Visual Studio https://visualstudio.microsoft.com/
+
+### ReShade
+To reinstall ReShade you can do so by running the ReShade setup in the extras folder. To open the ReShade control panel in the Client press Shift+F12 when running the client.
