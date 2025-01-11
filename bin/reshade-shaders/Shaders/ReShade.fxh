@@ -4,10 +4,6 @@
 
 #pragma once
 
-#if !defined(__RESHADE__) || __RESHADE__ < 30000
-	#error "ReShade 3.0+ is required to use this header file"
-#endif
-
 #ifndef RESHADE_DEPTH_INPUT_IS_UPSIDE_DOWN
 	#define RESHADE_DEPTH_INPUT_IS_UPSIDE_DOWN 0
 #endif

@@ -1,9 +1,5 @@
 #pragma once
 
-#if !defined(__RESHADE__) || __RESHADE__ < 30000
-#error "ReShade 3.0+ is required to use this header file"
-#endif
-
 #define RESHADE_VERSION(major,minor,build) (10000 * (major) + 100 * (minor) + (build))
 #define SUPPORTED_VERSION(major,minor,build) (__RESHADE__ >= RESHADE_VERSION(major,minor,build))
 
