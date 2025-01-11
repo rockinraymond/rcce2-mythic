@@ -72,7 +72,17 @@ BlitzForge is a custom version of Blitz3D specifically tailored for RealmCrafter
 BlitzRCPlus is a custom version of BlitzPlus specifically tailored for RealmCrafter: Community Edition. The [source](compiler\BlitzPlus\src) for this is included in the compilers folder.
 
 ### VSCode
-Blitz Syntax Plugin Link: https://marketplace.visualstudio.com/items?itemName=dones.blitz3d
+Blitz Syntax Plugin code is located in a [submodule](extras\vscode-blitz-forge)
+
+#### Build Instructions
+1. cd extras\vscode-blitz-forge
+1. nvm use 22.10.0
+1. npm install
+1. npm run build
+1. Open VSCode
+1. Press Ctrl+Shift+P
+1. Type "Install from VSIX"
+1. Select the blitzforge .vsix file
 
 You can compile, debug, test, run and publish via the VSCode launch configurations.
 
