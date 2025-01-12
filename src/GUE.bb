@@ -10233,24 +10233,7 @@ End Function
 
 ; Copies a directory and all its subdirectories (RECURSIVE)
 Function CopyTree(Dir$, DestinationDir$)
-
-	If FileType(DestinationDir$) = 0 Then CreateDir(DestinationDir$)
-
-	D = ReadDir(Dir$)
-	If D = 0 Then Return
-	Path$ = NextFile$(D)
-	While Len(Path$) > 0
-		If Path$ <> "." And Path$ <> ".."
-			If FileType(Dir$ + "\" + Path$) = 2
-				CopyTree(Dir$ + "\" + Path$, DestinationDir$ + "\" + Path$)
-			Else
-				CopyFile(Dir$ + "\" + Path$, DestinationDir$ + "\" + Path$)
-			EndIf
-		EndIf
-		Path$ = NextFile$(D)
-	Wend
-	CloseDir(D)
-
+	CopyDir(Dir$, DestinationDir$)
 End Function
 
 ; Copies a file, but deletes the destination first if it already exists

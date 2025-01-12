@@ -37,24 +37,7 @@ Type Filesystem
 
 	; Copies a directory and all its subdirectories (RECURSIVE)
 	Method copyTree(Dir$, DestinationDir$)
-
-		If FileType(DestinationDir$) = 0 Then CreateDir(DestinationDir$)
-
-		local D.BBDir = ReadDir(Dir$)
-		If D = Null Then Return
-		local Path$ = NextFile$(D)
-		While Len(Path$) > 0
-			If Path$ <> "." And Path$ <> ".."
-				If FileType(Dir$ + "\" + Path$) = 2
-					Filesystem::CopyTree(self,Dir$ + "\" + Path$, DestinationDir$ + "\" + Path$)
-				Else
-					CopyFile(Dir$ + "\" + Path$, DestinationDir$ + "\" + Path$)
-				EndIf
-			EndIf
-			Path$ = NextFile$(D)
-		Wend
-		CloseDir(D)
-
+		CopyDir(Dir$, DestinationDir$)
 	End Method
 
 	Method safeClearFile(f.File)
