@@ -76,6 +76,10 @@ Server/
 
 .DS_Store
 
+bin/tools/FontGen/Title.bmp
+
+bin/tools/FontGen/Title.dat
+
 bin/ReShade.log
 
 bin/ReShade.log1
