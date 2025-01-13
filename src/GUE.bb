@@ -6289,7 +6289,7 @@ Cls
 						IsEncrypted = False
 
 						; Copy file/folder if required
-						If Instr(App\CurrentFile$, CurrentDir$() + "Data\Meshes\") = 0 ;TODO: If RootDir is changed this may break
+						If Instr(App\CurrentFile$, "Data\Meshes\") = 0 ;TODO: If RootDir is changed this may break
 							Filename$ = App\CurrentFile$
 							If MediaFolder$ <> "" Then Filename$ = MediaFolder$ + "\" + Filename$
 							For i = Len(App\CurrentFile$) To 1 Step -1
@@ -6305,7 +6305,12 @@ Cls
 								CopyTree(App\CurrentFile$, "Data\Meshes\" + Filename$)
 							EndIf
 						Else
-							Filename$ = Right$(App\CurrentFile$, Len(App\CurrentFile$) - Len(CurrentDir$() + "Data\Meshes\")) ;TODO: If RootDir is changed this may break
+							Filename$ = Right$(App\CurrentFile$, Len(App\CurrentFile$) - Len("Data\Meshes\")) ;TODO: If RootDir is changed this may break
+						EndIf
+
+						; Remove trailing slash
+						If Right$(Filename$, 1) = "\"
+							Filename$ = Left$(Filename$, Len(Filename$) - 1)
 						EndIf
 
 						; Single file
