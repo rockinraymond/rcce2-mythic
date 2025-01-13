@@ -6313,10 +6313,6 @@ Cls
 							Filename$ = Left$(Filename$, Len(Filename$) - 1)
 						EndIf
 
-						; Remove trailing slash
-						If Right$(Filename$, 1) = "\"
-							Filename$ = Left$(Filename$, Len(Filename$) - 1)
-						EndIf
 
 						; Single file
 						If FileType("Data\Meshes\" + Filename$) = 1
@@ -6448,6 +6444,11 @@ Cls
 							EndIf
 						Else
 							Filename$ = Right$(App\CurrentFile$, Len(App\CurrentFile$) - Len("Data\Music\")) ;TODO: If RootDir is changed this may break
+						EndIf
+
+							; Remove trailing slash
+						If Right$(Filename$, 1) = "\"
+							Filename$ = Left$(Filename$, Len(Filename$) - 1)
 						EndIf
 
 						; Single file
