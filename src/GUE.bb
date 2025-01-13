@@ -6404,7 +6404,6 @@ Cls
 						If Right$(Filename$, 1) = "\"
 							Filename$ = Left$(Filename$, Len(Filename$) - 1)
 						EndIf
-						
 
 						; Single file
 						If FileType("Data\Sounds\" + Filename$) = 1
