@@ -6340,7 +6340,6 @@ Cls
 
 						; Copy file/folder if required
 						If Instr(App\CurrentFile$, "Data\Textures\") = 0 ;TODO: If RootDir is changed this may break
-						If Instr(App\CurrentFile$, "Data\Textures\") = 0 ;TODO: If RootDir is changed this may break
 							Filename$ = App\CurrentFile$
 							If MediaFolder$ <> "" Then Filename$ = MediaFolder$ + "\" + Filename$
 							For i = Len(App\CurrentFile$) To 1 Step -1
