@@ -6289,8 +6289,8 @@ Cls
 						IsEncrypted = False
 
 						; Remove trailing slash
-						If Right$(Filename$, 1) = "\"
-							Filename$ = Left$(Filename$, Len(Filename$) - 1)
+						If Right$(App\CurrentFile$, 1) = "\"
+							App\CurrentFile$ = Left$(App\CurrentFile$, Len(App\CurrentFile$) - 1)
 						EndIf
 
 						; Copy file/folder if required
@@ -6335,7 +6335,6 @@ Cls
 
 						; Remove trailing slash
 						If Right$(App\CurrentFile$, 1) = "\"
-							DebugLog "Trailing slash found"
 							App\CurrentFile$ = Left$(App\CurrentFile$, Len(App\CurrentFile$) - 1)
 						EndIf
 
@@ -6381,8 +6380,8 @@ Cls
 						Is3D = SoundDialog()
 
 						; Remove trailing slash
-						If Right$(Filename$, 1) = "\"
-							Filename$ = Left$(Filename$, Len(Filename$) - 1)
+						If Right$(App\CurrentFile$, 1) = "\"
+							App\CurrentFile$ = Left$(App\CurrentFile$, Len(App\CurrentFile$) - 1)
 						EndIf
 
 						; Copy file/folder if required
@@ -6426,8 +6425,8 @@ Cls
 					If Result = True
 
 						; Remove trailing slash
-						If Right$(Filename$, 1) = "\"
-							Filename$ = Left$(Filename$, Len(Filename$) - 1)
+						If Right$(App\CurrentFile$, 1) = "\"
+							App\CurrentFile$ = Left$(App\CurrentFile$, Len(App\CurrentFile$) - 1)
 						EndIf
 
 						; Copy file/folder if required
