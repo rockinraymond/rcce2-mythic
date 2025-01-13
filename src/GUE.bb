@@ -6313,6 +6313,11 @@ Cls
 							Filename$ = Left$(Filename$, Len(Filename$) - 1)
 						EndIf
 
+						; Remove trailing slash
+						If Right$(Filename$, 1) = "\"
+							Filename$ = Left$(Filename$, Len(Filename$) - 1)
+						EndIf
+
 						; Single file
 						If FileType("Data\Meshes\" + Filename$) = 1
 							AddMeshToManager(Filename$, IsAnim, IsEncrypted)
@@ -6334,7 +6339,7 @@ Cls
 						Flags = TextureDialog()
 
 						; Copy file/folder if required
-						If Instr(App\CurrentFile$, CurrentDir$() + "Data\Textures\") = 0 ;TODO: If RootDir is changed this may break
+						If Instr(App\CurrentFile$, "Data\Textures\") = 0 ;TODO: If RootDir is changed this may break
 							Filename$ = App\CurrentFile$
 							If MediaFolder$ <> "" Then Filename$ = MediaFolder$ + "\" + Filename$
 							For i = Len(App\CurrentFile$) To 1 Step -1
@@ -6350,7 +6355,12 @@ Cls
 								CopyTree(App\CurrentFile$, "Data\Textures\" + Filename$)
 							EndIf
 						Else
-							Filename$ = Right$(App\CurrentFile$, Len(App\CurrentFile$) - Len(CurrentDir$() + "Data\Textures\")) ;TODO: If RootDir is changed this may break
+							Filename$ = Right$(App\CurrentFile$, Len(App\CurrentFile$) - Len("Data\Textures\")) ;TODO: If RootDir is changed this may break
+						EndIf
+
+						; Remove trailing slash
+						If Right$(Filename$, 1) = "\"
+							Filename$ = Left$(Filename$, Len(Filename$) - 1)
 						EndIf
 
 						; Single file
@@ -6375,7 +6385,7 @@ Cls
 						Is3D = SoundDialog()
 
 						; Copy file/folder if required
-						If Instr(App\CurrentFile$, CurrentDir$() + "Data\Sounds\") = 0 ;TODO: If RootDir is changed this may break
+						If Instr(App\CurrentFile$, "Data\Sounds\") = 0 ;TODO: If RootDir is changed this may break
 							Filename$ = App\CurrentFile$
 							If MediaFolder$ <> "" Then Filename$ = MediaFolder$ + "\" + Filename$
 							For i = Len(App\CurrentFile$) To 1 Step -1
@@ -6391,8 +6401,14 @@ Cls
 								CopyTree(App\CurrentFile$, "Data\Sounds\" + Filename$)
 							EndIf
 						Else
-							Filename$ = Right$(App\CurrentFile$, Len(App\CurrentFile$) - Len(CurrentDir$() + "Data\Sounds\")) ;TODO: If RootDir is changed this may break
+							Filename$ = Right$(App\CurrentFile$, Len(App\CurrentFile$) - Len("Data\Sounds\")) ;TODO: If RootDir is changed this may break
 						EndIf
+
+						; Remove trailing slash
+						If Right$(Filename$, 1) = "\"
+							Filename$ = Left$(Filename$, Len(Filename$) - 1)
+						EndIf
+						
 
 						; Single file
 						If FileType("Data\Sounds\" + Filename$) = 1
@@ -6415,7 +6431,7 @@ Cls
 					If Result = True
 
 						; Copy file/folder if required
-						If Instr(App\CurrentFile$, CurrentDir$() + "Data\Music\") = 0 ;TODO: If RootDir is changed this may break
+						If Instr(App\CurrentFile$, "Data\Music\") = 0 ;TODO: If RootDir is changed this may break
 							Filename$ = App\CurrentFile$
 							If MediaFolder$ <> "" Then Filename$ = MediaFolder$ + "\" + Filename$
 							For i = Len(App\CurrentFile$) To 1 Step -1
@@ -6431,7 +6447,7 @@ Cls
 								CopyTree(App\CurrentFile$, "Data\Music\" + Filename$)
 							EndIf
 						Else
-							Filename$ = Right$(App\CurrentFile$, Len(App\CurrentFile$) - Len(CurrentDir$() + "Data\Music\")) ;TODO: If RootDir is changed this may break
+							Filename$ = Right$(App\CurrentFile$, Len(App\CurrentFile$) - Len("Data\Music\")) ;TODO: If RootDir is changed this may break
 						EndIf
 
 						; Single file
