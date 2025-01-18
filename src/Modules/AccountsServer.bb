@@ -100,7 +100,7 @@ Function AddAccount(User$, Pass$, Email$)
 	A\Pass$ = Pass$
 	A\Email$ = Email$
 	A\LoggedOn = -1
-	AddGadgetItem(Accounts\List, User$ + "  (" + Email$ + ")")
+	AddListBoxItem(Accounts\List, User$ + "  (" + Email$ + ")")
 	A\ListID = CountGadgetItems(Accounts\List) - 1
 	Accounts\TotalAccounts = Accounts\TotalAccounts + 1
 	SetGadgetText(Accounts\AccountsLabel, "Total accounts: " + Str(Accounts\TotalAccounts))
@@ -188,16 +188,16 @@ Function LoadAccounts()
 			A\LoggedOn = -1
 			If A\IsDM = False
 				If A\IsBanned = False
-					AddGadgetItem Accounts\List, A\User$ + "  (" + A\Email$ + ")"
+					AddListBoxItem Accounts\List, A\User$ + "  (" + A\Email$ + ")"
 				Else
-					AddGadgetItem Accounts\List, "[BAN] " + A\User$ + "  (" + A\Email$ + ")"
+					AddListBoxItem Accounts\List, "[BAN] " + A\User$ + "  (" + A\Email$ + ")"
 					Accounts\TotalBanned = Accounts\TotalBanned + 1
 				EndIf
 			Else
 				If A\IsBanned = False
-					AddGadgetItem Accounts\List, "[GM] " + A\User$ + "  (" + A\Email$ + ")"
+					AddListBoxItem Accounts\List, "[GM] " + A\User$ + "  (" + A\Email$ + ")"
 				Else
-					AddGadgetItem Accounts\List, "[BAN][GM] " + A\User$ + "  (" + A\Email$ + ")"
+					AddListBoxItem Accounts\List, "[BAN][GM] " + A\User$ + "  (" + A\Email$ + ")"
 					Accounts\TotalBanned = Accounts\TotalBanned + 1
 				EndIf
 				Accounts\TotalDMs = Accounts\TotalDMs + 1

@@ -396,7 +396,7 @@ Repeat
 					If AI\RNID > 0
 						AInstance.AreaInstance = Object.AreaInstance(AI\ServerArea)
 						If AInstance\Area = GameArea
-							AddGadgetItem(Game\PlayersList, AI\Name$ + " (" + AInstance\ID + ")")
+							AddListBoxItem(Game\PlayersList, AI\Name$ + " (" + AInstance\ID + ")")
 						EndIf
 					EndIf
 				Next

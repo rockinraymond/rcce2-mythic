@@ -70,7 +70,11 @@ Function CreateWindow(title$, x%, y%, width%, height%, parent%, style%)
 End Function
 
 Function CreateListBox(x%, y%, width%, height%, parent%)
-    return FUI_ComboBox(parent%, x%, y%, width%, height%)
+    return FUI_ListBox(parent%, x%, y%, width%, height%)
+End Function
+
+Function AddListBoxItem(parent%, item$, arg3% = False)
+	return FUI_ListBoxItem(parent, item$)
 End Function
 
 Function ClientWidth(parent%)

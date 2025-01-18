@@ -989,7 +989,7 @@ Function SetArea(A.ActorInstance, Ar.Area, Instance, Waypoint = -1, Portal = 0, 
 				Next
 			EndIf
 		EndIf
-		If Ar = GameArea Then AddGadgetItem(Game\PlayersList, A\Name$ + " (" + Str$(Instance) + ")")
+		If Ar = GameArea Then AddListBoxItem(Game\PlayersList, A\Name$ + " (" + Str$(Instance) + ")")
 	EndIf
 
 	; If old and new zones are different
