@@ -1,4 +1,4 @@
-; This application should be compiled with BlitzPlus
+; This application should be compiled with BlitzForge
 Global componentName$ = "server"
 Global RootDir$ = "..\"
 
