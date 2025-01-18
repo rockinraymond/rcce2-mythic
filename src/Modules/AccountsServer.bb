@@ -239,15 +239,15 @@ Function CreateAccountsWindow.AccountsWindow()
 	A.AccountsWindow = New AccountsWindow
 	A\Window = CreateWindow("Accounts", 10, 10, 500, 450, Desktop(), 1)
 
-	A\List = CreateListBox(5, 10, ClientWidth(A\Window) - 150, ClientHeight(A\Window) - 20, A\Window)
+	A\List = CreateListBox(5, 10, ClientWidth(A\Window) - 150, ClientHeight(A\Window) - 50, A\Window)
 
 	A\DMButton     = CreateButton("Toggle Account GM Status", ClientWidth(A\Window) - 140, 10, 135, 25, A\Window)
 	A\BanButton    = CreateButton("Ban/Unban Account", ClientWidth(A\Window) - 140, 40, 135, 25, A\Window)
 	A\DeleteButton = CreateButton("Remove Account", ClientWidth(A\Window) - 140, 70, 135, 25, A\Window)
 
-	A\AccountsLabel = CreateLabel("Total accounts: 999", ClientWidth(A\Window) - 140, ClientHeight(A\Window) - 60, 135, 20, A\Window)
-	A\DMLabel       = CreateLabel("GM accounts: 999", ClientWidth(A\Window) - 140, ClientHeight(A\Window) - 40, 135, 20, A\Window)
-	A\BannedLabel   = CreateLabel("Banned accounts: 999", ClientWidth(A\Window) - 140, ClientHeight(A\Window) - 20, 135, 20, A\Window)
+	A\AccountsLabel = CreateLabel("Total accounts: 999", ClientWidth(A\Window) - 140, ClientHeight(A\Window) - 80, 135, 20, A\Window)
+	A\DMLabel       = CreateLabel("GM accounts: 999", ClientWidth(A\Window) - 140, ClientHeight(A\Window) - 60, 135, 20, A\Window)
+	A\BannedLabel   = CreateLabel("Banned accounts: 999", ClientWidth(A\Window) - 140, ClientHeight(A\Window) - 40, 135, 20, A\Window)
 
 	Return A
 

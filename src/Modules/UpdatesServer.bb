@@ -2,8 +2,6 @@ Include "Modules\IO\Image.bb"
 
 Type UpdatesWindow
 	Field Window
-	Field LockImage.BBImage
-	Field UnlockImage.BBImage
 	Field ImageBox
 	Field LockButton
 	Field LockLabel
@@ -39,6 +37,7 @@ Function CreateUpdatesWindow.UpdatesWindow()
 
 	U.UpdatesWindow = New UpdatesWindow
 	U\Window = CreateWindow("Updates", 530, 10, 300, 450, Desktop(), 1)
+	CreateWindow("", 0, 0, 0, 0, 0, 1)
 
 	U\LockButton = CreateButton("Unlock Updates Server", 10, ClientHeight(U\Window) - 50, ClientWidth(U\Window) - 20, 25, U\Window)
 	;U\LockPanel = CreatePanel(0, 0, 50, 50, U\Window)
@@ -49,9 +48,7 @@ Function CreateUpdatesWindow.UpdatesWindow()
 	; Create ImageBox with pointer to loaded image
 	U\ImageBox = CreateImageBox((GadgetWidth(U\Window) / 2) - 25, 300, 50, 50, U\Window, CurrentDir() + "Data\Server Data\RedLight.bmp")
 
-	L = CreateLabel("Updates Server Status:", 0, 0, 110, 20, U\Window)
-	CentreGadget(L)
-	SetGadgetShape L, GadgetX(L), 275, 110, 20
+	L = CreateLabel("Updates Server Status:", (GadgetWidth(U\Window) / 2) - 55, 275, 110, 20, U\Window)
 
 	Dat$ = "The updates server is locked. This means that no players" + Chr(10)
 	Dat$ = Dat$ + "can join the game or download updates. Any players" + Chr(10)
