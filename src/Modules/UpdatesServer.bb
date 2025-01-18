@@ -66,11 +66,14 @@ Function CreateUpdatesWindow.UpdatesWindow()
 	CentreGadget(L)
 	SetGadgetShape L, GadgetX(L), 275, 110, 20
 
-	Dat$ = "The updates server is locked. This means that no players can join the game or download updates."
-	Dat$ = Dat$ + "Any players currently in the game will be removed and must wait until the server is unlocked "
-	Dat$ = Dat$ + "before they can rejoin. This is to allow you to upload a game update without players downloading "
-	Dat$ = Dat$ + "at the same time, and receiving old or corrupt files. Make sure you unlock the server as soon as "
-	Dat$ = Dat$ + "you have finished uploading any updates."
+	Dat$ = "The updates server is locked. This means that no players" + Chr(10)
+	Dat$ = Dat$ + "can join the game or download updates. Any players" + Chr(10)
+	Dat$ = Dat$ + "currently in the game will be removed and must wait" + Chr(10)
+	Dat$ = Dat$ + "until the server is unlocked before they can rejoin." + Chr(10)
+	Dat$ = Dat$ + "This is to allow you to upload a game update without" + Chr(10)
+	Dat$ = Dat$ + "players downloading at the same time, and receiving" + Chr(10)
+	Dat$ = Dat$ + "old or corrupt files. Make sure you unlock the server" + Chr(10)
+	Dat$ = Dat$ + "as soon as you have finished uploading any updates."
 	U\LockLabel = CreateLabel(Dat$, 10, 10, 280, 200, U\Window, 3)
 
 	Return U
