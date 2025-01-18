@@ -287,7 +287,7 @@ Function UpdateNetwork()
 									EndIf
 									A2 = A2\NextInZone
 								Wend
-								If AInstance\Area = GameArea Then AddTextAreaText(Game\ChatText, Pa$ + Chr$(13))
+								If AInstance\Area = GameArea Then AddListBoxItem(Game\ChatText, Pa$ + Chr$(13))
 							Case LanguageString$(LS_SYell)
 								Pa$ = Chr$(253) + "<" + AI\Name$ + "> " + Params$
 								For A2.ActorInstance = Each ActorInstance
@@ -297,7 +297,7 @@ Function UpdateNetwork()
 										EndIf
 									EndIf
 								Next
-								AddTextAreaText(Game\ChatText, Pa$ + Chr$(13))
+								AddListBoxItem(Game\ChatText, Pa$ + Chr$(13))
 							Case LanguageString$(LS_SGM)
 								A.Account = Object.Account(AI\Account)
 								If A\IsDM = True
@@ -547,7 +547,7 @@ Function UpdateNetwork()
 							A2 = A2\NextInZone
 						Wend
 						If AInstance\Area = GameArea
-							AddTextAreaText(Game\ChatText, Pa$ + Chr$(13))
+							AddListBoxItem(Game\ChatText, Pa$ + Chr$(13))
 							If ChatLoggingMode > 0 Then WriteLog(ChatLog, Pa$, True, True)
 						ElseIf ChatLoggingMode = 2
 							WriteLog(ChatLog, Pa$, True, True)
