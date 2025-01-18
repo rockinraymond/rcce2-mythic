@@ -234,7 +234,7 @@ End Function
 ; Creates the Accounts window
 Function CreateAccountsWindow.AccountsWindow()
 
-	If MySQL = True Then Return My_CreateAccountsWindow()
+	//If MySQL = True Then Return My_CreateAccountsWindow()
 
 	A.AccountsWindow = New AccountsWindow
 	A\Window = CreateWindow("Accounts", 10, 10, 500, 450, Desktop(), 1)

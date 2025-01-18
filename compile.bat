@@ -80,7 +80,7 @@ if %RCCE%==1 (
 
     cd %ROOTDIR%\src
 
-    set BLITZPATH=%ROOTDIR%\compiler\BlitzPlus
+    set BLITZPATH=%ROOTDIR%\compiler\BlitzForge
 
     "!BLITZPATH!\bin\blitzcc.exe" -o "%ROOTDIR%\bin\Server.exe" "%ROOTDIR%\src\Server.bb"
 

@@ -1441,7 +1441,7 @@ Function UpdateNetwork()
 					ThreadScript("Logout", "Main", Handle(AI), 0)
 					
 					; Unload account (only if using MySQL server version)
-					If MySQL = True
+					/*If MySQL = True
 						My_SaveAccount(A, True)
 						
 						; Free all data
@@ -1477,7 +1477,7 @@ Function UpdateNetwork()
 						Next
 						
 						Delete(A)
-					EndIf
+					EndIf*/
 				EndIf
 
 			; Start game request
@@ -1670,7 +1670,7 @@ Function UpdateNetwork()
 					; Check that username does not already exist
 					Exists = False
 					If MySQL = True
-						Exists = My_AccountExists(Username$)
+						//Exists = My_AccountExists(Username$)
 					Else
 						For A.Account = Each Account
 							If Upper$(A\User$) = Upper$(Username$) Then Exists = True : Exit
@@ -1703,7 +1703,7 @@ Function UpdateNetwork()
 						If Len(Username$) > 50 Or Len(Password$) > 50 Or Len(Email$) > 200 Then Valid = False
 						If Valid = True
 							If MySQL = True
-								My_AddAccount(Username$, Password$, Email$)
+								//My_AddAccount(Username$, Password$, Email$)
 							Else
 								AddAccount(Username$, Password$, Email$)
 							EndIf
@@ -1722,7 +1722,7 @@ Function UpdateNetwork()
 				Username$ = Mid$(M\MessageData$, 2, UsernameLen)
 
 				; MySQL version
-				If MySQL = True
+				/*If MySQL = True
 					; Get password
 					Offset = 2 + UsernameLen
 					PwdLen = RCE_IntFromStr(Mid$(M\MessageData$, Offset, 1))
@@ -1755,7 +1755,7 @@ Function UpdateNetwork()
 						RCE_Send(Host, M\FromID, P_VerifyAccount, Pa$, True)
 					EndIf
 				; Non-MySQL version
-				Else
+				Else*/
 
 					; Find account
 					Exists = False
@@ -1794,7 +1794,7 @@ Function UpdateNetwork()
 					Next
 					; If account was not found, return failure
 					If Exists = False Then RCE_Send(Host, M\FromID, P_VerifyAccount, "N", True)
-				EndIf
+				//EndIf
 
 			; Change account password request
 			Case P_ChangePassword
@@ -1812,7 +1812,7 @@ Function UpdateNetwork()
 							PwdLen = RCE_IntFromStr(Mid$(M\MessageData$, Offset, 1))
 							A\Pass$ = Mid$(M\MessageData$, Offset + 1, PwdLen)
 							RCE_Send(Host, M\FromID, P_ChangePassword, "Y", True)
-							If MySQL = True Then My_SaveAccount(A, False)
+							//If MySQL = True Then My_SaveAccount(A, False)
 						; Otherwise return password failure
 						Else
 							RCE_Send(Host, M\FromID, P_ChangePassword, "P", True)
@@ -1958,7 +1958,7 @@ Function UpdateNetwork()
 
 							; Check character name is not already in use
 							If MySQL
-								NameValid = Not My_ActorExists(Name$)
+								//NameValid = Not My_ActorExists(Name$)
 							Else
 								For AI.ActorInstance = Each ActorInstance
 									If AI\RNID >= 0
@@ -2030,7 +2030,7 @@ Function UpdateNetwork()
 									; If MySQL is enabled, then save individual account (fast)
 									If MySQL = True
 										; Similar to old command, however, takes no file/stream argument
-										My_NewActorInstance(C, A\QuestLog[FreeSlot], A\ActionBar[FreeSlot], False, A\My_ID)
+										//My_NewActorInstance(C, A\QuestLog[FreeSlot], A\ActionBar[FreeSlot], False, A\My_ID)
 									; Otherwise save all accounts
 									Else
 										SaveAccounts()
@@ -2073,7 +2073,7 @@ Function UpdateNetwork()
 								; Delete the character
 								If A\QuestLog[Number] <> Null Then Delete A\QuestLog[Number]
 								If MySQL = True
-									My_DeleteCharacter(A, Number)
+									//My_DeleteCharacter(A, Number)
 								Else
 									DeleteCharacter(A, Number)
 								EndIf

@@ -1,6 +1,10 @@
+Include "Modules\IO\Image.bb"
+
 Type UpdatesWindow
 	Field Window
-	Field LockPanel
+	Field LockImage.BBImage
+	Field UnlockImage.BBImage
+	Field ImageBox
 	Field LockButton
 	Field LockLabel
 End Type
@@ -36,11 +40,27 @@ Function CreateUpdatesWindow.UpdatesWindow()
 	U.UpdatesWindow = New UpdatesWindow
 	U\Window = CreateWindow("Updates", 530, 10, 300, 450, Desktop(), 1)
 
-	U\LockButton = CreateButton("Unlock Updates Server", 10, ClientHeight(U\Window) - 30, ClientWidth(U\Window) - 20, 25, U\Window)
-	U\LockPanel = CreatePanel(0, 0, 50, 50, U\Window)
-	CentreGadget(U\LockPanel)
-	SetGadgetShape U\LockPanel, GadgetX(U\LockPanel), 300, 50, 50
-	SetPanelImage(U\LockPanel, "Data\Server Data\RedLight.bmp")
+	; Load images first using the Image type
+	Local redLight.Image = New Image(CurrentDir() + "Data\Server Data\RedLight.bmp")
+	Local greenLight.Image = New Image(CurrentDir() + "Data\Server Data\GreenLight.bmp")
+	
+	; Store the actual BBImage handles
+	U\LockImage = Image::load(redLight)
+	U\UnlockImage = Image::load(greenLight)
+
+	; Verify images loaded successfully
+	If U\LockImage = Null Or U\UnlockImage = Null
+		RuntimeError("Failed to load status light images")
+	EndIf
+
+	U\LockButton = CreateButton("Unlock Updates Server", 10, ClientHeight(U\Window) - 50, ClientWidth(U\Window) - 20, 25, U\Window)
+	;U\LockPanel = CreatePanel(0, 0, 50, 50, U\Window)
+	;CentreGadget(U\LockPanel)
+	;SetGadgetShape U\LockPanel, GadgetX(U\LockPanel), 300, 50, 50
+	;SetPanelImage(U\LockPanel, "Data\Server Data\RedLight.bmp")
+
+	; Create ImageBox with pointer to loaded image
+	U\ImageBox = CreateImageBox((GadgetWidth(U\Window) / 2) - 25, 300, 50, 50, U\Window, Ptr U\LockImage)
 
 	L = CreateLabel("Updates Server Status:", 0, 0, 110, 20, U\Window)
 	CentreGadget(L)
