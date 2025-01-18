@@ -298,7 +298,7 @@ If Instr(Upper$(CommandLine$()), "-UNLOCK") > 0
 	; Update window
 	HideGadget Updates\LockLabel
 	SetGadgetText Updates\LockButton, "Lock Updates Server"
-	;SetPanelImage(Updates\LockPanel, "Data\Server Data\GreenLight.bmp")
+	SetPanelImage(Updates\ImageBox, CurrentDir() + "Data\Server Data\GreenLight.bmp")
 
 	; Reload files list
 	Number = LoadUpdateFiles() : WriteLog(MainLog, "Loaded " + Str$(Number) + " files for update system...")
@@ -454,7 +454,7 @@ Repeat
 					; Update window
 					ShowGadget Updates\LockLabel
 					SetGadgetText Updates\LockButton, "Unlock Updates Server"
-					;SetPanelImage(Updates\LockPanel, "Data\Server Data\RedLight.bmp")
+					SetPanelImage(Updates\ImageBox, CurrentDir() + "Data\Server Data\RedLight.bmp")
 
 					; Boot all players
 					For AI.ActorInstance = Each ActorInstance
@@ -494,7 +494,7 @@ Repeat
 					; Update window
 					HideGadget Updates\LockLabel
 					SetGadgetText Updates\LockButton, "Lock Updates Server"
-					;SetPanelImage(Updates\LockPanel, "Data\Server Data\GreenLight.bmp")
+					SetPanelImage(Updates\ImageBox, CurrentDir() + "Data\Server Data\GreenLight.bmp")
 
 					; Reload files list
 					Delete Each UpdateFile

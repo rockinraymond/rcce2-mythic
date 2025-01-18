@@ -24,8 +24,8 @@ Function TextFieldText$(parent%)
 	return FUI_SendMessage(parent, M_GETTEXT)
 End Function
 
-Function SetPanelImage(parent%, image%)
-	FUI_SendMessage(parent, M_SETIMAGE, image%)
+Function SetPanelImage(parent%, image$)
+	FUI_SendMessage(parent, M_SETIMAGE, image$)
 End Function
 
 Function SelectedGadgetItem%(parent%)
@@ -141,6 +141,6 @@ Function Desktop()
 	return 0
 End Function
 
-Function CreateImageBox(x%, y%, width%, height%, parent%, image%)
-	return FUI_ImageBox(parent%, x%, y%, width%, height%, image%)
+Function CreateImageBox(x%, y%, width%, height%, parent%, image$)
+	return FUI_ImageBox(parent%, x%, y%, width%, height%, image$)
 End Function
