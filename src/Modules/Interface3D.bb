@@ -1100,6 +1100,7 @@ Function UpdateInterface()
 			CharInteract = Null
 			GY_FreeGadget(WCharInteract)
 			CharInteractVisible = False
+			PlayerTarget = 0
 		; Window still open
 		Else
 			; Change target
