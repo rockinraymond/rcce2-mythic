@@ -393,7 +393,7 @@ Function UpdateInterface()
 	
 	;[~~~] automatic rotation behind character if mouse button 3 is hit cysis145
 	If MouseHit(3) = True
-		CamYaw# = EntityYaw#(Me\CollisionEN) + 180
+		CamYaw# = EntityYaw#(Me\CollisionEN)
 		CamPitch# = 0.0
 	EndIf
 	
@@ -416,7 +416,7 @@ Function UpdateInterface()
 		; Change camera mode
 		If ControlHit(Key_ChangeViewMode) And ViewMode = 2
 			CamMode = Not CamMode
-			CamYaw# = 0.0
+			CamYaw# = EntityYaw#(Me\CollisionEN)
 			CamPitch# = 0.0
 		EndIf
 		; Walk around / Fixed Bug where the player could still move once dead Cysis145
@@ -597,7 +597,7 @@ Function UpdateInterface()
 	If MZSpeed <> 0
 		CamDist# = CamDist# - (Float#(MZSpeed) * 1.5); * Delta#)
 		If CamDist# < 5.0 Then CamDist# = 5.0 ;5.0
-		If CamDist# > 25.0 Then CamDist# = 25.0
+		If CamDist# > 50.0 Then CamDist# = 50.0
 	EndIf
 	; Keyboard
 	If ControlDown(Key_CameraIn)
@@ -605,7 +605,7 @@ Function UpdateInterface()
 		If CamDist# < 3.0 Then CamDist# = 3.0
 	ElseIf ControlDown(Key_CameraOut)
 		CamDist# = CamDist# + Delta#
-		If CamDist# > 25.0 Then CamDist# = 25.0
+		If CamDist# > 50.0 Then CamDist# = 50.0
 	EndIf
 
 	; Update these buttons if the mouse is not over a dialog or the action bar
@@ -702,8 +702,7 @@ Function UpdateInterface()
 					; Double clicking the target makes you run towards it and attack if in range [~~~]
 					If IsDouble = True And OldTarget = PlayerTarget
 						SetDestination(Me, PickedX#(), PickedZ#(), PickedY#())
-						CamYaw# = 0.0
-						CamPitch# = 0.0
+						
 						Me\IsRunning = True
 						If Me\Mount <> Null Then Me\Mount\IsRunning = True
 						
@@ -807,8 +806,7 @@ Function UpdateInterface()
 							AlignToVector(ClickMarkerEN, PickedNX#(), PickedNY#(), PickedNZ#(), 2)
 							MoveEntity(ClickMarkerEN, 0, 0.085, 0)
 						EndIf
-						CamYaw# = 0.0
-						CamPitch# = 0.0
+						
 						; If in first person view, "compress" angle to destination
 						If CamMode = 1
 							PositionEntity GPP, Me\DestX#, EntityY#(Me\CollisionEN), Me\DestZ#
@@ -843,8 +841,7 @@ Function UpdateInterface()
 					If Target$ = ""
 						If IsDouble = False
 							SetDestination(Me, PickedX#(), PickedZ#(), PickedY#())
-							CamYaw# = 0.0
-							CamPitch# = 0.0
+							
 							Me\IsRunning = AlwaysRun
 							If Me\Mount <> Null Then Me\Mount\IsRunning = Me\IsRunning
 							AttackTarget = False
@@ -884,8 +881,7 @@ Function UpdateInterface()
 		If AI <> Null
 			SetDestination(Me, EntityX#(AI\CollisionEN), EntityZ#(AI\CollisionEN), EntityY#(AI\CollisionEN))
 			;[~~~]
-			CamYaw# = 0.0
-			CamPitch# = 0.0
+			
 			Me\IsRunning = True
 			If Me\Mount <> Null Then Me\Mount\IsRunning = True
 			; Check target is a combatant
