@@ -1130,6 +1130,26 @@ Function UpdateNetwork()
 						EndIf
 					EndIf
 				EndIf
+			
+			Case P_Examine
+				AI.ActorInstance = FindActorInstanceFromRNID(M\FromID)
+				If AI <> Null And Len(M\MessageData$) = 2
+					A2.ActorInstance = RuntimeIDList(RCE_IntFromStr(M\MessageData$))
+					If A2\Script$ <> ""
+						Running = False
+						
+						For Si.ScriptInstance = Each ScriptInstance
+							If Si\Name = A2\Script
+								If Si\AI = Handle(AI) And Si\AIContext = Handle(A2) Then Running = True : Exit
+							EndIf
+						Next
+						If Running = False
+							ThreadScript(A2\Script$, "Examine", Handle(AI), Handle(A2))
+						EndIf
+					Else
+						ThreadScript("Default", "Examine", Handle(AI), Handle(A2))
+					EndIf
+				EndIf
 
 			; A player has attacked something
 			Case P_AttackActor
