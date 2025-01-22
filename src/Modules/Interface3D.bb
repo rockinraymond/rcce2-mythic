@@ -1,3 +1,8 @@
+Global WContextMenu = 0
+Global BInteract = 0
+Global BAttack = 0
+Global BExamine = 0
+
 ; Alphabetically sorted list of abilities
 Dim KnownSpellSort(999)
 
@@ -608,6 +613,56 @@ Function UpdateInterface()
 		If CamDist# > 50.0 Then CamDist# = 50.0
 	EndIf
 
+	; Update context menu if it exists
+	If WContextMenu <> 0
+		If PlayerTarget > 0
+			AI.ActorInstance = Object.ActorInstance(PlayerTarget)
+			; Handle Interact button
+			If GY_ButtonHit(BInteract)
+				If AI <> Null
+					If EntityDistance#(AI\CollisionEN, Me\CollisionEN) < InteractRange
+						RCE_Send(Connection, PeerToHost, P_RightClick, RCE_StrFromInt$(AI\RuntimeID, 2), True)
+					else
+						SetDestination(Me, EntityX#(AI\CollisionEN), EntityZ#(AI\CollisionEN), EntityY#(AI\CollisionEN))
+						Me\IsRunning = True
+						If Me\Mount <> Null Then Me\Mount\IsRunning = True
+					EndIf
+				EndIf
+				GY_FreeGadget(WContextMenu)
+				WContextMenu = 0
+			EndIf
+			
+			; Handle Attack button
+			If GY_ButtonHit(BAttack)
+				If AI <> Null
+					SetDestination(Me, EntityX#(AI\CollisionEN), EntityZ#(AI\CollisionEN), EntityY#(AI\CollisionEN))
+					Me\IsRunning = True
+					If Me\Mount <> Null Then Me\Mount\IsRunning = True
+					AttackTarget = True
+				EndIf
+				GY_FreeGadget(WContextMenu)
+				WContextMenu = 0
+			EndIf
+			
+			; Handle Examine button
+			If GY_ButtonHit(BExamine)
+				If AI <> Null
+					RCE_Send(Connection, PeerToHost, P_Examine, RCE_StrFromInt$(AI\RuntimeID, 2), True)
+				EndIf
+				GY_FreeGadget(WContextMenu)
+				WContextMenu = 0
+			EndIf
+			
+			; Close menu if clicked outside
+			If MouseHit(1) And GY_MouseOverGadget = False
+				GY_FreeGadget(WContextMenu)
+				WContextMenu = 0
+			EndIf
+		else 
+			WContextMenu = 0
+		EndIf
+	EndIf
+
 	; Update these buttons if the mouse is not over a dialog or the action bar
 	If GY_MouseOverGadget = False And GY_MouseY# < 0.85 And (CurrentSeq(Me) >= Anim_LookRound Or Animating(Me\EN) = False) And InDialog = False And SMemorising = 0
 		; Talk to button down, remember the time (so we ignore presses which take more than 500ms)
@@ -717,14 +772,27 @@ Function UpdateInterface()
 					Else
 						If CharInteractVisible
 							UpdateCharInteractionWindow()
-						ElseIf CharInteract = Null
+						Else
 							CreateCharInteractionWindow(AI)
-							;CysisLibs Outline
-							;Outline ActorSelectEN
 						EndIf
-						If AI\FactionRatings[Me\HomeFaction] > 99 And EntityDistance#(AI\CollisionEN, Me\CollisionEN) < InteractRange
-							RCE_Send(Connection, PeerToHost, P_RightClick, RCE_StrFromInt$(AI\RuntimeID, 2), True)
+						; Create context menu
+						WContextMenu = GY_CreateWindowInter("Actions", GY_MouseX#, GY_MouseY#, 0.1, 0.08, True, True, False, CreateTexture(2, 2))
+						
+						; Interact button
+						Local interactLabel$ = "Interact"
+						If EntityDistance#(AI\CollisionEN, Me\CollisionEN) > InteractRange
+							interactLabel$ = "Move To"
 						EndIf
+						BInteract = GY_CreateButton(WContextMenu, 0.0, 0.0, 1.0, 0.33, interactLabel$, False, 255, 255, 255, LoadTexture("Data\Textures\GUI\ToolTip.png"))
+						
+						; Attack button (only if target is attackable)
+						If AI\Actor\Aggressiveness < 3 And Me\FactionRatings[AI\HomeFaction] <= 150
+							BAttack = GY_CreateButton(WContextMenu, 0.0, 0.33, 1.0, 0.33, "Attack", False, 255, 255, 255, LoadTexture("Data\Textures\GUI\ToolTip.png"))
+						EndIf
+						
+						; Examine button
+						BExamine = GY_CreateButton(WContextMenu, 0.0, 0.66, 1.0, 0.33, "Examine", False, 255, 255, 255, LoadTexture("Data\Textures\GUI\ToolTip.png"))
+						
 						AttackTarget = False
 					EndIf
 					;HideEntity(ClickMarkerEN) ;{@@@~}
