@@ -633,110 +633,110 @@ Function UpdateNetwork()
 					; Accept trading
 					If Len(M\MessageData$) > 0
 						; Player -> NPC or player -> scenery trading {##}
-						;If AI\IsTrading = 1
-						;	AI\IsTrading = 0
-						;	Change = 0
-						;	If AI\TradeResult$ <> ""
-						;		ID = RCE_IntFromStr(Left$(AI\TradeResult$, 2))
-						;		AInstance.AreaInstance = Object.AreaInstance(AI\ServerArea)
-						;		;Owned.OwnedScenery = AInstance\OwnedScenery[ID]
-						;	EndIf
-;
-							; Sold items
-						;	Offset = 193
-						;	For i = 0 To 31
-						;		SlotID = RCE_IntFromStr(Mid$(M\MessageData$, Offset, 1))
-						;		Amount = RCE_IntFromStr(Mid$(M\MessageData$, Offset + 1, 2))
-						;		Offset = Offset + 3
-						;		If SlotID > 0
-						;			If Amount > AI\Inventory\Amounts[SlotID] Then Amount = AI\Inventory\Amounts[SlotID]
-						;			If AI\Inventory\Items[SlotID] <> Null And Amount > 0
+						If AI\IsTrading = 1
+							AI\IsTrading = 0
+							Change = 0
+							If AI\TradeResult$ <> ""
+								ID = RCE_IntFromStr(Left$(AI\TradeResult$, 2))
+								AInstance.AreaInstance = Object.AreaInstance(AI\ServerArea)
+								;Owned.OwnedScenery = AInstance\OwnedScenery[ID]
+							EndIf
+
+							;Sold items
+							Offset = 193
+							For i = 0 To 31
+								SlotID = RCE_IntFromStr(Mid$(M\MessageData$, Offset, 1))
+								Amount = RCE_IntFromStr(Mid$(M\MessageData$, Offset + 1, 2))
+								Offset = Offset + 3
+								If SlotID > 0
+									If Amount > AI\Inventory\Amounts[SlotID] Then Amount = AI\Inventory\Amounts[SlotID]
+									If AI\Inventory\Items[SlotID] <> Null And Amount > 0
 										; Alter cost {##}
 										;If Owned = Null
-										;	Change = Change + (AI\Inventory\Items[SlotID]\Item\Value * Amount)
+											Change = Change + (AI\Inventory\Items[SlotID]\Item\Value * Amount)
 										; Add item to scenery inventory if applicable
-										;Else
-										;	For j = 0 To Owned\InventorySize - 1
-										;		If Owned\Inventory\Items[j] = Null
-										;			Owned\Inventory\Items[j] = CopyItemInstance(AI\Inventory\Items[SlotID])
-										;			Owned\Inventory\Amounts[j] = Amount
-										;			Exit
-										;		ElseIf ItemInstancesIdentical(AI\Inventory\Items[SlotID], Owned\Inventory\Items[j])
-										;			Owned\Inventory\Amounts[j] = Owned\Inventory\Amounts[j] + Amount
-										;			Exit
-										;		EndIf
-										;	Next
-										;EndIf
+										; Else
+										; 	For j = 0 To Owned\InventorySize - 1
+										; 		If Owned\Inventory\Items[j] = Null
+										; 			Owned\Inventory\Items[j] = CopyItemInstance(AI\Inventory\Items[SlotID])
+										; 			Owned\Inventory\Amounts[j] = Amount
+										; 			Exit
+										; 		ElseIf ItemInstancesIdentical(AI\Inventory\Items[SlotID], Owned\Inventory\Items[j])
+										; 			Owned\Inventory\Amounts[j] = Owned\Inventory\Amounts[j] + Amount
+										; 			Exit
+										; 		EndIf
+										; 	Next
+										; EndIf
 										; Remove item
-						;				AI\Inventory\Amounts[SlotID] = AI\Inventory\Amounts[SlotID] - Amount
-						;				If AI\Inventory\Amounts[SlotID] <= 0 Then FreeItemInstance(AI\Inventory\Items[SlotID])
-						;				; Tell player if required
-						;				If AI\RNID > 0
-						;					Pa$ = RCE_StrFromInt$(SlotID, 1) + RCE_StrFromInt$(Amount, 2)
-						;					RCE_Send(Host, AI\RNID, P_InventoryUpdate, "T" + Pa$, True)
-						;				EndIf
-						;			EndIf
-						;		EndIf
-						;	Next
+										AI\Inventory\Amounts[SlotID] = AI\Inventory\Amounts[SlotID] - Amount
+										If AI\Inventory\Amounts[SlotID] <= 0 Then FreeItemInstance(AI\Inventory\Items[SlotID])
+										; Tell player if required
+										If AI\RNID > 0
+											Pa$ = RCE_StrFromInt$(SlotID, 1) + RCE_StrFromInt$(Amount, 2)
+											RCE_Send(Host, AI\RNID, P_InventoryUpdate, "T" + Pa$, True)
+										EndIf
+									EndIf
+								EndIf
+							Next
 						;	; Bought items
-						;	Offset = 1
-						;	For i = 0 To 31
-						;		II.ItemInstance = Object.ItemInstance(RCE_IntFromStr(Mid$(M\MessageData$, Offset, 4)))
-						;		Amount = RCE_IntFromStr(Mid$(M\MessageData$, Offset + 4, 2))
-						;		Offset = Offset + 6
-						;		If II <> Null And Amount > 0
-						;			If II\Assignment > 0 And II\AssignTo = AI
-						;				If Amount < II\Assignment Then II\Assignment = Amount
+							Offset = 1
+							For i = 0 To 31
+								II.ItemInstance = Object.ItemInstance(RCE_IntFromStr(Mid$(M\MessageData$, Offset, 4)))
+								Amount = RCE_IntFromStr(Mid$(M\MessageData$, Offset + 4, 2))
+								Offset = Offset + 6
+								If II <> Null And Amount > 0
+									If II\Assignment > 0 And II\AssignTo = AI
+										If Amount < II\Assignment Then II\Assignment = Amount
 										; Alter cost {##}
-										;If Owned = Null
-										;	OldChange = Change
-										;	Change = Change - (II\Item\Value * II\Assignment)
-										; Remove from scenery inventory if applicable
-										;Else
-										;	RemoveAmount = II\Assignment
-										;	For j = 0 To Owned\InventorySize - 1
-										;		If Owned\Inventory\Items[j] <> Null
-										;			If ItemInstancesIdentical(II, Owned\Inventory\Items[j])
-										;				If Owned\Inventory\Amounts[j] >= RemoveAmount
-										;					Owned\Inventory\Amounts[j] = Owned\Inventory\Amounts[j] - RemoveAmount
-										;					RemoveAmount = 0
-										;					If Owned\Inventory\Amounts[j] = 0 Then FreeItemInstance(Owned\Inventory\Items[j])
-										;				Else
-										;					RemoveAmount = RemoveAmount - Owned\Inventory\Amounts[j]
-										;					Owned\Inventory\Amounts[j] = 0
-										;					FreeItemInstance(Owned\Inventory\Items[j])
-										;				EndIf
-										;				If RemoveAmount = 0 Then Exit
-										;			EndIf
-										;		EndIf
+										; If Owned = Null
+											OldChange = Change
+											Change = Change - (II\Item\Value * II\Assignment)
+										;Remove from scenery inventory if applicable
+										; Else
+										; 	RemoveAmount = II\Assignment
+										; 	For j = 0 To Owned\InventorySize - 1
+										; 		If Owned\Inventory\Items[j] <> Null
+										; 			If ItemInstancesIdentical(II, Owned\Inventory\Items[j])
+										; 				If Owned\Inventory\Amounts[j] >= RemoveAmount
+										; 					Owned\Inventory\Amounts[j] = Owned\Inventory\Amounts[j] - RemoveAmount
+										; 					RemoveAmount = 0
+										; 					If Owned\Inventory\Amounts[j] = 0 Then FreeItemInstance(Owned\Inventory\Items[j])
+										; 				Else
+										; 					RemoveAmount = RemoveAmount - Owned\Inventory\Amounts[j]
+										; 					Owned\Inventory\Amounts[j] = 0
+										; 					FreeItemInstance(Owned\Inventory\Items[j])
+										; 				EndIf
+										; 				If RemoveAmount = 0 Then Exit
+										; 			EndIf
+										; 		EndIf
 										;	Next
 										;EndIf
 										; Prevent cheating
-						;				If AI\Gold + Change >= 0
-											; Ask client to specify a slot to put it in
-						;					Pa$ = RCE_StrFromInt$(II\Item\ID, 2) + RCE_StrFromInt$(II\Assignment, 2)
-						;					RCE_Send(Host, AI\RNID, P_InventoryUpdate, "G" + RCE_StrFromInt$(Handle(II), 4) + Pa$, True)
-						;				Else
-						;					Change = OldChange
-						;					FreeItemInstance(II)
-						;					Exit
-						;				EndIf
-						;			EndIf
-						;		EndIf
-						;	Next
+										If AI\Gold + Change >= 0
+											;Ask client to specify a slot to put it in
+											Pa$ = RCE_StrFromInt$(II\Item\ID, 2) + RCE_StrFromInt$(II\Assignment, 2)
+											RCE_Send(Host, AI\RNID, P_InventoryUpdate, "G" + RCE_StrFromInt$(Handle(II), 4) + Pa$, True)
+										Else
+											Change = OldChange
+											FreeItemInstance(II)
+											Exit
+										EndIf
+									EndIf
+								EndIf
+							Next
 
 							; Adjust gold level
-						;	If Owned = Null
-						;		If Change <> 0
-						;			AI\Gold = AI\Gold + Change
-						;			If Change > 0
-						;				Pa$ = "U" + RCE_StrFromInt$(Change, 4)
-						;			Else
-						;				Pa$ = "D" + RCE_StrFromInt$(Abs(Change), 4)
-						;			EndIf
-						;			RCE_Send(Host, AI\RNID, P_GoldChange, Pa$, True)
-						;		EndIf
-						;	EndIf
+							;If Owned = Null
+								If Change <> 0
+									AI\Gold = AI\Gold + Change
+									If Change > 0
+										Pa$ = "U" + RCE_StrFromInt$(Change, 4)
+									Else
+										Pa$ = "D" + RCE_StrFromInt$(Abs(Change), 4)
+									EndIf
+									RCE_Send(Host, AI\RNID, P_GoldChange, Pa$, True)
+								EndIf
+							;EndIf
 						; Player -> player trading
 						ElseIf AI\IsTrading = 4
 							AI\IsTrading = 5
@@ -850,7 +850,7 @@ Function UpdateNetwork()
 						EndIf
 						AI\IsTrading = 0
 					EndIf
-				;EndIf {##}
+				EndIf ;{##}
 
 			; Jump
 			Case P_Jump

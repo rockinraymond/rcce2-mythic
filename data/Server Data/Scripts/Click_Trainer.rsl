@@ -26,5 +26,12 @@ Function Main()
 End Function
 
 Function Examine()
+	player = actor()
+	trader = contextactor()
+
 	Output(Actor(), "This trainer can teach you the fireball skill")
+	player = actor()
+	trader = contextactor()
+
+	opentrading(player,trader)
 End Function
