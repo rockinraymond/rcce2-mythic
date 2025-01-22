@@ -756,33 +756,34 @@ Function UpdateNetwork()
 							ElseIf AI\TradingActor\IsTrading = 5
 								A2.ActorInstance = AI\TradingActor
 
-								; Compare what players expect with what they are getting, to prevent cheating
+								; Compare what players expect with what they are getting, to prevent cheating (COMMENTED OUT, Was causing all player to player trades to fail)
 								Valid = True
 								A1Cost = RCE_IntFromStr(Left$(AI\TradeResult$, 4)) * -1
 								A2Cost = RCE_IntFromStr(Left$(A2\TradeResult$, 4))
-								If A1Cost <> A2Cost Then Valid = False
-								For i = 0 To 31
-									A1SoldAmount = RCE_IntFromStr(Mid$(AI\TradeResult$, 101 + (i * 2), 2))
-									If A1SoldAmount > 0
-										For j = 0 To 31
-											If RCE_IntFromStr(Mid$(A2\TradeResult$, 5 + (j * 3), 1)) = i
-												Amount = RCE_IntFromStr(Mid$(A2\TradeResult$, 6 + (j * 3), 2))
-												If Amount <> A1SoldAmount Then Valid = False
-												Exit
-											EndIf
-										Next
-									EndIf
-									A2SoldAmount = RCE_IntFromStr(Mid$(A2\TradeResult$, 101 + (i * 2), 2))
-									If A2SoldAmount > 0
-										For j = 0 To 31
-											If RCE_IntFromStr(Mid$(AI\TradeResult$, 5 + (j * 3), 1)) = i
-												Amount = RCE_IntFromStr(Mid$(AI\TradeResult$, 6 + (j * 3), 2))
-												If Amount <> A2SoldAmount Then Valid = False
-												Exit
-											EndIf
-										Next
-									EndIf
-								Next
+
+								; If A1Cost <> A2Cost Then Valid = False
+								; For i = 0 To 31
+								; 	A1SoldAmount = RCE_IntFromStr(Mid$(AI\TradeResult$, 101 + (i * 2), 2))
+								; 	If A1SoldAmount > 0
+								; 		For j = 0 To 31
+								; 			If RCE_IntFromStr(Mid$(A2\TradeResult$, 5 + (j * 3), 1)) = i
+								; 				Amount = RCE_IntFromStr(Mid$(A2\TradeResult$, 6 + (j * 3), 2))
+								; 				If Amount <> A1SoldAmount Then Valid = False
+								; 				Exit
+								; 			EndIf
+								; 		Next
+								; 	EndIf
+								; 	A2SoldAmount = RCE_IntFromStr(Mid$(A2\TradeResult$, 101 + (i * 2), 2))
+								; 	If A2SoldAmount > 0
+								; 		For j = 0 To 31
+								; 			If RCE_IntFromStr(Mid$(AI\TradeResult$, 5 + (j * 3), 1)) = i
+								; 				Amount = RCE_IntFromStr(Mid$(AI\TradeResult$, 6 + (j * 3), 2))
+								; 				If Amount <> A2SoldAmount Then Valid = False
+								; 				Exit
+								; 			EndIf
+								; 		Next
+								; 	EndIf
+								; Next
 
 								If Valid = True
 									; Swap money
@@ -830,7 +831,7 @@ Function UpdateNetwork()
 											RCE_Send(Host, AI\RNID, P_InventoryUpdate, "G" + RCE_StrFromInt$(Handle(GiveItem), 4) + Pa$, True)
 										EndIf
 									Next
-								EndIf
+								 EndIf
 
 								; End trading mode for both players
 								AI\TradeResult$ = ""
@@ -850,7 +851,7 @@ Function UpdateNetwork()
 						EndIf
 						AI\IsTrading = 0
 					EndIf
-				EndIf ;{##}
+				EndIf
 
 			; Jump
 			Case P_Jump
