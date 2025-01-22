@@ -485,7 +485,8 @@ Next
 			MoveEntity(S\EN, 0, 0, 100.0)
 			PointEntity(S\EN, Cam)
 			
-			ShadowLight S\EN
+			Delete_Light_Caster S\EN
+			Cast_Light S\EN, 10000
 			
 			;light rays
 			CameraProject Cam, EntityX(S\EN,1), EntityY(S\EN,1), EntityZ(S\EN,1) 

@@ -150,7 +150,9 @@ Include "Modules\MD5.bb"                   ; MD5 function for passwords
 Include "Modules\Projectiles3D.bb"         ; Projectile 3D display system
 ;Include "Modules\Utility.bb"         	   ; Crtl + Home Menu				 [Disabled as massively un-optimised]
 Include "Modules\FastExt.bb"			   ; Fast Extends Library
-Include "Modules\ShadowsSimple.bb" 		   ; FE Shadows
+;Include "Modules\ShadowsSimple.bb" 		   ; FE Shadows
+
+Include "Modules\Libraries\ShadowSystem.bb"
 
 ;&&& Water edit 
 ;Global frame% = 0 
@@ -239,8 +241,9 @@ Repeat
 	Select ShadowC
 		Case 1
 			;Shadow
-			UpdateShadows Cam
+			
 	End Select
+	Update_Shadows Cam
 		
 	RenderWorld()
 	
@@ -449,15 +452,15 @@ Function UpdateActorInstances()
 
 	; Updates for every actor
 	For AI.ActorInstance = Each ActorInstance
-	FreeShadowCaster% (AI\EN)
+	Delete_Shadow_Caster(AI\EN)
 		
 	If AI\EN <> 0
-		CreateShadowCaster% (AI\EN)
+		Cast_Shadow(AI\EN)
 	EndIf
 	
 
 	If AI\EN <> 0 And EntityDistance# (AI\EN, Cam) > 80.0	
-		FreeShadowCaster% (AI\EN)
+		Delete_Shadow_Caster(AI\EN)
 	EndIf
 	
 		; If it's not dead
@@ -776,7 +779,7 @@ Function UpdateActorInstances()
 
 			; NPCs only fade out
 			If Animating(AI\EN) = False And AI\RNID = 0
-				FreeShadowCaster% (AI\EN)
+				Delete_Shadow_Caster (AI\EN)
 				If AI\AIMode > 0
 					AI\AIMode = AI\AIMode - 1
 					Alpha# = Float#(AI\AIMode) / 501.0 ;501.0
