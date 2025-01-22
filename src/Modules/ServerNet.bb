@@ -1152,6 +1152,13 @@ Function UpdateNetwork()
 					EndIf
 				EndIf
 
+				Case P_Trade
+				AI.ActorInstance = FindActorInstanceFromRNID(M\FromID)
+				If AI <> Null And Len(M\MessageData$) = 2
+					A2.ActorInstance = RuntimeIDList(RCE_IntFromStr(M\MessageData$))
+						ThreadScript("Default", "Trade", Handle(AI), Handle(A2))
+				EndIf
+
 			; A player has attacked something
 			Case P_AttackActor
 				AI.ActorInstance = FindActorInstanceFromRNID(M\FromID)
