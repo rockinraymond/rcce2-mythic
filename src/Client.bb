@@ -241,9 +241,9 @@ Repeat
 	Select ShadowC
 		Case 1
 			;Shadow
-			
+			Update_Shadows Cam
 	End Select
-	Update_Shadows Cam
+	
 		
 	RenderWorld()
 	
