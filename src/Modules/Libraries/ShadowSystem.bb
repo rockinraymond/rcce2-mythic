@@ -182,6 +182,7 @@ Function Cast_Shadow(Caster, Resolution=512, Translucent=0)
 
 			ThisShadow.Shadow = New Shadow
 			ThisShadow\Mesh = CreateMesh()
+			EntityParent ThisShadow\Mesh, 0
 			SURFACE_Shadow  = CreateSurface(ThisShadow\Mesh)
 	
 		Next
@@ -245,6 +246,7 @@ Function Receive_Shadow(Receiver)
 
 		ThisShadow.Shadow = New Shadow
 		ThisShadow\Mesh = CreateMesh()
+		EntityParent ThisShadow\Mesh, 0
 		SURFACE_Shadow  = CreateSurface(ThisShadow\Mesh)
 		
 	Next	
@@ -315,6 +317,7 @@ Function Cast_Light(Entity, Range#)
 
 			ThisShadow.Shadow = New Shadow
 			ThisShadow\Mesh = CreateMesh()
+			EntityParent ThisShadow\Mesh, 0
 			SURFACE_Shadow  = CreateSurface(ThisShadow\Mesh)
 	
 		Next
@@ -389,6 +392,9 @@ Function Update_Shadows(Current_Camera)
 	; Clear all the shadow meshes.
 	For ThisShadow.Shadow = Each Shadow
 
+		; Add this line to ensure shadow meshes are in world space
+		EntityParent ThisShadow\Mesh, 0
+		
 		; Find the surface of this shadow mesh.
 		SURFACE_Shadow = GetSurface(ThisShadow\Mesh, 1)
 				
@@ -881,6 +887,26 @@ Function Update_Shadows(Current_Camera)
 
 					If Receiver_In_Region
 
+						; Quick sphere test against frustum
+						Sphere_Center_X# = (Light_X# + Caster_X#) * 0.5
+						Sphere_Center_Y# = (Light_Y# + Caster_Y#) * 0.5 
+						Sphere_Center_Z# = (Light_Z# + Caster_Z#) * 0.5
+						Sphere_Radius# = Light_To_Caster_Distance# * 0.5
+
+						; Test receiver sphere against shadow frustum sphere
+						Dx# = Receiver_X# - Sphere_Center_X#
+						Dy# = Receiver_Y# - Sphere_Center_Y#
+						Dz# = Receiver_Z# - Sphere_Center_Z#
+						Distance# = Sqr(Dx#*Dx# + Dy#*Dy# + Dz#*Dz#)
+						
+						If Distance# > (Sphere_Radius# + ThisReceiver\Radius#)
+							Receiver_In_Region = False
+						EndIf
+					EndIf
+
+
+					If Receiver_In_Region
+
 						; Find the surface of this shadow mesh.
 						SURFACE_Shadow = GetSurface(ThisShadow\Mesh, 1)
 
@@ -1142,6 +1168,8 @@ Function Update_Shadows(Current_Camera)
 		
 						Next	; Next Surface
 
+
+                        EntityParent ThisShadow\Mesh, 0
 
 						; Set new shadow mesh to be full bright, use vertex colors, no fog.
 						EntityFX ThisShadow\Mesh, 1+2+8
