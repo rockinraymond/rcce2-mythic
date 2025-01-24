@@ -485,8 +485,10 @@ Next
 			MoveEntity(S\EN, 0, 0, 100.0)
 			PointEntity(S\EN, Cam)
 			
-			Delete_Light_Caster S\EN
-			Cast_Light S\EN, 10000
+			If S\CastShadow <> True
+				Cast_Light S\EN, 10000
+				S\CastShadow = True
+			EndIf
 			
 			;light rays
 			CameraProject Cam, EntityX(S\EN,1), EntityY(S\EN,1), EntityZ(S\EN,1) 

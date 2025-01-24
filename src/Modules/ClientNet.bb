@@ -902,6 +902,7 @@ Function UpdateNetwork()
 					A\AIMode = 501 ; For fade out
 					;FreeEntity A\ShadowEN : A\ShadowEN = 0 ;[###]
 					Delete_Shadow_Caster (A\EN)
+					A\CastShadow = False
 
 					FreeEntity A\NametagEN : A\NametagEN = 0
 					EntityType A\CollisionEN, 0
@@ -1346,9 +1347,10 @@ Function UpdateNetwork()
 								FreeProjectileInstance(ProjI)
 							EndIf
 						Next
-						
+						A\CastShadow = False
 						;Actor shadows Cysis145
 						Delete_Shadow_Caster (A\EN)
+
 						; Display exit message
 						
 						If A\RNID = True Then Output(LanguageString$(LS_PlayerLeftZone) + " " + A\Name$, 255, 0, 0)
@@ -1365,6 +1367,7 @@ Function UpdateNetwork()
 				If A <> Null
 				
 					Delete_Shadow_Caster (A\EN)
+					A\CastShadow = False
 					
 					Result = LoadActorInstance3D(A, 0.05)
 					If Result = False Then RuntimeError("Could not load actor mesh for " + A\Actor\Race$ + "!")
@@ -1417,12 +1420,14 @@ Function UpdateNetwork()
 				If AreaName$ <> OldAreaName$
 					For A.ActorInstance = Each ActorInstance
       					Delete_Shadow_Caster (A\EN)
+						A\CastShadow = False
    					Next
 				EndIf
 				
 				If AreaName$ = OldAreaName$
 					For A.ActorInstance = Each ActorInstance
       					Delete_Shadow_Caster (A\EN)
+						A\CastShadow = False
    					Next
 				EndIf
 

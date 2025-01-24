@@ -130,6 +130,8 @@ Type ActorInstance
 	Field Attribute_ID
 	Field Resistance_ID	
 	Field Account_ID
+
+	Field CastShadow
 End Type
 
 Type Party

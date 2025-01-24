@@ -79,9 +79,9 @@ Global Shadow_Nudge# = 0.000001
 
 
 ; You should set these to the current ambient light color in your world.
-Global Shadow_Ambient_Light_R = 0
-Global Shadow_Ambient_Light_G = 0
-Global Shadow_Ambient_Light_B = 0
+Global Shadow_Ambient_Light_R = 90
+Global Shadow_Ambient_Light_G = 90
+Global Shadow_Ambient_Light_B = 90
 
 
 ; I'm not sure why but I have to adjust the ambient light up from the setting used for the world to match
@@ -345,8 +345,8 @@ Function Update_Shadows(Current_Camera)
 
 
 	; Turn off the main camera view.
-		HideEntity Current_Camera
-		;CameraProjMode Current_Camera, 0
+		;HideEntity Current_Camera
+		CameraProjMode Current_Camera, 0
 
 	; Reset the count of the number of polys in all the shadows combined.
 		Shadow_Poly_Count = 0
@@ -1207,8 +1207,8 @@ Function Update_Shadows(Current_Camera)
 	FreeEntity Light_Pivot	
 	FreeEntity Caster_Pivot
 
-	ShowEntity Current_Camera
-	;CameraProjMode Current_Camera, 1
+	;ShowEntity Current_Camera
+	CameraProjMode Current_Camera, 1
 		
 End Function
 
