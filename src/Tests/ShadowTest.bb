@@ -18,7 +18,8 @@ InitShadowSystem()
 
 ; Create camera
 Global camera = CreateCamera()
-PositionEntity camera, 0, 20, -30
+CameraClsColor camera, 0, 0, 128
+PositionEntity camera, 0, 10, -20
 RotateEntity camera, 20, 0, 0
 CameraRange camera, 0.1, 1000
 NameEntity camera, "MainCamera"
@@ -27,20 +28,20 @@ NameEntity camera, "MainCamera"
 AmbientLight 128, 128, 128
 
 ; Create light
-Global light = CreateLight(1) ; Type 1 = Point light
-PositionEntity light, 10, 15, -10 ; Position closer to scene
+Global light = CreateLight()
+NameEntity light, "MainLight"
+PositionEntity light, 10, 15, -10
 LightRange light, 50 ; Smaller range for more concentrated shadows
 LightColor light, 255, 255, 255
-NameEntity light, "MainLight"
 
 ; Create shadow light
 Global shadowLight.ShadowLight = CreateShadowLight(light, 50, 1.0)
 
 ; Create floor (receiver) - using a flat cube
 Global floor = CreateCube()
-EntityColor floor, 200, 200, 200
+EntityColor floor, 128, 128, 128
 MoveEntity floor, 0, -5, 0
-ScaleEntity floor, 20, 0.1, 20 ; Smaller floor for more visible shadows
+ScaleEntity floor, 10, 0.1, 10 ; Smaller floor for more visible shadows
 NameEntity floor, "Floor"
 
 ; Create shadow receiver for floor
@@ -57,30 +58,32 @@ NameEntity cube, "Cube"
 Global cubeCaster.ShadowCaster = CreateShadowCaster(cube, 1024) ; Higher resolution shadow map
 
 ; Main loop
+Local angle# = 0
 While Not KeyDown(1)
-    ; Rotate cube slowly
-    TurnEntity cube, 0.1, 0.2, 0.0
+    ; Update camera position
+    angle# = angle# + 0.5
+    PositionEntity camera, Sin(angle#) * 20, 10, Cos(angle#) * 20
+    PointEntity camera, cube
     
+    ; Handle light movement
+    If KeyDown(200) Then MoveEntity light, 0, 0, 0.1 ; Forward
+    If KeyDown(208) Then MoveEntity light, 0, 0, -0.1 ; Back
+    If KeyDown(203) Then MoveEntity light, -0.1, 0, 0 ; Left
+    If KeyDown(205) Then MoveEntity light, 0.1, 0, 0 ; Right
+
     ; Update shadows
     UpdateShadows(camera)
     
-    ; Move light with keys
-    If KeyDown(203) Then MoveEntity light, -0.1, 0, 0 ; Left
-    If KeyDown(205) Then MoveEntity light, 0.1, 0, 0  ; Right
-    If KeyDown(200) Then MoveEntity light, 0, 0.1, 0  ; Up
-    If KeyDown(208) Then MoveEntity light, 0, -0.1, 0 ; Down
-    
-    UpdateWorld
     RenderWorld
     
-    ; Display debug info
-    Text 10, 10, "Arrow keys - Move light"
-    Text 10, 30, "ESC - Exit"
-    Text 10, 50, "Light pos: " + EntityX(light) + ", " + EntityY(light) + ", " + EntityZ(light)
-    Text 10, 70, "Cube pos: " + EntityX(cube) + ", " + EntityY(cube) + ", " + EntityZ(cube)
-    Text 10, 90, "In range: " + IsInRange(cube, light, 50)
-    Text 10, 110, "Shadow mesh exists: " + (floorReceiver\shadowMesh <> 0)
-    Text 10, 130, "Shadow vertices: " + CountVertices(GetSurface(floorReceiver\shadowMesh, 1))
+    ; Update debug info
+    Text 5, 25, "Arrow keys - Move light"
+    Text 5, 45, "ESC - Exit"
+    Text 5, 65, "Light pos: " + EntityX#(light) + ", " + EntityY#(light) + ", " + EntityZ#(light)
+    Text 5, 85, "Cube pos: " + EntityX#(cube) + ", " + EntityY#(cube) + ", " + EntityZ#(cube)
+    Text 5, 105, "In range: " + IsInRange(cube, light, shadowLight\range)
+    Text 5, 125, "Shadow mesh exists: " + (floorReceiver\shadowMesh <> 0)
+    Text 5, 145, "Shadow vertices: " + CountVertices(GetSurface(floorReceiver\shadowMesh, 1))
     
     Flip
 Wend

@@ -319,7 +319,7 @@ Function GetShadowMesh(receiver.ShadowReceiver)
     ; Set mesh properties
     EntityBlend mesh, 2 ; Multiply blend mode
     EntityAlpha mesh, 0.5
-    EntityFX mesh, 1 ; Just fullbright
+    EntityFX mesh, 0 ; No special effects
     EntityOrder mesh, -10 ; Draw well before other objects
     CreateSurface(mesh) ; Create initial surface
     
@@ -397,11 +397,11 @@ Function ProjectShadow(shadowMesh, casterEntity, light.ShadowLight, shadowMap)
                 Local pz# = lightZ# + dz# * t#
                 
                 If DEBUG_LOG_ENABLED
-                    DebugLog "Projected pos: " + px# + ", -4.93, " + pz#
+                    DebugLog "Projected pos: " + px# + ", -5.0, " + pz#
                 EndIf
                 
-                ; Add vertex to shadow mesh
-                VertexMap(v) = AddVertex(shadowSurf, px#, -4.93, pz#) ; Slightly above floor
+                ; Add vertex to shadow mesh exactly on floor plane
+                VertexMap(v) = AddVertex(shadowSurf, px#, -5.0, pz#)
                 VertexColor shadowSurf, VertexMap(v), 0, 0, 0 ; Pure black shadow
             Else
                 VertexMap(v) = -1 ; Mark invalid projection
