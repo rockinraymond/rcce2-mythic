@@ -20,6 +20,7 @@ Type ShadowReceiver
     Field scaleX#     ; Entity's X scale
     Field scaleY#     ; Entity's Y scale
     Field scaleZ#     ; Entity's Z scale
+    Field surfaceNormalMap ; Normal map texture for non-flat surfaces
 End Type
 
 Type ShadowLight 
@@ -27,6 +28,7 @@ Type ShadowLight
     Field range#      ; Light's effective range
     Field intensity#  ; Light's intensity (0-1)
     Field debugMode   ; Enable extra debug visualization
+    Field softness#   ; Shadow edge softness (0-1)
 End Type
 
 ; Debug visualization colors
@@ -40,6 +42,8 @@ Global SHADOW_MAP_SIZE = 512        ; Default shadow map resolution
 Global SHADOW_BIAS# = 0.001         ; Depth bias to prevent shadow acne
 Global SHADOW_SOFTNESS# = 1.0       ; Shadow edge softness
 Global SHADOW_AMBIENT_LIGHT# = 0.2  ; Minimum shadow darkness
+Global SHADOW_MAX_STEPS = 8         ; Maximum ray march steps for surface intersection
+Global SHADOW_STEP_SIZE# = 0.1      ; Step size for ray marching
 
 ; Performance settings
 Global MAX_SHADOW_CASTERS = 32
@@ -328,7 +332,7 @@ Function GetShadowMesh(receiver.ShadowReceiver)
     
     ; Set mesh properties
     EntityBlend mesh, 2 ; Multiply blend mode
-    EntityAlpha mesh, 0.5
+    EntityAlpha mesh, 0.5 ; Semi-transparent
     EntityFX mesh, 8 ; Fullbright + enable depth writes
     CreateSurface(mesh) ; Create initial surface
     
@@ -360,7 +364,6 @@ Function ProjectShadow(shadowMesh, casterEntity, light.ShadowLight, receiver.Sha
     
     If DEBUG_LOG_ENABLED
         DebugLog "Projecting shadow from " + EntityName$(casterEntity)
-        DebugLog "Light position: " + EntityX#(light\entity, True) + ", " + EntityY#(light\entity, True) + ", " + EntityZ#(light\entity, True)
     EndIf
     
     ; Get light position in world space
@@ -372,13 +375,8 @@ Function ProjectShadow(shadowMesh, casterEntity, light.ShadowLight, receiver.Sha
     Local shadowSurf = GetSurface(shadowMesh, 1)
     ClearSurface shadowSurf
     
-    ; Find the receiving surface Y position
+    ; Get floor Y position (receiver)
     Local floorY# = EntityY#(receiver\entity, True)
-    Local floorHeight# = floorY# + (receiver\scaleY# * 0.1) ; Adjust for scaled cube height
-    
-    If DEBUG_LOG_ENABLED
-        DebugLog "Floor height: " + floorHeight#
-    EndIf
     
     ; Process each surface of the caster
     For s = 1 To surfCount
@@ -398,28 +396,22 @@ Function ProjectShadow(shadowMesh, casterEntity, light.ShadowLight, receiver.Sha
             vy# = TFormedY#()
             vz# = TFormedZ#()
             
-            If DEBUG_LOG_ENABLED
-                DebugLog "Vertex " + v + " world pos: " + vx# + ", " + vy# + ", " + vz#
-            EndIf
-            
             ; Calculate direction from light to vertex
             Local dx# = vx# - lightX#
             Local dy# = vy# - lightY#
             Local dz# = vz# - lightZ#
             
-            ; Project onto floor plane at the receiver's height
+            ; Simple projection to floor plane
             If Abs(dy#) > 0.0001 ; Avoid division by zero
-                Local t# = (floorHeight# - lightY#) / dy#
+                Local t# = (floorY# - lightY#) / dy#
                 Local px# = lightX# + dx# * t#
                 Local pz# = lightZ# + dz# * t#
                 
-                If DEBUG_LOG_ENABLED
-                    DebugLog "Projected pos: " + px# + ", " + (floorHeight# + 1.01) + ", " + pz#
-                EndIf
+                ; Add vertex to shadow mesh with a larger offset from the floor
+                VertexMap(v) = AddVertex(shadowSurf, px#, floorY# + 0.5, pz#)
                 
-                ; Add vertex to shadow mesh slightly above the floor
-                VertexMap(v) = AddVertex(shadowSurf, px#, floorHeight# + 1.01, pz#)
-                VertexColor shadowSurf, VertexMap(v), 32, 32, 32 ; Dark gray shadow
+                ; Set shadow color (darker and more opaque)
+                VertexColor shadowSurf, VertexMap(v), 0, 0, 0
             Else
                 VertexMap(v) = -1 ; Mark invalid projection
             EndIf
@@ -434,13 +426,189 @@ Function ProjectShadow(shadowMesh, casterEntity, light.ShadowLight, receiver.Sha
             ; Only add triangle if all vertices were projected successfully
             If VertexMap(v0) >= 0 And VertexMap(v1) >= 0 And VertexMap(v2) >= 0
                 AddTriangle shadowSurf, VertexMap(v0), VertexMap(v1), VertexMap(v2)
-                
-                If DEBUG_LOG_ENABLED
-                    DebugLog "Added shadow triangle: " + v0 + ", " + v1 + ", " + v2
+            EndIf
+        Next
+    Next
+End Function
+
+Function RayMarchIntersect#(startX#, startY#, startZ#, dirX#, dirY#, dirZ#, target, hitX#, hitY#, hitZ#)
+    Local currentX# = startX#
+    Local currentY# = startY#
+    Local currentZ# = startZ#
+    
+    ; Get target mesh surface
+    Local surf = GetSurface(target, 1)
+    If surf = 0 Return False
+    
+    For s = 1 To SHADOW_MAX_STEPS
+        ; Move along ray
+        currentX# = currentX# + dirX# * SHADOW_STEP_SIZE#
+        currentY# = currentY# + dirY# * SHADOW_STEP_SIZE#
+        currentZ# = currentZ# + dirZ# * SHADOW_STEP_SIZE#
+        
+        ; Transform point to target's local space
+        TFormPoint currentX#, currentY#, currentZ#, 0, target
+        Local localX# = TFormedX#()
+        Local localY# = TFormedY#()
+        Local localZ# = TFormedZ#()
+        
+        ; Check intersection with each triangle
+        For t = 0 To CountTriangles(surf)-1
+            Local v0 = TriangleVertex(surf, t, 0)
+            Local v1 = TriangleVertex(surf, t, 1)
+            Local v2 = TriangleVertex(surf, t, 2)
+            
+            ; Get triangle vertices
+            Local x0# = VertexX#(surf, v0)
+            Local y0# = VertexY#(surf, v0)
+            Local z0# = VertexZ#(surf, v0)
+            
+            Local x1# = VertexX#(surf, v1)
+            Local y1# = VertexY#(surf, v1)
+            Local z1# = VertexZ#(surf, v1)
+            
+            Local x2# = VertexX#(surf, v2)
+            Local y2# = VertexY#(surf, v2)
+            Local z2# = VertexZ#(surf, v2)
+            
+            ; Check if point is inside triangle's bounding box first (optimization)
+            Local minX# = Min(Min(x0#, x1#), x2#) - SHADOW_BIAS#
+            Local maxX# = Max(Max(x0#, x1#), x2#) + SHADOW_BIAS#
+            Local minY# = Min(Min(y0#, y1#), y2#) - SHADOW_BIAS#
+            Local maxY# = Max(Max(y0#, y1#), y2#) + SHADOW_BIAS#
+            Local minZ# = Min(Min(z0#, z1#), z2#) - SHADOW_BIAS#
+            Local maxZ# = Max(Max(z0#, z1#), z2#) + SHADOW_BIAS#
+            
+            If localX# >= minX# And localX# <= maxX# And localY# >= minY# And localY# <= maxY# And localZ# >= minZ# And localZ# <= maxZ#
+                ; Point is in bounding box, do detailed triangle test
+                If PointInTriangle(localX#, localY#, localZ#, x0#, y0#, z0#, x1#, y1#, z1#, x2#, y2#, z2#)
+                    ; Transform hit point back to world space
+                    TFormPoint currentX#, currentY#, currentZ#, target, 0
+                    hitX# = TFormedX#()
+                    hitY# = TFormedY#()
+                    hitZ# = TFormedZ#()
+                    Return True
                 EndIf
             EndIf
         Next
     Next
+    
+    Return False
+End Function
+
+Function PointInTriangle#(px#, py#, pz#, x0#, y0#, z0#, x1#, y1#, z1#, x2#, y2#, z2#)
+    ; Calculate triangle normal
+    Local nx# = (y1# - y0#) * (z2# - z0#) - (z1# - z0#) * (y2# - y0#)
+    Local ny# = (z1# - z0#) * (x2# - x0#) - (x1# - x0#) * (z2# - z0#)
+    Local nz# = (x1# - x0#) * (y2# - y0#) - (y1# - y0#) * (x2# - x0#)
+    
+    ; Normalize normal
+    Local len# = Sqr(nx#*nx# + ny#*ny# + nz#*nz#)
+    If len# = 0 Return False
+    nx# = nx# / len#
+    ny# = ny# / len#
+    nz# = nz# / len#
+    
+    ; Project point and triangle onto dominant axis plane
+    Local absX# = Abs(nx#)
+    Local absY# = Abs(ny#)
+    Local absZ# = Abs(nz#)
+    
+    Local u0#, v0#, u1#, v1#, u2#, v2#, pu#, pv#
+    
+    ; Choose largest normal component to determine projection plane
+    If absX# >= absY# And absX# >= absZ#
+        ; Project onto YZ plane
+        u0# = y0# : v0# = z0#
+        u1# = y1# : v1# = z1#
+        u2# = y2# : v2# = z2#
+        pu# = py# : pv# = pz#
+    ElseIf absY# >= absX# And absY# >= absZ#
+        ; Project onto XZ plane
+        u0# = x0# : v0# = z0#
+        u1# = x1# : v1# = z1#
+        u2# = x2# : v2# = z2#
+        pu# = px# : pv# = pz#
+    Else
+        ; Project onto XY plane
+        u0# = x0# : v0# = y0#
+        u1# = x1# : v1# = y1#
+        u2# = x2# : v2# = y2#
+        pu# = px# : pv# = py#
+    EndIf
+    
+    ; Calculate barycentric coordinates
+    Local area# = (u1# - u0#) * (v2# - v0#) - (u2# - u0#) * (v1# - v0#)
+    If area# = 0 Return False
+    
+    Local s# = ((u1# - u0#) * (pv# - v0#) - (pu# - u0#) * (v1# - v0#)) / area#
+    Local t# = ((pu# - u0#) * (v2# - v0#) - (u2# - u0#) * (pv# - v0#)) / area#
+    
+    ; Point is inside triangle if barycentric coordinates are all positive and sum to <= 1
+    Return s# >= 0 And t# >= 0 And (s# + t#) <= 1
+End Function
+
+Function GetSurfaceNormalAtPoint(entity, x#, y#, z#, nx#, ny#, nz#)
+    Local surf = GetSurface(entity, 1)
+    If surf = 0 
+        nx# = 0
+        ny# = 1
+        nz# = 0
+        Return
+    EndIf
+    
+    ; Find closest triangle and interpolate normal
+    Local closestDist# = 1000000
+    Local closestTri = -1
+    
+    For t = 0 To CountTriangles(surf)-1
+        Local v0 = TriangleVertex(surf, t, 0)
+        Local v1 = TriangleVertex(surf, t, 1)
+        Local v2 = TriangleVertex(surf, t, 2)
+        
+        ; Get triangle center
+        Local cx# = (VertexX#(surf,v0) + VertexX#(surf,v1) + VertexX#(surf,v2)) / 3
+        Local cy# = (VertexY#(surf,v0) + VertexY#(surf,v1) + VertexY#(surf,v2)) / 3
+        Local cz# = (VertexZ#(surf,v0) + VertexZ#(surf,v1) + VertexZ#(surf,v2)) / 3
+        
+        ; Calculate distance to point
+        Local dx# = x# - cx#
+        Local dy# = y# - cy#
+        Local dz# = z# - cz#
+        Local dist# = Sqr(dx#*dx# + dy#*dy# + dz#*dz#)
+        
+        If dist# < closestDist#
+            closestDist# = dist#
+            closestTri = t
+        EndIf
+    Next
+    
+    If closestTri >= 0
+        ; Get vertex normals
+        Local vv0 = TriangleVertex(surf, closestTri, 0)
+        Local vv1 = TriangleVertex(surf, closestTri, 1)
+        Local vv2 = TriangleVertex(surf, closestTri, 2)
+        
+        nx# = (VertexNX#(surf,vv0) + VertexNX#(surf,vv1) + VertexNX#(surf,vv2)) / 3
+        ny# = (VertexNY#(surf,vv0) + VertexNY#(surf,vv1) + VertexNY#(surf,vv2)) / 3
+        nz# = (VertexNZ#(surf,vv0) + VertexNZ#(surf,vv1) + VertexNZ#(surf,vv2)) / 3
+        
+        ; Normalize
+        Local len# = Sqr(nx#*nx# + ny#*ny# + nz#*nz#)
+        If len# > 0
+            nx# = nx# / len#
+            ny# = ny# / len#
+            nz# = nz# / len#
+        Else
+            nx# = 0
+            ny# = 1
+            nz# = 0
+        EndIf
+    Else
+        nx# = 0
+        ny# = 1
+        nz# = 0
+    EndIf
 End Function
 
 ; -------------------------------------------------------------------------------------------------------------------
@@ -501,3 +669,11 @@ Function VisualizeShadowProjection(shadowMesh, light.ShadowLight, caster.ShadowC
     EntityAlpha shadowMesh, 0.5
     WireFrame False
 End Function 
+
+Function Min(a#, b#)
+    If a# < b# Then Return a# Else Return b#
+End Function
+
+Function Max(a#, b#)
+    If a# > b# Then Return a# Else Return b#
+End Function
