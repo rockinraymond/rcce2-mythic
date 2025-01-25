@@ -17,6 +17,9 @@ Type ShadowReceiver
     Field boundingSphere# ; Radius of bounding sphere for culling
     Field debugMode    ; Enable extra debug visualization
     Field shadowMesh   ; The mesh used for shadows
+    Field scaleX#     ; Entity's X scale
+    Field scaleY#     ; Entity's Y scale
+    Field scaleZ#     ; Entity's Z scale
 End Type
 
 Type ShadowLight 
@@ -97,8 +100,15 @@ Function CreateShadowReceiver.ShadowReceiver(entity)
     receiver\entity = entity
     receiver\boundingSphere# = CalculateBoundingSphere(entity)
     
+    ; Store current scale
+    TFormVector 1, 1, 1, entity, 0
+    receiver\scaleX# = TFormedX#()
+    receiver\scaleY# = TFormedY#()
+    receiver\scaleZ# = TFormedZ#()
+    
     If DEBUG_LOG_ENABLED
         DebugLog "Created shadow receiver: " + EntityName$(entity)
+        DebugLog "Receiver scale: " + receiver\scaleX# + ", " + receiver\scaleY# + ", " + receiver\scaleZ#
     EndIf
     
     Return receiver
@@ -274,7 +284,7 @@ Function ApplyShadowToReceiver(caster.ShadowCaster, light.ShadowLight, receiver.
     If Not shadowMesh Return
     
     ; Project shadow onto receiver
-    ProjectShadow(shadowMesh, caster\entity, light, caster\shadowMap)
+    ProjectShadow(shadowMesh, caster\entity, light, receiver, caster\shadowMap)
     
     If DEBUG_MODE
         VisualizeShadowProjection(shadowMesh, light, caster, receiver)
@@ -319,8 +329,7 @@ Function GetShadowMesh(receiver.ShadowReceiver)
     ; Set mesh properties
     EntityBlend mesh, 2 ; Multiply blend mode
     EntityAlpha mesh, 0.5
-    EntityFX mesh, 1+8 ; Fullbright + enable depth writes
-    EntityOrder mesh, -10 ; Draw well before other objects
+    EntityFX mesh, 8 ; Fullbright + enable depth writes
     CreateSurface(mesh) ; Create initial surface
     
     ; Store mesh in receiver
@@ -345,7 +354,7 @@ Function CalculateShadowMatrix#(light.ShadowLight, caster.ShadowCaster)
     Return 1.0
 End Function
 
-Function ProjectShadow(shadowMesh, casterEntity, light.ShadowLight, shadowMap)
+Function ProjectShadow(shadowMesh, casterEntity, light.ShadowLight, receiver.ShadowReceiver, shadowMap)
     Local surfCount = CountSurfaces(casterEntity)
     If surfCount = 0 Return
     
@@ -362,6 +371,14 @@ Function ProjectShadow(shadowMesh, casterEntity, light.ShadowLight, shadowMap)
     ; Get the shadow surface
     Local shadowSurf = GetSurface(shadowMesh, 1)
     ClearSurface shadowSurf
+    
+    ; Find the receiving surface Y position
+    Local floorY# = EntityY#(receiver\entity, True)
+    Local floorHeight# = floorY# + (receiver\scaleY# * 0.1) ; Adjust for scaled cube height
+    
+    If DEBUG_LOG_ENABLED
+        DebugLog "Floor height: " + floorHeight#
+    EndIf
     
     ; Process each surface of the caster
     For s = 1 To surfCount
@@ -390,19 +407,19 @@ Function ProjectShadow(shadowMesh, casterEntity, light.ShadowLight, shadowMap)
             Local dy# = vy# - lightY#
             Local dz# = vz# - lightZ#
             
-            ; Project onto floor plane (Y = -5)
+            ; Project onto floor plane at the receiver's height
             If Abs(dy#) > 0.0001 ; Avoid division by zero
-                Local t# = (-5.0 - lightY#) / dy#
+                Local t# = (floorHeight# - lightY#) / dy#
                 Local px# = lightX# + dx# * t#
                 Local pz# = lightZ# + dz# * t#
                 
                 If DEBUG_LOG_ENABLED
-                    DebugLog "Projected pos: " + px# + ", -5.0, " + pz#
+                    DebugLog "Projected pos: " + px# + ", " + (floorHeight# + 1.01) + ", " + pz#
                 EndIf
                 
-                ; Add vertex to shadow mesh exactly on floor plane
-                VertexMap(v) = AddVertex(shadowSurf, px#, -5.0, pz#)
-                VertexColor shadowSurf, VertexMap(v), 0, 0, 0 ; Pure black shadow
+                ; Add vertex to shadow mesh slightly above the floor
+                VertexMap(v) = AddVertex(shadowSurf, px#, floorHeight# + 1.01, pz#)
+                VertexColor shadowSurf, VertexMap(v), 32, 32, 32 ; Dark gray shadow
             Else
                 VertexMap(v) = -1 ; Mark invalid projection
             EndIf
