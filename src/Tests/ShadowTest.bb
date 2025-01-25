@@ -42,7 +42,6 @@ EntityColor floor, 200, 200, 200
 MoveEntity floor, 0, -5, 0
 ScaleEntity floor, 20, 0.1, 20 ; Smaller floor for more visible shadows
 NameEntity floor, "Floor"
-RegisterEntity(floor)
 
 ; Create shadow receiver for floor
 Global floorReceiver.ShadowReceiver = CreateShadowReceiver(floor)
@@ -53,7 +52,6 @@ PositionEntity cube, 0, 0, 0
 EntityColor cube, 255, 0, 0
 ScaleEntity cube, 2, 2, 2
 NameEntity cube, "Cube"
-RegisterEntity(cube)
 
 ; Create shadow caster for cube
 Global cubeCaster.ShadowCaster = CreateShadowCaster(cube, 1024) ; Higher resolution shadow map
@@ -81,6 +79,8 @@ While Not KeyDown(1)
     Text 10, 50, "Light pos: " + EntityX(light) + ", " + EntityY(light) + ", " + EntityZ(light)
     Text 10, 70, "Cube pos: " + EntityX(cube) + ", " + EntityY(cube) + ", " + EntityZ(cube)
     Text 10, 90, "In range: " + IsInRange(cube, light, 50)
+    Text 10, 110, "Shadow mesh exists: " + (floorReceiver\shadowMesh <> 0)
+    Text 10, 130, "Shadow vertices: " + CountVertices(GetSurface(floorReceiver\shadowMesh, 1))
     
     Flip
 Wend

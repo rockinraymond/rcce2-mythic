@@ -167,11 +167,15 @@ Function UpdateLightShadows(light.ShadowLight, shadowCam)
             ; Apply shadows to receivers
             For receiver.ShadowReceiver = Each ShadowReceiver
                 If IsInRange(receiver\entity, light\entity, light\range#)
-                
+                    If DEBUG_LOG_ENABLED
+                        DebugLog "Projecting shadow from " + EntityName$(caster\entity) + " to " + EntityName$(receiver\entity)
+                        DebugLog "Light position: " + lightX# + ", " + lightY# + ", " + lightZ#
+                    EndIf
+                    
                     ApplyShadowToReceiver(caster, light, receiver)
-                endif
+                EndIf
             Next
-        endif
+        EndIf
     Next
     
     If DEBUG_MODE
@@ -244,10 +248,6 @@ Function RenderShadowMap(caster.ShadowCaster, light.ShadowLight, shadowCam)
     ; Configure shadow camera
     CameraViewport shadowCam, 0, 0, caster\resolution, caster\resolution
     
-    ; Set caster properties for shadow map rendering
-    EntityFX caster\entity, 1 ; Full bright
-    EntityColor caster\entity, 0, 0, 0 ; Make it pure black for shadow map
-    
     ; Hide all entities except the shadow caster
     HideAllExcept(caster\entity)
     
@@ -256,8 +256,6 @@ Function RenderShadowMap(caster.ShadowCaster, light.ShadowLight, shadowCam)
     
     ; Restore entity states
     ShowAll()
-    EntityFX caster\entity, 0 ; Reset to default
-    EntityColor caster\entity, 255, 0, 0 ; Reset to red
     
     ; Reset buffer
     SetBuffer BackBuffer()
@@ -315,13 +313,14 @@ Function GetShadowMesh(receiver.ShadowReceiver)
         receiver\shadowMesh = 0
     EndIf
     
-    ; Create new shadow mesh
+    ; Create new shadow mesh in world space (no parent)
     Local mesh = CreateMesh()
     
     ; Set mesh properties
-    EntityOrder mesh, -1 ; Draw before other objects
-    EntityFX mesh, 1+2+8 ; Fullbright + vertex colors + no fog
     EntityBlend mesh, 2 ; Multiply blend mode
+    EntityAlpha mesh, 0.5
+    EntityFX mesh, 1 ; Just fullbright
+    EntityOrder mesh, -10 ; Draw well before other objects
     CreateSurface(mesh) ; Create initial surface
     
     ; Store mesh in receiver
@@ -350,6 +349,11 @@ Function ProjectShadow(shadowMesh, casterEntity, light.ShadowLight, shadowMap)
     Local surfCount = CountSurfaces(casterEntity)
     If surfCount = 0 Return
     
+    If DEBUG_LOG_ENABLED
+        DebugLog "Projecting shadow from " + EntityName$(casterEntity)
+        DebugLog "Light position: " + EntityX#(light\entity, True) + ", " + EntityY#(light\entity, True) + ", " + EntityZ#(light\entity, True)
+    EndIf
+    
     ; Get light position in world space
     Local lightX# = EntityX#(light\entity, True)
     Local lightY# = EntityY#(light\entity, True)
@@ -377,6 +381,10 @@ Function ProjectShadow(shadowMesh, casterEntity, light.ShadowLight, shadowMap)
             vy# = TFormedY#()
             vz# = TFormedZ#()
             
+            If DEBUG_LOG_ENABLED
+                DebugLog "Vertex " + v + " world pos: " + vx# + ", " + vy# + ", " + vz#
+            EndIf
+            
             ; Calculate direction from light to vertex
             Local dx# = vx# - lightX#
             Local dy# = vy# - lightY#
@@ -388,9 +396,13 @@ Function ProjectShadow(shadowMesh, casterEntity, light.ShadowLight, shadowMap)
                 Local px# = lightX# + dx# * t#
                 Local pz# = lightZ# + dz# * t#
                 
+                If DEBUG_LOG_ENABLED
+                    DebugLog "Projected pos: " + px# + ", -4.93, " + pz#
+                EndIf
+                
                 ; Add vertex to shadow mesh
-                VertexMap(v) = AddVertex(shadowSurf, px#, -4.99, pz#) ; Slightly above floor
-                VertexColor shadowSurf, VertexMap(v), 0, 0, 0
+                VertexMap(v) = AddVertex(shadowSurf, px#, -4.93, pz#) ; Slightly above floor
+                VertexColor shadowSurf, VertexMap(v), 0, 0, 0 ; Pure black shadow
             Else
                 VertexMap(v) = -1 ; Mark invalid projection
             EndIf
@@ -405,28 +417,20 @@ Function ProjectShadow(shadowMesh, casterEntity, light.ShadowLight, shadowMap)
             ; Only add triangle if all vertices were projected successfully
             If VertexMap(v0) >= 0 And VertexMap(v1) >= 0 And VertexMap(v2) >= 0
                 AddTriangle shadowSurf, VertexMap(v0), VertexMap(v1), VertexMap(v2)
+                
+                If DEBUG_LOG_ENABLED
+                    DebugLog "Added shadow triangle: " + v0 + ", " + v1 + ", " + v2
+                EndIf
             EndIf
         Next
     Next
-    
-    ; Apply shadow properties
-    EntityAlpha shadowMesh, 0.7 ; Make shadow more visible
-    EntityBlend shadowMesh, 2 ; Multiply blend mode
 End Function
 
 ; -------------------------------------------------------------------------------------------------------------------
 ; Entity visibility helpers
 ; -------------------------------------------------------------------------------------------------------------------
 
-; Entity tracking
-Global EntityList.BBList = CreateList()    ; Array to store entity handles
-
-Function RegisterEntity(entity)
-    ListAdd(EntityList, entity)
-End Function
-
 Function HideAllExcept(exceptEntity)
-    ; Only hide casters, leave receivers visible
     For entity.ShadowCaster = Each ShadowCaster
         If entity\entity <> exceptEntity
             HideEntity entity\entity
@@ -435,7 +439,6 @@ Function HideAllExcept(exceptEntity)
 End Function
 
 Function ShowAll()
-    ; Show all casters
     For entity.ShadowCaster = Each ShadowCaster
         ShowEntity entity\entity
     Next
