@@ -319,7 +319,7 @@ Function GetShadowMesh(receiver.ShadowReceiver)
     ; Set mesh properties
     EntityBlend mesh, 2 ; Multiply blend mode
     EntityAlpha mesh, 0.5
-    EntityFX mesh, 0 ; No special effects
+    EntityFX mesh, 1+8 ; Fullbright + enable depth writes
     EntityOrder mesh, -10 ; Draw well before other objects
     CreateSurface(mesh) ; Create initial surface
     
