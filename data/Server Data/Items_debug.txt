@@ -1,12 +1,6 @@
 Item ID: 0
-Item Name: Imperial Armor
+Item Name: Sword
 
 Item ID: 1
-Item Name: Imperial Helmet
-
-Item ID: 2
-Item Name: Scarred Shield
-
-Item ID: 3
-Item Name: Sword
+Item Name: Shield
 
