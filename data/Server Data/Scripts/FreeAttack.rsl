@@ -1,0 +1,99 @@
+Using "RC_Core.rcm"
+
+Function Main()
+
+Player = Actor()
+OutPut(Actor(),"testMessage")
+
+;Name check
+
+PName$ = Name(Player)
+
+
+;Shield Check
+If (ActorShield(Player) <> 0)
+	If ItemWeaponType(ActorWeapon(Player)) > 1
+	Output(Player, "You cannot use a shield with this weapon!", 255, 255, 0)
+		Return
+	EndIf
+EndIf
+
+
+;Range Weapon Check
+If( ItemWeaponType(ActorWeapon(Player)) = 3)
+	If ((HasItem(Player,"Arrow",1) = 0) AND (HUMAN = 1))
+		Output(Player, "You have no more arrows!", 255, 255, 0)
+		Return
+	Else
+		GiveItem(Player,"Arrow",-1)
+	EndIf
+EndIf
+
+
+If(ItemWeaponType(ActorWeapon(Player)) = 1)
+	
+	Select rand(1,4)
+	case 1
+	animateactor(player,"Right Hand Attack", 1)
+	case 2
+	animateactor(player,"Right Hand Attack 2", 1)
+	case 3
+	animateactor(player,"Right Hand Attack 3", 1)
+	case 4
+	animateactor(player, "Right Hand Attack 4", 1)
+	End Select
+	doevents(500)
+	;Playsound(Player,13,1)
+	
+elseif(ItemWeaponType(ActorWeapon(Player)) = 2)
+	If ItemName(ActorWeapon(Player)) = "Spear"
+	Select rand(1,3)
+	case 1
+	animateactor(player,"Staff Attack 1", 1)
+	case 2
+	animateactor(player,"staff attack 2", 1)
+	case 3
+	animateactor(player,"staff attack 3", 1)
+	case 4
+	animateactor(player,"staff attack 4", 1)
+	case 5
+	animateactor(player,"spear attack", 1)
+	End Select
+	doevents(500)
+	;Playsound(Player,13,1)
+	
+	else
+	
+	Select rand(1,3)
+	case 1
+	animateactor(player,"Two Hand attack", 1)
+	case 2
+	animateactor(player,"two hand attack 2", 1)
+	case 3
+	animateactor(player,"two hand attack 3", 1)
+	End Select
+	doevents(500)
+	;Playsound(Player,13,1)
+	EndIf
+
+elseif(ItemWeaponType(ActorWeapon(Player)) = 3)
+	animateactor(player,"bow attack", 2)
+	doevents(1200)
+	Playsound(Player,2,1)
+else
+	Select rand(1,3)
+	case 1
+	animateactor(player,"default attack", 1)
+	case 2
+	animateactor(player,"default attack 2", 1)
+	case 2
+	animateactor(player,"default attack 3", 1)
+	End Select
+	doevents(500)
+	;Playsound(Player,13,1)	
+EndIf
+
+	
+	
+End Function
+;End Basic Attack script 

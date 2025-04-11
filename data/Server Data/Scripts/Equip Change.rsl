@@ -6,8 +6,33 @@ Using "RC_Core.rcm"
 ; The context actor for the script is null
 Function Main()
 
-	; Done
+	Player = Actor()	
+	If (ActorIsHuman(Player) = 1)
+	ChestAC = 0
 	
+	If ActorChest(Player) <> 0
+	If (ItemHealth(ActorChest(Player)) > 0)
+		ChestAC = ItemArmor(ActorChest(Player))
+	else 
+		ChestAC = 10 ;broken armor is hazordous
+	EndIf
+	EndIf
+	
+	If ActorShield(player) <> 0
+	If (ItemHealth(ActorShield(Player)) > 0)
+	ShieldAC = ItemArmor(ActorShield(Player))
+	Else
+	ShieldAC = -1 ;broken shield is hazordous
+	EndIf
+	EndIf
+	
+		
+	If (ChestAC = 0)
+	SetAttribute(Player,"Armor Class",11 + ShieldAC)
+	Else
+	SetAttribute(Player,"Armor Class",ChestAC + ShieldAC)
+	EndIf
+	EndIf
 	Return
 
 End Function

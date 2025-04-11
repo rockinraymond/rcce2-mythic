@@ -1,0 +1,609 @@
+Using "RC_Core.rcm"
+
+; Class based functions for leveling up used in levelup.rsl
+
+Function LevelFighter(Player,NewLevel)
+PlayerCon = Attribute(player,"constitution")
+
+;IncreaseAttackBonus
+ATKBNS% = AttackBonusFighter(NewLevel)
+SetAttribute(Player, "Attack Bonus", ATKBNS%)
+;Increase Health
+HitDie = 8
+
+If Race(Player) = "Elf" OR Race(Player) = "Halfling"
+HitDie = 6
+EndIf
+
+FlatRate = 2
+CurrentHealth = MaxAttribute(Player,"Health")
+
+If (NewLevel < 10)
+HealthIncrease = Rand(1,HitDie) + AbilityBonus(PlayerCon)
+	If (HealthIncrease < 1)
+	HealthIncrease = 1
+	EndIf
+Else
+HealthIncrease = FlatRate
+EndIf
+
+Output(Player,"You have gained " + HealthIncrease + " hitpoints!", 150,255,150)
+NewHealth = CurrentHealth + HealthIncrease
+SetMaxAttribute(Player,"Health",NewHealth)
+SetAttribute(Player,"Health", NewHealth)
+Return
+
+End Function
+
+Function LevelThief(Player,NewLevel)
+PlayerCon = Attribute(player,"constitution")
+
+;IncreaseAttackBonus
+ATKBNS = AttackBonusThiefCleric(NewLevel)
+SetAttribute(Player, "Attack Bonus", ATKBNS)
+
+;Increase Health
+HitDie = 4
+FlatRate = 2
+CurrentHealth = MaxAttribute(Player,"Health")
+
+If (NewLevel < 10)
+HealthIncrease = Rand(1,HitDie) + AbilityBonus(PlayerCon)
+	If (HealthIncrease < 1)
+	HealthIncrease = 1
+	EndIf
+Else
+HealthIncrease = FlatRate
+EndIf
+Output(Player,"You have gained " + HealthIncrease + " hitpoints!", 150,255,150)
+NewHealth = CurrentHealth + HealthIncrease
+SetMaxAttribute(Player,"Health",NewHealth)
+SetAttribute(Player,"Health", NewHealth)
+Return
+End Function
+
+Function LevelCleric(Player,NewLevel)
+PlayerCon = Attribute(player,"constitution")
+
+;IncreaseAttackBonus
+ATKBNS = AttackBonusThiefCleric(NewLevel)
+SetAttribute(Player, "Attack Bonus", ATKBNS)
+
+;Increase Health
+HitDie = 6
+FlatRate = 1
+CurrentHealth = MaxAttribute(Player,"Health")
+
+If (NewLevel < 10)
+HealthIncrease = Rand(1,HitDie) + AbilityBonus(PlayerCon)
+	If (HealthIncrease < 1)
+	HealthIncrease = 1
+	EndIf
+Else
+HealthIncrease = FlatRate
+EndIf
+Output(Player,"You have gained " + HealthIncrease + " hitpoints!", 150,255,150)
+NewHealth = CurrentHealth + HealthIncrease
+SetMaxAttribute(Player,"Health",NewHealth)
+SetAttribute(Player,"Health", NewHealth)
+Return
+End Function
+
+Function LevelMagicUser(Player,NewLevel)
+PlayerCon = Attribute(player,"constitution")
+
+;IncreaseAttackBonus
+ATKBNS = AttackBonusMagicUser(NewLevel)
+SetAttribute(Player, "Attack Bonus", ATKBNS)
+
+;Increase Health
+HitDie = 4
+FlatRate = 1
+CurrentHealth = MaxAttribute(Player,"Health")
+
+If (NewLevel < 10)
+HealthIncrease = Rand(1,HitDie) + AbilityBonus(PlayerCon)
+	If (HealthIncrease < 1)
+	HealthIncrease = 1
+	EndIf
+Else
+HealthIncrease = FlatRate
+EndIf
+Output(Player,"You have gained " + HealthIncrease + " hitpoints!", 150,255,150)
+NewHealth = CurrentHealth + HealthIncrease
+SetMaxAttribute(Player,"Health",NewHealth)
+SetAttribute(Player,"Health", NewHealth)
+Return
+End Function
+
+Function DeLevelFighter(Player,NewLevel)
+
+;DecreaseAttackBonus
+ATKBNS% = AttackBonusFighter(NewLevel)
+SetAttribute(Player, "Attack Bonus", ATKBNS%)
+;Decrease Health
+HitDie = 8
+
+If Race(Player) = "Elf" OR Race(Player) = "Halfling"
+HitDie = 6
+EndIf
+
+FlatRate = 2
+CurrentHealth = MaxAttribute(Player,"Health")
+
+If (NewLevel < 10)
+HealthDecrease = Rand(1,HitDie)
+Else
+HealthDecrease = FlatRate
+EndIf
+
+Output(Player,"You have lost " + HealthDecrease + " hitpoints!", 255,150,150)
+NewHealth = CurrentHealth - HealthDecrease
+If newhealth < hitdie
+newhealth = hitdie
+EndIf
+SetMaxAttribute(Player,"Health",NewHealth)
+If Attribute(player,Health) > MaxAttribute(Player,"health")
+SetAttribute(Player,"Health", NewHealth)
+EndIf
+Return
+
+End Function
+
+Function DeLevelThief(Player,NewLevel)
+
+;DecreaseAttackBonus
+ATKBNS% = AttackBonusThiefCleric(NewLevel)
+SetAttribute(Player, "Attack Bonus", ATKBNS%)
+;Decrease Health
+HitDie = 4
+FlatRate = 2
+CurrentHealth = MaxAttribute(Player,"Health")
+
+If (NewLevel < 10)
+HealthDecrease = Rand(1,HitDie)
+Else
+HealthDecrease = FlatRate
+EndIf
+
+Output(Player,"You have lost " + HealthDecrease + " hitpoints!", 255,150,0)
+NewHealth = CurrentHealth - HealthDecrease
+If newhealth < hitdie
+newhealth = hitdie
+EndIf
+SetMaxAttribute(Player,"Health",NewHealth)
+If Attribute(player,Health) > MaxAttribute(Player,"health")
+SetAttribute(Player,"Health", NewHealth)
+EndIf
+Return
+
+End Function
+
+Function DeLevelCleric(Player,NewLevel)
+
+;DecreaseAttackBonus
+ATKBNS% = AttackBonusThiefCleric(NewLevel)
+SetAttribute(Player, "Attack Bonus", ATKBNS%)
+;Decrease Health
+HitDie = 6
+FlatRate = 1
+CurrentHealth = MaxAttribute(Player,"Health")
+
+If (NewLevel < 10)
+HealthDecrease = Rand(1,HitDie)
+Else
+HealthDecrease = FlatRate
+EndIf
+
+Output(Player,"You have lost " + HealthDecrease + " hitpoints!", 255,150,0)
+NewHealth = CurrentHealth - HealthDecrease
+If newhealth < hitdie
+newhealth = hitdie
+EndIf
+SetMaxAttribute(Player,"Health",NewHealth)
+If Attribute(player,Health) > MaxAttribute(Player,"health")
+SetAttribute(Player,"Health", NewHealth)
+EndIf
+Return
+
+End Function
+
+Function DeLevelMagicUser(Player,NewLevel)
+
+;DecreaseAttackBonus
+ATKBNS% = AttackBonusMagicUser(NewLevel)
+SetAttribute(Player, "Attack Bonus", ATKBNS%)
+
+;Decrease Health
+HitDie = 6
+FlatRate = 1
+CurrentHealth = MaxAttribute(Player,"Health")
+
+If (NewLevel < 10)
+HealthDecrease = Rand(1,HitDie)
+Else
+HealthDecrease = FlatRate
+EndIf
+
+Output(Player,"You have lost " + HealthDecrease + " hitpoints!", 255,150,0)
+If newhealth < hitdie
+newhealth = hitdie
+EndIf
+NewHealth = CurrentHealth - HealthDecrease
+SetMaxAttribute(Player,"Health",NewHealth)
+If Attribute(player,Health) > MaxAttribute(Player,"health")
+SetAttribute(Player,"Health", NewHealth)
+EndIf
+Return
+
+End Function
+
+
+Function NextLvlXPFighter(PlayerLevel%)
+Select PlayerLevel
+case 1
+XPAMT = 2000
+case 2
+XPAMT = 4000
+case 3
+XPAMT = 8000
+case 4
+XPAMT = 16000
+case 5
+XPAMT = 32000
+case 6
+XPAMT = 64000
+case 7
+XPAMT = 120000
+case 8
+XPAMT = 240000
+case 9
+XPAMT = 360000
+default
+XPAMT = 0
+End Select
+Return XPAMT
+End Function
+
+Function NextLvlXPThief(PlayerLevel%)
+Select PlayerLevel
+case 1
+XPAMT = 1250
+case 2
+XPAMT = 2500
+case 3
+XPAMT = 5000
+case 4
+XPAMT = 10000
+case 5
+XPAMT = 20000
+case 6
+XPAMT = 40000
+case 7
+XPAMT = 75000
+case 8
+XPAMT = 150000
+case 9
+XPAMT = 225000
+default
+XPAMT = 0
+End Select
+Return XPAMT
+Return
+End Function
+
+Function NextLvlXPCleric(PlayerLevel%)
+Select PlayerLevel
+case 1
+XPAMT = 1500
+case 2
+XPAMT = 3000
+case 3
+XPAMT = 6000
+case 4
+XPAMT = 12000
+case 5
+XPAMT = 24000
+case 6
+XPAMT = 48000
+case 7
+XPAMT = 90000
+case 8
+XPAMT = 180000
+case 9
+XPAMT = 270000
+default
+XPAMT = 0
+End Select
+Return XPAMT
+Return
+End Function
+
+Function NextLvlXPMagicUser(PlayerLevel%)
+Select PlayerLevel
+case 1
+XPAMT = 2500
+case 2
+XPAMT = 5000
+case 3
+XPAMT = 10000
+case 4
+XPAMT = 20000
+case 5
+XPAMT = 40000
+case 6
+XPAMT = 80000
+case 7
+XPAMT = 150000
+case 8
+XPAMT = 300000
+case 9
+XPAMT = 450000
+default
+XPAMT = 0
+End Select
+Return XPAMT
+Return
+End Function
+
+Function AttackBonusFighter(newLevel%)
+
+Select newLevel
+case 1
+return 1
+case 2
+return 2
+case 3
+return 2
+case 4
+return 3
+case 5
+return 4
+case 6
+return 4
+case 7
+return 5
+case 8
+return 6
+case 9
+return 6
+case 10
+return 6
+default
+return 0
+End Select
+
+return 0
+End Function
+
+Function AttackBonusThiefCleric(newLevel%)
+
+Select newLevel
+case 1 
+return 1
+case 2
+return 1
+case 3 
+return 2
+case 4
+return 2
+case 5
+return 3
+case 6
+return 3
+case 7
+return 4
+case 8
+return 5
+case 9
+return 5
+case 10
+return 5
+default
+return 0
+End Select
+
+return 0
+End Function
+
+Function AttackBonusMagicUser(newLevel%)
+
+Select newLevel
+case 1
+return 1
+case 2 
+return 1
+case 3
+return 1
+case 4
+return 2
+case 5
+return 2
+case 6
+return 3
+case 7
+return 3
+case 8
+return 3
+case 9
+return 4
+case 10
+return 4
+default
+return 0
+End Select
+
+return 0
+End Function
+
+Function AbilityBonus(SkillLevel%)
+Select SkillLevel
+case 3
+return -3
+case 4
+return -2
+case 5
+return -2
+case 6
+return -1
+case 7 
+return -1
+case 8
+return -1
+case 13 OR 14 OR 15
+return 1
+case 14
+return 1
+case 15
+return 1
+case 16
+return 2
+case 17
+return 2
+case 18
+return 3
+default 
+return 0
+End Select
+
+End Function
+
+Function LastLvlXPFighter(PlayerLevel%)
+Select PlayerLevel
+case 1
+XPAMT = 0
+case 2
+XPAMT = 2000
+case 3
+XPAMT = 4000
+case 4
+XPAMT = 8000
+case 5
+XPAMT = 16000
+case 6
+XPAMT = 32000
+case 7
+XPAMT = 64000
+case 8
+XPAMT = 120000
+case 9
+XPAMT = 240000
+default
+XPAMT = 0
+End Select
+Return XPAMT
+End Function
+
+Function LastLvlXPThief(PlayerLevel%)
+Select PlayerLevel
+case 1
+XPAMT = 0
+case 2
+XPAMT = 1250
+case 3
+XPAMT = 2500
+case 4
+XPAMT = 5000
+case 5
+XPAMT = 10000
+case 6
+XPAMT = 20000
+case 7
+XPAMT = 40000
+case 8
+XPAMT = 75000
+case 9
+XPAMT = 150000
+default
+XPAMT = 0
+End Select
+Return XPAMT
+Return
+End Function
+
+Function LastLvlXPCleric(PlayerLevel%)
+Select PlayerLevel
+case 1
+XPAMT = 0
+case 2
+XPAMT = 1500
+case 3
+XPAMT = 3000
+case 4
+XPAMT = 6000
+case 5
+XPAMT = 12000
+case 6
+XPAMT = 24000
+case 7
+XPAMT = 48000
+case 8
+XPAMT = 90000
+case 9
+XPAMT = 180000
+default
+XPAMT = 0
+End Select
+Return XPAMT
+Return
+End Function
+
+Function LastLvlXPMagicUser(PlayerLevel%)
+Select PlayerLevel
+case 1
+XPAMT = 0
+case 2
+XPAMT = 2500
+case 3
+XPAMT = 5000
+case 4
+XPAMT = 10000
+case 5
+XPAMT = 20000
+case 6
+XPAMT = 40000
+case 7
+XPAMT = 80000
+case 8
+XPAMT = 150000
+case 9
+XPAMT = 300000
+default
+XPAMT = 0
+End Select
+Return XPAMT
+Return
+End Function
+
+
+
+Function FighterSavingThrows(Player,Level)
+
+DeathVal% = 0
+WandVal% = 0
+ParaVal% = 0
+DragVal% = 0
+SpellVal% = 0
+
+End Function
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -1,0 +1,7 @@
+Using "RC_Core.rcm"
+; Define entry function 'Main'
+
+Function Main()
+BubbleOutput(ContextActor(),"hello world")
+Return
+End Function

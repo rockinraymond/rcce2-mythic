@@ -1,0 +1,35 @@
+Using "RC_Core.rcm"
+; Define entry function 'Main'
+
+Function Main()
+playerRace$ = Race(Actor())
+
+
+If (playerRace = "Human")
+giveitem(actor(),"Long Sword")
+giveitem(actor(),"shield")
+elseif(playerRace = "Goblin")
+giveitem(actor(),"cudgel")
+elseif(playerRace =  "Orc")
+giveitem(actor(),"spear")
+elseif(playerRace =  "Dwarf")
+giveitem(actor(),"great axe")
+elseif(playerRace =  "Elf")
+giveitem(actor(),"shortbow")
+elseif(playerRace =  "Halfling")
+giveitem(actor(),"walking staff")
+elseif(playerRace =  "Gnome" )
+giveitem(actor(),"mace")
+elseIf (playerRace = "Trader")
+giveitem(actor(),"Long Sword" , 2)
+giveitem(actor(),"shield", 2)
+giveitem(actor(),"mace")
+giveitem(actor(),"great axe")
+giveitem(actor(),"spear")
+giveitem(actor(),"cudgel")
+giveitem(actor(),"shortbow")
+giveitem(actor(),"walking staff")
+EndIf
+
+Return
+End Function

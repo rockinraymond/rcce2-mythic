@@ -1,0 +1,90 @@
+Using "RC_Core.rcm"
+; Commonly used functions
+
+Function AbilityBonus(SkillLevel%)
+Select SkillLevel
+case 3
+return -3
+case 4
+return -2
+case 5
+return -2
+case 6
+return -1
+case 7 
+return -1
+case 8
+return -1
+case 13 OR 14 OR 15
+return 1
+case 14
+return 1
+case 15
+return 1
+case 16
+return 2
+case 17
+return 2
+case 18
+return 3
+default 
+return 0
+End Select
+
+End Function
+
+Function MobXPStandard(MobLevel%)
+Select MobLevel
+Case 1
+return 25
+case 2
+return 75
+case 3
+return 145
+case 4
+return 240
+case 5
+return 360
+case 6
+return 500
+case 7
+return 670
+case 8
+return 875
+case 9
+return 1075
+case 10
+return 1300
+default
+return 10
+End Select 
+return 0
+End Function
+
+Function MobXPBonus(MobLevel%)
+Select MobLevel
+Case 1
+return 12
+case 2
+return 25
+case 3
+return 30
+case 4
+return 40
+case 5
+return 45
+case 6
+return 55
+case 7
+return 65
+case 8
+return 70
+case 9
+return 75
+case 10
+return 90
+default
+return 3
+End Select 
+return 0
+End Function

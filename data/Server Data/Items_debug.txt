@@ -1,6 +1,54 @@
 Item ID: 0
-Item Name: Sword
+Item Name: Hand Axe
 
 Item ID: 1
-Item Name: Shield
+Item Name: Battle Axe
+
+Item ID: 2
+Item Name: Great Axe
+
+Item ID: 3
+Item Name: Short Bow
+
+Item ID: 4
+Item Name: Long Bow
+
+Item ID: 5
+Item Name: Dagger
+
+Item ID: 6
+Item Name: Short Sword
+
+Item ID: 7
+Item Name: Long Sword
+
+Item ID: 8
+Item Name: Scimitar
+
+Item ID: 9
+Item Name: Two Handed Sword
+
+Item ID: 10
+Item Name: Warhammer
+
+Item ID: 11
+Item Name: Mace
+
+Item ID: 12
+Item Name: Maul
+
+Item ID: 13
+Item Name: Cudgel
+
+Item ID: 14
+Item Name: Walking Staff
+
+Item ID: 15
+Item Name: Quarter Staff
+
+Item ID: 16
+Item Name: Pole Arm
+
+Item ID: 17
+Item Name: Spear
 

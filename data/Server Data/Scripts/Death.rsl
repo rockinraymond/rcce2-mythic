@@ -6,26 +6,99 @@ Using "RC_Core.rcm"
 ; The context actor for the script is set to whoever killed the player
 Function Main()
 
+Target = Actor()
+TargetX# = ActorX(Target) 
+TargetY# = ActorY(Target) 
+TargetZ# = ActorZ(Target) 
+targetzone$ = ActorZone(Target) 
+
 	; Death animation
-	Output(Actor(), "You have died...")
+	Output(target, "You have died...",255,191,0)
+	Output(Target, "You can wait for revival or use /respawn command.",255,191,0)
+	TargetXp = ActorXP(Target)
+	XpPenalty = TargetXP * -.1
+	GiveXP(Target,XpPenalty,1)
+	Playspeech(Target,9)
 	Death = Rand(1, 3)
 	If (Death = 1)
-		AnimateActor(Actor(), "Death 1", 0.2, 0)
+		AnimateActor(Actor(), "Death 1", 1, 0)
 	ElseIf (Death = 2)
-		AnimateActor(Actor(), "Death 2", 0.2, 0)
+		AnimateActor(Actor(), "Death 2", 1, 0)
 	Else
-		AnimateActor(Actor(), "Death 3", 0.2, 0)
+		AnimateActor(Actor(), "Death 3", 1, 0)
 	EndIf
 
-	; Wait
-	DoEvents(5000)
+	;Drop Items
+	
+For x% = 0 to 31 Step 1
+;Drop each item
+Repeat
+Item = ActorBackpack(Target, x) 
+NameItem$ = ItemName(Item) 
 
-	; Restore some health and take away some gold
-	SetAttribute(Actor(), "Health", 50)
-;	ChangeGold(Actor(), -10)
+If (HasItem(Target,NameItem$,1000))
+	quanity = 1000
+elseif (HasItem(Target,NameItem$,500))
+	quanity = 500
+elseif (HasItem(Target,NameItem$,100))
+	quanity = 100
+elseif (HasItem(Target,NameItem$,50))
+	quanity = 50
+elseif (HasItem(Target,NameItem$,10))
+	quanity = 10
+elseif (HasItem(Target,NameItem$,5))
+	quanity = 5
+else
+	quanity = 1
+EndIf
+GiveItem(target, NameItem$, -quanity)
+SpawnItem(Nameitem$, quanity, TargetZone$, TargetX# + Rand(-1,1), TargetY#, TargetZ# + Rand(-1,1)) 
+Until (item = 0)
+Next
 
-	; Warp back to area start
-	Warp(Actor(), ActorZone(Actor()), "Begin")
+;Weapon and armor
+Item = ActorWeapon(Target) 
+NameItem$ = ItemName(Item) 
+GiveItem(target, NameItem$, -1)
+SpawnItem(Nameitem$, 1, TargetZone$, TargetX# + Rand(-1,1), TargetY#, TargetZ# + Rand(-1,1)) 
+Item = ActorChest(Target) 
+NameItem$ = ItemName(Item) 
+GiveItem(target, NameItem$, -1)
+SpawnItem(Nameitem$, 1, TargetZone$, TargetX# + Rand(-1,1), TargetY#, TargetZ# + Rand(-1,1)) 
+Item = ActorHat(Target) 
+NameItem$ = ItemName(Item) 
+GiveItem(target, NameItem$, -1)
+SpawnItem(Nameitem$, 1, TargetZone$, TargetX# + Rand(-1,1), TargetY#, TargetZ# + Rand(-1,1)) 
+Item = ActorShield(Target) 
+NameItem$ = ItemName(Item) 
+GiveItem(target, NameItem$, -1)
+SpawnItem(Nameitem$, 1, TargetZone$, TargetX# + Rand(-1,1), TargetY#, TargetZ# + Rand(-1,1)) 
+Item = ActorHands(Target) 
+NameItem$ = ItemName(Item) 
+GiveItem(target, NameItem$, -1)
+SpawnItem(Nameitem$, 1, TargetZone$, TargetX# + Rand(-1,1), TargetY#, TargetZ# + Rand(-1,1)) 
+Item = ActorFeet(Target) 
+NameItem$ = ItemName(Item) 
+GiveItem(target, NameItem$, -1)
+SpawnItem(Nameitem$, 1, TargetZone$, TargetX# + Rand(-1,1), TargetY#, TargetZ# + Rand(-1,1)) 
+Item = ActorBelt(Target) 
+NameItem$ = ItemName(Item) 
+GiveItem(target, NameItem$, -1)
+SpawnItem(Nameitem$, 1, TargetZone$, TargetX# + Rand(-1,1), TargetY#, TargetZ# + Rand(-1,1)) 
+Item = ActorLegs(Target) 
+NameItem$ = ItemName(Item) 
+GiveItem(target, NameItem$, -1)
+SpawnItem(Nameitem$, 1, TargetZone$, TargetX# + Rand(-1,1), TargetY#, TargetZ# + Rand(-1,1)) 
+Item = ActorAmulet(Target,0) 
+NameItem$ = ItemName(Item) 
+GiveItem(target, NameItem$, -1)
+SpawnItem(Nameitem$, 1, TargetZone$, TargetX# + Rand(-1,1), TargetY#, TargetZ# + Rand(-1,1)) 
+Item = ActorAmulet(Target,1) 
+NameItem$ = ItemName(Item) 
+GiveItem(target, NameItem$, -1)
+SpawnItem(Nameitem$, 1, TargetZone$, TargetX# + Rand(-1,1), TargetY#, TargetZ# + Rand(-1,1)) 
+
+;SpawnItem("bones", 1, TargetZone$, TargetX# + Rand(-1,1), TargetY#, TargetZ# + Rand(-1,1)) 
 
 	; Done
 	Return

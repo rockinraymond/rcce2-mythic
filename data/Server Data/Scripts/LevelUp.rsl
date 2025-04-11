@@ -1,4 +1,6 @@
 Using "RC_Core.rcm"
+include "LevelUp_Classes.rsl"
+
 ; Default XP gain script for all player characters
 ; You may alter this script however you like, but DO NOT RENAME OR DELETE IT
 
@@ -9,15 +11,62 @@ Function Main()
 	Player = Actor()
 
 	XP = ActorXP(Player)
-	Lvl = ActorLevel(Player)
+	CurrentLevel = ActorLevel(Player)
+	ActorClass$ = Class(Player)
+	
+	Select ActorClass
+	case "Fighter"
+	NextXp = NextLvlXPFighter(CurrentLevel)
+	LastXP = LastLvlXPFighter(CurrentLevel)
+	case "Thief"
+	NextXp = NextLvlXPThief(CurrentLevel)
+	LastXP = LastLvlXPThief(CurrentLevel)
+	case "Cleric"
+	NextXP = NextLvlXPCleric(CurrentLevel)
+	LastXP = LastLvlXPCleric(CurrentLevel)
+	case "Magic User"
+	NextXP = NextLvlXPMagicUser(CurrentLevel)
+	LastXP = LastLvlXPMagicUser(CurrentLevel)
+	End Select
 
+;max level check
+If(CurrentLevel < 10)
 	; Player gets a level-up
-	If (XP > Lvl * 1000)
-		Lvl = Lvl + 1
+	If (XP >= NextXP)
+		Lvl = CurrentLevel + 1
 		SetActorLevel(Player, Lvl)
-		Output(Player, "You advanced to level " + Lvl + "!")
+		Output(Player, "Congratulations, you have advanced to level " + Lvl + "!",255,255,0)
+		Select ActorClass
+		case "Fighter"
+		LevelFighter(Player,Lvl)
+		case "Thief"
+		LevelThief(Player,Lvl)
+		case "Cleric"
+		LevelCleric(Player,Lvl)
+		case "Magic User"
+		LevelMagicUser(Player,Lvl)
+		End Select
+		
 	EndIf
-
+	
+	;player loses a level
+	If (XP < LastXP)
+		Lvl = CurrentLevel - 1
+		SetActorLevel(Player, Lvl)
+		Output(Player, "You have lost a level and are now level " + Lvl + "!",155,0,255)
+		Select ActorClass
+		case "Fighter"
+		DeLevelFighter(Player,Lvl)
+		case "Thief"
+		DeLevelThief(Player,Lvl)
+		case "Cleric"
+		DeLevelCleric(Player,Lvl)
+		case "Magic User"
+		DeLevelMagicUser(Player,Lvl)
+		End Select
+		
+	EndIf
+EndIf
 	Return
 
 End Function
