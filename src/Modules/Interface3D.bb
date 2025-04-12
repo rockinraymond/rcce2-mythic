@@ -1796,7 +1796,7 @@ EndIf
 					If Y# + 0.4 > 0.99 Then Y# = 0.59
 					If X# + 0.4 > 0.99 Then X# = 0.59
 					If LTooltip <> 0 Then GY_FreeGadget(LTooltip) : LTooltip = 0
-					WTooltip = GY_CreateWindow(Name$, X#, Y#, 0.2, 0.3, True, False, False)
+					WTooltip = GY_CreateWindow(Name$, X#, Y#, 0.25, 0.3, True, False, False)
 					WTooltipReturn = WInventory
 					GY_CreateLabel(WTooltip, 0.02, 0.05, LanguageString$(LS_Type) + " " + GetItemType$(Me\Inventory\Items[i]\Item))
 					If Me\Inventory\Items[i]\Item\TakesDamage = True
@@ -1805,7 +1805,7 @@ EndIf
 					Else
 						GY_CreateLabel(WTooltip, 0.02, 0.12, LanguageString$(LS_Indestructible), 255, 0, 0)
 					EndIf
-					GY_CreateLabel(WTooltip, 0.02, 0.19, LanguageString$(LS_Value) + " " + Me\Inventory\Items[i]\Item\Value)
+					GY_CreateLabel(WTooltip, 0.02, 0.19, LanguageString$(LS_Value) + " " + MoneyToolTip$(Me\Inventory\Items[i]\Item\Value))
 					GY_CreateLabel(WTooltip, 0.02, 0.26, LanguageString$(LS_Mass) + " " + Me\Inventory\Items[i]\Item\Mass)
 					If Me\Inventory\Items[i]\Item\Stackable = True
 						GY_CreateLabel(WTooltip, 0.02, 0.33, LanguageString$(LS_CanBeStacked), 0, 255, 0)
@@ -1863,7 +1863,7 @@ EndIf
 					If Y# + 0.4 > 0.99 Then Y# = 0.59
 					If X# + 0.4 > 0.99 Then X# = 0.59
 					If LTooltip <> 0 Then GY_FreeGadget(LTooltip) : LTooltip = 0
-					WTooltip = GY_CreateWindow(Name$, X#, Y#, 0.2, 0.3, True, False, False)
+					WTooltip = GY_CreateWindow(Name$, X#, Y#, 0.25, 0.3, True, False, False)
 					WTooltipReturn = WTrading
 					GY_CreateLabel(WTooltip, 0.02, 0.05, LanguageString$(LS_Type) + " " + GetItemType$(Me\Inventory\Items[i + SlotI_Backpack]\Item))
 					If Me\Inventory\Items[i + SlotI_Backpack]\Item\TakesDamage = True
@@ -1872,7 +1872,7 @@ EndIf
 					Else
 						GY_CreateLabel(WTooltip, 0.02, 0.12, LanguageString$(LS_Indestructible), 255, 0, 0)
 					EndIf
-					GY_CreateLabel(WTooltip, 0.02, 0.19, LanguageString$(LS_Value) + " " + Me\Inventory\Items[i + SlotI_Backpack]\Item\Value)
+					GY_CreateLabel(WTooltip, 0.02, 0.19, LanguageString$(LS_Value) + " " + MoneyToolTip$(Me\Inventory\Items[i + SlotI_Backpack]\Item\Value))
 					GY_CreateLabel(WTooltip, 0.02, 0.26, LanguageString$(LS_Mass) + " " + Me\Inventory\Items[i + SlotI_Backpack]\Item\Mass)
 					If Me\Inventory\Items[i + SlotI_Backpack]\Item\Stackable = True
 						GY_CreateLabel(WTooltip, 0.02, 0.33, LanguageString$(LS_CanBeStacked), 0, 255, 0)
@@ -1925,7 +1925,7 @@ EndIf
 					If Y# + 0.4 > 0.99 Then Y# = 0.59
 					If X# + 0.4 > 0.99 Then X# = 0.59
 					If LTooltip <> 0 Then GY_FreeGadget(LTooltip) : LTooltip = 0
-					WTooltip = GY_CreateWindow(Name$, X#, Y#, 0.2, 0.3, True, False, False)
+					WTooltip = GY_CreateWindow(Name$, X#, Y#, 0.25, 0.3, True, False, False)
 					WTooltipReturn = WTrading
 					GY_CreateLabel(WTooltip, 0.02, 0.05, LanguageString$(LS_Type) + " " + GetItemType$(TradeItems(i)\Item))
 					If TradeItems(i)\Item\TakesDamage = True
@@ -1934,7 +1934,7 @@ EndIf
 					Else
 						GY_CreateLabel(WTooltip, 0.02, 0.12, LanguageString$(LS_Indestructible), 255, 0, 0)
 					EndIf
-					GY_CreateLabel(WTooltip, 0.02, 0.19, LanguageString$(LS_Value) + " " + TradeItems(i)\Item\Value)
+					GY_CreateLabel(WTooltip, 0.02, 0.19, LanguageString$(LS_Value) + " " + MoneyToolTip$(TradeItems(i)\Item\Value))
 					GY_CreateLabel(WTooltip, 0.02, 0.26, LanguageString$(LS_Mass) + " " + TradeItems(i)\Item\Mass)
 					If TradeItems(i)\Item\Stackable = True
 						GY_CreateLabel(WTooltip, 0.02, 0.33, LanguageString$(LS_CanBeStacked), 0, 255, 0)
@@ -3484,6 +3484,7 @@ Function CreateInterface()
 	WCharStats = GY_CreateWindow(LanguageString$(LS_Character), 0.1, 0.1, 0.5, 0.7, True, True, False, LoadTexture("Data\Textures\GUI\CharBG.png"))
 	GY_CreateLabel(WCharStats, 0.5, 0.03, Me\Name$, 255, 255, 255, Justify_Centre)
 	LReputation = GY_CreateLabel(WCharStats, 0.05, 0.09, LanguageString$(LS_Reputation) + " 00000", 0, 255, 0)
+	LClass = GY_CreateLabel(WCharStats, 0.05, 0.13,Me\Actor\Race$ + " " + Me\Actor\Class$, 0, 255, 0)
 	;LGold = GY_CreateLabel(WCharStats, 0.05, 0.13, "000000000000000000000000000000000000000000000000000000000000", 0, 255, 0)
 	LLevel = GY_CreateLabel(WCharStats, 0.05, 0.17, LanguageString$(LS_Level) + " 0000000", 0, 255, 0)
 	LXP = GY_CreateLabel(WCharStats, 0.05, 0.21, LanguageString$(LS_Experience) + " 0000000000000", 0, 255, 0)

@@ -91,3 +91,5 @@ bin/ReShade.ini
 compiler/BlitzPlus/
 
 scripts/msbuild_blitzrcplus.bat
+data/Server Data/Dropped Items.dat
+
