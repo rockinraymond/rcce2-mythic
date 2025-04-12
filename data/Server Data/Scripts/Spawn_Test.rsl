@@ -22,6 +22,7 @@ giveitem(actor(),"walking staff",1)
 giveitem(actor(),"quarterstaff",1)
 giveitem(actor(),"pole arm",1)
 giveitem(actor(),"spear",1)
+giveitem(actor(),"arrow",50)
 
 NPC = Actor()
 

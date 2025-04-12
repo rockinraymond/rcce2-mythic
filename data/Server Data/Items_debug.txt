@@ -52,3 +52,6 @@ Item Name: Pole Arm
 Item ID: 17
 Item Name: Spear
 
+Item ID: 18
+Item Name: Arrow
+

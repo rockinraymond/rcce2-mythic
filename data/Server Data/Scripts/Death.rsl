@@ -30,7 +30,7 @@ targetzone$ = ActorZone(Target)
 
 	;Drop Items
 	
-For x% = 0 to 31 Step 1
+For x% = 1 to 32 Step 1
 ;Drop each item
 Repeat
 Item = ActorBackpack(Target, x) 

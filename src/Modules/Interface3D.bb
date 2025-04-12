@@ -819,7 +819,7 @@ Function UpdateInterface()
 				; Target is a dropped item
 				ElseIf Target$ = "D"
 					; In range - pick it up if room in inventory
-					If EntityDistance#(Result, Me\EN) < 25.0
+					If (EntityDistance#(Result, Me\EN) < 15.0) And (Me\Attributes\Value[HealthStat] > 0)
 						UsedClick = True
 
 						DItem.DroppedItem = Object.DroppedItem(EntityName$(Result))
