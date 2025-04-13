@@ -1,0 +1,28 @@
+Using "RC_Core.rcm"
+; Define entry function 'Main'
+
+Function Main()
+
+Player = Actor()
+
+D = OpenDialog(Player, ContextActor(), "Testing Talking")
+	DialogOutput(Player, D, "This is a test for a talk script", 255, 255, 255)
+	
+	Result = DialogInput(Player, D, "Hello|Close", "|")
+			
+		If Result = 1
+			DialogOutput(Player, D, "Hello There tester I will give you a test quest!", 0, 255, 0)
+			
+			CloseDialog(Player, D)
+			NewQuest(Actor(), "The Flour Shipment", "Find 10 bags of flour!", 255, 255, 255)
+			
+			UpdateQuest(Actor(), "The Flour Shipment", "Return the flour to Mr Cravat", 0, 255, 0)
+			
+		ElseIf Result = 2
+			DialogOutput(Player, D, "Goodbye stranger", 255, 0 , 0)
+			DialogInput(Player, D, "Goodbye")
+			CloseDialog(Player, D)
+		EndIf
+Return
+
+End Function

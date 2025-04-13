@@ -15,12 +15,12 @@ Function Main()
     EndIf
 
     ;Check the mana
-    ManaLevel = Attribute(Player, "Mana")
+    ManaLevel = Attribute(Player, "Spell Points")
     If(ManaLevel < 1)
         Output(Player, "Not enough Mana")
         Return
     EndIf
-        SetAttribute(Player, "Mana", ManaLevel -1)
+        SetAttribute(Player, "Spell Points", ManaLevel -1)
 
 
     ;Particles and casting animation
