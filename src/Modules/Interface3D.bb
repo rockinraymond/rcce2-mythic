@@ -1032,8 +1032,13 @@ Function UpdateInterface()
 							AI.ActorInstance = Object.ActorInstance(PlayerTarget)
 							Pa$ = Pa$ + RCE_StrFromInt$(AI\RuntimeID, 2)
 						EndIf
-						RCE_Send(Connection, PeerToHost, P_SpellUpdate, "F" + Pa$, True)
-						Me\SpellCharge[Num] = RechargeTime
+						
+						If (Me\Attributes\Value[HealthStat] > 0)
+							RCE_Send(Connection, PeerToHost, P_SpellUpdate, "F" + Pa$, True)
+							Me\SpellCharge[Num] = RechargeTime
+						Else
+							Output("You cannot use abilites while dead!", 255, 50, 50)
+						EndIf
 						
 						;[654]
 						RechargeTime = RechargeTime - 1000
@@ -1144,8 +1149,13 @@ Function UpdateInterface()
 						AI.ActorInstance = Object.ActorInstance(PlayerTarget)
 						Pa$ = Pa$ + RCE_StrFromInt$(AI\RuntimeID, 2)
 					EndIf
-					RCE_Send(Connection, PeerToHost, P_SpellUpdate, "F" + Pa$, True)
-					Me\SpellCharge[Num] = RechargeTime
+					If (Me\Attributes\Value[HealthStat] > 0)
+						RCE_Send(Connection, PeerToHost, P_SpellUpdate, "F" + Pa$, True)
+						Me\SpellCharge[Num] = RechargeTime
+					Else
+						Output("You cannot use abilites while dead!", 255, 50, 50)
+					EndIf
+
 					
 				;[654] fixing cooldown reset bug in action bar
 						RechargeTime = RechargeTime - 1000
@@ -1368,7 +1378,7 @@ Function UpdateInterface()
 								;##########								
 								
 								; Tell server
-								RCE_Send(Connection, PeerToHost, P_SpellUpdate, "M" + RCE_StrFromInt$(MemoriseSpell, 2), True)
+									RCE_Send(Connection, PeerToHost, P_SpellUpdate, "M" + RCE_StrFromInt$(MemoriseSpell, 2), True)
 								; Done
 								Found = True
 								Exit
@@ -1417,8 +1427,13 @@ Function UpdateInterface()
 							AI.ActorInstance = Object.ActorInstance(PlayerTarget)
 							Pa$ = Pa$ + RCE_StrFromInt$(AI\RuntimeID, 2)
 						EndIf
-						RCE_Send(Connection, PeerToHost, P_SpellUpdate, "F" + Pa$, True)
-						Me\SpellCharge[Num] = SpellsList(Me\KnownSpells[Num])\RechargeTime
+						If (Me\Attributes\Value[HealthStat] > 0)
+							RCE_Send(Connection, PeerToHost, P_SpellUpdate, "F" + Pa$, True)
+							Me\SpellCharge[Num] = SpellsList(Me\KnownSpells[Num])\RechargeTime
+						Else
+							Output("You cannot use abilites while dead!", 255, 50, 50)
+						EndIf
+						
 					; Not recharged
 					Else
 						Output(LanguageString$(LS_AbilityNotRecharged), 255, 50, 50)
@@ -3941,31 +3956,31 @@ End Function
 ; Eats/equips/calls the script for an item
 Function UseItem(SlotIndex, Amount)
 
-	If Me\Inventory\Items[SlotIndex] <> Null
+	If (Me\Inventory\Items[SlotIndex] <> Null ) And (Me\Attributes\Value[HealthStat] > 0)
 		If Me\Inventory\Amounts[SlotIndex] >= Amount
 			GY_SetButtonState(BSlots(SlotIndex), False)
 
 			; Eat food
-			If Me\Inventory\Items[SlotIndex]\Item\ItemType = I_Potion Or Me\Inventory\Items[SlotIndex]\Item\ItemType = I_Ingredient
-				If Me\Inventory\Items[SlotIndex]\Item\ExclusiveClass$ = "" Or Upper$(Me\Inventory\Items[SlotIndex]\Item\ExclusiveClass$) = Upper$(Me\Actor\Class$)
-					If Me\Inventory\Items[SlotIndex]\Item\ExclusiveRace$ = "" Or Upper$(Me\Inventory\Items[SlotIndex]\Item\ExclusiveRace$) = Upper$(Me\Actor\Race$)
-						RCE_Send(Connection, PeerToHost, P_EatItem, RCE_StrFromInt$(SlotIndex, 1) + RCE_StrFromInt$(Amount, 2), True)
-						Me\Inventory\Amounts[SlotIndex] = Me\Inventory\Amounts[SlotIndex] - Amount
-						If Me\Inventory\Amounts[SlotIndex] <= 0
-							Me\Inventory\Items[SlotIndex] = Null
-							GY_SetButtonState(BSlots(SlotIndex), True)
-							GY_SetButtonLabel(BSlots(SlotIndex), "")
-							GYG.GY_Gadget = Object.GY_Gadget(BSlots(SlotIndex))
-							GYB.GY_Button = Object.GY_Button(GYG\TypeHandle)
-							EntityTexture(GYB\Gadget\EN, GYB\UserTexture)
-							EnableInventoryBlanks(True)
-						Else
-							GY_SetButtonLabel(BSlots(SlotIndex), Me\Inventory\Amounts[SlotIndex], 100, 255, 0, True)
-						EndIf
-					EndIf
-				EndIf
+			; If Me\Inventory\Items[SlotIndex]\Item\ItemType = I_Potion Or Me\Inventory\Items[SlotIndex]\Item\ItemType = I_Ingredient
+			; 	If Me\Inventory\Items[SlotIndex]\Item\ExclusiveClass$ = "" Or Upper$(Me\Inventory\Items[SlotIndex]\Item\ExclusiveClass$) = Upper$(Me\Actor\Class$)
+			; 		If Me\Inventory\Items[SlotIndex]\Item\ExclusiveRace$ = "" Or Upper$(Me\Inventory\Items[SlotIndex]\Item\ExclusiveRace$) = Upper$(Me\Actor\Race$)
+			; 			RCE_Send(Connection, PeerToHost, P_EatItem, RCE_StrFromInt$(SlotIndex, 1) + RCE_StrFromInt$(Amount, 2), True)
+			; 			Me\Inventory\Amounts[SlotIndex] = Me\Inventory\Amounts[SlotIndex] - Amount
+			; 			If Me\Inventory\Amounts[SlotIndex] <= 0
+			; 				Me\Inventory\Items[SlotIndex] = Null
+			; 				GY_SetButtonState(BSlots(SlotIndex), True)
+			; 				GY_SetButtonLabel(BSlots(SlotIndex), "")
+			; 				GYG.GY_Gadget = Object.GY_Gadget(BSlots(SlotIndex))
+			; 				GYB.GY_Button = Object.GY_Button(GYG\TypeHandle)
+			; 				EntityTexture(GYB\Gadget\EN, GYB\UserTexture)
+			; 				EnableInventoryBlanks(True)
+			; 			Else
+			; 				GY_SetButtonLabel(BSlots(SlotIndex), Me\Inventory\Amounts[SlotIndex], 100, 255, 0, True)
+			; 			EndIf
+			; 		EndIf
+			; 	EndIf
 				
-			ElseIf Me\Inventory\Items[SlotIndex]\Item\ItemType = I_Image
+			If Me\Inventory\Items[SlotIndex]\Item\ItemType = I_Image
 				; Image item
 				Pa$ = RCE_StrFromInt$(SlotIndex, 1)
 				RCE_Send(Connection, PeerToHost, P_ItemScript, Pa$, True)
