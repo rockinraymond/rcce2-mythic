@@ -39,7 +39,7 @@ TDexMod% = AbilityBonus(TDex)
 
 ;Attack Bonus/Armor Class
 PAtkBns% = Attribute(Player, "Attack Bonus")
-TArmorClass% = Attribute(Player,"Armor Class") + PDexMod%
+TArmorClass% = Attribute(Player,"Armor Class") + TDexMod%
 
 
 
@@ -112,9 +112,9 @@ Select DamType
 	case "Bashing"
 		WeaponSound% = Rand(30,31)
 	case "Slashing"
-		WeaponSound% = Rand(27,26)
+		WeaponSound% = Rand(26,27)
 	case "Piercing"
-		WeaponSound% = Rand(27,26)
+		WeaponSound% = Rand(26,27)
 	case "Missile"
 		WeaponSound% = 25
 	default
@@ -280,7 +280,9 @@ EndIf
 
 
 TotDoDmg% = Attribute(Target, "Health")- Damage ; take damage from target health.
-Playsound(Target,WeaponSound,1)
+If (AttackHit = 1)
+	Playsound(Target,WeaponSound,1)
+EndIf
     If (TotDoDmg% <= 0)
         ;Target is dead set xp and end attack.
         Output(Player, "You have killed " + TName, 255, 255, 0)

@@ -1,0 +1,245 @@
+Using "RC_Core.rcm"
+
+Function Main()
+
+End Function
+
+Function ThrowWeapon(Player, Target, ThrownItemName$, DamageDie%, WepDamageBonus%)
+    ;test Output
+    Output(Player, "You throw a " + ThrownItemName$ + " at " + Name(Target) + " for 1d" + DamageDie + " damage!")
+
+    ;Name check
+
+    PName$ = Name(Player)
+    TName$ = Name(Target)
+
+    ;Level Check
+
+    PLvl% = ActorLevel(Player)
+    TLvl% = ActorLevel(Target)
+
+    ;Stat Check
+
+    ;Health
+
+    PHealth% = Attribute(Player, "Health") ;Player Hp
+    THealth% = Attribute(Target, "Health") ;Target HP
+
+    ;Strength
+
+    PStr% = Attribute(Player, "Strength") ;Player str
+    PStrMod% = AbilityBonus(PStr)
+
+    ;Dexterity
+
+    PDex% = Attribute(Player, "Dexterity") ;Player Dexterity
+    PDexMod% = AbilityBonus(PDex)
+    TDex% = Attribute(Target, "Dexterity") ;Target Dexterity
+    TDexMod% = AbilityBonus(TDex)
+
+    ;Attack Bonus/Armor Class
+    PAtkBns% = Attribute(Player, "Attack Bonus")
+    TArmorClass% = Attribute(Player,"Armor Class") + TDexMod%
+
+    ;Distance modifiers
+    If (ActorDistance(Player,Target) < 5)
+		PAtkBns% = PAtkBns% - 5
+    elseif (ActorDistance(Player,Target) < 10)
+        PAtkBns% = PAtkBns% + 1
+    elseif (ActorDistance(Player,Target) > 20)
+        PAtkBns% = PAtkBns% - 2 
+    elseif (ActorDistance(Player,Target) > 30)
+        Output(Player, "Target is too far away!", 255, 50, 50)
+        return
+	EndIf
+
+    ;Hit Roll
+    HitRoll = Rand(1,20)
+    
+    If ((HitRoll + PAtkBns + PDexMod%) > TArmorClass)
+        AttackHit = 1
+    else
+        AttackHit = 0
+    EndIf
+    
+    ;Nat 20 or Nat 1 auto hit or auto  miss
+    If(HitRoll = 20)
+        AttackHit = 1
+    EndIf
+    
+    If(HitRoll = 1)
+        AttackHit = 0
+    EndIf
+    
+    ;if Hit Apply Damage and set Output
+    If (AttackHit = 1)
+        Damage = Rand(1,DamageDie) + WepDamageBonus + PAtkBonus + PStrMod
+        If (Damage < 1)
+            Damage = 1
+        EndIf
+        CreateFloatingNumber(Target, Damage, 255, 0, 0) ;Red normal attack do damage above player.
+        POutput$ = "You have hit " + TName + " for " + Damage + " damage!"
+        TOutput$ = PName + " has hit you for " + Damage + " damage!"
+    Else
+        Damage = 0
+        POutput$ = "You have missed " + TName + "!"
+        TOutput$ = PName + " has missed you!"
+    EndIf
+
+    Output(Player, POutput, 0, 255, 0)
+    Output(Target, TOutput, 255, 0, 0)
+
+    ;Animations and FX
+    animateactor(player,"Right Hand Attack 2", 1)
+    doevents(500)
+	Playsound(Player,32,1)
+
+   ;take item away and drop it near target
+    GiveItem(Player, ThrownItemName$, -1)
+    SpawnItem(ThrownItemName$, 1,  ActorZone(Target), ActorX(Target), ActorY(Target), ActorZ(Target))
+   
+    WeaponSound% = 26
+
+    ;Apply Final Damage
+    TotDoDmg% = Attribute(Target, "Health")- Damage ; take damage from target health.
+    If (AttackHit = 1)
+        Playsound(Target,WeaponSound,1)
+    EndIf
+        If (TotDoDmg% <= 0)
+            ;Target is dead set xp and end attack.
+            Output(Player, "You have killed " + TName, 255, 255, 0)
+            Output(Target, "You have been killed by " + PName, 255, 0, 0)
+            KillXP = MobXPStandard(TLvl)
+            ;if statement looking for special creteria for bonus xp
+            ;KillXP = KillXP + MobXPBonus(Tlvl)
+            ;endif
+            GiveXP(Player,KillXP)
+            SetAttribute(Target, "Health", 0)
+
+            Return
+
+        EndIf    
+    ;Continue and do Damage 
+    SetAttribute(Target, "Health", TotDoDmg) ;set targets health
+
+    If (ActorIsHuman(Target) = 0)
+        SetActorTarget(Target, Player)
+		SetActorAIState(Target, 3)
+        ;NPC call for help at low health
+        QuarterHealth% = MaxAttribute(Target, "health") / 2
+        CallChance = Rand(1,4)
+        If (Attribute(Target, "health") <= QuarterHealth) AND (CallChance = 4)
+        ActorCallForHelp(Target)
+        BubbleOutput(Target,"I need HELP!",255,0,0)
+        EndIf
+    EndIf
+
+    
+    
+End Function
+
+
+Function Dagger()
+
+    Player = Actor()
+    Target = ContextActor()
+
+    If Target = 0 
+        Output(Player, "No target selected!", 255 ,50, 50)
+        Return
+    EndIf
+
+    ThrownItemName$ = "Dagger"
+    DamageDie% = 4
+    DamageBonus% = 0
+
+    ThrowWeapon(Player, Target, ThrownItemName$, DamageDie%, DamageBonus%)
+End Function
+
+Function AbilityBonus(SkillLevel%)
+Select SkillLevel
+case 3
+return -3
+case 4
+return -2
+case 5
+return -2
+case 6
+return -1
+case 7 
+return -1
+case 8
+return -1
+case 13 OR 14 OR 15
+return 1
+case 14
+return 1
+case 15
+return 1
+case 16
+return 2
+case 17
+return 2
+case 18
+return 3
+default 
+return 0
+End Select
+
+End Function
+
+Function MobXPStandard(MobLevel%)
+Select MobLevel
+Case 1
+return 25
+case 2
+return 75
+case 3
+return 145
+case 4
+return 240
+case 5
+return 360
+case 6
+return 500
+case 7
+return 670
+case 8
+return 875
+case 9
+return 1075
+case 10
+return 1300
+default
+return 10
+End Select 
+return 0
+End Function
+
+Function MobXPBonus(MobLevel%)
+Select MobLevel
+Case 1
+return 12
+case 2
+return 25
+case 3
+return 30
+case 4
+return 40
+case 5
+return 45
+case 6
+return 55
+case 7
+return 65
+case 8
+return 70
+case 9
+return 75
+case 10
+return 90
+default
+return 3
+End Select 
+return 0
+End Function

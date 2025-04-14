@@ -4040,47 +4040,47 @@ Function UseItem(SlotIndex, Amount)
 ;CSlots
 ;-------------------------------------------------------------------------------------------------
 				; Equip weapon
-				If Me\Inventory\Items[SlotIndex]\Item\ItemType = I_Weapon And SlotIndex >= SlotI_Backpack
-					If Me\Inventory\Items[SlotI_Weapon] = Null
-						EnableInventoryBlanks()
-						Result = InventorySwap(Me, SlotIndex, SlotI_Weapon, Amount)
-						If Result = True
-							; Update icons
-							GYG.GY_Gadget = Object.GY_Gadget(BSlots(SlotI_Weapon))
-							EntityTexture(GYG\EN, GetTexture(Me\Inventory\Items[SlotI_Weapon]\Item\ThumbnailTexID))
-							If Me\Inventory\Amounts[SlotIndex] <= 0
-								GYG.GY_Gadget = Object.GY_Gadget(BSlots(SlotIndex))
-								GYB.GY_Button = Object.GY_Button(GYG\TypeHandle)
-								EntityTexture(GYB\Gadget\EN, GYB\UserTexture)
-								GY_SetButtonState(BSlots(SlotIndex), True)
-								GY_SetButtonLabel(BSlots(SlotIndex), "")
-							EndIf
-							UpdateActorItems(Me)
-						EndIf
-						EnableInventoryBlanks(True)
-					EndIf
+				; If Me\Inventory\Items[SlotIndex]\Item\ItemType = I_Weapon And SlotIndex >= SlotI_Backpack
+				; 	If Me\Inventory\Items[SlotI_Weapon] = Null
+				; 		EnableInventoryBlanks()
+				; 		Result = InventorySwap(Me, SlotIndex, SlotI_Weapon, Amount)
+				; 		If Result = True
+				; 			; Update icons
+				; 			GYG.GY_Gadget = Object.GY_Gadget(BSlots(SlotI_Weapon))
+				; 			EntityTexture(GYG\EN, GetTexture(Me\Inventory\Items[SlotI_Weapon]\Item\ThumbnailTexID))
+				; 			If Me\Inventory\Amounts[SlotIndex] <= 0
+				; 				GYG.GY_Gadget = Object.GY_Gadget(BSlots(SlotIndex))
+				; 				GYB.GY_Button = Object.GY_Button(GYG\TypeHandle)
+				; 				EntityTexture(GYB\Gadget\EN, GYB\UserTexture)
+				; 				GY_SetButtonState(BSlots(SlotIndex), True)
+				; 				GY_SetButtonLabel(BSlots(SlotIndex), "")
+				; 			EndIf
+				; 			UpdateActorItems(Me)
+				; 		EndIf
+				; 		EnableInventoryBlanks(True)
+				; 	EndIf
 				; Equip armour
-				ElseIf Me\Inventory\Items[SlotIndex]\Item\ItemType = I_Armour And SlotIndex >= SlotI_Backpack
-					i = Me\Inventory\Items[SlotIndex]\Item\SlotType - 1
-					If Me\Inventory\Items[i] = Null
-						EnableInventoryBlanks()
-						Result = InventorySwap(Me, SlotIndex, i, Amount)
-						If Result = True
-							; Update icons
-							GYG.GY_Gadget = Object.GY_Gadget(BSlots(i))
-							EntityTexture(GYG\EN, GetTexture(Me\Inventory\Items[i]\Item\ThumbnailTexID))
-							If Me\Inventory\Amounts[SlotIndex] <= 0
-								GYG.GY_Gadget = Object.GY_Gadget(BSlots(SlotIndex))
-								GYB.GY_Button = Object.GY_Button(GYG\TypeHandle)
-								EntityTexture(GYB\Gadget\EN, GYB\UserTexture)
-								GY_SetButtonState(BSlots(SlotIndex), True)
-								GY_SetButtonLabel(BSlots(SlotIndex), "")
-							EndIf
-							UpdateActorItems(Me)
-						EndIf
-						EnableInventoryBlanks(True)
-					EndIf
-				EndIf
+				; ElseIf Me\Inventory\Items[SlotIndex]\Item\ItemType = I_Armour And SlotIndex >= SlotI_Backpack
+				; 	i = Me\Inventory\Items[SlotIndex]\Item\SlotType - 1
+				; 	If Me\Inventory\Items[i] = Null
+				; 		EnableInventoryBlanks()
+				; 		Result = InventorySwap(Me, SlotIndex, i, Amount)
+				; 		If Result = True
+				; 			; Update icons
+				; 			GYG.GY_Gadget = Object.GY_Gadget(BSlots(i))
+				; 			EntityTexture(GYG\EN, GetTexture(Me\Inventory\Items[i]\Item\ThumbnailTexID))
+				; 			If Me\Inventory\Amounts[SlotIndex] <= 0
+				; 				GYG.GY_Gadget = Object.GY_Gadget(BSlots(SlotIndex))
+				; 				GYB.GY_Button = Object.GY_Button(GYG\TypeHandle)
+				; 				EntityTexture(GYB\Gadget\EN, GYB\UserTexture)
+				; 				GY_SetButtonState(BSlots(SlotIndex), True)
+				; 				GY_SetButtonLabel(BSlots(SlotIndex), "")
+				; 			EndIf
+				; 			UpdateActorItems(Me)
+				; 		EndIf
+				; 		EnableInventoryBlanks(True)
+				; 	EndIf
+				; EndIf
 			EndIf
 		EndIf
 	EndIf

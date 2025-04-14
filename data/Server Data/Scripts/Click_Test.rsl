@@ -22,3 +22,9 @@ D = OpenDialog(Player, ContextActor(), "Testing Talking")
 Return
 
 End Function
+
+Function Examine()
+
+	Output(Actor(), "This guy can sell me stuff")
+	
+End Function
