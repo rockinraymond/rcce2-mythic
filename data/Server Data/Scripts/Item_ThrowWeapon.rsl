@@ -156,6 +156,40 @@ Function Dagger()
     ThrowWeapon(Player, Target, ThrownItemName$, DamageDie%, DamageBonus%)
 End Function
 
+Function HandAxe()
+
+    Player = Actor()
+    Target = ContextActor()
+
+    If Target = 0 
+        Output(Player, "No target selected!", 255 ,50, 50)
+        Return
+    EndIf
+
+    ThrownItemName$ = "Hand Axe"
+    DamageDie% = 6
+    DamageBonus% = 0
+
+    ThrowWeapon(Player, Target, ThrownItemName$, DamageDie%, DamageBonus%)
+End Function
+
+Function Warhammer()
+
+    Player = Actor()
+    Target = ContextActor()
+
+    If Target = 0 
+        Output(Player, "No target selected!", 255 ,50, 50)
+        Return
+    EndIf
+
+    ThrownItemName$ = "Warhammer"
+    DamageDie% = 6
+    DamageBonus% = 0
+
+    ThrowWeapon(Player, Target, ThrownItemName$, DamageDie%, DamageBonus%)
+End Function
+
 Function AbilityBonus(SkillLevel%)
 Select SkillLevel
 case 3
