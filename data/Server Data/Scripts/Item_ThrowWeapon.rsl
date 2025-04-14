@@ -6,7 +6,7 @@ End Function
 
 Function ThrowWeapon(Player, Target, ThrownItemName$, DamageDie%, WepDamageBonus%)
     ;test Output
-    Output(Player, "You throw a " + ThrownItemName$ + " at " + Name(Target) + " for 1d" + DamageDie + " damage!")
+    Output(Player, "You throw a " + ThrownItemName$ + " at " + Name(Target) + "!",255,255,50)
 
     ;Name check
 
