@@ -77,6 +77,8 @@ Function BVM_InitStringConst_BVM_MAIN_CMD_SET_DEF_$()
 	s = s + "Function ITEMRANGE<BVM_ITEMRANGE>#(PARAM1%)"+Chr(10)
 	s = s + "Function ITEMDAMAGE<BVM_ITEMDAMAGE>%(PARAM1%)"+Chr(10)
 	s = s + "Function ITEMDAMAGETYPE<BVM_ITEMDAMAGETYPE>$(PARAM1%)"+Chr(10)
+	s = s + "Function ZZITEMMAGICBONUS<BVM_ZZITEMMAGICBONUS>%(PARAM1%)"+Chr(10)
+	s = s + "Function ZZITEMEQUIPCLASS<BVM_ZZITEMEQUIPCLASS>$(PARAM1%)"+Chr(10)
 	s = s + "Function ITEMWEAPONTYPE<BVM_ITEMWEAPONTYPE>%(PARAM1%)"+Chr(10)
 	s = s + "Function ITEMARMOR<BVM_ITEMARMOR>%(PARAM1%)"+Chr(10)
 	s = s + "Function ITEMMISCDATA<BVM_ITEMMISCDATA>$(PARAM1%)"+Chr(10)
@@ -1690,6 +1692,12 @@ Function BVM_Invoke%(withTimeOut% = 0)
 			Case 578
 				sparam0$ = BVM_PopString()
 				BVM_PushInt(BVM_ZONEOUTDOORS(sparam0$))
+			Case 579
+				iparam0% = BVM_PopInt()
+				BVM_PushString(BVM_ZZITEMEQUIPCLASS(iparam0%))
+			Case 580
+				iparam0% = BVM_PopInt()
+				BVM_PushInt(BVM_ZZITEMMAGICBONUS(iparam0%))
 			Default 
 				BVM_SetLastError(BVM_ERR_ERROR%, "Fatal error : unknown command of id " + BVM_IntToStr(ret%) + ", the invoker seems to be out of sync with the 'rc_standard' command set")
 				BVM_ReportDebugError(BVM_GetLastErrorMsg())

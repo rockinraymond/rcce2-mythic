@@ -18,6 +18,18 @@ Function Wave()
 
 End Function
 
+Function WepInfo()
+	Player = Actor()
+	PlayerWeapon = ActorWeapon(player)
+
+	EquipClass$ = ZZItemEquipClass(PlayerWeapon)
+	MagicBonus% = ZZItemMagicBonus(PlayerWeapon)
+
+	Output(Player, "magic bonus: " + MagicBonus)
+	Output(Player, "equip class: " + EquipClass)
+
+End Function
+
 ; Example '/heal' command for GMs
 Function Heal()
 
