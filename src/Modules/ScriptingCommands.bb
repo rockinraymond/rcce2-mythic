@@ -680,6 +680,22 @@ Function BVM_ITEMDAMAGE%(Param1%)
 Return Result%
 End Function
 
+Function BVM_ZZITEMMAGICBONUS%(Param1%)
+	Item.ItemInstance = Object.ItemInstance(Param1%)
+	If Item <> Null Then Result% = Item\Item\MagicBonus
+Return Result%
+End Function
+
+Function BVM_ZZITEMEQUIPCLASS$(Param1%)
+	Item.ItemInstance = Object.ItemInstance(Param1%)
+	If Item <> Null
+		Result$ = Item\Item\EquipmentClass$
+	Else
+		Result$ = ""
+	EndIf
+Return Result$
+End Function
+
 Function BVM_ITEMDAMAGETYPE$(Param1%)
 	Item.ItemInstance = Object.ItemInstance(Param1%)
 	If Item <> Null Then Result$ = DamageTypes$(Item\Item\WeaponDamageType)
