@@ -1177,6 +1177,12 @@ Global BItemImageID = FUI_Button(TItemsGeneral, 20, 240, 90, 20, "Change")
 Global LItemMiscData = FUI_Label(TItemsGeneral, 20, 400, "Miscellaneous data:")
 Global TItemMiscData = FUI_TextBox(TItemsGeneral, 120, 400, 300, 20)
 
+Global LEquipClass = FUI_Label(TItemsGeneral, 450, 400, "Equip Class:")
+Global TEquipClass = FUI_TextBox(TItemsGeneral, 525, 400, 300, 20)
+
+Global LMagicBonus = FUI_Label(TItemsGeneral, 450, 360, "Magic Bonus:")
+Global SMagicBonus = FUI_Spinner(TItemsGeneral, 525, 360, 100, 20, 0, 5000, 0, 1, DTYPE_INTEGER)
+
 
 ; Appearance
 Global LItemThumb = FUI_Label(TItemsAppearance, 20, 22, "Item thumbnail texture: [NONE]")
@@ -5900,6 +5906,10 @@ Cls
 				If SelectedItem <> Null Then SelectedItem\Range# = E\EventData : ItemsSaved = False
 			Case SItemArmourLevel
 				If SelectedItem <> Null Then SelectedItem\ArmourLevel = E\EventData : ItemsSaved = False
+			Case SMagicBonus
+				If SelectedItem <> Null Then SelectedItem\MagicBonus = E\EventData : ItemsSaved = False
+			Case TEquipClass
+				If SelectedItem <> Null Then SelectedItem\EquipmentClass$ = E\EventData : ItemsSaved = False
 			Case SItemEatEffects
 				If SelectedItem <> Null Then SelectedItem\EatEffectsLength = E\EventData : ItemsSaved = False
 			Case BItemImageID
@@ -7472,6 +7482,8 @@ Function UpdateItemDisplay()
 	FUI_HideGadget(LItemRangedProjectile) : FUI_HideGadget(CItemRangedProjectile)
 	FUI_HideGadget(LItemRangedAnimation) : FUI_HideGadget(TItemRangedAnimation)
 	FUI_HideGadget(LItemRange) : FUI_HideGadget(SItemRange)
+	FUI_HideGadget(LEquipClass) : FUI_HideGadget(TEquipClass)
+	FUI_HideGadget(LMagicBonus) : FUI_HideGadget(SMagicBonus)
 
 	; No item, blank everything
 	If SelectedItem = Null
@@ -7572,8 +7584,13 @@ Function UpdateItemDisplay()
 				FUI_ShowGadget(LItemWeaponDamage) : FUI_ShowGadget(SItemWeaponDamage)
 				FUI_ShowGadget(LItemWeaponType) : FUI_ShowGadget(CItemWeaponType)
 				FUI_ShowGadget(LItemDamageType) : FUI_ShowGadget(CItemDamageType)
+				
+				FUI_ShowGadget(LMagicBonus) : FUI_ShowGadget(SMagicBonus)
+				FUI_ShowGadget(LEquipClass) : FUI_ShowGadget(TEquipClass)
+				
 				FUI_SendMessage(SItemWeaponDamage, M_SETVALUE, SelectedItem\WeaponDamage)
 				FUI_SendMessage(CItemWeaponType, M_SETINDEX, SelectedItem\WeaponType)
+				
 				Idx = 0
 				For i = 0 To 19
 					If DamageTypes$(i) <> ""
@@ -7584,6 +7601,10 @@ Function UpdateItemDisplay()
 						EndIf
 					EndIf
 				Next
+
+				FUI_SendMessage(TEquipClass, M_SETCAPTION, SelectedItem\EquipmentClass$)
+				FUI_SendMessage(SMagicBonus, M_SETVALUE, SelectedItem\MagicBonus)
+
 				FUI_ShowGadget(LItemRangedProjectile) : FUI_ShowGadget(CItemRangedProjectile)
 				FUI_ShowGadget(LItemRangedAnimation) : FUI_ShowGadget(TItemRangedAnimation)
 				FUI_ShowGadget(LItemRange) : FUI_ShowGadget(SItemRange)
@@ -7597,7 +7618,14 @@ Function UpdateItemDisplay()
 			; Armour
 			Case I_Armour
 				FUI_ShowGadget(LItemArmourLevel) : FUI_ShowGadget(SItemArmourLevel)
+				
+				FUI_ShowGadget(LMagicBonus) : FUI_ShowGadget(SMagicBonus)
+				FUI_ShowGadget(LEquipClass) : FUI_ShowGadget(TEquipClass)
+				
 				FUI_SendMessage(SItemArmourLevel, M_SETVALUE, SelectedItem\ArmourLevel)
+				
+				FUI_SendMessage(SMagicBonus, M_SETVALUE, SelectedItem\MagicBonus)
+				FUI_SendMessage(TEquipClass, M_SETCAPTION, SelectedItem\EquipmentClass$)
 			; Potion/ingredient
 			Case I_Potion, I_Ingredient
 				FUI_ShowGadget(LItemEatEffects) : FUI_ShowGadget(SItemEatEffects)

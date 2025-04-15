@@ -43,6 +43,8 @@ Type Item
 	Field ImageID                                    ; Image item specific (Texture ID)
 	Field MiscData$                                  ; General use for misc items
 	Field Stackable                                  ; Item can be stacked up
+	Field MagicBonus								 ; Bonus for magic Items
+	Field EquipmentClass$							 ; String for weapon/armor types
 End Type
 
 ; Is used when an actual instance of an item is created in the world (on the floor, in someone's inventory, etc.)
@@ -65,7 +67,7 @@ End Type
 ; Returns the correct length in bytes of an item instance in string form
 Function ItemInstanceStringLength()
 
-	Return 83
+	Return 100
 
 End Function
 
@@ -283,6 +285,10 @@ Function LoadItems(Filename$)
 					I\ImageID          = ReadShort(F)
 			End Select
 			I\MiscData$        = ReadString$(F)
+			If (I\ItemType = I_Armour) Or (I\ItemType = I_Weapon)
+				I\MagicBonus = ReadShort(F)								 
+				I\EquipmentClass$ = ReadString(F)
+			EndIf
 			Items = Items + 1
 		Wend
 
@@ -331,6 +337,10 @@ Function SaveItems(Filename$)
 					WriteShort F, I\ImageID
 			End Select
 			WriteString F, I\MiscData$
+			If ((I\ItemType = I_Armour) Or (I\ItemType = I_Weapon))
+				WriteShort F, I\MagicBonus								 
+				WriteString F, I\EquipmentClass$
+			EndIf
 		Next
 
 	CloseFile(F)
