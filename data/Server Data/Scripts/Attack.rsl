@@ -39,7 +39,8 @@ TDexMod% = AbilityBonus(TDex)
 
 ;Attack Bonus/Armor Class
 PAtkBns% = Attribute(Player, "Attack Bonus")
-TArmorClass% = Attribute(Player,"Armor Class") + TDexMod%
+PDamBns% = Attribute(Player, "Damage Bonus")
+TArmorClass% = Attribute(Target,"Armor Class") + TDexMod%
 
 
 
@@ -67,7 +68,11 @@ If( ItemWeaponType(ActorWeapon(Player)) = 3)
 		Return
 		EndIf
 	EndIf
-	PSkillMod% = PSDexMod	
+	PHitMod% = PSDexMod
+	if Race(Player) = "Halfling"
+		PHitMod = PHitMod + 2
+	endif
+	PDamMod% = 0	
 	If ((HasItem(Player,"Arrow",1) = 0) AND (HUMAN = 1))
 		Output(Player, "You have no more arrows!", 255, 255, 0)
 		Return
@@ -75,7 +80,8 @@ If( ItemWeaponType(ActorWeapon(Player)) = 3)
 		GiveItem(Player,"Arrow",-1)
 	EndIf
 Else
-	PSkillMod% = PStrMod
+	PHitMod% = PStrMod
+	PDamMod% = PStrMod
 EndIf
 
 ;;;;;;;;; NPC face target ;;; 
@@ -98,11 +104,10 @@ EndIf
 If (ActorWeapon(player) = 0 )
 WepDamage% = Attribute(Player, "Base Damage")
 else
-WepBonus% = ItemAttribute(ActorWeapon(Player),"Attack Bonus")
+
 WepDamage% = ItemDamage(ActorWeapon(Player))
 	If (ItemHealth(ActorWeapon(Player)) = 100)
 	WepDamage% = 3
-	WepBonus% = -1
 	EndIf
 EndIf
 
@@ -126,7 +131,7 @@ End Select
 ;Hit Roll
  HitRoll = Rand(1,20)
  
- If ((HitRoll + PAtkBns + PSkillMod) > TArmorClass)
+ If ((HitRoll + PAtkBns + PHitMod) > TArmorClass)
  	AttackHit = 1
  else
  	AttackHit = 0
@@ -143,7 +148,8 @@ End Select
  
  ;if Hit Apply Damage and set Output
  If (AttackHit = 1)
- Damage = Rand(1,WepDamage) + WepBonus + PAtkBonus + PSkillMod
+
+ 	Damage = Rand(1,WepDamage) + PDamMod + PDamBns
  
  If (Damage < 1)
  Damage = 1
@@ -154,49 +160,49 @@ End Select
  
  
  ;ItemDamage
- WeaponHealth = ItemHealth(ActorWeapon(Player))
- ArmorHealth = ItemHealth(ActorChest(Target))
- ShieldHealth = ItemHealth(ActorShield(Target))
- HelmHealth = ItemHealth(ActorHat(Target))
- If (WeaponHealth > 0)
- DamageChance = Rand(1,4)
-	If (DamageChance = 1)
- 	SetItemHealth(ActorWeapon(Player),WeaponHealth - 1)
- 	EndIf
- 	If ItemHealth(ActorWeapon(Player)) = 0
- 	 Output(Player, "Your weapon is now broken!", 255, 255, 0)
- 	EndIf
- EndIf
+ ;WeaponHealth = ItemHealth(ActorWeapon(Player))
+ ;ArmorHealth = ItemHealth(ActorChest(Target))
+ ;ShieldHealth = ItemHealth(ActorShield(Target))
+ ;HelmHealth = ItemHealth(ActorHat(Target))
+ ;If (WeaponHealth > 0)
+ ;DamageChance = Rand(1,4)
+;	If (DamageChance = 1)
+; 	SetItemHealth(ActorWeapon(Player),WeaponHealth - 1)
+; 	EndIf
+; 	If ItemHealth(ActorWeapon(Player)) = 0
+; 	 Output(Player, "Your weapon is now broken!", 255, 255, 0)
+; 	EndIf
+; EndIf
  
-  If (ArmorHealth > 0)
- DamageChance = Rand(1,4)
-	If (DamageChance = 1)
- 	SetItemHealth(ActorChest(Target),ArmorHealth - 1)
- 	EndIf
- 	If ItemHealth(ActorChest(Target)) = 0
- 	 Output(Target, "Your armor is now broken!", 255, 255, 0)
- 	EndIf
- EndIf
+;  If (ArmorHealth > 0)
+; DamageChance = Rand(1,4)
+;	If (DamageChance = 1)
+; 	SetItemHealth(ActorChest(Target),ArmorHealth - 1)
+; 	EndIf
+; 	If ItemHealth(ActorChest(Target)) = 0
+; 	 Output(Target, "Your armor is now broken!", 255, 255, 0)
+; 	EndIf
+; EndIf
  
-   If (ShieldHealth > 0)
- DamageChance = Rand(1,4)
-	If (DamageChance = 1)
- 	SetItemHealth(ActorShield(Target),ShieldHealth - 1)
- 	EndIf
- 	If ItemHealth(ActorShield(Target)) = 0
- 	 Output(Target, "Your shield is now broken!", 255, 255, 0)
- 	EndIf
- EndIf
+;   If (ShieldHealth > 0)
+; DamageChance = Rand(1,4)
+;	If (DamageChance = 1)
+; 	SetItemHealth(ActorShield(Target),ShieldHealth - 1)
+; 	EndIf
+; 	If ItemHealth(ActorShield(Target)) = 0
+; 	 Output(Target, "Your shield is now broken!", 255, 255, 0)
+; 	EndIf
+; EndIf
  
-   If (HelmHealth > 0)
- DamageChance = Rand(1,4)
-	If (DamageChance = 1)
- 	SetItemHealth(ActorHat(Target),HelmHealth - 1)
- 	EndIf
- 	If ItemHealth(ActorHat(Target)) = 0
- 	 Output(Target, "Your helm is now broken!", 255, 255, 0)
- 	EndIf
- EndIf
+;   If (HelmHealth > 0)
+; DamageChance = Rand(1,4)
+;	If (DamageChance = 1)
+ ;	SetItemHealth(ActorHat(Target),HelmHealth - 1)
+; 	EndIf
+; 	If ItemHealth(ActorHat(Target)) = 0
+; 	 Output(Target, "Your helm is now broken!", 255, 255, 0)
+; 	EndIf
+; EndIf
  
  Playspeech(Target,Rand(6,7))
  Else
@@ -328,7 +334,7 @@ case 7
 return -1
 case 8
 return -1
-case 13 OR 14 OR 15
+case 13 
 return 1
 case 14
 return 1

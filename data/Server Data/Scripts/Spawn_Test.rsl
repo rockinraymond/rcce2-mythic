@@ -23,6 +23,10 @@ giveitem(actor(),"quarterstaff",1)
 giveitem(actor(),"pole arm",1)
 giveitem(actor(),"spear",1)
 giveitem(actor(),"arrow",50)
+giveitem(actor(),"leather armor",2)
+giveitem(actor(),"chain mail",1)
+giveitem(actor(),"plate mail",1)
+giveitem(actor(),"shield",2)
 
 NPC = Actor()
 

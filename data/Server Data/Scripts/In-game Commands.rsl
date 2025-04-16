@@ -30,6 +30,13 @@ Function WepInfo()
 
 End Function
 
+Function Testitems()
+	GiveItem(Actor(), "Dagger +1")
+	GiveItem(Actor(), "Leather Armor +1")
+	GiveItem(Actor(), "Shield")
+	ChangeMoney(Player, 10000)
+End Function
+
 ; Example '/heal' command for GMs
 Function Heal()
 

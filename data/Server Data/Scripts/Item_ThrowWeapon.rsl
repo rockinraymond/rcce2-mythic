@@ -38,8 +38,9 @@ Function ThrowWeapon(Player, Target, ThrownItemName$, DamageDie%, WepDamageBonus
     TDexMod% = AbilityBonus(TDex)
 
     ;Attack Bonus/Armor Class
-    PAtkBns% = Attribute(Player, "Attack Bonus")
-    TArmorClass% = Attribute(Player,"Armor Class") + TDexMod%
+    PAtkBns% = FindAttackBonus(Class(Player),ActorLevel(Player))
+    PDamBns% = WepDamageBonus%
+    TArmorClass% = Attribute(Target,"Armor Class") + TDexMod%
 
     ;Distance modifiers
     If (ActorDistance(Player,Target) < 5)
@@ -52,6 +53,10 @@ Function ThrowWeapon(Player, Target, ThrownItemName$, DamageDie%, WepDamageBonus
         Output(Player, "Target is too far away!", 255, 50, 50)
         return
 	EndIf
+
+    if Race(Player) = "Halfling"
+		PDexMod = PDexMod + 2
+	endif
 
     ;Hit Roll
     HitRoll = Rand(1,20)
@@ -73,7 +78,7 @@ Function ThrowWeapon(Player, Target, ThrownItemName$, DamageDie%, WepDamageBonus
     
     ;if Hit Apply Damage and set Output
     If (AttackHit = 1)
-        Damage = Rand(1,DamageDie) + WepDamageBonus + PAtkBonus + PStrMod
+        Damage = Rand(1,DamageDie) + PStrMod + PDamBns%
         If (Damage < 1)
             Damage = 1
         EndIf
@@ -204,7 +209,7 @@ case 7
 return -1
 case 8
 return -1
-case 13 OR 14 OR 15
+case 13 
 return 1
 case 14
 return 1
@@ -276,4 +281,105 @@ default
 return 3
 End Select 
 return 0
+End Function
+
+Function AttackBonusFighter(newLevel%)
+
+Select newLevel
+case 1
+return 1
+case 2
+return 2
+case 3
+return 2
+case 4
+return 3
+case 5
+return 4
+case 6
+return 4
+case 7
+return 5
+case 8
+return 6
+case 9
+return 6
+case 10
+return 6
+default
+return 0
+End Select
+
+return 0
+End Function
+
+Function AttackBonusThiefCleric(newLevel%)
+
+Select newLevel
+case 1 
+return 1
+case 2
+return 1
+case 3 
+return 2
+case 4
+return 2
+case 5
+return 3
+case 6
+return 3
+case 7
+return 4
+case 8
+return 5
+case 9
+return 5
+case 10
+return 5
+default
+return 0
+End Select
+
+return 0
+End Function
+
+Function AttackBonusMagicUser(newLevel%)
+
+Select newLevel
+case 1
+return 1
+case 2 
+return 1
+case 3
+return 1
+case 4
+return 2
+case 5
+return 2
+case 6
+return 3
+case 7
+return 3
+case 8
+return 3
+case 9
+return 4
+case 10
+return 4
+default
+return 0
+End Select
+End Function
+
+Function FindAttackBonus(playerClass$, playerLevel%)
+Select playerClass$
+    case "Magic User"
+        return AttackBonusMagicUser(playerLevel%)
+    case "Thief"
+        return AttackBonusThiefCleric(playerLevel%)
+    case "Cleric"
+        return AttackBonusThiefCleric(playerLevel%)
+    default
+        return AttackBonusFighter(playerLevel%)
+End Select
 End Function

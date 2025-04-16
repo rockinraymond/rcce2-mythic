@@ -271,6 +271,9 @@ Function ActorAttack(A1.ActorInstance, A2.ActorInstance)
 					EndIf
 				; Attack script
 				Else
+					; In range?
+					CheckDist# = A1\Inventory\Items[SlotI_Weapon]\Item\Range# + A1\Actor\Radius# + A2\Actor\Radius#
+					If Dist# > CheckDist# * CheckDist# Then Return False
 					; Check both actors are allowed to engage in combat
 					If A1\Actor\Aggressiveness = 3 Or A2\Actor\Aggressiveness = 3 Then Return False
 					; Check faction ratings
@@ -450,6 +453,32 @@ Function ActorAttack(A1.ActorInstance, A2.ActorInstance)
 		Goto SkipAttackNet
 	EndIf
 
+	; Apply damage to target actor
+	If Damage > 0 Then A2\Attributes\Value[HealthStat] = A2\Attributes\Value[HealthStat] - Damage
+
+	; Tell player(s) if applicable
+	Pa$ = RCE_StrFromInt$(Damage + 1, 2) + RCE_StrFromInt$(DamageType, 1)
+	If A1\RNID > 0
+		RCE_Send(Host, A1\RNID, P_AttackActor, "H" + RCE_StrFromInt$(A2\RuntimeID, 2) + Pa$, True)
+	EndIf
+	If A2\RNID > 0
+		RCE_Send(Host, A2\RNID, P_AttackActor, "Y" + RCE_StrFromInt$(A1\RuntimeID, 2) + Pa$, True)
+	EndIf
+
+	; Tell other players in the same area
+	Pa$ = "O" + RCE_StrFromInt$(A1\RuntimeID, 2) + RCE_StrFromInt$(A2\RuntimeID, 2)
+
+	AInstance.AreaInstance = Object.AreaInstance(A1\ServerArea)
+	A3.ActorInstance = AInstance\FirstInZone
+	While A3 <> Null
+		If A3\RNID > 0
+			If A3 <> A1 And A3 <> A2 Then RCE_Send(Host, A3\RNID, P_AttackActor, Pa$, True)
+		EndIf
+		A3 = A3\NextInZone
+	Wend
+
+	.SkipAttackNet
+
 	; Damage weapon
 	If WeaponDamage = True
 		If A1\Inventory\Items[SlotI_Weapon] <> Null
@@ -481,32 +510,6 @@ Function ActorAttack(A1.ActorInstance, A2.ActorInstance)
 			EndIf
 		Next
 	EndIf
-
-	; Apply damage to target actor
-	If Damage > 0 Then A2\Attributes\Value[HealthStat] = A2\Attributes\Value[HealthStat] - Damage
-
-	; Tell player(s) if applicable
-	Pa$ = RCE_StrFromInt$(Damage + 1, 2) + RCE_StrFromInt$(DamageType, 1)
-	If A1\RNID > 0
-		RCE_Send(Host, A1\RNID, P_AttackActor, "H" + RCE_StrFromInt$(A2\RuntimeID, 2) + Pa$, True)
-	EndIf
-	If A2\RNID > 0
-		RCE_Send(Host, A2\RNID, P_AttackActor, "Y" + RCE_StrFromInt$(A1\RuntimeID, 2) + Pa$, True)
-	EndIf
-
-	; Tell other players in the same area
-	Pa$ = "O" + RCE_StrFromInt$(A1\RuntimeID, 2) + RCE_StrFromInt$(A2\RuntimeID, 2)
-
-	AInstance.AreaInstance = Object.AreaInstance(A1\ServerArea)
-	A3.ActorInstance = AInstance\FirstInZone
-	While A3 <> Null
-		If A3\RNID > 0
-			If A3 <> A1 And A3 <> A2 Then RCE_Send(Host, A3\RNID, P_AttackActor, Pa$, True)
-		EndIf
-		A3 = A3\NextInZone
-	Wend
-
-	.SkipAttackNet
 
 	; If target was a player with pets, make pets attack too
 	If A1\RNID > 0

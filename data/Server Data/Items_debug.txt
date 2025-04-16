@@ -55,3 +55,21 @@ Item Name: Spear
 Item ID: 18
 Item Name: Arrow
 
+Item ID: 19
+Item Name: Leather Armor
+
+Item ID: 20
+Item Name: Chain Mail
+
+Item ID: 21
+Item Name: Plate Mail
+
+Item ID: 22
+Item Name: Shield
+
+Item ID: 23
+Item Name: Leather Armor +1
+
+Item ID: 24
+Item Name: Dagger +1
+
