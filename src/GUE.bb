@@ -10012,21 +10012,27 @@ End Function
 Function FixedAttributeDialog()
 
 	; Create window
-	W = FUI_Window(0, 0, 250, 250, "Set Fixed Attributes", "", 1, 0)
+	W = FUI_Window(0, 0, 250, 375, "Set Fixed Attributes", "", 1, 0)
 	FUI_Label(W, 10, 12, "Health:")
 	FUI_Label(W, 10, 42, "Energy:")
 	FUI_Label(W, 10, 72, "Breath:")
-	FUI_Label(W, 10, 102, "Toughness:")
+	FUI_Label(W, 10, 102, "Armor Class:")
 	FUI_Label(W, 10, 132, "Strength:")
 	FUI_Label(W, 10, 162, "Speed:")
+	FUI_Label(W, 10, 192, "Dexterity:")
+	FUI_Label(W, 10, 222, "Attack Bonus:")
+	FUI_Label(W, 10, 252, "Damage Bonus:")
 	CHealth = FUI_ComboBox(W, 90, 10, 120, 20, 20)
 	CEnergy = FUI_ComboBox(W, 90, 40, 120, 20, 20)
 	CBreath = FUI_ComboBox(W, 90, 70, 120, 20, 20)
 	CToughness = FUI_ComboBox(W, 90, 100, 120, 20, 20)
 	CStrength = FUI_ComboBox(W, 90, 130, 120, 20, 20)
 	CSpeed = FUI_ComboBox(W, 90, 160, 120, 20, 20)
-	BCancel = FUI_Button(W, 100, 190, 60, 25, "Cancel")
-	BSave = FUI_Button(W, 180, 190, 60, 25, "Save")
+	CDexterity = FUI_ComboBox(W, 90, 190, 120, 20, 20)
+	CAttackBonus = FUI_ComboBox(W, 90, 220, 120, 20, 20)
+	CDamageBonus = FUI_ComboBox(W, 90, 250, 120, 20, 20)
+	BCancel = FUI_Button(W, 100, 280, 60, 25, "Cancel")
+	BSave = FUI_Button(W, 180, 280, 60, 25, "Save")
 	FUI_ModalWindow(W)
 	FUI_CenterWindow(W)
 
@@ -10042,6 +10048,9 @@ Function FixedAttributeDialog()
 	ToughnessStat = ReadShort(F)
 	StrengthStat = ReadShort(F)
 	SpeedStat = ReadShort(F)
+	DexterityStat = ReadShort(F)
+	AttackBonusStat = ReadShort(F)
+	DamageBonusStat = ReadShort(F)
 	CloseFile(F)
 
 	; Fill list boxes
@@ -10058,12 +10067,18 @@ Function FixedAttributeDialog()
 			Item = FUI_ComboBoxItem(CToughness, AttributeNames$(i)) : FUI_SendMessage(Item, M_SETDATA, i)
 			Item = FUI_ComboBoxItem(CStrength, AttributeNames$(i)) : FUI_SendMessage(Item, M_SETDATA, i)
 			Item = FUI_ComboBoxItem(CSpeed, AttributeNames$(i)) : FUI_SendMessage(Item, M_SETDATA, i)
+			Item = FUI_ComboBoxItem(CDexterity, AttributeNames$(i)) : FUI_SendMessage(Item, M_SETDATA, i)
+			Item = FUI_ComboBoxItem(CAttackBonus, AttributeNames$(i)) : FUI_SendMessage(Item, M_SETDATA, i)
+			Item = FUI_ComboBoxItem(CDamageBonus, AttributeNames$(i)) : FUI_SendMessage(Item, M_SETDATA, i)
 			If i = HealthStat Then HealthIdx = Idx
 			If i = EnergyStat Then EnergyIdx = Idx + 1
 			If i = BreathStat Then BreathIdx = Idx + 1
 			If i = ToughnessStat Then ToughnessIdx = Idx
 			If i = StrengthStat Then StrengthIdx = Idx
 			If i = SpeedStat Then SpeedIdx = Idx
+			If i = DexterityStat Then DexterityIdx = Idx
+			If i = AttackBonusStat Then AttackBonusIdx = Idx
+			If i = DamageBonusStat Then DamageBonusIdx = Idx
 			Idx = Idx + 1
 		EndIf
 	Next
@@ -10073,6 +10088,9 @@ Function FixedAttributeDialog()
 	FUI_SendMessage(CToughness, M_SETINDEX, ToughnessIdx)
 	FUI_SendMessage(CStrength, M_SETINDEX, StrengthIdx)
 	FUI_SendMessage(CSpeed, M_SETINDEX, SpeedIdx)
+	FUI_SendMessage(CDexterity, M_SETINDEX, DexterityIdx)
+	FUI_SendMessage(CAttackBonus, M_SETINDEX, AttackBonusIdx)
+	FUI_SendMessage(CDamageBonus, M_SETINDEX, DamageBonusIdx)
 
 	; Event loop
 	Done = False
@@ -10093,6 +10111,9 @@ Function FixedAttributeDialog()
 						WriteShort(F, ToughnessStat)
 						WriteShort(F, StrengthStat)
 						WriteShort(F, SpeedStat)
+						WriteShort(F, DexterityStat)
+						WriteShort(F, AttackBonusStat)
+						WriteShort(F, DamageBonusStat)
 					CloseFile(F)
 					F = WriteFile("Data\Game Data\Fixed Attributes.dat")
 						WriteShort(F, HealthStat)
@@ -10115,6 +10136,12 @@ Function FixedAttributeDialog()
 					StrengthStat = FUI_SendMessage(FUI_SendMessage(CStrength, M_GETSELECTED), M_GETDATA)
 				Case CSpeed
 					SpeedStat = FUI_SendMessage(FUI_SendMessage(CSpeed, M_GETSELECTED), M_GETDATA)
+				Case CDexterity
+					DexterityStat = FUI_SendMessage(FUI_SendMessage(CDexterity, M_GETSELECTED), M_GETDATA)
+				Case CAttackBonus
+					AttackBonusStat = FUI_SendMessage(FUI_SendMessage(CAttackBonus, M_GETSELECTED), M_GETDATA)
+				Case CDamageBonus
+					DamageBonusStat = FUI_SendMessage(FUI_SendMessage(CDamageBonus, M_GETSELECTED), M_GETDATA)
 			End Select
 			Delete E
 		Next
