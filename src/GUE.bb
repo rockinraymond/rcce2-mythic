@@ -92,7 +92,7 @@ WriteLog(GUELog, "** GUE startup log begins **", True, True)
 ;Window or fullscreen for editor
 ;############################
 Local GUE_width# = GetSystemMetrics(0) * 0.9
-Local GUE_height# = GetSystemMetrics(1) * 0.8
+Local GUE_height# = GetSystemMetrics(1) * 0.85
 If (GUE_width < 1280 And GUE_height< 960)
 	GUE_width = 1280
 	GUE_height = 960
