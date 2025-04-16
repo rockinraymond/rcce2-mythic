@@ -56,10 +56,12 @@ EndIf
 
 ;Range Weapon Check
 If( ItemWeaponType(ActorWeapon(Player)) = 3)
-	If (ActorDistance(Player,Target) < 10)
-		
+	PHitMod% = PSDexMod
+	If (ActorDistance(Player,Target) < 5)
+	PHitMod% = PSDexMod
 		If (HUMAN = 1)
-		Output(Player, "You are too close to use a ranged weapon!", 255, 255, 0)
+		Output(Player, "You are too close to use a ranged weapon effectively!", 255, 255, 0)
+		PHitMod% = PHitMod% - 5
 		Return
 		Else
 		WepName$ = ItemName(ActorWeapon(Player))
@@ -68,7 +70,19 @@ If( ItemWeaponType(ActorWeapon(Player)) = 3)
 		Return
 		EndIf
 	EndIf
-	PHitMod% = PSDexMod
+	
+
+	;Range Checks
+	LongRange% = ItemRange(ActorWeapon(Player))
+	ShortRange% = LongRange% / 3
+	MediumRange% = ShortRange% * 2
+
+	If (ActorDistance(Player,Target) < ShortRange%)
+		PHitMod = PHitMod + 1
+	ElseIf (ActorDistance(Player,Target) > MediumRange%)
+		PHitMod = PHitMod - 2
+	EndIf
+
 	if Race(Player) = "Halfling"
 		PHitMod = PHitMod + 2
 	endif
