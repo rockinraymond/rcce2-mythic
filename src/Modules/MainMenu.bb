@@ -939,6 +939,10 @@ Function LogIn()
 											NameLen = RCE_IntFromStr(Mid$(Pa$, Offset, 1))
 											It\MiscData$ = Mid$(Pa$, Offset + 1, NameLen)
 											Offset = Offset + 1 + NameLen
+											If ((It\ItemType = I_Armour) Or (It\ItemType = I_Weapon))
+											It\MagicBonus = RCE_IntFromStr(Mid$(Pa$, Offset, 2))
+											Offset = Offset + 2 	
+											EndIf
 								Wend
 								Delete M
 							; Actor block

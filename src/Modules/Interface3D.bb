@@ -1831,9 +1831,15 @@ EndIf
 					Select Me\Inventory\Items[i]\Item\ItemType
 						Case I_Weapon
 							Dam = Me\Inventory\Items[i]\Item\WeaponDamage
+							MagBns = Me\Inventory\Items[i]\Item\MagicBonus
+							If MagBns > 0
+								WepDamageStr$ = LanguageString$(LS_Damage) + " d" + Str$(Dam) + " + " + Str$(MagBns)
+							Else
+								WepDamageStr$ = LanguageString$(LS_Damage) + " d" + Str$(Dam) 
+							EndIf
 							DamType$ = DamageTypes$(Me\Inventory\Items[i]\Item\WeaponDamageType)
 							WepType$ = GetWeaponType$(Me\Inventory\Items[i]\Item)
-							GY_CreateLabel(WTooltip, 0.02, 0.40, LanguageString$(LS_Damage) + " " + Str$(Dam))
+							GY_CreateLabel(WTooltip, 0.02, 0.40, WepDamageStr$)
 							GY_CreateLabel(WTooltip, 0.02, 0.47, LanguageString$(LS_DamageType) + " " + DamType$)
 							GY_CreateLabel(WTooltip, 0.02, 0.54, LanguageString$(LS_WeaponType) + " " + WepType$)
 							Y# = 0.61
@@ -1898,9 +1904,15 @@ EndIf
 					Select Me\Inventory\Items[i + SlotI_Backpack]\Item\ItemType
 						Case I_Weapon
 							Dam = Me\Inventory\Items[i + SlotI_Backpack]\Item\WeaponDamage
+							MagBns = Me\Inventory\Items[i + SlotI_Backpack]\Item\MagicBonus
+							If MagBns > 0
+								WepDamageStr$ = LanguageString$(LS_Damage) + " d" + Str$(Dam) + " + " + Str$(MagBns)
+							Else
+								WepDamageStr$ = LanguageString$(LS_Damage) + " d" + Str$(Dam) 
+							EndIf
 							DamType$ = DamageTypes$(Me\Inventory\Items[i + SlotI_Backpack]\Item\WeaponDamageType)
 							WepType$ = GetWeaponType$(Me\Inventory\Items[i + SlotI_Backpack]\Item)
-							GY_CreateLabel(WTooltip, 0.02, 0.40, LanguageString$(LS_Damage) + " " + Str$(Dam))
+							GY_CreateLabel(WTooltip, 0.02, 0.40, WepDamageStr$)
 							GY_CreateLabel(WTooltip, 0.02, 0.47, LanguageString$(LS_DamageType) + " " + DamType$)
 							GY_CreateLabel(WTooltip, 0.02, 0.54, LanguageString$(LS_WeaponType) + " " + WepType$)
 							Y# = 0.61
@@ -1960,9 +1972,15 @@ EndIf
 					Select TradeItems(i)\Item\ItemType
 						Case I_Weapon
 							Dam = TradeItems(i)\Item\WeaponDamage
+							MagBns = TradeItems(i)\Item\MagicBonus
+							If MagBns > 0
+								WepDamageStr$ = LanguageString$(LS_Damage) + " d" + Str$(Dam) + " + " + Str$(MagBns)
+							Else
+								WepDamageStr$ = LanguageString$(LS_Damage) + " d" + Str$(Dam) 
+							EndIf
 							DamType$ = DamageTypes$(TradeItems(i)\Item\WeaponDamageType)
 							WepType$ = GetWeaponType$(TradeItems(i)\Item)
-							GY_CreateLabel(WTooltip, 0.02, 0.40, LanguageString$(LS_Damage) + " " + Str$(Dam))
+							GY_CreateLabel(WTooltip, 0.02, 0.40, WepDamageStr$ )
 							GY_CreateLabel(WTooltip, 0.02, 0.47, LanguageString$(LS_DamageType) + " " + DamType$)
 							GY_CreateLabel(WTooltip, 0.02, 0.54, LanguageString$(LS_WeaponType) + " " + WepType$)
 							Y# = 0.61

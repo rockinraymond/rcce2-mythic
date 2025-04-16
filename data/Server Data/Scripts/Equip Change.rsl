@@ -13,48 +13,48 @@ Function Main()
 			
 			If ActorChest(Player) <> 0
 				If (ItemHealth(ActorChest(Player)) > 0)
-					ChestAC = ItemArmor(ActorChest(Player))
+					ChestAC = ItemArmor(ActorChest(Player)) - 11
+					AddActorEffect(Player, "Armor Bonus", "Armor Class", ChestAC, 0, 0)
 				else 
 					Output(Player, "Your armor is broken", 255, 50, 50)
-					ChestAC = 10 ;broken armor is hazordous
+					AddActorEffect(Player, "Armor Bonus", "Armor Class", -1, 0, 0)
 				EndIf
+			Else
+				DeleteActorEffect(Player, "Armor Bonus")
 			EndIf
 			
 			If ActorShield(player) <> 0
 				If (ItemHealth(ActorShield(Player)) > 0)
 					ShieldAC = ItemArmor(ActorShield(Player))
+					AddActorEffect(Player, "Shield Bonus", "Armor Class", ShieldAC, 0, 0)
 				Else
 					Output(Player, "Your shield is broken", 255, 50, 50)
-					ShieldAC = -1 ;broken shield is hazordous
+					AddActorEffect(Player, "Shield Bonus", "Armor Class", -1, 0, 0)
 				EndIf
+			Else
+				DeleteActorEffect(Player, "Shield Bonus")
 			EndIf
 			
-				
-			If (ChestAC = 0)
-				SetAttribute(Player,"Armor Class",11 + ShieldAC)
-			Else
-				SetAttribute(Player,"Armor Class",ChestAC + ShieldAC)
-			EndIf
 		;end Armorclass
 		
 		;Magic items
 		;Weapon
 		If (ZZItemMagicBonus(ActorWeapon(Player)) > 0)
-			AddActorEffect(Player, "Magical Attack Bonus", "Attack Bonus", ZZItemMagicBonus(ActorWeapon(Player)), 0, 11)
-			AddActorEffect(Player, "Magical Damage Bonus", "Damage Bonus", ZZItemMagicBonus(ActorWeapon(Player)), 0, 11)
+			AddActorEffect(Player, "Magical Attack Bonus", "Attack Bonus", ZZItemMagicBonus(ActorWeapon(Player)), 0, 0)
+			AddActorEffect(Player, "Magical Damage Bonus", "Damage Bonus", ZZItemMagicBonus(ActorWeapon(Player)), 0, 0)
 		Else
 			DeleteActorEffect(Player, "Magical Attack Bonus")
 			DeleteActorEffect(Player, "Magical Damage Bonus")
 		EndIf
 		;Armor
-		If (ZZItemMagicBonus(ActorWeapon(Player)) > 0)
-			AddActorEffect(Player, "Magical Armor Bonus", "Armor Class", ZZItemMagicBonus(ActorChest(Player)), 0, 12)
+		If (ZZItemMagicBonus(ActorChest(Player)) > 0)
+			AddActorEffect(Player, "Magical Armor Bonus", "Armor Class", ZZItemMagicBonus(ActorChest(Player)), 0, 0)
 		Else
 			DeleteActorEffect(Player, "Magical Armor Bonus")
 		EndIf
 		;Shield
-		If (ZZItemMagicBonus(ActorWeapon(Player)) > 0)
-			AddActorEffect(Player, "Magical Shield Bonus", "Armor Class", ZZItemMagicBonus(ActorChest(Player)), 0, 12)
+		If (ZZItemMagicBonus(ActorShield(Player)) > 0)
+			AddActorEffect(Player, "Magical Shield Bonus", "Armor Class", ZZItemMagicBonus(ActorShield(Player)), 0, 0)
 		Else
 			DeleteActorEffect(Player, "Magical Shield Bonus")
 		EndIf
@@ -71,7 +71,7 @@ Function Main()
 				DeleteActorEffect(Player, "Weapon Non-Proficiency")
 			default
 				Output(Player, "Magic Users are not proficent with this weapon.", 255, 50, 50)
-				AddActorEffect(Player, "Weapon Non-Proficiency", "Attack Bonus", -5, 0, 11)
+				AddActorEffect(Player, "Weapon Non-Proficiency", "Attack Bonus", -5, 0, 0)
 			End Select
 			If ItemArmor(ActorChest(Player)) > 0
 				Output(Player, "Magic Users cannot cast spells wearing armor.", 255, 50, 50)

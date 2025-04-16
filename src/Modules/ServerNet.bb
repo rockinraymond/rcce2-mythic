@@ -1635,6 +1635,9 @@ Function UpdateNetwork()
 							Pa$ = Pa$ + RCE_StrFromInt$(It\ImageID, 2)							
 					End Select
 					Pa$ = Pa$ + RCE_StrFromInt$(Len(It\MiscData$), 1) + It\MiscData$
+					If ((It\ItemType = I_Armour) Or (It\ItemType = I_Weapon))
+							Pa$ = Pa$ + RCE_StrFromInt$(It\MagicBonus, 2)	
+					EndIf
 					If ItemsSent >= 6 And It <> Last Item
 						SendQueued(Host, M\FromID, P_FetchActors, "IN" + Pa$, True)
 						ItemsSent = 0
