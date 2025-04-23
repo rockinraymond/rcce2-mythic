@@ -365,6 +365,7 @@ Function ActorAttack(A1.ActorInstance, A2.ActorInstance)
 
 		;Roll D20
 		HitRoll = Rand(1,20) + A_STRBNS + A_AttackBonus
+		If HitRoll = 20 Then HitRoll = 100
 		ModHitRoll = HitRoll + A_STRBNS + A_AttackBonus
 		If ModHitRoll >= (T_ArmorClass + T_DEXBNS)
 			; Initial damage
