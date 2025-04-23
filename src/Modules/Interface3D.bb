@@ -747,6 +747,9 @@ Function UpdateInterface()
 			SelectKeyWasDown = False
 
 			; Pick a target
+			GY_FreeGadget(WContextMenu)
+			WContextMenu = 0
+
 			SetPickModes(0, 3, True, 1)
 			Result = CameraPick(Cam, MouseX(), MouseY())
 			If Result <> 0

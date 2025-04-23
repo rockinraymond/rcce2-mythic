@@ -922,7 +922,15 @@ Function UpdateNetwork()
 					; I attacked someone else
 					If Left$(M\MessageData$, 1) = "H"
 						AnimateActorAttack(Me)
-						PlayActorSound(Me, Rand(Speech_Attack1, Speech_Attack2))
+						//PlayActorSound(Me, Rand(Speech_Attack1, Speech_Attack2))
+						AttackSound = 32
+						If Me\Inventory\Items[SlotI_Weapon] <> Null 
+							If Me\Inventory\Items[SlotI_Weapon]\Item\WeaponType = W_Ranged
+								AttackSound = 23
+							EndIf
+						EndIf
+
+						EmitSound(GetSound(AttackSound), Me\EN)
 						Damage = RCE_IntFromStr(Mid$(M\MessageData$, 4, 2)) - 1
 						DType$ = DamageTypes$(RCE_IntFromStr(Mid$(M\MessageData$, 6, 1)))
 						; And hit them
@@ -930,15 +938,16 @@ Function UpdateNetwork()
 							CombatDamageOutput(A, Damage, DType$)
 							A\Attributes\Value[HealthStat] = A\Attributes\Value[HealthStat] - Damage
 							PlayAnimation(A, 3, 0.035, Rand(Anim_FirstHit, Anim_LastHit))
+							PlayActorWeaponSound(Me, A)
 							PlayActorSound(A, Rand(Speech_Hit1, Speech_Hit2))
-							If A\Actor\BloodTexID > 0
-								B.BloodSpurt = New BloodSpurt
-								B\Timer = MilliSecs()
-								B\EmitterEN = RP_CreateEmitter(A\Actor\BloodTexID)
-								PositionEntity(B\EmitterEN, EntityX#(A\CollisionEN), EntityY#(A\CollisionEN), EntityZ#(A\CollisionEN))
-								PointEntity(B\EmitterEN, Me\CollisionEN)
-								MoveEntity(B\EmitterEN, 0.0, 0.0, 1.0)
-							EndIf
+							; If A\Actor\BloodTexID > 0
+							; 	B.BloodSpurt = New BloodSpurt
+							; 	B\Timer = MilliSecs()
+							; 	B\EmitterEN = RP_CreateEmitter(A\Actor\BloodTexID)
+							; 	PositionEntity(B\EmitterEN, EntityX#(A\CollisionEN), EntityY#(A\CollisionEN), EntityZ#(A\CollisionEN))
+							; 	PointEntity(B\EmitterEN, Me\CollisionEN)
+							; 	MoveEntity(B\EmitterEN, 0.0, 0.0, 1.0)
+							; EndIf
 						; And missed
 						ElseIf Damage < 0
 							CombatDamageOutput(A, 0, "0")
@@ -956,7 +965,9 @@ Function UpdateNetwork()
 							Me\Attributes\Value[HealthStat] = Me\Attributes\Value[HealthStat] - Damage
 							AnimateActorAttack(A)
 							PlayAnimation(Me, 3, 0.035, Rand(Anim_FirstHit, Anim_LastHit))
-							PlayActorSound(A, Rand(Speech_Attack1, Speech_Attack2))
+							PlayActorWeaponSound(A, Me)
+							//PlayActorSound(A, Rand(Speech_Attack1, Speech_Attack2))
+							EmitSound(GetSound(32), A\EN)
 							PlayActorSound(Me, Rand(Speech_Hit1, Speech_Hit2))
 							If Me\Actor\BloodTexID > 0
 								B.BloodSpurt = New BloodSpurt
@@ -971,7 +982,8 @@ Function UpdateNetwork()
 							CombatDamageOutput(A, 0, "1")
 							AnimateActorAttack(A)
 							AnimateActorParry(Me)
-							PlayActorSound(A, Rand(Speech_Attack1, Speech_Attack2))
+							//PlayActorSound(A, Rand(Speech_Attack1, Speech_Attack2))
+							EmitSound(GetSound(32), A\EN)
 						EndIf
 					; Someone else attacked someone else
 					Else
