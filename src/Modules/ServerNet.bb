@@ -1187,7 +1187,7 @@ Function UpdateNetwork()
 							If AI <> Null
 								SlotI = RCE_IntFromStr(Mid$(M\MessageData$, 6, 1))
 								If AI\Inventory\Items[SlotI] = Null Or (ItemInstancesIdentical(D\Item, AI\Inventory\Items[SlotI]) And D\Item\Item\Stackable = True And SlotI >= SlotI_Backpack)
-									If SlotsMatch(D\Item\Item, SlotI) And ActorHasSlot(AI\Actor, SlotI, D\Item\Item)
+									If SlotsMatch(D\Item\Item, SlotI) And ActorHasSlot(AI, SlotI, D\Item\Item)
 										; Put into player's inventory
 										If AI\Inventory\Items[SlotI] <> Null
 											Delete AI\Inventory\Items[SlotI]
@@ -1255,7 +1255,7 @@ Function UpdateNetwork()
 								If Mid$(M\MessageData$, 2, 1) = "Y"
 									SlotI = RCE_IntFromStr(Right$(M\MessageData$, 1))
 									If AI\Inventory\Items[SlotI] = Null Or (ItemInstancesIdentical(II, AI\Inventory\Items[SlotI]) And II\Item\Stackable = True And SlotI >= SlotI_Backpack)
-										If SlotsMatch(II\Item, SlotI) And ActorHasSlot(AI\Actor, SlotI, II\Item)
+										If SlotsMatch(II\Item, SlotI) And ActorHasSlot(AI, SlotI, II\Item)
 											If AI\Inventory\Items[SlotI] <> Null
 												Delete AI\Inventory\Items[SlotI]
 											Else

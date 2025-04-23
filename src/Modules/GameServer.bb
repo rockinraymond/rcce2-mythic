@@ -1304,7 +1304,7 @@ Function GiveItem(Actor.ActorInstance, Param2$, Param3%=1)
 				; Give
 				If Amount > 0
 					; Check if Actor can use this slot
-					If( ActorHasSlot(Actor\Actor, It\SlotType, It ) )
+					If( ActorHasSlot(Actor, It\SlotType, It ) )
 						; Human
 						If Actor\RNID > 0
 							; Create the item

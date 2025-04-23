@@ -94,9 +94,9 @@ Function InventoryAdd(A.ActorInstance, SlotFrom, SlotTo, Amount, TellServer = Tr
 	If SlotFrom < 0 Or SlotFrom > Slots_Inventory Or SlotTo < SlotI_Backpack Or SlotTo > Slots_Inventory Then Return False
 	If A\Inventory\Amounts[SlotFrom] < 1 Or A\Inventory\Items[SlotFrom] = Null Then Return False
 	If A\Inventory\Items[SlotTo] = Null Then Return False
-	If ActorHasSlot(A\Actor, SlotFrom, A\Inventory\Items[SlotFrom]\Item) = False
+	If ActorHasSlot(A, SlotFrom, A\Inventory\Items[SlotFrom]\Item) = False
 		Return False
-	ElseIf ActorHasSlot(A\Actor, SlotTo, A\Inventory\Items[SlotTo]\Item) = False
+	ElseIf ActorHasSlot(A, SlotTo, A\Inventory\Items[SlotTo]\Item) = False
 		Return False
 	EndIf
 	If ItemInstancesIdentical(A\Inventory\Items[SlotFrom], A\Inventory\Items[SlotTo]) = False Then Return False
@@ -124,7 +124,7 @@ Function InventorySwap(A.ActorInstance, SlotA, SlotB, Amount = 0, TellServer = T
 	If SlotA < 0 Or SlotA > Slots_Inventory Or SlotB < 0 Or SlotB > Slots_Inventory Then Return False
 	If A\Inventory\Items[SlotA] = Null Then Return False
 	I.Item = A\Inventory\Items[SlotA]\Item
-	If ActorHasSlot(A\Actor, SlotA, I) = False Or ActorHasSlot(A\Actor, SlotB, I) = False Then Return False
+	If ActorHasSlot(A, SlotA, I) = False Or ActorHasSlot(A, SlotB, I) = False Then Return False
 	If SlotsMatch(A\Inventory\Items[SlotA]\Item, SlotB) = False Then Return False
 	If A\Inventory\Items[SlotB] <> Null
 		If SlotsMatch(A\Inventory\Items[SlotB]\Item, SlotA) = False Then Return False
@@ -183,7 +183,8 @@ Function InventoryHasItem(I.Inventory, Item$, Amount)
 End Function
 
 ; Checks if an actor has a particular slot index
-Function ActorHasSlot(A.Actor, SlotI, I.Item)
+Function ActorHasSlot(AI.ActorInstance, SlotI, I.Item)
+	A.Actor = AI\Actor
 
 	; If it's an equipped slot
 	If SlotI < Slot_Backpack
@@ -200,6 +201,25 @@ Function ActorHasSlot(A.Actor, SlotI, I.Item)
 		; Never allow the slot if the item is exclusive to another race
 		If I\ExclusiveClass$ <> ""
 			If Upper$(I\ExclusiveClass$) <> Upper$(A\Class$) Then Return False
+		EndIf
+
+		;checking for two handed items/shields
+		If AI\Inventory\Items[SlotI_Shield] <> Null
+			If I\WeaponType = W_TwoHand
+				Return False
+			ElseIf I\WeaponType = W_Ranged
+				Return False
+			EndIf
+		EndIf
+		
+		If I\SlotType = Slot_Shield
+			If AI\Inventory\Items[SlotI_Weapon] <> Null
+				If AI\Inventory\Items[SlotI_Weapon]\Item\WeaponType = W_TwoHand 
+					Return False
+				ElseIf AI\Inventory\Items[SlotI_Weapon]\Item\WeaponType = W_Ranged
+					Return False
+				EndIf
+			EndIf
 		EndIf
 	EndIf
 

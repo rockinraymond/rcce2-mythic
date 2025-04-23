@@ -2255,7 +2255,7 @@ Function BVM_GIVEITEM(Param1%, Param2$, Param3%=1)
 				; Give
 				If Amount > 0
 					; Check if Actor can use this slot
-					If( ActorHasSlot(Actor\Actor, It\SlotType, It ) )
+					;If( ActorHasSlot(Actor, It\SlotType, It ) )
 						; Human
 						If Actor\RNID > 0
 							; Create the item
@@ -2295,7 +2295,7 @@ Function BVM_GIVEITEM(Param1%, Param2$, Param3%=1)
 								EndIf
 							Next
 						EndIf
-					EndIf
+					;EndIf
 				; Take
 				Else
 					Amount = Abs(Amount)
