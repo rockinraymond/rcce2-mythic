@@ -63,7 +63,7 @@ Type Actor
 	Field InventorySlots     ; Short (up to 16 true/false flags) for the slots defined in Inventories.bb
 	Field DefaultDamageType
 	Field DefaultFaction     ; Initial home faction for instances of this actor
-	Field XPMultiplier       ; How much experience another actor gets for killing an instance of this actor
+	Field XPMultiplier       ; changing this to be default level for this actor
 	Field PolyCollision      ; True for polygonal collision instead of ellipsoid
 End Type
 
@@ -412,7 +412,7 @@ Function CreateActorInstance.ActorInstance(Actor.Actor)
 		A\MemorisedSpells[i] = 5000 ; No spell memorised
 	Next
 	If A\Actor\Genders = 2 Then A\Gender = 1
-	A\Level = 1
+	A\Level = A\Actor\XPMultiplier
 	A\RuntimeID = -1
 	A\LastAttack = MilliSecs()
 	A\SourceSP = -1

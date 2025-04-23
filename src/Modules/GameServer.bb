@@ -113,9 +113,7 @@ Function KillActor(A.ActorInstance, Killer.ActorInstance)
 		If Killer\FactionRatings[A\HomeFaction] < 0 Then Killer\FactionRatings[A\HomeFaction] = 0
 
 		; Give XP to the killer
-		Diff = A\Level - Killer\Level
-		If Diff < 1 Then Diff = 1
-		XP = (Diff * A\Actor\XPMultiplier) + Rand(0, 20)
+		XP = MobXPStandard(A\Level)
 		GiveXP(Killer, XP)
 	EndIf
 
@@ -1304,7 +1302,7 @@ Function GiveItem(Actor.ActorInstance, Param2$, Param3%=1)
 				; Give
 				If Amount > 0
 					; Check if Actor can use this slot
-					If( ActorHasSlot(Actor, It\SlotType, It ) )
+					;If( ActorHasSlot(Actor, It\SlotType, It ) )
 						; Human
 						If Actor\RNID > 0
 							; Create the item
@@ -1344,7 +1342,7 @@ Function GiveItem(Actor.ActorInstance, Param2$, Param3%=1)
 								EndIf
 							Next
 						EndIf
-					EndIf
+					;EndIf
 				; Take
 				Else
 					Amount = Abs(Amount)
@@ -1417,4 +1415,32 @@ Function AbilityBonus(AbilityScore)
 			return 0
 	End Select
 
+End Function
+
+Function MobXPStandard(MobLevel)
+	Select MobLevel
+		Case 1
+			return 25
+		case 2
+			return 75
+		case 3
+			return 145
+		case 4
+			return 240
+		case 5
+			return 360
+		case 6
+			return 500
+		case 7
+			return 670
+		case 8
+			return 875
+		case 9
+			return 1075
+		case 10
+			return 1300
+		default
+			return 10
+	End Select 
+	return 0
 End Function
