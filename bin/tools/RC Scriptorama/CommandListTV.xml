@@ -38,7 +38,7 @@
 		<tree label="ActorUnderWater(Actor)" />
 		<tree label="ActorX(Actor)" />
 		<tree label="ActorXP(Actor)" />
-		<tree label="ActorXPMultiplier(ActorID)" />
+		<tree label="ActorDefaultLevel(ActorID)" />
 		<tree label="ActorY(Actor)" />
 		<tree label="ActorZ(Actor)" />
 		<tree label="ActorZone(Actor)" />

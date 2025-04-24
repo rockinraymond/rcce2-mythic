@@ -870,7 +870,7 @@ Next
 FUI_Label(TActorsGeneral, 260, 112, "Start portal:")
 Global TActorStartPortal = FUI_TextBox(TActorsGeneral, 340, 110, 90, 20)
 FUI_Label(TActorsGeneral, 20, 142, "Default Level:")
-Global SActorXPMultiplier = FUI_Spinner(TActorsGeneral, 120, 140, 90, 20, 0, 1000, 1, 1, DTYPE_INTEGER)
+Global SActorDefaultLevel = FUI_Spinner(TActorsGeneral, 120, 140, 90, 20, 0, 1000, 1, 1, DTYPE_INTEGER)
 Global BActorPlayable = FUI_CheckBox(TActorsGeneral, 20, 172, "Actor is playable")
 Global BActorRideable = FUI_CheckBox(TActorsGeneral, 20, 192, "Actor can be ridden")
 FUI_Label(TActorsGeneral, 20, 222, "Male animation set:")
@@ -5037,7 +5037,7 @@ Cls
 					At\InventorySlots = SelectedActor\InventorySlots
 					At\DefaultDamageType = SelectedActor\DefaultDamageType
 					At\DefaultFaction = SelectedActor\DefaultFaction
-					At\XPMultiplier = SelectedActor\XPMultiplier
+					At\DefaultLevel = SelectedActor\DefaultLevel
 					At\PolyCollision = SelectedActor\PolyCollision
 					Item = FUI_ComboBoxItem(CActorSelected, At\Race$ + " [" + At\Class$ + "]")
 					FUI_SendMessage(Item, M_SETDATA, At\ID)
@@ -5132,8 +5132,8 @@ Cls
 				If SelectedActor <> Null Then SelectedActor\StartArea$ = FUI_SendMessage(CActorStartArea, M_GETCAPTION) : ActorsSaved = False
 			Case TActorStartPortal
 				If SelectedActor <> Null Then SelectedActor\StartPortal$ = E\EventData : ActorsSaved = False
-			Case SActorXPMultiplier
-				If SelectedActor <> Null Then SelectedActor\XPMultiplier = E\EventData : ActorsSaved = False			
+			Case SActorDefaultLevel
+				If SelectedActor <> Null Then SelectedActor\DefaultLevel = E\EventData : ActorsSaved = False			
 			Case BActorPlayable
 				If SelectedActor <> Null Then SelectedActor\Playable = E\EventData : ActorsSaved = False
 			Case BActorRideable
@@ -7733,7 +7733,7 @@ Function UpdateActorDisplay()
 		FUI_SendMessage(CActorAttacks, M_SETINDEX, 1)
 		FUI_SendMessage(SActorAttackRange, M_SETVALUE, 1)
 		FUI_SendMessage(CActorTrades, M_SETINDEX, 1)
-		FUI_SendMessage(SActorXPMultiplier, M_SETVALUE, 1)
+		FUI_SendMessage(SActorDefaultLevel, M_SETVALUE, 1)
 		FUI_SendMessage(BActorPlayable, M_SETCHECKED, False)
 		FUI_SendMessage(BActorRideable, M_SETCHECKED, False)
 		FUI_SendMessage(CActorEnviro, M_SETINDEX, 1)
@@ -7770,7 +7770,7 @@ Function UpdateActorDisplay()
 		FUI_SendMessage(CActorAttacks, M_SETINDEX, SelectedActor\Aggressiveness + 1)
 		FUI_SendMessage(SActorAttackRange, M_SETVALUE, SelectedActor\AggressiveRange)
 		FUI_SendMessage(CActorTrades, M_SETINDEX, SelectedActor\TradeMode + 1)
-		FUI_SendMessage(SActorXPMultiplier, M_SETVALUE, SelectedActor\XPMultiplier)
+		FUI_SendMessage(SActorDefaultLevel, M_SETVALUE, SelectedActor\DefaultLevel)
 		FUI_SendMessage(BActorPlayable, M_SETCHECKED, SelectedActor\Playable)
 		FUI_SendMessage(BActorRideable, M_SETCHECKED, SelectedActor\Rideable)
 		FUI_SendMessage(CActorEnviro, M_SETINDEX, SelectedActor\Environment + 1)
