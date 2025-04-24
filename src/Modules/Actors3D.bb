@@ -709,3 +709,29 @@ Function PlayActorSound(A.ActorInstance, Speech)
 		EndIf
 
 End Function
+
+Function PlayActorWeaponSound(Attacker.ActorInstance,Target.ActorInstance)
+
+		WeaponType = 0
+		If Attacker\Inventory\Items[SlotI_Weapon] <> Null
+			WeaponType = Attacker\Inventory\Items[SlotI_Weapon]\Item\WeaponDamageType
+		EndIf
+
+		Result = 28
+		Select WeaponType
+			Case 1
+				Result = Rand(30,31)
+			Case 2
+				Result = Rand(26,27)
+			Case 3
+				Result = Rand(26,27)
+			Case 4
+				Result = 25
+			Default
+				Result = Rand(28,29)
+		End Select
+		
+		EN = FindChild(Target\EN, "Head")
+		If EN = 0 Then EN = Target\EN
+		EmitSound(GetSound(Result), EN)
+End Function

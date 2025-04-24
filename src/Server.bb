@@ -130,7 +130,7 @@ If MySQL
 	If Not hEXT Then RuntimeError("MySQL - Threads could not connect to the server, please check configuration")
 EndIf
 
-Global SpeedStat, StrengthStat, HealthStat, EnergyStat = -1, ToughnessStat = -1, BreathStat = -1
+Global SpeedStat, StrengthStat, HealthStat, EnergyStat = -1, ToughnessStat = -1, BreathStat = -1, DexterityStat = -1, AttackBonusStat = -1, DamageBonusStat = -1
 
 Global ChatLoggingMode = 2 ; Log all chat
 Global ServerLocked = True
@@ -273,6 +273,9 @@ BreathStat = ReadShort(F)
 ToughnessStat = ReadShort(F)
 StrengthStat = ReadShort(F)
 SpeedStat = ReadShort(F)
+DexterityStat = ReadShort(F)
+AttackBonusStat = ReadShort(F)
+DamageBonusStat = ReadShort(F)
 CloseFile(F)
 If HealthStat = 65535 Then HealthStat = -1 ;RuntimeError("A valid Health attribute must be selected!")
 If EnergyStat = 65535 Then EnergyStat = -1
@@ -280,6 +283,9 @@ If BreathStat = 65535 Then BreathStat = -1
 If ToughnessStat = 65535 Then ToughnessStat = -1 ;RuntimeError("A valid Toughness attribute must be selected!")
 If StrengthStat = 65535 Then RuntimeError("A valid Strength attribute must be selected!")
 If SpeedStat = 65535 Then RuntimeError("A valid Speed attribute must be selected!")
+If DexterityStat = 65535 Then DexterityStat = -1
+If AttackBonusStat = 65535 Then AttackBonusStat = -1
+If DamageBonusStat = 65535 Then DamageBonusStat = -1
 
 ; Precalculate actor radii
 For Actor.Actor = Each Actor

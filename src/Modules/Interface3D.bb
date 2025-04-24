@@ -747,6 +747,9 @@ Function UpdateInterface()
 			SelectKeyWasDown = False
 
 			; Pick a target
+			GY_FreeGadget(WContextMenu)
+			WContextMenu = 0
+
 			SetPickModes(0, 3, True, 1)
 			Result = CameraPick(Cam, MouseX(), MouseY())
 			If Result <> 0
@@ -828,11 +831,11 @@ Function UpdateInterface()
 						For i = 0 To Slots_Inventory
 							If Me\Inventory\Items[i] = Null
 								If DItem\Item <> Null
-									If SlotsMatch(DItem\Item\Item, i) And ActorHasSlot(Me\Actor, i, DItem\Item\Item) Then FoundSlot = i : Exit
+									If SlotsMatch(DItem\Item\Item, i) And ActorHasSlot(Me, i, DItem\Item\Item) Then FoundSlot = i : Exit
 								EndIf
 							ElseIf (ItemInstancesIdentical(DItem\Item, Me\Inventory\Items[i]) And  DItem\Item <> Null And i >= SlotI_Backpack)
 								If DItem\Item\Item\Stackable = True
-									If SlotsMatch(DItem\Item\Item, i) And ActorHasSlot(Me\Actor, i, DItem\Item\Item) Then FoundSlot = i : Exit
+									If SlotsMatch(DItem\Item\Item, i) And ActorHasSlot(Me, i, DItem\Item\Item) Then FoundSlot = i : Exit
 								EndIf
 							EndIf
 						Next

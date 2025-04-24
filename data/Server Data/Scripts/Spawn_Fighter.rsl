@@ -1,0 +1,30 @@
+Using "RC_Core.rcm"
+; Define entry function 'Main'
+
+Function Main()
+
+NPC = Actor()
+
+LoadOut = Rand(1,5)
+
+Select LoadOut
+    case 1
+        giveitem(NPC, "short sword")
+        giveitem(NPC, "shield")
+        giveitem(NPC, "chain mail")
+    Case 2
+        giveitem(NPC, "hand axe")
+        giveitem(NPC, "shield")
+        giveitem(NPC, "leather armor")
+    Case 3
+        giveitem(NPC, "long sword")
+        giveitem(NPC, "chain mail")
+    Case 4
+        giveitem(NPC, "great axe")
+        giveitem(NPC, "leather armor")
+    default
+        giveitem(NPC, "spear")
+        giveitem(NPC, "leather armor")
+End Select
+
+End Function

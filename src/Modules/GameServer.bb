@@ -113,9 +113,7 @@ Function KillActor(A.ActorInstance, Killer.ActorInstance)
 		If Killer\FactionRatings[A\HomeFaction] < 0 Then Killer\FactionRatings[A\HomeFaction] = 0
 
 		; Give XP to the killer
-		Diff = A\Level - Killer\Level
-		If Diff < 1 Then Diff = 1
-		XP = (Diff * A\Actor\XPMultiplier) + Rand(0, 20)
+		XP = MobXPStandard(A\Level)
 		GiveXP(Killer, XP)
 	EndIf
 
@@ -243,63 +241,63 @@ Function ActorAttack(A1.ActorInstance, A2.ActorInstance)
 	Dist# = (XDist# * XDist#) + (ZDist# * ZDist#) + (YDist# * YDist#)
 
 	; Check if this is actually a projectile attack
-	If A1\Inventory\Items[SlotI_Weapon] <> Null
-		If A1\Inventory\Items[SlotI_Weapon]\Item\WeaponType = W_Ranged
-			If A1\Inventory\Items[SlotI_Weapon]\ItemHealth > 0
-				; Fixed function
-				If CombatFormula <> 4
-					; In range?
-					CheckDist# = A1\Inventory\Items[SlotI_Weapon]\Item\Range# + A1\Actor\Radius# + A2\Actor\Radius#
-					If Dist# > CheckDist# * CheckDist# Then Return False
+	; If A1\Inventory\Items[SlotI_Weapon] <> Null
+	; 	If A1\Inventory\Items[SlotI_Weapon]\Item\WeaponType = W_Ranged
+	; 		If A1\Inventory\Items[SlotI_Weapon]\ItemHealth > 0
+	; 			; Fixed function
+	; 			If CombatFormula <> 4
+	; 				; In range?
+	; 				CheckDist# = A1\Inventory\Items[SlotI_Weapon]\Item\Range# + A1\Actor\Radius# + A2\Actor\Radius#
+	; 				If Dist# > CheckDist# * CheckDist# Then Return False
 
-					; Tell other players in the same area
-					Pa$ = "O" + RCE_StrFromInt$(A1\RuntimeID, 2) + RCE_StrFromInt$(A2\RuntimeID, 2)
-					AInstance.AreaInstance = Object.AreaInstance(A1\ServerArea)
-					A3.ActorInstance = AInstance\FirstInZone
-					While A3 <> Null
-						If A3\RNID > 0
-							If A3 <> A1 And A3 <> A2 Then RCE_Send(Host, A3\RNID, P_AttackActor, Pa$, True)
-						EndIf
-						A3 = A3\NextInZone
-					Wend
+	; 				; Tell other players in the same area
+	; 				Pa$ = "O" + RCE_StrFromInt$(A1\RuntimeID, 2) + RCE_StrFromInt$(A2\RuntimeID, 2)
+	; 				AInstance.AreaInstance = Object.AreaInstance(A1\ServerArea)
+	; 				A3.ActorInstance = AInstance\FirstInZone
+	; 				While A3 <> Null
+	; 					If A3\RNID > 0
+	; 						If A3 <> A1 And A3 <> A2 Then RCE_Send(Host, A3\RNID, P_AttackActor, Pa$, True)
+	; 					EndIf
+	; 					A3 = A3\NextInZone
+	; 				Wend
 
-					; Launch projectile
-					P.Projectile = ProjectileList(A1\Inventory\Items[SlotI_Weapon]\Item\RangedProjectile)
-					If P <> Null
-						FireProjectile(P, A1, A2)
-						A1\LastAttack = MilliSecs()
-					EndIf
-				; Attack script
-				Else
-					; In range?
-					CheckDist# = A1\Inventory\Items[SlotI_Weapon]\Item\Range# + A1\Actor\Radius# + A2\Actor\Radius#
-					If Dist# > CheckDist# * CheckDist# Then Return False
-					; Check both actors are allowed to engage in combat
-					If A1\Actor\Aggressiveness = 3 Or A2\Actor\Aggressiveness = 3 Then Return False
-					; Check faction ratings
-					If A1\FactionRatings[A2\HomeFaction] > 150 Then Return False
-					; Store time of attack
-					A1\LastAttack = MilliSecs()
-					; Make attacked actor angry if it's defensive
-					If A2\RNID = -1
-						If A2\Actor\Aggressiveness = 1
-							A2\AITarget = A1
-							A2\AIMode = AI_Chase
-						; Or if it's aggressive and has no target...
-						ElseIf A2\Actor\Aggressiveness = 2 And A2\AITarget = Null
-							A2\AITarget = A1
-							A2\AIMode = AI_Chase
-						EndIf
-					EndIf
-					ThreadScript("Attack", "Main", Handle(A1), Handle(A2))
-				EndIf
-				Return True
-			Else
-				If A1\RNID > 0 Then RCE_Send(Host, A1\RNID, P_ChatMessage, Chr$(253) + LanguageString$(LS_WeaponDamaged), True)
-				Return False
-			EndIf
-		EndIf
-	EndIf
+	; 				; Launch projectile
+	; 				P.Projectile = ProjectileList(A1\Inventory\Items[SlotI_Weapon]\Item\RangedProjectile)
+	; 				If P <> Null
+	; 					FireProjectile(P, A1, A2)
+	; 					A1\LastAttack = MilliSecs()
+	; 				EndIf
+	; 			; Attack script
+	; 			Else
+	; 				; In range?
+	; 				CheckDist# = A1\Inventory\Items[SlotI_Weapon]\Item\Range# + A1\Actor\Radius# + A2\Actor\Radius#
+	; 				If Dist# > CheckDist# * CheckDist# Then Return False
+	; 				; Check both actors are allowed to engage in combat
+	; 				If A1\Actor\Aggressiveness = 3 Or A2\Actor\Aggressiveness = 3 Then Return False
+	; 				; Check faction ratings
+	; 				If A1\FactionRatings[A2\HomeFaction] > 150 Then Return False
+	; 				; Store time of attack
+	; 				A1\LastAttack = MilliSecs()
+	; 				; Make attacked actor angry if it's defensive
+	; 				If A2\RNID = -1
+	; 					If A2\Actor\Aggressiveness = 1
+	; 						A2\AITarget = A1
+	; 						A2\AIMode = AI_Chase
+	; 					; Or if it's aggressive and has no target...
+	; 					ElseIf A2\Actor\Aggressiveness = 2 And A2\AITarget = Null
+	; 						A2\AITarget = A1
+	; 						A2\AIMode = AI_Chase
+	; 					EndIf
+	; 				EndIf
+	; 				ThreadScript("Attack", "Main", Handle(A1), Handle(A2))
+	; 			EndIf
+	; 			Return True
+	; 		Else
+	; 			If A1\RNID > 0 Then RCE_Send(Host, A1\RNID, P_ChatMessage, Chr$(253) + LanguageString$(LS_WeaponDamaged), True)
+	; 			Return False
+	; 		EndIf
+	; 	EndIf
+	; EndIf
 
 	; Check both actors are allowed to engage in combat
 	If A1\Actor\Aggressiveness = 3 Or A2\Actor\Aggressiveness = 3 Then Return False
@@ -307,10 +305,32 @@ Function ActorAttack(A1.ActorInstance, A2.ActorInstance)
 	; Check faction ratings
 	If A1\FactionRatings[A2\HomeFaction] > 150 Then Return False
 
-	; Check distance is acceptable
-	CheckDist# = 7.0 + A1\Actor\Radius# + A2\Actor\Radius#
-	If Dist# > CheckDist# * CheckDist# Then Return False
+	;Range Check
+	If A1\Inventory\Items[SlotI_Weapon] <> Null 
+		PlayerWeaponType = A1\Inventory\Items[SlotI_Weapon]\Item\WeaponType
+	Else 
+		PlayerWeaponType = 0
+	EndIf
 
+	If PlayerWeaponType = W_Ranged
+		If A1\Inventory\Items[SlotI_Weapon]\ItemHealth > 0
+			CheckDist# = A1\Inventory\Items[SlotI_Weapon]\Item\Range# + A1\Actor\Radius# + A2\Actor\Radius#
+			If Dist# > CheckDist# * CheckDist# Then Return False
+		Else
+			If A1\RNID > 0 Then RCE_Send(Host, A1\RNID, P_ChatMessage, Chr$(253) + LanguageString$(LS_WeaponDamaged), True)
+				Return False
+		EndIf
+		If InventoryHasItem(A1\Inventory, "Arrow", 1) = False
+			If A1\RNID > 0 Then RCE_Send(Host, A1\RNID, P_ChatMessage, Chr$(253) + "You are out of arrows!", True)
+			Return False
+		Else
+			GiveItem(A1, "Arrow", -1)
+		EndIf
+	Else
+		; Check distance is acceptable
+		CheckDist# = 7.0 + A1\Actor\Radius# + A2\Actor\Radius#
+		If Dist# > CheckDist# * CheckDist# Then Return False
+	EndIf
 	; Store time of attack
 	A1\LastAttack = MilliSecs()
 
@@ -330,41 +350,48 @@ Function ActorAttack(A1.ActorInstance, A2.ActorInstance)
 	; Normal formula
 	If CombatFormula = 1
 		AICallForHelp(A2)
-		; 90% chance to hit
-		ToHit = Rand(100)
-		If ToHit > 10
+		
+		;Attacker Stats
+		A_STRBNS = AbilityBonus(A1\Attributes\Value[StrengthStat])
+		A_DEXBNS = AbilityBonus(A1\Attributes\Value[DexterityStat])
+		A_AttackBonus = A1\Attributes\Value[AttackBonusStat]
+		A_DamageBonus = A1\Attributes\Value[DamageBonusStat]
+		
+		;Target Stats
+		T_DEXBNS = AbilityBonus(A2\Attributes\Value[DexterityStat])
+		T_ArmorClass = A2\Attributes\Value[ToughnessStat]
+
+		;Roll D20
+		HitRoll = Rand(1,20) + A_STRBNS + A_AttackBonus
+		If HitRoll = 20 Then HitRoll = 100
+		ModHitRoll = HitRoll + A_STRBNS + A_AttackBonus
+		If ModHitRoll >= (T_ArmorClass + T_DEXBNS)
 			; Initial damage
-			Strength = A1\Attributes\Value[StrengthStat]
+			
 			If A1\Inventory\Items[SlotI_Weapon] <> Null
 				If A1\Inventory\Items[SlotI_Weapon]\ItemHealth > 0
-					Damage = A1\Inventory\Items[SlotI_Weapon]\Item\WeaponDamage
-					If Strength < Damage
-						Damage = Damage - Rand(5, 8)
-					ElseIf Strength > Damage
-						Damage = Damage + Rand(5, 8)
-					Else
-						Damage = Damage + Rand(-5, 5)
-					EndIf
+					Damage = Rand(1,A1\Inventory\Items[SlotI_Weapon]\Item\WeaponDamage) + A_DamageBonus + StrBNS
+					
 					DamageType = A1\Inventory\Items[SlotI_Weapon]\Item\WeaponDamageType
 				Else
-					Damage = (Strength / 8) + Rand(-5, 5)
+					Damage = Rand(1,3) + A_DamageBonus + StrBNS
 					DamageType = A1\Actor\DefaultDamageType
 				EndIf
 			Else
-				Damage = (Strength / 8) + Rand(-5, 5)
+				Damage = Rand(1,3) + A_DamageBonus + StrBNS
 				DamageType = A1\Actor\DefaultDamageType
 			EndIf
 
 			; Critical damage
-			If Rand(1, 10) = 1
-				Damage = Damage * 2
-				If A1\RNID > 0 Then RCE_Send(Host, A1\RNID, P_ChatMessage, Chr$(250) + Chr$(255) + Chr$(225) + Chr$(100) + LanguageString$(LS_CriticalDamage), True)
-			EndIf
+			; If HitRoll = 20
+			; 	Damage = Damage * 3
+			; 	If A1\RNID > 0 Then RCE_Send(Host, A1\RNID, P_ChatMessage, Chr$(250) + Chr$(255) + Chr$(225) + Chr$(100) + LanguageString$(LS_CriticalDamage), True)
+			; EndIf
 
 			; Armour
-			AP = GetArmourLevel(A2\Inventory) + (A2\Resistances[DamageType] - 100)
-			If ToughnessStat > -1 Then AP = AP + (A2\Attributes\Value[ToughnessStat] / 8)
-			Damage = Damage - AP
+			; AP = GetArmourLevel(A2\Inventory) + (A2\Resistances[DamageType] - 100)
+			; If ToughnessStat > -1 Then AP = AP + (A2\Attributes\Value[ToughnessStat] / 8)
+			; Damage = Damage - AP
 
 			; Minimum of 1
 			If Damage < 1 Then Damage = 1
@@ -372,81 +399,82 @@ Function ActorAttack(A1.ActorInstance, A2.ActorInstance)
 		Else
 			Damage = -1
 		EndIf
+
 	; No strength bonus or penalty
-	ElseIf CombatFormula = 2
-		AICallForHelp(A2)
-		; 90% chance to hit
-		ToHit = Rand(100)
-		If ToHit > 10
-			; Initial damage
-			If A1\Inventory\Items[SlotI_Weapon] <> Null
-				If A1\Inventory\Items[SlotI_Weapon]\ItemHealth > 0
-					Damage = A1\Inventory\Items[SlotI_Weapon]\Item\WeaponDamage
-					DamageType = A1\Inventory\Items[SlotI_Weapon]\Item\WeaponDamageType
-				Else
-					Damage = (A1\Attributes\Value[StrengthStat] / 8) + Rand(-5, 5)
-					DamageType = A1\Actor\DefaultDamageType
-				EndIf
-			Else
-				Damage = (A1\Attributes\Value[StrengthStat] / 8) + Rand(-5, 5)
-				DamageType = A1\Actor\DefaultDamageType
-			EndIf
+	; ElseIf CombatFormula = 2
+	; 	AICallForHelp(A2)
+	; 	; 90% chance to hit
+	; 	ToHit = Rand(100)
+	; 	If ToHit > 10
+	; 		; Initial damage
+	; 		If A1\Inventory\Items[SlotI_Weapon] <> Null
+	; 			If A1\Inventory\Items[SlotI_Weapon]\ItemHealth > 0
+	; 				Damage = A1\Inventory\Items[SlotI_Weapon]\Item\WeaponDamage
+	; 				DamageType = A1\Inventory\Items[SlotI_Weapon]\Item\WeaponDamageType
+	; 			Else
+	; 				Damage = (A1\Attributes\Value[StrengthStat] / 8) + Rand(-5, 5)
+	; 				DamageType = A1\Actor\DefaultDamageType
+	; 			EndIf
+	; 		Else
+	; 			Damage = (A1\Attributes\Value[StrengthStat] / 8) + Rand(-5, 5)
+	; 			DamageType = A1\Actor\DefaultDamageType
+	; 		EndIf
 
-			; Critical damage
-			If Rand(1, 10) = 1
-				Damage = Damage * 2
-				If A1\RNID > 0 Then RCE_Send(Host, A1\RNID, P_ChatMessage, Chr$(250) + Chr$(255) + Chr$(225) + Chr$(100) + LanguageString$(LS_CriticalDamage), True)
-			EndIf
+	; 		; Critical damage
+	; 		If Rand(1, 10) = 1
+	; 			Damage = Damage * 2
+	; 			If A1\RNID > 0 Then RCE_Send(Host, A1\RNID, P_ChatMessage, Chr$(250) + Chr$(255) + Chr$(225) + Chr$(100) + LanguageString$(LS_CriticalDamage), True)
+	; 		EndIf
 
-			; Armour
-			AP = GetArmourLevel(A2\Inventory) + (A2\Resistances[DamageType] - 100)
-			If ToughnessStat > -1 Then AP = AP + (A2\Attributes\Value[ToughnessStat] / 8)
-			Damage = Damage - AP
+	; 		; Armour
+	; 		AP = GetArmourLevel(A2\Inventory) + (A2\Resistances[DamageType] - 100)
+	; 		If ToughnessStat > -1 Then AP = AP + (A2\Attributes\Value[ToughnessStat] / 8)
+	; 		Damage = Damage - AP
 
-			; Minimum of 1
-			If Damage < 1 Then Damage = 1
-		; Miss!
-		Else
-			Damage = -1
-		EndIf
-	; Multiplied formula
-	ElseIf CombatFormula = 3
-		AICallForHelp(A2)
-		; 90% chance to hit
-		ToHit = Rand(100)
-		If ToHit > 10
-			; Initial damage
-			Strength = A1\Attributes\Value[StrengthStat]
-			If A1\Inventory\Items[SlotI_Weapon] <> Null
-				If A1\Inventory\Items[SlotI_Weapon]\ItemHealth > 0
-					Damage = A1\Inventory\Items[SlotI_Weapon]\Item\WeaponDamage * Strength
-					DamageType = A1\Inventory\Items[SlotI_Weapon]\Item\WeaponDamageType
-				Else
-					Damage = Strength + Rand(-10, 10)
-					DamageType = A1\Actor\DefaultDamageType
-				EndIf
-			Else
-				Damage = Strength + Rand(-10, 10)
-				DamageType = A1\Actor\DefaultDamageType
-			EndIf
+	; 		; Minimum of 1
+	; 		If Damage < 1 Then Damage = 1
+	; 	; Miss!
+	; 	Else
+	; 		Damage = -1
+	; 	EndIf
+	; ; Multiplied formula
+	; ElseIf CombatFormula = 3
+	; 	AICallForHelp(A2)
+	; 	; 90% chance to hit
+	; 	ToHit = Rand(100)
+	; 	If ToHit > 10
+	; 		; Initial damage
+	; 		Strength = A1\Attributes\Value[StrengthStat]
+	; 		If A1\Inventory\Items[SlotI_Weapon] <> Null
+	; 			If A1\Inventory\Items[SlotI_Weapon]\ItemHealth > 0
+	; 				Damage = A1\Inventory\Items[SlotI_Weapon]\Item\WeaponDamage * Strength
+	; 				DamageType = A1\Inventory\Items[SlotI_Weapon]\Item\WeaponDamageType
+	; 			Else
+	; 				Damage = Strength + Rand(-10, 10)
+	; 				DamageType = A1\Actor\DefaultDamageType
+	; 			EndIf
+	; 		Else
+	; 			Damage = Strength + Rand(-10, 10)
+	; 			DamageType = A1\Actor\DefaultDamageType
+	; 		EndIf
 
-			; Critical damage
-			If Rand(1, 10) = 1
-				Damage = Damage * 2
-				If A1\RNID > 0 Then RCE_Send(Host, A1\RNID, P_ChatMessage, Chr$(250) + Chr$(255) + Chr$(225) + Chr$(100) + LanguageString$(LS_CriticalDamage), True)
-			EndIf
+	; 		; Critical damage
+	; 		If Rand(1, 10) = 1
+	; 			Damage = Damage * 2
+	; 			If A1\RNID > 0 Then RCE_Send(Host, A1\RNID, P_ChatMessage, Chr$(250) + Chr$(255) + Chr$(225) + Chr$(100) + LanguageString$(LS_CriticalDamage), True)
+	; 		EndIf
 
-			; Armour
-			AP = GetArmourLevel(A2\Inventory) + (A2\Resistances[DamageType] - 100)
-			If ToughnessStat > -1 Then AP = AP * A2\Attributes\Value[ToughnessStat] Else AP = AP * AP
-			Damage = Damage - AP
+	; 		; Armour
+	; 		AP = GetArmourLevel(A2\Inventory) + (A2\Resistances[DamageType] - 100)
+	; 		If ToughnessStat > -1 Then AP = AP * A2\Attributes\Value[ToughnessStat] Else AP = AP * AP
+	; 		Damage = Damage - AP
 
-			; Minimum of 1
-			If Damage < 1 Then Damage = 1
-		; Miss!
-		Else
-			Damage = -1
-		EndIf
+	; 		; Minimum of 1
+	; 		If Damage < 1 Then Damage = 1
+	; 	; Miss!
+	; 	Else
+	; 		Damage = -1
+	; 	EndIf
 	; Scripted
 	ElseIf CombatFormula = 4
 		ThreadScript("Attack", "Main", Handle(A1), Handle(A2))
@@ -454,7 +482,9 @@ Function ActorAttack(A1.ActorInstance, A2.ActorInstance)
 	EndIf
 
 	; Apply damage to target actor
-	If Damage > 0 Then A2\Attributes\Value[HealthStat] = A2\Attributes\Value[HealthStat] - Damage
+	FinalDamge = A2\Attributes\Value[HealthStat] - Damage
+	If FinalDamge < 0 Then FinalDamge = 0
+	If Damage > 0 Then A2\Attributes\Value[HealthStat] = FinalDamge
 
 	; Tell player(s) if applicable
 	Pa$ = RCE_StrFromInt$(Damage + 1, 2) + RCE_StrFromInt$(DamageType, 1)
@@ -1259,4 +1289,158 @@ Function AICallForHelp(AI.ActorInstance)
 		Wend
 	EndIf
 
+End Function
+
+Function GiveItem(Actor.ActorInstance, Param2$, Param3%=1)
+	
+	If Actor <> Null
+		ItemName$ = Upper$(Param2$)
+		Amount = Param3%
+		; Find the requested item
+		For It.Item = Each Item
+			If Upper$(It\Name$) = ItemName$
+				; Give
+				If Amount > 0
+					; Check if Actor can use this slot
+					;If( ActorHasSlot(Actor, It\SlotType, It ) )
+						; Human
+						If Actor\RNID > 0
+							; Create the item
+							II.ItemInstance = CreateItemInstance(It)
+							II\Assignment = Amount
+							II\AssignTo = Actor
+							; Ask client to specify a slot to put it in
+							Pa$ = RCE_StrFromInt$(It\ID, 2) + RCE_StrFromInt$(II\Assignment, 2)
+							RCE_Send(Host, Actor\RNID, P_InventoryUpdate, "G" + RCE_StrFromInt$(Handle(II), 4) + Pa$, True)
+						; AI
+						Else
+							II.ItemInstance = CreateItemInstance(It)
+							For i = 0 To Slots_Inventory
+								If Actor\Inventory\Items[i] = Null Or (ItemInstancesIdentical(II, Actor\Inventory\Items[i]) And II\Item\Stackable = True And i >= SlotI_Backpack)
+									If SlotsMatch(It, i)
+										; Only put one item in this slot if it is an equipped slot
+										ThisAmount = Amount
+										If i < SlotI_Backpack Then ThisAmount = 1
+									; Put in slot
+										If Actor\Inventory\Items[i] <> Null
+											FreeItemInstance(Actor\Inventory\Items[i])
+										Else
+											Actor\Inventory\Amounts[i] = 0
+										EndIf
+										Actor\Inventory\Items[i] = II
+										Actor\Inventory\Amounts[i] = Actor\Inventory\Amounts[i] + ThisAmount
+
+										; Visual stuff
+										If i = SlotI_Weapon Or i = SlotI_Shield Or i = SlotI_Hat Or i = SlotI_Chest
+											SendEquippedUpdate(Actor)
+										EndIf
+
+										; If all items have been placed, exit loop
+										Amount = Amount - ThisAmount
+										If Amount = 0 Then Exit
+									EndIf
+								EndIf
+							Next
+						EndIf
+					;EndIf
+				; Take
+				Else
+					Amount = Abs(Amount)
+					For i = 0 To Slots_Inventory
+						If Actor\Inventory\Items[i] <> Null
+							If Actor\Inventory\Items[i]\Item = It
+								AmountTaken = 0
+
+								; Delete item
+								If Actor\Inventory\Amounts[i] <= Amount
+									AmountTaken = Actor\Inventory\Amounts[i]
+									Amount = Amount - Actor\Inventory\Amounts[i]
+									FreeItemInstance(Actor\Inventory\Items[i])
+									Actor\Inventory\Amounts[i] = 0
+								Else
+									Actor\Inventory\Amounts[i] = Actor\Inventory\Amounts[i] - Amount
+									AmountTaken = Amount
+									Amount = 0
+								EndIf
+
+								; Tell player if required
+								If Actor\RNID > 0
+									Pa$ = RCE_StrFromInt$(i, 1) + RCE_StrFromInt$(AmountTaken, 2)
+									RCE_Send(Host, Actor\RNID, P_InventoryUpdate, "T" + Pa$, True)
+								EndIf
+
+								; Update equipment if required
+								If i = SlotI_Weapon Or i = SlotI_Shield Or i = SlotI_Hat
+									SendEquippedUpdate(Actor)
+								EndIf
+
+								If Amount = 0 Then Exit
+							EndIf
+						EndIf
+					Next
+				EndIf
+				Exit
+			EndIf
+		Next
+	EndIf
+End Function
+
+Function AbilityBonus(AbilityScore)
+	Select AbilityScore
+		case 3
+			return -3
+		case 4
+			return -2
+		case 5
+			return -2
+		case 6
+			return -1
+		case 7 
+			return -1
+		case 8
+			return -1
+		case 13 
+			return 1
+		case 14
+			return 1
+		case 15
+			return 1
+		case 16
+			return 2
+		case 17
+			return 2
+		case 18
+			return 3
+		default 
+			return 0
+	End Select
+
+End Function
+
+Function MobXPStandard(MobLevel)
+	Select MobLevel
+		Case 1
+			return 25
+		case 2
+			return 75
+		case 3
+			return 145
+		case 4
+			return 240
+		case 5
+			return 360
+		case 6
+			return 500
+		case 7
+			return 670
+		case 8
+			return 875
+		case 9
+			return 1075
+		case 10
+			return 1300
+		default
+			return 10
+	End Select 
+	return 0
 End Function

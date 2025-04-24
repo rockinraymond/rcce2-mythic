@@ -96,25 +96,57 @@ End Function
 
 ; Plays an actor's attack animation
 Function AnimateActorAttack(A.ActorInstance)
-
+	AnimSpeed = 1
+	If A\Gender = 0
+		AS.AnimSet = AnimList(A\Actor\MAnimationSet)
+	Else
+		AS.AnimSet = AnimList(A\Actor\FAnimationSet)
+	EndIf
 	; Choose animation and play it
 	If A\Inventory\Items[SlotI_Weapon] = Null
-		Anim = Anim_DefaultAttack
+		Select Rand(1,3)
+			Case 1 : Anim = FindAnimation(AS, "default attack")
+			Case 2 : Anim = FindAnimation(AS, "default attack 2")
+			Case 3 : Anim = FindAnimation(AS, "default attack 3")
+		End Select
 	Else
 		Select A\Inventory\Items[SlotI_Weapon]\Item\WeaponType
-			Case W_OneHand : Anim = Anim_RightAttack
-			Case W_TwoHand : Anim = Anim_TwoHandAttack
-			Case W_Ranged
-				If A\Gender = 0
-					AS.AnimSet = AnimList(A\Actor\MAnimationSet)
+			Case W_OneHand 
+				Select Rand(1,4)
+					Case 1 : Anim = FindAnimation(AS, "right hand attack")
+					Case 2 : Anim = FindAnimation(AS, "right hand attack 2")
+					Case 3 : Anim = FindAnimation(AS, "right hand attack 3")
+					Case 4 : Anim = FindAnimation(AS, "right hand attack 4")
+				End Select
+			Case W_TwoHand ;Todo add EquipentClass to client side!
+				If (A\Inventory\Items[SlotI_Weapon]\Item\EquipmentClass$ = "polearm")
+					Select Rand(1,5)
+						Case 1 : Anim = FindAnimation(AS, "staff attack 1")
+						Case 2 : Anim = FindAnimation(AS, "staff attack 2")
+						Case 3 : Anim = FindAnimation(AS, "staff attack 3")
+						Case 4 : Anim = FindAnimation(AS, "staff attack 4")
+						Case 5 : Anim = FindAnimation(AS, "spear attack")
+					End Select
+				ElseIf (A\Inventory\Items[SlotI_Weapon]\Item\EquipmentClass$ = "quarterstaff")
+					Select Rand(1,4)
+						Case 1 : Anim = FindAnimation(AS, "staff attack 1")
+						Case 2 : Anim = FindAnimation(AS, "staff attack 2")
+						Case 3 : Anim = FindAnimation(AS, "staff attack 3")
+						Case 4 : Anim = FindAnimation(AS, "staff attack 4")
+					End Select
 				Else
-					AS.AnimSet = AnimList(A\Actor\FAnimationSet)
+					Select Rand(1,3)
+						Case 1 : Anim = FindAnimation(AS, "two hand attack")
+						Case 2 : Anim = FindAnimation(AS, "two hand attack 2")
+						Case 3 : Anim = FindAnimation(AS, "two hand attack 3")
+					End Select
 				EndIf
-				Anim = FindAnimation(AS, A\Inventory\Items[SlotI_Weapon]\Item\RangedAnimation$)
-				If Anim = -1 Then Anim = Anim_RangedAttack
+			Case W_Ranged
+					AnimSpeed = 1.25
+					Anim = FindAnimation(AS, "bow attack")
 		End Select
 	EndIf
-	PlayAnimation(A, 3, 0.5, Anim, False)
+	PlayAnimation(A, 3, AnimSpeed, Anim, False)
 
 End Function
 

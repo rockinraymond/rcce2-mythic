@@ -541,7 +541,7 @@ Function BVM_GIVEKILLXP(Param1%, Param2%)
 	If Actor <> Null And Actor2 <> Null
 		Diff = Actor2\Level - Actor\Level
 		If Diff < 1 Then Diff = 1
-		XP = (Diff * Actor2\Actor\XPMultiplier) + Rand(0, 20)
+		XP = (Diff * Actor2\Actor\DefaultLevel) + Rand(0, 20)
 		GiveXP(Actor, XP)
 	EndIf
 End Function
@@ -1629,10 +1629,10 @@ Function BVM_ACTORXP%(Param1%)
 Return Result%
 End Function
 
-Function BVM_ACTORXPMULTIPLIER%(Param1%)
+Function BVM_ACTORDefaultLevel%(Param1%)
 	ID = Param1%
 	If ActorList(ID) <> Null
-		Result% = ActorList(ID)\XPMultiplier
+		Result% = ActorList(ID)\DefaultLevel
 	EndIf
 Return Result%
 End Function
@@ -2255,7 +2255,7 @@ Function BVM_GIVEITEM(Param1%, Param2$, Param3%=1)
 				; Give
 				If Amount > 0
 					; Check if Actor can use this slot
-					If( ActorHasSlot(Actor\Actor, It\SlotType, It ) )
+					;If( ActorHasSlot(Actor, It\SlotType, It ) )
 						; Human
 						If Actor\RNID > 0
 							; Create the item
@@ -2295,7 +2295,7 @@ Function BVM_GIVEITEM(Param1%, Param2$, Param3%=1)
 								EndIf
 							Next
 						EndIf
-					EndIf
+					;EndIf
 				; Take
 				Else
 					Amount = Abs(Amount)
