@@ -1629,7 +1629,7 @@ Function BVM_ACTORXP%(Param1%)
 Return Result%
 End Function
 
-Function BVM_ACTORDefaultLevel%(Param1%)
+Function BVM_ActorXDefaultLevel%(Param1%)
 	ID = Param1%
 	If ActorList(ID) <> Null
 		Result% = ActorList(ID)\DefaultLevel
