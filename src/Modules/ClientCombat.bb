@@ -119,31 +119,29 @@ Function AnimateActorAttack(A.ActorInstance)
 					Case 4 : Anim = FindAnimation(AS, "right hand attack 4")
 				End Select
 			Case W_TwoHand ;Todo add EquipentClass to client side!
-				If (A\Inventory\Items[SlotI_Weapon]\Item\EquipmentClass$ = "polearm")
-					Select Rand(1,5)
-						Case 1 : Anim = FindAnimation(AS, "staff attack 1")
-						Case 2 : Anim = FindAnimation(AS, "staff attack 2")
-						Case 3 : Anim = FindAnimation(AS, "staff attack 3")
-						Case 4 : Anim = FindAnimation(AS, "staff attack 4")
-						Case 5 : Anim = FindAnimation(AS, "spear attack")
-					End Select
-				ElseIf (A\Inventory\Items[SlotI_Weapon]\Item\EquipmentClass$ = "quarterstaff")
-					Select Rand(1,4)
-						Case 1 : Anim = FindAnimation(AS, "staff attack 1")
-						Case 2 : Anim = FindAnimation(AS, "staff attack 2")
-						Case 3 : Anim = FindAnimation(AS, "staff attack 3")
-						Case 4 : Anim = FindAnimation(AS, "staff attack 4")
-					End Select
-				Else
 					Select Rand(1,3)
 						Case 1 : Anim = FindAnimation(AS, "two hand attack")
 						Case 2 : Anim = FindAnimation(AS, "two hand attack 2")
 						Case 3 : Anim = FindAnimation(AS, "two hand attack 3")
 					End Select
-				EndIf
 			Case W_Ranged
 					AnimSpeed = 1.25
 					Anim = FindAnimation(AS, "bow attack")
+			Case W_Staff 
+				Select Rand(1,4)
+					Case 1 : Anim = FindAnimation(AS, "staff attack 1")
+					Case 2 : Anim = FindAnimation(AS, "staff attack 2")
+					Case 3 : Anim = FindAnimation(AS, "staff attack 3")
+					Case 4 : Anim = FindAnimation(AS, "staff attack 4")
+				End Select
+			Case W_Polearm
+				Select Rand(1,5)
+						Case 1 : Anim = FindAnimation(AS, "staff attack 1")
+						Case 2 : Anim = FindAnimation(AS, "staff attack 2")
+						Case 3 : Anim = FindAnimation(AS, "staff attack 3")
+						Case 4 : Anim = FindAnimation(AS, "staff attack 4")
+						Case 5 : Anim = FindAnimation(AS, "spear attack")
+				End Select
 		End Select
 	EndIf
 	PlayAnimation(A, 3, AnimSpeed, Anim, False)

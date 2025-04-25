@@ -16,6 +16,8 @@ Const A_Shield   = 5
 Const W_OneHand = 1 ; Weapon types
 Const W_TwoHand = 2
 Const W_Ranged  = 3
+Const W_Staff = 4
+Const W_Polearm = 5
 
 Dim DamageTypes$(19)
 
@@ -406,6 +408,8 @@ Function GetWeaponType$(I.Item)
 		Case W_OneHand : Return LanguageString$(LS_OneHanded)
 		Case W_TwoHand : Return LanguageString$(LS_TwoHanded)
 		Case W_Ranged : Return LanguageString$(LS_Ranged)
+		Case W_Staff : Return LanguageString$(LS_TwoHanded)
+		Case W_Polearm: Return LanguageString$(LS_TwoHanded)
 	End Select
 	Return LanguageString$(LS_Unknown)
 
