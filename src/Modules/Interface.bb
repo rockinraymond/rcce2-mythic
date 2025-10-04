@@ -76,6 +76,10 @@ Global BMenu, BLogOut, BCharSelect, BExit
 
 Global BOptions
 
+;chat boxes
+Global WChat
+Global WGameLog
+
 ;	End edit
 ;##############################################################################################################
 
@@ -156,17 +160,34 @@ Global InDialog
 ; Chat text display
 Dim ChatHistory$(1999) ; Chat history stored permanently
 Dim ChatHistoryColour(1999)
+
+; GameLog display
+Dim GameLogHistory$(1999) ; Chat history stored permanently
+Dim GameLogHistoryColour(1999)
 Type CurrentChat ; Chat which will disappear after a certain amount of time
 	Field Dat$, cR, cG, cB
 	Field Timer
 End Type
+Type CurrentLog ; Chat which will disappear after a certain amount of time
+	Field Dat$, cR, cG, cB
+	Field Timer
+End Type
 Dim ChatLines(0) ; Gooey labels to display chat, this array gets resized to however many lines can fit vertically
+Dim GameLogLines(0) ; Gooey labels to display chat, this array gets resized to however many lines can fit vertically
 Global MaxChatLine = 0 ; Stores the highest index of the resized ChatLines array
+Global MaxGameLogLine = 0 ; Stores the highest index of the resized ChatLines array
+
 Global HistoryMode = False ; True if viewing history
 Global FirstHistoryLine = 0 ; First line of history being viewed
 Global MaxHistoryLine = -1 ; Last line of history available
 Global BHistoryMode ; History mode toggle button
 Global BHistoryUp, BHistoryDown ; Buttons to scroll through history
+
+Global HistoryModeGame = False ; True if viewing history
+Global FirstHistoryLineGame = 0 ; First line of history being viewed
+Global MaxHistoryLineGame = -1 ; Last line of history available
+Global BHistoryModeGame ; History mode toggle button
+Global BHistoryUpGame, BHistoryDownGame ; Buttons to scroll through history
 
 ; Interface component settings
 Type InterfaceComponent

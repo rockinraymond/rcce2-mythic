@@ -52,9 +52,9 @@ Function CreateDialog(Title$, A.ActorInstance, ScriptHandle, BackgroundTexID = 6
 	D\ActorInstance = A
 	D\ScriptHandle = ScriptHandle
 	If BackgroundTexID < 65535
-		D\Win = GY_CreateWindow(Title$, 0.02, 0.15, 0.32, 0.5, True, False, False, GetTexture(BackgroundTexID), False)
+		D\Win = GY_CreateWindow(Title$, 0.02, 0.15, 0.32, 0.5, True, False, True, GetTexture(BackgroundTexID), False)
 	Else
-		D\Win = GY_CreateWindow(Title$, 0.02, 0.15, 0.32, 0.5, True, False, False)
+		D\Win = GY_CreateWindow(Title$, 0.02, 0.15, 0.32, 0.5, True, False, True)
 	EndIf
 	Y# = 0.07
 	For i = 0 To 13
@@ -157,7 +157,7 @@ Function DialogOutput(Han, T$, R = 255, G = 255, B = 255, Opt = 0)
 End Function
 
 ; Adds a new chat message
-Function Output(Dat$, R = 255, G = 255, B = 255)
+Function OutputChat(Dat$, R = 255, G = 255, B = 255)
 
 	; Word wrap
 	MaxWidth# = Chat\Width#
@@ -167,16 +167,16 @@ Function Output(Dat$, R = 255, G = 255, B = 255)
 		For i = Len(Dat$) To 1 Step -1
 			If Mid$(Dat$, i, 1) = " "
 				If GY_TextWidth#(Gad\EN, Left$(Dat$, i - 1)) <= MaxWidth#
-					Output(Left$(Dat$, i - 1), R, G, B)
-					Output(Mid$(Dat$, i + 1), R, G, B)
+					OutputChat(Left$(Dat$, i - 1), R, G, B)
+					OutputChat(Mid$(Dat$, i + 1), R, G, B)
 					Return
 				EndIf
 			EndIf
 		Next
 		For i = Len(Dat$) To 1 Step -1
 			If GY_TextWidth#(Gad\EN, Left$(Dat$, i - 1)) <= MaxWidth#
-				Output(Left$(Dat$, i - 1), R, G, B)
-				Output(Mid$(Dat$, i), R, G, B)
+				OutputChat(Left$(Dat$, i - 1), R, G, B)
+				OutputChat(Mid$(Dat$, i), R, G, B)
 				Return
 			EndIf
 		Next
@@ -208,6 +208,58 @@ Function Output(Dat$, R = 255, G = 255, B = 255)
 
 End Function
 
+; Adds a new game log message
+Function Output(Dat$, R = 255, G = 255, B = 255)
+
+	; Word wrap
+	MaxWidth# = Chat\Width#
+	If Chat\X# <= 0.5 Then MaxWidth# = MaxWidth# - 0.035
+	Gad.GY_Gadget = Object.GY_Gadget(GameLogLines(0))
+	If GY_TextWidth#(Gad\EN, Dat$) >= MaxWidth#
+		For i = Len(Dat$) To 1 Step -1
+			If Mid$(Dat$, i, 1) = " "
+				If GY_TextWidth#(Gad\EN, Left$(Dat$, i - 1)) <= MaxWidth#
+					Output(Left$(Dat$, i - 1), R, G, B)
+					Output(Mid$(Dat$, i + 1), R, G, B)
+					Return
+				EndIf
+			EndIf
+		Next
+		For i = Len(Dat$) To 1 Step -1
+			If GY_TextWidth#(Gad\EN, Left$(Dat$, i - 1)) <= MaxWidth#
+				Output(Left$(Dat$, i - 1), R, G, B)
+				Output(Mid$(Dat$, i), R, G, B)
+				Return
+			EndIf
+		Next
+		Return
+	EndIf
+
+	; Add to history
+	If MaxHistoryLineGame < 1999
+		MaxHistoryLineGame = MaxHistoryLineGame + 1
+	Else
+		For i = 0 To 1998
+			GameLogHistory$(i) = GameLogHistory$(i + 1)
+			GameLogHistoryColour(i) = GameLogHistoryColour(i + 1)
+		Next
+	EndIf
+	GameLogHistory$(MaxHistoryLineGame) = Dat$
+	GameLogHistoryColour(MaxHistoryLineGame) = R Or (G Shl 8) Or (B Shl 16)
+
+	; Add to current chat text
+	CL.CurrentLog = New CurrentLog
+	CL\Dat$ = Dat$
+	CL\cR = R
+	CL\cG = G
+	CL\cB = B
+	CL\Timer = MilliSecs()
+
+	; Display
+	UpdateGameLogDisplay()
+
+End Function
+
 ; Creates a new chat bubble
 Dim BubbleLines$(9)
 Dim BubbleLinesEN(9)
@@ -218,9 +270,9 @@ Function BubbleOutput(Label$, R, G, B, AI.ActorInstance, NoText = False)
 		Name$ = Trim$(AI\Name$)
 		If Name$ = "" Then Name$ = AI\Actor\Race$
 		If R = 0 And G = 0 And B = 0
-			Output("<" + Name$ + "> " + Label$, 255, 255, 255)
+			OutputChat("<" + Name$ + "> " + Label$, 255, 255, 255)
 		Else
-			Output("<" + Name$ + "> " + Label$, R, G, B)
+			OutputChat("<" + Name$ + "> " + Label$, R, G, B)
 		EndIf
 	EndIf
 
@@ -330,6 +382,40 @@ Function UpdateChatTextDisplay()
 		Next
 		For i = Count To MaxChatLine
 			GY_UpdateLabel(ChatLines(i), "")
+		Next
+	EndIf
+
+End Function
+
+Function UpdateGameLogDisplay()
+
+	; Draw history
+	If HistoryModeGame
+		CurrentLine = FirstHistoryLineGame
+		For i = 0 To MaxGameLogLine
+			R = GameLogHistoryColour(CurrentLine) And 255
+			G = (GameLogHistoryColour(CurrentLine) Shr 8) And 255
+			B = (GameLogHistoryColour(CurrentLine) Shr 16) And 255
+			GY_UpdateLabel(GameLogLines(i), GameLogHistory$(CurrentLine), R, G, B) ;R, G, B)
+			CurrentLine = CurrentLine + 1
+			If CurrentLine = MaxHistoryLineGame + 1
+				For j = i + 1 To MaxGameLogLine
+					GY_UpdateLabel(GameLogLines(j), "")
+				Next
+				Exit
+			EndIf
+			If CurrentLine > 1999 Then Return
+		Next
+	; Draw current messages
+	Else
+		Count = 0
+		For CL.CurrentLog = Each CurrentLog
+			GY_UpdateLabel(GameLogLines(Count), CL\Dat$, CL\cR, CL\cG, CL\cB)
+			Count = Count + 1
+			If Count > MaxGameLogLine Then Return
+		Next
+		For i = Count To MaxGameLogLine
+			GY_UpdateLabel(GameLogLines(i), "")
 		Next
 	EndIf
 
@@ -2873,6 +2959,44 @@ EndIf
 		EndIf
 	Next
 
+	; game log history buttons
+	If GY_ButtonHit(BHistoryModeGame)
+		HistoryModeGame = Not HistoryModeGame
+		; Hide history
+		If HistoryModeGame = False
+			GYG.GY_Gadget = Object.GY_Gadget(BHistoryModeGame)
+			EntityTexture(GYG\EN, ActionBarDownTex)
+			GY_PositionGadget(BHistoryModeGame, GY_GadgetX#(BHistoryModeGame), 0.0)
+			GY_GadgetAlpha(BHistoryUpGame, 0.0)
+			GY_GadgetAlpha(BHistoryDownGame, 0.0)
+			UpdateGameLogDisplay()
+		; Show history
+		Else
+			GYG.GY_Gadget = Object.GY_Gadget(BHistoryModeGame)
+			EntityTexture(GYG\EN, ActionBarUpTex)
+			GY_PositionGadget(BHistoryModeGame, GY_GadgetX#(BHistoryModeGame), 0.9)
+			GY_GadgetAlpha(BHistoryUpGame, 0.85)
+			GY_GadgetAlpha(BHistoryDownGame, 0.85)
+			FirstHistoryLineGame = MaxHistoryLineGame - MaxGameLogLine
+			If FirstHistoryLineGame < 0 Then FirstHistoryLineGame = 0
+			UpdateGameLogDisplay()
+		EndIf
+	EndIf
+
+	; Scroll up through history
+	If GY_ButtonHit(BHistoryUpGame)
+		If FirstHistoryLineGame > 0
+			FirstHistoryLineGame = FirstHistoryLineGame - 1
+			UpdateGameLogDisplay()
+		EndIf
+	; Scroll down through history
+	ElseIf GY_ButtonHit(BHistoryDownGame)
+		If FirstHistoryLineGame < MaxHistoryLineGame
+			FirstHistoryLineGame = FirstHistoryLineGame + 1
+			UpdateGameLogDisplay()
+		EndIf
+	EndIf
+
 	; Chat text history buttons
 	If GY_ButtonHit(BHistoryMode)
 		HistoryMode = Not HistoryMode
@@ -2880,7 +3004,7 @@ EndIf
 		If HistoryMode = False
 			GYG.GY_Gadget = Object.GY_Gadget(BHistoryMode)
 			EntityTexture(GYG\EN, ActionBarDownTex)
-			GY_PositionGadget(BHistoryMode, GY_GadgetX#(BHistoryMode), Chat\Y# + 0.005)
+			GY_PositionGadget(BHistoryMode, GY_GadgetX#(BHistoryMode), 0.0)
 			GY_GadgetAlpha(BHistoryUp, 0.0)
 			GY_GadgetAlpha(BHistoryDown, 0.0)
 			UpdateChatTextDisplay()
@@ -2888,7 +3012,7 @@ EndIf
 		Else
 			GYG.GY_Gadget = Object.GY_Gadget(BHistoryMode)
 			EntityTexture(GYG\EN, ActionBarUpTex)
-			GY_PositionGadget(BHistoryMode, GY_GadgetX#(BHistoryMode), Chat\Y# + Chat\Height# - 0.02)
+			GY_PositionGadget(BHistoryMode, GY_GadgetX#(BHistoryMode), 0.9)
 			GY_GadgetAlpha(BHistoryUp, 0.85)
 			GY_GadgetAlpha(BHistoryDown, 0.85)
 			FirstHistoryLine = MaxHistoryLine - MaxChatLine
@@ -2918,6 +3042,14 @@ EndIf
 			Delete(CC)
 			; Remove from display
 			If HistoryMode = False Then UpdateChatTextDisplay()
+		EndIf
+	Next
+
+	For CL.CurrentLog = Each CurrentLog
+		If MilliSecs() - CL\Timer > 15000
+			Delete(CL)
+			; Remove from display
+			If HistoryModeGame = False Then UpdateGameLogDisplay()
 		EndIf
 	Next
 	
@@ -3374,28 +3506,54 @@ Function CreateInterface()
 	Next
 
 	; Chat text display
-	MaxChatLine = Int(Floor#(Chat\Height# / 0.025)) - 1
+	MaxChatLine = 9;Int(Floor#(Chat\Height# / 0.075)) - 1
 	Dim ChatLines(MaxChatLine)
-	Y# = Chat\Y#
+	WChat = GY_CreateWindow("Chat", Chat\X#, Chat\Y#, Chat\Width#, Chat\Height#, True, False, True)
+	Y# = Chat\Y# - 0.55
 	X# = Chat\X#
 	If Chat\X# <= 0.5 Then X# = X# + 0.035
 	For i = 0 To MaxChatLine
-		ChatLines(i) = GY_CreateLabel(0, X# - WX1#, Y#, String$(" ", 200))
+		ChatLines(i) = GY_CreateLabel(WChat, X# - WX1#, Y#, String$(" ", 75))
 		
 		GY_UpdateLabel(ChatLines(i), "")
 		GY_DropGadget(ChatLines(i))
-		Y# = Y# + 0.025
+		Y# = Y# + 0.075
 	Next
 	X# = Chat\X# + 0.005
 	If Chat\X# > 0.5 Then X# = Chat\X# + Chat\Width# - 0.025
 	
-	BHistoryMode = GY_CreateButton(0, X# - WX1#, Chat\Y# + 0.005, 0.02, 0.015, "", False, 0, 0, 0, ActionBarDownTex)
-	BHistoryUp = GY_CreateButton(0, X# - WX1#, Chat\Y# + 0.005, 0.02, 0.015, "", False, 0, 0, 0, ActionBarUpTex)
-	BHistoryDown = GY_CreateButton(0, X# - WX1#, Chat\Y# + 0.025, 0.02, 0.015, "", False, 0, 0, 0, ActionBarDownTex)
+	BHistoryMode = GY_CreateButton(WChat, X# - WX1#, 0.0, 0.08, 0.08, "", False, 0, 0, 0, ActionBarDownTex)
+	BHistoryUp = GY_CreateButton(WChat, X# - WX1#, 0.0, 0.08, 0.08, "", False, 0, 0, 0, ActionBarUpTex)
+    BHistoryDown = GY_CreateButton(WChat, X# - WX1#, 0.08, 0.08, 0.08, "", False, 0, 0, 0, ActionBarDownTex)
 
 	GY_GadgetAlpha(BHistoryMode, 0.85)
 	GY_GadgetAlpha(BHistoryUp, 0.0)
 	GY_GadgetAlpha(BHistoryDown, 0.0)
+
+	; GameLog display
+	MaxGameLogLine = 9;Int(Floor#(Chat\Height# / 0.075)) - 1
+	Dim GameLogLines(MaxGameLogLine)
+	WGameLog = GY_CreateWindow("Log", Chat\X#, Chat\Y# - .2, Chat\Width#, Chat\Height#, True, False, True)
+	Y# = Chat\Y# - 0.55
+	X# = Chat\X#
+	If Chat\X# <= 0.5 Then X# = X# + 0.035
+	For i = 0 To MaxGameLogLine
+		GameLogLines(i) = GY_CreateLabel(WGameLog, X# - WX1#, Y#, String$(" ", 75))
+		
+		GY_UpdateLabel(GameLogLines(i), "")
+		GY_DropGadget(GameLogLines(i))
+		Y# = Y# + 0.075
+	Next
+	X# = Chat\X# + 0.005
+	If Chat\X# > 0.5 Then X# = Chat\X# + Chat\Width# - 0.025
+	
+	BHistoryModeGame = GY_CreateButton(WGameLog, X# - WX1#, 0.0, 0.08, 0.08, "", False, 0, 0, 0, ActionBarDownTex)
+	BHistoryUpGame = GY_CreateButton(WGameLog, X# - WX1#, 0.0, 0.08, 0.08, "", False, 0, 0, 0, ActionBarUpTex)
+    BHistoryDownGame = GY_CreateButton(WGameLog, X# - WX1#, 0.08, 0.08, 0.08, "", False, 0, 0, 0, ActionBarDownTex)
+
+	GY_GadgetAlpha(BHistoryModeGame, 0.85)
+	GY_GadgetAlpha(BHistoryUpGame, 0.0)
+	GY_GadgetAlpha(BHistoryDownGame, 0.0)
 
 	; Amount dialog
 	WAmount = GY_CreateWindow(LanguageString$(LS_ChooseAmount), 0.35, 0.4, 0.4, 0.1, True, True, False)
@@ -4153,9 +4311,15 @@ Function FreeInterface()
 	Next
 
 		; Chat text display
-	MaxChatLine = Int(Floor#(Chat\Height# / 0.025)) - 1
+	MaxChatLine = 9;Int(Floor#(Chat\Height# / 0.075)) - 1
 	For i = 0 To MaxChatLine
 		GY_FreeGadget(ChatLines(i)); = GY_CreateLabel(0, X#, Y#, String$(" ", 200))
+	Next
+
+		; Chat text display
+	MaxGameLogLine = 9;Int(Floor#(Chat\Height# / 0.075)) - 1
+	For i = 0 To MaxGameLogLine
+		GY_FreeGadget(GameLogLines(i)); = GY_CreateLabel(0, X#, Y#, String$(" ", 200))
 	Next
 	
 	;problem occurs when trying to free these	

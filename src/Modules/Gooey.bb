@@ -2299,55 +2299,40 @@ Function GY_CreateWindow(Title$, X#, Y#, Width#, Height#, HasTitle = True, Close
 	EntityFX(G\EN, 1 + 8)
 	GY_PositionGadget(Handle(G), X#, Y#)
 
-	LLRBorder = LoadTexture("Data\UI\WindowBorder.png", 4)
-	
 	; Borders
 	W\LeftEN = GY_CreateQuad(GY_Cam)
 	ScaleEntity(W\LeftEN, 0.005 * 20.0, Height# * 15.0, 1.0)
 	PositionEntity(W\LeftEN, (X# * 20.0) - 10.1, (Y# * -15.0) + 7.5, 10.0)
 	EntityFX(W\LeftEN, 1 + 8)
-	
 	EntityColor(W\LeftEN, GY_BorderR, GY_BorderG, GY_BorderB)
-	
 	EntityParent(W\LeftEN, G\EN)
-	EntityTexture(W\LeftEN, LLRBorder)
 
 	W\LowerEN = GY_CreateQuad(GY_Cam)
 	ScaleEntity(W\LowerEN, (Width# + 0.01) * 20.0, 0.005 * 15.0, 1.0)
 	PositionEntity(W\LowerEN, (X# * 20.0) - 10.1, ((Y# + Height#) * -15.0) + 7.5, 10.0)
 	EntityFX(W\LowerEN, 1 + 8)
-	
 	EntityColor(W\LowerEN, GY_BorderR, GY_BorderG, GY_BorderB)
-	
 	EntityParent(W\LowerEN, G\EN)
-	EntityTexture(W\LowerEN, LLRBorder)
 
 	W\RightEN = GY_CreateQuad(GY_Cam)
 	ScaleEntity(W\RightEN, 0.005 * 20.0, Height# * 15.0, 1.0)
 	PositionEntity(W\RightEN, ((X# + Width#) * 20.0) - 10.0, (Y# * -15.0) + 7.5, 10.0)
-	EntityFX(W\RightEN, 1 + 8)
-	
 	EntityColor(W\RightEN, GY_BorderR, GY_BorderG, GY_BorderB)
-	
+	EntityFX(W\RightEN, 1 + 8)
 	EntityParent(W\RightEN, G\EN)
-	EntityTexture(W\RightEN, LLRBorder)
 
 	If HasTitle = True
 		; Title bar
 		W\TitleEN = GY_CreateQuad(GY_Cam)
-		ScaleEntity(W\TitleEN, (Width# + 0.0) * 20.0, 0.03 * 15.0, 1.0) ;(Width# + 0.01) * 20.0, 0.03 * 15.0, 1.0)
+		ScaleEntity(W\TitleEN, (Width# + 0.01) * 20.0, 0.03 * 15.0, 1.0)
 		EntityTexture(W\TitleEN, GY_Title)
 		EntityFX(W\TitleEN, 1 + 8)
-		PositionEntity(W\TitleEN, (X# * 20.0) - 10.0, (Y# * -15.0) + 7.95, 10.0) ; (X# * 20.0) - 10.1, (Y# * -15.0) + 7.95, 10.0)
+		PositionEntity(W\TitleEN, (X# * 20.0) - 10.1, (Y# * -15.0) + 7.95, 10.0)
 		EntityParent(W\TitleEN, G\EN)
 
 		; Text
-		Length = 25 ;(Width# / 0.02) - 1
-	;	W\TitleText = GY_Create3DText(X# + 0.004, Y# + 0.006, 0.013 * Float#(Length), 0.02, Length, GY_TitleFont, GY_Cam) ;X#, Y# - 0.0255, 0.013 * Float#(Length), 0.02, Length, GY_TitleFont, GY_Cam)
-		W\TitleText = GY_Create3DText(X# + 0.01, Y# - 0.0255, 0.013 * Float#(Length), 0.02, Length, GY_TitleFont, GY_Cam)
-
-	;	G\EN = GY_Create3DText(0.0, 0.0, 0.013 * Len(Label$), 0.02, Len(Label$), GY_TitleFont, GY_Cam)
-		
+		Length = (Width# / 0.02) - 1
+		W\TitleText = GY_Create3DText(X#, Y# - 0.0325, 0.015 * Float#(Length), 0.025, Length, GY_TitleFont, GY_Cam)
 		GY_Set3DText(W\TitleText, G\Caption$)
 		EntityColor(W\TitleText, GY_TitleR, GY_TitleG, GY_TitleB)
 		EntityParent(W\TitleText, G\EN)
@@ -2358,7 +2343,7 @@ Function GY_CreateWindow(Title$, X#, Y#, Width#, Height#, HasTitle = True, Close
 			ScaleEntity(W\CloseEN, 0.02 * 20.0, 0.02 * 20.0, 1.0)
 			EntityTexture(W\CloseEN, GY_Close)
 			EntityFX(W\CloseEN, 1 + 8)
-			PositionEntity(W\CloseEN, ((X# + Width#) * 20.0) - 10.4, (Y# * -15.0) + 7.925, 10.0) ;(X# + Width#) * 20.0) - 10.4, (Y# * -15.0) + 7.925, 10.0)
+			PositionEntity(W\CloseEN, ((X# + Width#) * 20.0) - 10.4, (Y# * -15.0) + 7.925, 10.0)
 			EntityParent(W\CloseEN, G\EN)
 		EndIf
 
@@ -2369,9 +2354,9 @@ Function GY_CreateWindow(Title$, X#, Y#, Width#, Height#, HasTitle = True, Close
 			EntityTexture(W\MinEN, GY_Minimise)
 			EntityFX(W\MinEN, 1 + 8)
 			If Close = True
-				PositionEntity(W\MinEN, ((X# + Width#) * 20.0) - 11.1, (Y# * -15.0) + 7.35, 10.0)
+				PositionEntity(W\MinEN, ((X# + Width#) * 20.0) - 10.9, (Y# * -15.0) + 7.925, 10.0)
 			Else
-				PositionEntity(W\MinEN, ((X# + Width#) * 20.0) - 10.6, (Y# * -15.0) + 7.35, 10.0)
+				PositionEntity(W\MinEN, ((X# + Width#) * 20.0) - 10.4, (Y# * -15.0) + 7.925, 10.0)
 			EndIf
 			EntityParent(W\MinEN, G\EN)
 		EndIf
@@ -2381,11 +2366,8 @@ Function GY_CreateWindow(Title$, X#, Y#, Width#, Height#, HasTitle = True, Close
 		ScaleEntity(W\TopEN, (Width# + 0.01) * 20.0, 0.005 * 15.0, 1.0)
 		PositionEntity(W\TopEN, (X# * 20.0) - 10.1, ((Y# - 0.005) * -15.0) + 7.5, 10.0)
 		EntityFX(W\TopEN, 1 + 8)
-		
 		EntityColor(W\TopEN, GY_BorderR, GY_BorderG, GY_BorderB)
-		
 		EntityParent(W\TopEN, G\EN)
-		EntityTexture(W\TopEN, LLRBorder)
 	EndIf
 
 	; Put in front

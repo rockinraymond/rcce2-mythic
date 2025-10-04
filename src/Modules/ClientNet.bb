@@ -1046,17 +1046,17 @@ Function UpdateNetwork()
 						; No actor found, use normal text output
 						Else
 							If Instr(M\MessageData$, "<" + Me\Name$ + ">") = 1
-								Output(M\MessageData$, 0, 128, 255)
+								OutputChat(M\MessageData$, 0, 128, 255)
 							Else
-								Output(M\MessageData$)
+								OutputChat(M\MessageData$)
 							EndIf
 						EndIf
 					; Normal text output
 					Else
 						If Instr(M\MessageData$, "<" + Me\Name$ + ">") = 1
-							Output(M\MessageData$, 0, 128, 255)
+							OutputChat(M\MessageData$, 0, 128, 255)
 						Else
-							Output(M\MessageData$)
+							OutputChat(M\MessageData$)
 						EndIf
 					EndIf
 				EndIf
