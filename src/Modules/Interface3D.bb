@@ -1677,72 +1677,28 @@ Function UpdateInterface()
 	If CharStatsVisible = True
 		; Reputation and gold display
 		GY_UpdateLabel(LReputation, LanguageString$(LS_Reputation) + " " + Me\Reputation)
-		;GY_UpdateLabel(LGold, Money$(Me\Gold))
+		GY_UpdateLabel(LGold, Money$(Me\Gold))
 		GY_UpdateLabel(LLevel, LanguageString$(LS_Level) + " " + Me\Level)
 		GY_UpdateLabel(LXP, LanguageString$(LS_Experience) + " " + Me\XP)
-		; Next/previous buttons
-		If GY_ButtonHit(BNextAttribute)
-			; Check we have a next attribute to go to
-			Count = 0
-			For i = FirstAttribute + 1 To 39
-				If AttributeNames$(i) <> "" And AttributeHidden(i) = False
-					Count = Count + 1
-				EndIf
-			Next
-			; If so, go to it
-			If Count > 9
-				For i = FirstAttribute + 1 To 39
-					If AttributeNames$(i) <> "" And AttributeHidden(i) = False
-						FirstAttribute = i
-						Att = FirstAttribute - 1
-						Found = 0
-						Repeat
-							Att = Att + 1
-						If AttributeNames$(Att) <> "" And AttributeHidden(Att) = False
-								GY_UpdateLabel(LAttributeNames(Found), AttributeNames$(Att))
-								Found = Found + 1
-								If Found = 10 Then Exit
-							EndIf
-						Forever
-						Exit
-					EndIf
-			Next
-			EndIf
-		ElseIf GY_ButtonHit(BPrevAttribute)
-			; Go to previous attribute if there is one
-			For i = FirstAttribute - 1 To 0 Step -1
-				If AttributeNames$(i) <> "" And AttributeHidden(i) = False
-					FirstAttribute = i
-					Att = FirstAttribute - 1
-					Found = 0
-				Repeat
-						Att = Att + 1
-						If AttributeNames$(Att) <> "" And AttributeHidden(Att) = False
-							GY_UpdateLabel(LAttributeNames(Found), AttributeNames$(Att))
-							Found = Found + 1
-							If Found = 10 Then Exit
-						EndIf
-					Forever
-					Exit
-				EndIf
-		Next
-		EndIf
+
 	; Display attributes
-		Att = FirstAttribute - 1
-		Found = 0
-		Repeat
-			Att = Att + 1
-			If AttributeNames$(Att) <> "" And AttributeHidden(Att) = False
-				If AttributeIsSkill(Att)
-					GY_UpdateLabel(LAttributeVals(Found), Me\Attributes\Value[Att])
-				Else
-					GY_UpdateLabel(LAttributeVals(Found), Me\Attributes\Value[Att] + " / " + Me\Attributes\Maximum[Att])
-				EndIf
-				Found = Found + 1
-				If Found = 10 Then Exit
+		CurrentAtt = 0
+		For i = 0 To 39
+			If AttributeNames$(i) <> "" And AttributeHidden(i) = False And AttributeIsSkill(i) = False
+					GY_UpdateLabel(LAttributeVals(CurrentAtt), Me\Attributes\Value[i] + " / " + Me\Attributes\Maximum[i])
+					CurrentAtt = CurrentAtt + 1
 			EndIf
-			If Att >= 39 Then Exit
-		Forever
+		Next
+	;Display skills
+		CurrentSkl = 0
+		For i = 0 To 39
+			If AttributeNames$(i) <> "" And AttributeHidden(i) = False And AttributeIsSkill(i) = True
+					GY_UpdateLabel(AttributeXpDisplayNumbers(CurrentSkl), Str(Me\Attributes\Xp[i]) + "/"+ Str(Me\Attributes\XpMax[i]))
+					GY_UpdateProgressBar(AttributeXpDisplays(CurrentSkl), (Float#(Me\Attributes\Xp[i]) / Float#(Me\Attributes\XpMax[i])) * 100.0)
+					GY_UpdateLabel(LSkillVals(CurrentSkl), Me\Attributes\Value[i])
+					CurrentSkl = CurrentSkl + 1
+			EndIf
+		Next
 
 ;ItemShop Buttons
 	If GY_ButtonHit(BOffers)
@@ -3506,14 +3462,14 @@ Function CreateInterface()
 	Next
 
 	; Chat text display
-	MaxChatLine = 9;Int(Floor#(Chat\Height# / 0.075)) - 1
+	MaxChatLine = 10;Int(Floor#(Chat\Height# / 0.075)) - 1
 	Dim ChatLines(MaxChatLine)
 	WChat = GY_CreateWindow("Chat", Chat\X#, Chat\Y#, Chat\Width#, Chat\Height#, True, False, True)
-	Y# = Chat\Y# - 0.55
+	Y# = Chat\Y# - 0.6
 	X# = Chat\X#
 	If Chat\X# <= 0.5 Then X# = X# + 0.035
 	For i = 0 To MaxChatLine
-		ChatLines(i) = GY_CreateLabel(WChat, X# - WX1#, Y#, String$(" ", 75))
+		ChatLines(i) = GY_CreateLabel(WChat, X# - WX1# + .06, Y#, String$(" ", 75))
 		
 		GY_UpdateLabel(ChatLines(i), "")
 		GY_DropGadget(ChatLines(i))
@@ -3531,14 +3487,14 @@ Function CreateInterface()
 	GY_GadgetAlpha(BHistoryDown, 0.0)
 
 	; GameLog display
-	MaxGameLogLine = 9;Int(Floor#(Chat\Height# / 0.075)) - 1
+	MaxGameLogLine = 10;Int(Floor#(Chat\Height# / 0.075)) - 1
 	Dim GameLogLines(MaxGameLogLine)
-	WGameLog = GY_CreateWindow("Log", Chat\X#, Chat\Y# - .2, Chat\Width#, Chat\Height#, True, False, True)
-	Y# = Chat\Y# - 0.55
+	WGameLog = GY_CreateWindow("Log", Chat\X# + .68, Chat\Y#, Chat\Width#, Chat\Height#, True, False, True)
+	Y# = Chat\Y# - 0.6
 	X# = Chat\X#
 	If Chat\X# <= 0.5 Then X# = X# + 0.035
 	For i = 0 To MaxGameLogLine
-		GameLogLines(i) = GY_CreateLabel(WGameLog, X# - WX1#, Y#, String$(" ", 75))
+		GameLogLines(i) = GY_CreateLabel(WGameLog, X# - WX1# + .06, Y#, String$(" ", 75))
 		
 		GY_UpdateLabel(GameLogLines(i), "")
 		GY_DropGadget(GameLogLines(i))
@@ -3642,28 +3598,38 @@ Function CreateInterface()
 	WCharStats = GY_CreateWindow(LanguageString$(LS_Character), 0.1, 0.1, 0.5, 0.7, True, True, False, LoadTexture("Data\Textures\GUI\CharBG.png"))
 	GY_CreateLabel(WCharStats, 0.5, 0.03, Me\Name$, 255, 255, 255, Justify_Centre)
 	LReputation = GY_CreateLabel(WCharStats, 0.05, 0.09, LanguageString$(LS_Reputation) + " 00000", 0, 255, 0)
-	;LGold = GY_CreateLabel(WCharStats, 0.05, 0.13, "000000000000000000000000000000000000000000000000000000000000", 0, 255, 0)
+	LGold = GY_CreateLabel(WCharStats, 0.05, 0.13, "000000000000000000000000000000000000000000000000000000000000", 0, 255, 0)
 	LLevel = GY_CreateLabel(WCharStats, 0.05, 0.17, LanguageString$(LS_Level) + " 0000000", 0, 255, 0)
 	LXP = GY_CreateLabel(WCharStats, 0.05, 0.21, LanguageString$(LS_Experience) + " 0000000000000", 0, 255, 0)
-	GY_CreateLabel(WCharStats, 0.5, 0.27, LanguageString$(LS_Attributes), 255, 255, 255, Justify_Centre)
-	For i = 0 To 9
-		LAttributeNames(i) = GY_CreateLabel(WCharStats, 0.03, 0.4 + (Float#(i) * 0.05), "LONGEST ATTRIBUTE NAME HERE!")
-		LAttributeVals(i) = GY_CreateLabel(WCharStats, 0.97, 0.4 + (Float#(i) * 0.05), "00000 / 00000", 255, 255, 255, Justify_Right)
-		GY_UpdateLabel(LAttributeNames(i), "")
-		GY_UpdateLabel(LAttributeVals(i), "")
-	Next
-	Found = 0
+	GY_CreateLabel(WCharStats, 0.03, 0.375, LanguageString$(LS_Attributes), 255, 255, 255)
+	GY_CreateLabel(WCharStats, 0.53, 0.1, "SKILLS", 255, 255, 255)
+	AttCount = 0
 	For i = 0 To 39
-		If AttributeNames$(i) <> "" And AttributeHidden(i) = False
-			GY_UpdateLabel(LAttributeNames(Found), AttributeNames$(i))
-			Found = Found + 1
-			If Found = 10 Then Exit
+		If AttributeNames$(i) <> "" And AttributeHidden(i) = False And AttributeIsSkill(i) = False
+			LAttributeNames(AttCount) = GY_CreateLabel(WCharStats, 0.03, 0.4 + (Float#(AttCount) * 0.025), "LONGEST ATTRIBUTE NAME HERE!")
+			LAttributeVals(AttCount) = GY_CreateLabel(WCharStats, 0.33, 0.4 + (Float#(AttCount) * 0.025), "00000 / 00000", 255, 255, 255, Justify_Right)
+			GY_UpdateLabel(LAttributeNames(AttCount), AttributeNames$(i))
+			GY_UpdateLabel(LAttributeVals(AttCount), "")
+			AttCount = AttCount + 1
 		EndIf
 	Next
-	If Found >= 10
-		BPrevAttribute = GY_CreateButton(WCharStats, 0.425, 0.33, 0.15, 0.05, LanguageString$(LS_Up))
-		BNextAttribute = GY_CreateButton(WCharStats, 0.425, 0.93, 0.15, 0.05, LanguageString$(LS_Down))
-	EndIf
+	SklCount = 0
+	SkillStart# = 0.135
+	For i = 0 To 39
+		If AttributeNames$(i) <> "" And AttributeHidden(i) = False And AttributeIsSkill(i) = True
+			LSkillNames(SklCount) = GY_CreateLabel(WCharStats, 0.53, SkillStart + (Float#(SklCount) * 0.05), "LONGEST SKILL NAME HERE!")
+			LSkillVals(SklCount) = GY_CreateLabel(WCharStats, 0.83, SkillStart + (Float#(SklCount) * 0.05), "00000", 255, 255, 255, Justify_Right)
+			GY_UpdateLabel(LSkillNames(SklCount), AttributeNames$(i))
+			GY_UpdateLabel(LSkillVals(SklCount), "")
+
+			; Create xp bar
+			AttributeXpDisplayNumbers(SklCount) = GY_CreateLabel(WCharStats, 0.83, SkillStart + 0.025 + (Float#(SklCount) * 0.05), "0000/0000", 255, 255, 255, Justify_Right)
+			AttributeXpDisplays(SklCount) = GY_CreateProgressBar(WCharStats, 0.58, SkillStart + 0.03 + (Float#(SklCount) * 0.05), 0.18, 0.015, 50, 100, 255, 68, 51)
+			GY_CreateLabel(WCharStats, 0.53, SkillStart + 0.025 + (Float#(SklCount) * 0.05), "EXP:", 255, 255, 255)
+			
+			SklCount = SklCount + 1
+		EndIf
+	Next
 
 	; Help window
 	WHelp = GY_CreateWindow(LanguageString$(LS_Help), 0.25, 0.2, 0.5, 0.6, True, True, False, LoadTexture("Data\Textures\GUI\HelpBG.png"))

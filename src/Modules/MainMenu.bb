@@ -1004,7 +1004,9 @@ Function LogIn()
 									For i = 0 To 39
 										A\Attributes\Value[i] = RCE_IntFromStr(Mid$(Pa$, Offset, 2))
 										A\Attributes\Maximum[i] = RCE_IntFromStr(Mid$(Pa$, Offset + 2, 2))
-										Offset = Offset + 4
+										A\Attributes\Xp[i] = RCE_IntFromStr(Mid$(Pa$, Offset + 4, 2))
+										A\Attributes\XpMax[i] = RCE_IntFromStr(Mid$(Pa$, Offset + 6, 2))
+										Offset = Offset + 8
 									Next
 									NameLen = RCE_IntFromStr(Mid$(Pa$, Offset, 1))
 									A\Race$ = Mid$(Pa$, Offset + 1, NameLen)
@@ -1693,8 +1695,10 @@ Function CharSelect()
 								While Offset < Len(M\MessageData$)
 									Me\Attributes\Value[AttributesDone] = RCE_IntFromStr(Mid$(M\MessageData$, Offset, 2))
 									Me\Attributes\Maximum[AttributesDone] = RCE_IntFromStr(Mid$(M\MessageData$, Offset + 2, 2))
+									Me\Attributes\Xp[AttributesDone] = RCE_IntFromStr(Mid$(M\MessageData$, Offset + 4, 2))
+									Me\Attributes\XpMax[AttributesDone] = RCE_IntFromStr(Mid$(M\MessageData$, Offset + 6, 2))
 									AttributesDone = AttributesDone + 1
-									Offset = Offset + 4
+									Offset = Offset + 8
 								Wend
 							; Block 2 <No longer exists, reserved for future use>
 ;							ElseIf Mid$(M\MessageData$, 2, 1) = "2"

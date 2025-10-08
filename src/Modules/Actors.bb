@@ -151,6 +151,8 @@ Dim AttributeHidden(39)
 Type Attributes
 	Field Value[39]
 	Field Maximum[39]
+	Field Xp[39]
+	Field XpMax[39]
 	Field My_ID ; Required for MySQL
 End Type
 
@@ -225,6 +227,8 @@ Function WriteActorInstance(Stream, A.ActorInstance)
 	For i = 0 To 39
 		WriteShort Stream, A\Attributes\Value[i]
 		WriteShort Stream, A\Attributes\Maximum[i]
+		WriteShort Stream, A\Attributes\Xp[i]
+		WriteShort Stream, A\Attributes\XpMax[i]
 	Next
 	For i = 0 To 19
 		WriteShort Stream, A\Resistances[i]
@@ -300,6 +304,8 @@ Function ReadActorInstance.ActorInstance(Stream)
 	For i = 0 To 39
 		A\Attributes\Value[i]   = ReadShort(Stream)
 		A\Attributes\Maximum[i] = ReadShort(Stream)
+		A\Attributes\Xp[i]   = ReadShort(Stream)
+		A\Attributes\XpMax[i] = ReadShort(Stream)
 	Next
 	For i = 0 To 19
 		A\Resistances[i] = ReadShort(Stream)
@@ -357,6 +363,8 @@ Function CreateActor.Actor()
 			ActorList(A\ID) = A
 			A\Attributes = New Attributes
 			For i = 0 To 39 : A\Attributes\Maximum[i] = 100 : Next
+			For i = 0 To 39 : A\Attributes\Xp[i] = 0 : Next
+			For i = 0 To 39 : A\Attributes\XpMax[i] = 100 : Next
 			For i = 0 To 7
 				A\MeshIDs[i] = 65535
 				If i <= 4
@@ -404,6 +412,8 @@ Function CreateActorInstance.ActorInstance(Actor.Actor)
 	For i = 0 To 39
 		A\Attributes\Value[i] = A\Actor\Attributes\Value[i]
 		A\Attributes\Maximum[i] = A\Actor\Attributes\Maximum[i]
+		A\Attributes\Xp[i] = A\Actor\Attributes\Xp[i]
+		A\Attributes\XpMax[i] = A\Actor\Attributes\XpMax[i]
 	Next
 	For i = 0 To 19
 		A\Resistances[i] = A\Actor\Resistances[i]
@@ -554,6 +564,8 @@ Function LoadActors(Filename$)
 			For i = 0 To 39
 				A\Attributes\Value[i] = ReadShort(F)
 				A\Attributes\Maximum[i] = ReadShort(F)
+				A\Attributes\Xp[i] = ReadShort(F)
+				A\Attributes\XpMax[i] = ReadShort(F)
 			Next
 			For i = 0 To 19
 				A\Resistances[i] = ReadShort(F)
@@ -610,6 +622,8 @@ Function SaveActors(Filename$)
 			For i = 0 To 39
 				WriteShort(F, A\Attributes\Value[i])
 				WriteShort(F, A\Attributes\Maximum[i])
+				WriteShort(F, A\Attributes\Xp[i])
+				WriteShort(F, A\Attributes\XpMax[i])
 			Next
 			For i = 0 To 19
 				WriteShort(F, A\Resistances[i])

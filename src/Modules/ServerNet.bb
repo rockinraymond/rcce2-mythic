@@ -1677,6 +1677,8 @@ Function UpdateNetwork()
 					For i = 0 To 39
 						Pa$ = Pa$ + RCE_StrFromInt$(Ac\Attributes\Value[i], 2)
 						Pa$ = Pa$ + RCE_StrFromInt$(Ac\Attributes\Maximum[i], 2)
+						Pa$ = Pa$ + RCE_StrFromInt$(Ac\Attributes\Xp[i], 2)
+						Pa$ = Pa$ + RCE_StrFromInt$(Ac\Attributes\XpMax[i], 2)
 					Next
 					Pa$ = Pa$ + RCE_StrFromInt$(Len(Ac\Race$), 1) + Ac\Race$
 					Pa$ = Pa$ + RCE_StrFromInt$(Len(Ac\Class$), 1) + Ac\Class$
@@ -1874,6 +1876,8 @@ Function UpdateNetwork()
 								For i = 0 To 39
 									Pa$ = Pa$ + RCE_StrFromInt$(A\Character[Number]\Attributes\Value[i], 2)
 									Pa$ = Pa$ + RCE_StrFromInt$(A\Character[Number]\Attributes\Maximum[i], 2)
+									Pa$ = Pa$ + RCE_StrFromInt$(A\Character[Number]\Attributes\Xp[i], 2)
+									Pa$ = Pa$ + RCE_StrFromInt$(A\Character[Number]\Attributes\XpMax[i], 2)
 								Next
 								SendQueued(Host, M\FromID, P_FetchCharacter, "C1" + Pa$, True)
 								Pa$ = ""

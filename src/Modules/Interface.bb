@@ -119,8 +119,10 @@ Dim ServerTradeIDs(31)
 ; Char stats window
 Global WCharStats, CharStatsVisible = False
 Global LReputation, LGold, LLevel, LXP, BNextAttribute, BPrevAttribute, FirstAttribute
-Dim LAttributeNames(9)
-Dim LAttributeVals(9)
+Dim LAttributeNames(39)
+Dim LAttributeVals(39)
+Dim LSkillNames(39)
+Dim LSkillVals(39)
 
 ; Spells (abilities) window
 Global WSpells, SpellsVisible = False
@@ -207,6 +209,8 @@ Global Radar.InterfaceComponent              ; Radar map
 Global Compass.InterfaceComponent            ; Compass
 Dim AttributeDisplays.InterfaceComponent(39) ; Bars for character attributes
 Dim AttributeDisplayNumbers(39)              ; Number displays for character attribute bars
+Dim AttributeXpDisplays(39) ; Bars for character attributes
+Dim AttributeXpDisplayNumbers(39)              ; Number displays for character attribute bars
 Global InventoryWindow.InterfaceComponent    ; Inventory window
 Global InventoryDrop.InterfaceComponent      ; Inventory drop button
 Global InventoryEat.InterfaceComponent       ; Inventory use button
