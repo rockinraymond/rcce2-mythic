@@ -1860,6 +1860,46 @@ Function BVM_SETATTRIBUTE(Param1%, Param2$, Param3%)
 	EndIf
 End Function
 
+Function BVM_ZZADDSKILLXP(Param1%, Param2$, Param3%)
+	Actor.ActorInstance = Object.ActorInstance(Param1%)
+	If Actor <> Null
+		Attribute = FindAttribute(Param2$)
+		LevelUpPackets = False
+		If Attribute > -1
+				Actor\Attributes\Xp[Attribute] = Actor\Attributes\Xp[Attribute] + Param3%
+				; Level Up Skill
+				If Actor\Attributes\Xp[Attribute] >= Actor\Attributes\XpMax[Attribute]
+					If Actor\Attributes\Value[Attribute] < Actor\Attributes\Maximum[Attribute]
+						;Reset Xp
+						Actor\Attributes\Xp[Attribute] = 0
+						;Increment Skill Level
+						Actor\Attributes\Value[Attribute] = Actor\Attributes\Value[Attribute] + 1
+						;Adjust Max Xp
+						Actor\Attributes\XpMax[Attribute] = Actor\Attributes\Value[Attribute] * 100
+						LevelUpPackets = True
+					Else
+						;skill maxxed so xp stays maxxed
+						Actor\Attributes\Xp[Attribute] = Actor\Attributes\XpMax[Attribute]
+					EndIf
+				;xp will not drop below 0
+				ElseIf Actor\Attributes\Value[Attribute] < 0
+						Actor\Attributes\Value[Attribute] = 0
+				EndIf
+				If Actor\RNID > 0
+					Pa$ = RCE_StrFromInt$(Actor\RuntimeID, 2) + RCE_StrFromInt$(Attribute, 1) + RCE_StrFromInt$(Actor\Attributes\Xp[Attribute], 2)
+					RCE_Send(Host, Actor\RNID, P_StatUpdate, "X" + Pa$, True)
+					If LevelUpPackets = True
+						Pa$ = RCE_StrFromInt$(Actor\RuntimeID, 2) + RCE_StrFromInt$(Attribute, 1) + RCE_StrFromInt$(Actor\Attributes\XpMax[Attribute], 2)
+						RCE_Send(Host, Actor\RNID, P_StatUpdate, "Z" + Pa$, True)
+						Pa$ = RCE_StrFromInt$(Actor\RuntimeID, 2) + RCE_StrFromInt$(Attribute, 1) + RCE_StrFromInt$(Actor\Attributes\Value[Attribute], 2)
+						RCE_Send(Host, Actor\RNID, P_StatUpdate, "A" + Pa$, True)
+						RCE_Send(Host, Actor\RNID, P_ChatMessage, Chr$(250) + Chr$(255) + Chr$(255) + Chr$(0) + ("You have gained a level in " + Param2$ + "!"), True)
+					EndIf
+				EndIf
+		EndIf
+	EndIf
+End Function
+
 Function BVM_CHANGEATTRIBUTE(Param1%, Param2$, Param3%)
 	Actor.ActorInstance = Object.ActorInstance(Param1%)
 	If Actor <> Null

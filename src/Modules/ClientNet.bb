@@ -817,6 +817,12 @@ Function UpdateNetwork()
 					A\Attributes\Maximum[Attribute] = RCE_IntFromStr(Mid$(M\MessageData$, 5, 2))
 				ElseIf Left$(M\MessageData$, 1) = "R"
 					A\Reputation = RCE_IntFromStr(Mid$(M\MessageData$, 4, 2))
+				ElseIf Left$(M\MessageData$, 1) = "X"
+					Attribute = RCE_IntFromStr(Mid$(M\MessageData$, 4, 1))
+					A\Attributes\Xp[Attribute] = RCE_IntFromStr(Mid$(M\MessageData$, 5, 2))
+				ElseIf Left$(M\MessageData$, 1) = "Z"
+					Attribute = RCE_IntFromStr(Mid$(M\MessageData$, 4, 1))
+					A\Attributes\XpMax[Attribute] = RCE_IntFromStr(Mid$(M\MessageData$, 5, 2))
 				EndIf
 
 			; Scripted text input dialog

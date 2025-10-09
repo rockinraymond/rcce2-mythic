@@ -67,3 +67,10 @@ Function Heal()
 	Return
 
 End Function
+
+Function giveSkillXp()
+
+	Player = Actor()
+	ZZADDSKILLXP(Player, "Swords", 25)
+
+End Function
