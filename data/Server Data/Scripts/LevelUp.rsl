@@ -21,3 +21,12 @@ Function Main()
 	Return
 
 End Function
+
+Function giveSkillXp()
+
+	SkillName$ = Parameter(1)
+	Amount# = Parameter(2)
+	Player = Actor()
+	ZZADDSKILLXP(Player, SkillName$, Amount#)
+
+End Function

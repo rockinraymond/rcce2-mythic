@@ -485,6 +485,10 @@ Function ActorAttack(A1.ActorInstance, A2.ActorInstance)
 	; Apply damage to target actor
 	If Damage > 0 Then A2\Attributes\Value[HealthStat] = A2\Attributes\Value[HealthStat] - Damage
 
+	;give xp for skill
+	Params$ = "Unarmed" + "," + Str(Damage)
+	ThreadScript("LevelUp", "giveSkillXp", Handle(A1), 0, Params$)
+
 	; Tell player(s) if applicable
 	Pa$ = RCE_StrFromInt$(Damage + 1, 2) + RCE_StrFromInt$(DamageType, 1)
 	If A1\RNID > 0
