@@ -1677,6 +1677,7 @@ Function CharSelect()
 			Spells = 0 : RequiredSpells = 2000 : Memorised = 0
 			ItemsDone = 0
 			AttributesDone = 0
+			ResistancesDone = 0
 			Done = False
 			While Done = False
 				Delay 10
@@ -1693,13 +1694,20 @@ Function CharSelect()
 								Me\HomeFaction = RCE_IntFromStr(Mid$(M\MessageData$, 15, 1))
 								Offset = 16
 								While Offset < Len(M\MessageData$)
-									Me\Attributes\Value[AttributesDone] = RCE_IntFromStr(Mid$(M\MessageData$, Offset, 2))
-									Me\Attributes\Maximum[AttributesDone] = RCE_IntFromStr(Mid$(M\MessageData$, Offset + 2, 2))
-									Me\Attributes\Xp[AttributesDone] = RCE_IntFromStr(Mid$(M\MessageData$, Offset + 4, 2))
-									Me\Attributes\XpMax[AttributesDone] = RCE_IntFromStr(Mid$(M\MessageData$, Offset + 6, 2))
-									AttributesDone = AttributesDone + 1
-									Offset = Offset + 8
+									If AttributesDone < 40
+										Me\Attributes\Value[AttributesDone] = RCE_IntFromStr(Mid$(M\MessageData$, Offset, 2))
+										Me\Attributes\Maximum[AttributesDone] = RCE_IntFromStr(Mid$(M\MessageData$, Offset + 2, 2))
+										Me\Attributes\Xp[AttributesDone] = RCE_IntFromStr(Mid$(M\MessageData$, Offset + 4, 2))
+										Me\Attributes\XpMax[AttributesDone] = RCE_IntFromStr(Mid$(M\MessageData$, Offset + 6, 2))
+										AttributesDone = AttributesDone + 1
+										Offset = Offset + 8
+									Else
+										Me\Resistances[ResistancesDone] = RCE_IntFromStr(Mid$(M\MessageData$, Offset, 2))
+										ResistancesDone = ResistancesDone + 1
+										Offset = Offset + 2
+									EndIf
 								Wend
+								
 							; Block 2 <No longer exists, reserved for future use>
 ;							ElseIf Mid$(M\MessageData$, 2, 1) = "2"
 

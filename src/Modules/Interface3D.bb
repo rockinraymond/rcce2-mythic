@@ -1699,6 +1699,14 @@ Function UpdateInterface()
 					CurrentSkl = CurrentSkl + 1
 			EndIf
 		Next
+	;Display Resistances
+		 CurrentRes = 0
+		 For i = 0 To 19
+		 	If DamageTypes$(i) <> "" 
+					GY_UpdateLabel(LResistanceVals(CurrentRes), Me\Resistances[i])
+					CurrentRes = CurrentRes + 1
+			EndIf
+		Next
 
 ;ItemShop Buttons
 	If GY_ButtonHit(BOffers)
@@ -3601,18 +3609,39 @@ Function CreateInterface()
 	LGold = GY_CreateLabel(WCharStats, 0.05, 0.13, "000000000000000000000000000000000000000000000000000000000000", 0, 255, 0)
 	LLevel = GY_CreateLabel(WCharStats, 0.05, 0.17, LanguageString$(LS_Level) + " 0000000", 0, 255, 0)
 	LXP = GY_CreateLabel(WCharStats, 0.05, 0.21, LanguageString$(LS_Experience) + " 0000000000000", 0, 255, 0)
-	GY_CreateLabel(WCharStats, 0.03, 0.375, LanguageString$(LS_Attributes), 255, 255, 255)
-	GY_CreateLabel(WCharStats, 0.53, 0.1, "SKILLS", 255, 255, 255)
+	
+	;Attributes
+	GY_CreateLabel(WCharStats, 0.03, 0.355, LanguageString$(LS_Attributes), 255, 255, 255)
 	AttCount = 0
+	ResY# = 0
 	For i = 0 To 39
 		If AttributeNames$(i) <> "" And AttributeHidden(i) = False And AttributeIsSkill(i) = False
-			LAttributeNames(AttCount) = GY_CreateLabel(WCharStats, 0.03, 0.4 + (Float#(AttCount) * 0.025), "LONGEST ATTRIBUTE NAME HERE!")
-			LAttributeVals(AttCount) = GY_CreateLabel(WCharStats, 0.33, 0.4 + (Float#(AttCount) * 0.025), "00000 / 00000", 255, 255, 255, Justify_Right)
+			LAttributeNames(AttCount) = GY_CreateLabel(WCharStats, 0.03, 0.38 + (Float#(AttCount) * 0.025), "LONGEST ATTRIBUTE NAME HERE!")
+			LAttributeVals(AttCount) = GY_CreateLabel(WCharStats, 0.33, 0.38 + (Float#(AttCount) * 0.025), "00000 / 00000", 255, 255, 255, Justify_Right)
 			GY_UpdateLabel(LAttributeNames(AttCount), AttributeNames$(i))
 			GY_UpdateLabel(LAttributeVals(AttCount), "")
 			AttCount = AttCount + 1
+			ResY# = 0.4 + (Float#(AttCount) * 0.025)
 		EndIf
 	Next
+	
+	;Resistances
+	ResY# = ResY# + 0.015
+	GY_CreateLabel(WCharStats, 0.03, ResY#, "RESISTANCES", 255, 255, 255)
+	ResY# = ResY# + .03
+	ResCount = 0
+	For i = 0 To 19
+		If DamageTypes$(i) <> ""
+			LResistanceNames(ResCount) = GY_CreateLabel(WCharStats, 0.03, ResY# + (Float#(ResCount) * 0.025), "LONGEST ATTRIBUTE NAME HERE!")
+			LResistanceVals(ResCount) = GY_CreateLabel(WCharStats, 0.33, ResY# + (Float#(ResCount) * 0.025), "00000 / 00000", 255, 255, 255, Justify_Right)
+			GY_UpdateLabel(LResistanceNames(ResCount), DamageTypes$(i))
+			GY_UpdateLabel(LResistanceVals(ResCount), "")
+			ResCount = ResCount + 1
+		EndIf
+	Next
+	
+	;Skills
+	GY_CreateLabel(WCharStats, 0.53, 0.1, "SKILLS", 255, 255, 255)
 	SklCount = 0
 	SkillStart# = 0.135
 	For i = 0 To 39

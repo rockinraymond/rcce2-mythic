@@ -123,6 +123,8 @@ Dim LAttributeNames(39)
 Dim LAttributeVals(39)
 Dim LSkillNames(39)
 Dim LSkillVals(39)
+Dim LResistanceNames(39)
+Dim LResistanceVals(39)
 
 ; Spells (abilities) window
 Global WSpells, SpellsVisible = False

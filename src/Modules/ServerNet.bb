@@ -1879,6 +1879,9 @@ Function UpdateNetwork()
 									Pa$ = Pa$ + RCE_StrFromInt$(A\Character[Number]\Attributes\Xp[i], 2)
 									Pa$ = Pa$ + RCE_StrFromInt$(A\Character[Number]\Attributes\XpMax[i], 2)
 								Next
+								For i = 0 to 19
+									Pa$ = Pa$ + RCE_StrFromInt$(A\Character[Number]\Resistances[i], 2)
+								Next
 								SendQueued(Host, M\FromID, P_FetchCharacter, "C1" + Pa$, True)
 								Pa$ = ""
 								For i = 0 To Slots_Inventory
