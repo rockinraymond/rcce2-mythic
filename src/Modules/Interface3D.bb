@@ -3175,11 +3175,13 @@ Function UpdateEffectIcons()
 	; Retexture
 	Slot = First EffectIconSlot
 	For E.EffectIcon = Each EffectIcon
-		If Slot = Null Then Return
-		Slot\Effect = E
-		ShowEntity Slot\EN
-		EntityTexture Slot\EN, GetTexture(E\TextureID)
-		Slot = After Slot
+		If E\TextureID > 0 //does not create a buff icon if this is set to zero (good for items)
+			If Slot = Null Then Return
+			Slot\Effect = E
+			ShowEntity Slot\EN
+			EntityTexture Slot\EN, GetTexture(E\TextureID)
+			Slot = After Slot
+		EndIf
 	Next
 
 End Function
