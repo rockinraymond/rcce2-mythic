@@ -3655,7 +3655,7 @@ Function CreateInterface()
 
 			; Create xp bar
 			AttributeXpDisplayNumbers(SklCount) = GY_CreateLabel(WCharStats, 0.83, SkillStart + 0.025 + (Float#(SklCount) * 0.05), "0000/0000", 255, 255, 255, Justify_Right)
-			AttributeXpDisplays(SklCount) = GY_CreateProgressBar(WCharStats, 0.58, SkillStart + 0.03 + (Float#(SklCount) * 0.05), 0.18, 0.015, 50, 100, 255, 68, 51)
+			AttributeXpDisplays(SklCount) = GY_CreateProgressBar(WCharStats, 0.58, SkillStart + 0.03 + (Float#(SklCount) * 0.05), 0.18, 0.015, 0, 100, 255, 68, 51)
 			GY_CreateLabel(WCharStats, 0.53, SkillStart + 0.025 + (Float#(SklCount) * 0.05), "EXP:", 255, 255, 255)
 			
 			SklCount = SklCount + 1

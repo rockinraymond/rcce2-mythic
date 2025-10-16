@@ -74,3 +74,25 @@ Function giveSkillXp()
 	ZZADDSKILLXP(Player, "Swords", 25)
 
 End Function
+
+Function testEffects()
+
+	Player = Actor()
+	AddActorEffect(Player, "Strength Bonus", "Strength", 5, 30, 0)
+	AddActorEffect(Player, "Magic Bonus", "Magic", 5, 30, 1)
+	AddActorEffect(Player, "Speed Bonus", "Speed", 5, 30, 0)
+	AddActorEffect(Player, "Toughness Bonus", "Toughness", 5, 30, 2)
+	AddActorEffect(Player, "Shadow defense Bonus", "Shadow", 5, 30, 2, 1)
+
+End Function
+
+Function clearEffects()
+
+	Player = Actor()
+	DeleteActorEffect(Player, "Strength Bonus")
+	DeleteActorEffect(Player, "Magic Bonus")
+	DeleteActorEffect(Player, "Speed Bonus")
+	DeleteActorEffect(Player, "Toughness Bonus")
+	DeleteActorEffect(Player, "Shadow defense Bonus")
+
+End Function

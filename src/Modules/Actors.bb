@@ -163,6 +163,7 @@ Type ActorEffect
 	Field Attributes.Attributes
 	Field CreatedTime, Length ; Time created and time it lasts in milliseconds (Length = 0 for infinite)
 	Field IconTexID
+	Field Resistances[19]
 End Type
 
 ; Factions

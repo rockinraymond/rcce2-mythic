@@ -558,11 +558,19 @@ Function UpdateActorInstances(Broadcast)
 							Pa$ = Pa$ + RCE_StrFromInt$(AE\Attributes\Value[i], 4)
 						Next
 						RCE_Send(Host, AE\Owner\RNID, P_ActorEffect, "R" + Pa$, True)
+						Pa$ = RCE_StrFromInt$(Handle(AE), 4)
+						For i = 0 To 19
+							Pa$ = Pa$ + RCE_StrFromInt$(AE\Resistances[i], 4)
+						Next
+						RCE_Send(Host, AE\Owner\RNID, P_ActorEffect, "Q" + Pa$, True)
 					EndIf
 
 					; Remove effect
 					For i = 0 To 39
 						AE\Owner\Attributes\Value[i] = AE\Owner\Attributes\Value[i] - AE\Attributes\Value[i]
+					Next
+					For i = 0 To 19
+						AE\Owner\Resistances[i] = AE\Owner\Resistances[i] - AE\Resistances[i]
 					Next
 					Delete AE\Attributes
 					Delete AE

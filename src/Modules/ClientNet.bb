@@ -393,6 +393,11 @@ Function UpdateNetwork()
 					Att = RCE_IntFromStr(Mid$(M\MessageData$, 2, 1))
 					Amount = RCE_IntFromStr(Mid$(M\MessageData$, 3, 4))
 					Me\Attributes\Value[Att] = Me\Attributes\Value[Att] + Amount
+				; Effect (RES) updated
+				ElseIf Left$(M\MessageData$, 1) = "S"
+					Res = RCE_IntFromStr(Mid$(M\MessageData$, 2, 1))
+					Amount = RCE_IntFromStr(Mid$(M\MessageData$, 3, 4))
+					Me\Resistances[Res] = Me\Resistances[Res] + Amount
 				; Removed
 				ElseIf Left$(M\MessageData$, 1) = "R"
 					ID = RCE_IntFromStr(Mid$(M\MessageData$, 2, 4))
@@ -407,8 +412,21 @@ Function UpdateNetwork()
 						Amount = RCE_IntFromStr(Mid$(M\MessageData$, 6 + (i * 4), 4))
 						Me\Attributes\Value[i] = Me\Attributes\Value[i] - Amount
 					Next
+				; Removed RES
+				ElseIf Left$(M\MessageData$, 1) = "Q"
+					ID = RCE_IntFromStr(Mid$(M\MessageData$, 2, 4))
+					For EI.EffectIcon = Each EffectIcon
+						If EI\ID = ID
+							Delete EI
+							UpdateEffectIcons()
+							Exit
+						EndIf
+					Next
+					For i = 0 To 19
+						Amount = RCE_IntFromStr(Mid$(M\MessageData$, 6 + (i * 4), 4))
+						Me\Resistances[i] = Me\Resistances[i] - Amount
+					Next
 				EndIf
-
 			; Trading updated
 			Case P_UpdateTrading
 				If TradingVisible = True

@@ -1111,7 +1111,8 @@ Function BVM_ZONEOUTDOORS%(Param1$)
 Return Result%
 End Function
 
-Function BVM_ADDACTOREFFECT(Param1%, Param2$, Param3$, Param4%, Param5%, Param6%)
+Function BVM_ADDACTOREFFECT(Param1%, Param2$, Param3$, Param4%, Param5%, Param6%, Param7% = 0)
+	IsResistance = Param7%
 	Actor.ActorInstance = Object.ActorInstance(Param1%)
 	If Actor <> Null
 		EffectName$ = Upper$(Param2$)
@@ -1138,20 +1139,28 @@ Function BVM_ADDACTOREFFECT(Param1%, Param2$, Param3$, Param4%, Param5%, Param6%
 		EndIf
 		FoundAE\CreatedTime = MilliSecs()
 		FoundAE\Length = Param5% * 1000
-		Att = FindAttribute(Param3$)
-		If Att > -1
-			Old = FoundAE\Attributes\Value[Att]
-			FoundAE\Attributes\Value[Att] = Param4%
-;Fix from RC Standard to Setting Actor Effects on NPC's
-			FoundAE\Owner\Attributes\Value[Att] = FoundAE\Owner\Attributes\Value[Att] + (FoundAE\Attributes\Value[Att] - Old)
-			If FoundAE\Owner\RNID > 0
-				Pa$ = RCE_StrFromInt$(Att, 1) + RCE_StrFromInt$(FoundAE\Attributes\Value[Att] - Old, 4)
-				RCE_Send(Host, FoundAE\Owner\RNID, P_ActorEffect, "E" + Pa$, True)
+		If IsResistance = 0
+			Att = FindAttribute(Param3$)
+			If Att > -1
+				Old = FoundAE\Attributes\Value[Att]
+				FoundAE\Attributes\Value[Att] = Param4%
+				FoundAE\Owner\Attributes\Value[Att] = FoundAE\Owner\Attributes\Value[Att] + (FoundAE\Attributes\Value[Att] - Old)
+				If FoundAE\Owner\RNID > 0
+					Pa$ = RCE_StrFromInt$(Att, 1) + RCE_StrFromInt$(FoundAE\Attributes\Value[Att] - Old, 4)
+					RCE_Send(Host, FoundAE\Owner\RNID, P_ActorEffect, "E" + Pa$, True)
+				EndIf
 			EndIf
-;End Fix
-;Old Code	;Pa$ = RCE_StrFromInt$(Att, 1) + RCE_StrFromInt$(FoundAE\Attributes\Value[Att] - Old, 4)
-			;FoundAE\Owner\Attributes\Value[Att] = FoundAE\Owner\Attributes\Value[Att] + (FoundAE\Attributes\Value[Att] - Old)
-			;RCE_Send(Host, FoundAE\Owner\RNID, P_ActorEffect, "E" + Pa$, True)
+		Else
+			Res = FindDamageType(Param3$)
+			If Att > -1
+				Old = FoundAE\Resistances[Res]
+				FoundAE\Resistances[Res] = Param4%
+				FoundAE\Owner\Resistances[Res] = FoundAE\Owner\Resistances[Att] + (FoundAE\Resistances[Res] - Old)
+				If FoundAE\Owner\RNID > 0
+					Pa$ = RCE_StrFromInt$(Res, 1) + RCE_StrFromInt$(FoundAE\Resistances[Res] - Old, 4)
+					RCE_Send(Host, FoundAE\Owner\RNID, P_ActorEffect, "S" + Pa$, True)
+				EndIf
+			EndIf
 		EndIf
 	EndIf
 End Function
@@ -1169,10 +1178,18 @@ Function BVM_DELETEACTOREFFECT(Param1%, Param2$)
 							Pa$ = Pa$ + RCE_StrFromInt$(AE\Attributes\Value[i], 4)
 						Next
 						RCE_Send(Host, AE\Owner\RNID, P_ActorEffect, "R" + Pa$, True)
+						Pa$ = RCE_StrFromInt$(Handle(AE), 4)
+						For i = 0 To 19
+							Pa$ = Pa$ + RCE_StrFromInt$(AE\Resistances[i], 4)
+						Next
+						RCE_Send(Host, AE\Owner\RNID, P_ActorEffect, "Q" + Pa$, True)
 					EndIf
 
 					For i = 0 To 39
 						AE\Owner\Attributes\Value[i] = AE\Owner\Attributes\Value[i] - AE\Attributes\Value[i]
+					Next
+					For i = 0 To 19
+						AE\Owner\Resistances[i] = AE\Owner\Resistances[i] - AE\Resistances[i]
 					Next
 					Delete AE\Attributes
 					Delete AE
