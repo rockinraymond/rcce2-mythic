@@ -43,6 +43,7 @@ Type Item
 	Field ImageID                                    ; Image item specific (Texture ID)
 	Field MiscData$                                  ; General use for misc items
 	Field Stackable                                  ; Item can be stacked up
+	Field Resistances[19]
 End Type
 
 ; Is used when an actual instance of an item is created in the world (on the floor, in someone's inventory, etc.)
@@ -283,6 +284,9 @@ Function LoadItems(Filename$)
 					I\ImageID          = ReadShort(F)
 			End Select
 			I\MiscData$        = ReadString$(F)
+			For j = 0 To 19
+				I\Resistances[j] = ReadShort(F)
+			Next
 			Items = Items + 1
 		Wend
 
@@ -331,6 +335,9 @@ Function SaveItems(Filename$)
 					WriteShort F, I\ImageID
 			End Select
 			WriteString F, I\MiscData$
+			For j = 0 To 19
+				WriteShort(F, I\Resistances[j])
+			Next
 		Next
 
 	CloseFile(F)

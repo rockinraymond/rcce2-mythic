@@ -1620,6 +1620,7 @@ Function UpdateNetwork()
 					Pa$ = Pa$ + RCE_StrFromInt$(It\MMeshID, 2) + RCE_StrFromInt$(It\FMeshID, 2) + RCE_StrFromInt$(It\SlotType, 2)
 					Pa$ = Pa$ + RCE_StrFromInt$(It\Stackable, 1)
 					For j = 0 To 39 : Pa$ = Pa$ + RCE_StrFromInt$(It\Attributes\Value[j] + 5000, 2) : Next
+					For j = 0 To 19 : Pa$ = Pa$ + RCE_StrFromInt$(It\Resistances[j] + 5000, 2) : Next
 					Pa$ = Pa$ + RCE_StrFromInt$(Len(It\Name$), 1) + It\Name$
 					Pa$ = Pa$ + RCE_StrFromInt$(Len(It\ExclusiveRace$), 1) + It\ExclusiveRace$
 					Pa$ = Pa$ + RCE_StrFromInt$(Len(It\ExclusiveClass$), 1) + It\ExclusiveClass$

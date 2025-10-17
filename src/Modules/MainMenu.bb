@@ -910,6 +910,10 @@ Function LogIn()
 										It\Attributes\Value[j] = RCE_IntFromStr(Mid$(Pa$, Offset, 2)) - 5000
 										Offset = Offset + 2
 									Next
+									For j = 0 To 19
+										It\Resistances[j] = RCE_IntFromStr(Mid$(Pa$, Offset, 2)) - 5000
+										Offset = Offset + 2
+									Next
 									NameLen = RCE_IntFromStr(Mid$(Pa$, Offset, 1))
 									It\Name$ = Mid$(Pa$, Offset + 1, NameLen)
 									Offset = Offset + 1 + NameLen
@@ -936,9 +940,9 @@ Function LogIn()
 											It\ImageID = RCE_IntFromStr(Mid$(Pa$, Offset, 2))
 											Offset = Offset + 2
 									End Select
-											NameLen = RCE_IntFromStr(Mid$(Pa$, Offset, 1))
-											It\MiscData$ = Mid$(Pa$, Offset + 1, NameLen)
-											Offset = Offset + 1 + NameLen
+									NameLen = RCE_IntFromStr(Mid$(Pa$, Offset, 1))
+									It\MiscData$ = Mid$(Pa$, Offset + 1, NameLen)
+									Offset = Offset + 1 + NameLen
 								Wend
 								Delete M
 							; Actor block

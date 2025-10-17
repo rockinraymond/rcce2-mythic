@@ -1895,8 +1895,37 @@ EndIf
 							Y# = Y# + 0.07
 						EndIf
 					EndIf
+					Y# = Y# + 0.07
 					ItemDescription$ = Me\Inventory\Items[i]\Item\MiscData$
-					GY_CreateLabel(WTooltip, 0.02, Y# + 0.07, ItemDescription$, 255, 255, 255)
+					GY_CreateLabel(WTooltip, 0.02, Y#, ItemDescription$, 255, 255, 255)
+					Y# = Y# + 0.07
+					Y2# = Y#
+					GY_CreateLabel(WTooltip, 0.02, Y#, "BONUSES", 255, 255, 255)
+					For j = 0 to 39
+						If Me\Inventory\Items[i]\Item\Attributes\Value[j] > 0
+							Y# = Y# + 0.06
+							GY_CreateLabel(WToolTip, 0.02, Y#, AttributeNames$(j) + ": +" + Me\Inventory\Items[i]\Item\Attributes\Value[j], 0, 255, 0)
+						EndIf
+					Next
+					For j = 0 to 19
+						If Me\Inventory\Items[i]\Item\Resistances[j] > 0
+							Y# = Y# + 0.06
+							GY_CreateLabel(WToolTip, 0.02, Y#, DamageTypes$(j) + ": +" + Me\Inventory\Items[i]\Item\Resistances[j], 0, 255, 0)
+						EndIf
+					Next
+					GY_CreateLabel(WTooltip, 0.5, Y2#, "PENALTIES", 255, 255, 255)
+					For j = 0 to 39
+						If Me\Inventory\Items[i]\Item\Attributes\Value[j] < 0
+							Y2# = Y2# + 0.06
+							GY_CreateLabel(WToolTip, 0.5, Y2#, AttributeNames$(j) + ": " + Me\Inventory\Items[i]\Item\Attributes\Value[j], 255, 0, 0)
+						EndIf
+					Next
+					For j = 0 to 19
+						If Me\Inventory\Items[i]\Item\Resistances[j] < 0
+							Y2# = Y2# + 0.06
+							GY_CreateLabel(WToolTip, 0.5, Y2#, DamageTypes$(j) + ": " + Me\Inventory\Items[i]\Item\Resistances[j], 255, 0, 0)
+						EndIf
+					Next
 					GY_GadgetAlpha(WTooltip, 0.85, True)
 					Exit
 				EndIf
@@ -1962,8 +1991,37 @@ EndIf
 							Y# = Y# + 0.07
 						EndIf
 					EndIf
+					Y# = Y# + 0.07
 					ItemDescription$ = Me\Inventory\Items[i + SlotI_Backpack]\Item\MiscData$
-					GY_CreateLabel(WTooltip, 0.02, Y# + 0.07, ItemDescription$, 255, 255, 255)
+					GY_CreateLabel(WTooltip, 0.02, Y#, ItemDescription$, 255, 255, 255)
+					Y# = Y# + 0.07
+					Y2# = Y#
+					GY_CreateLabel(WTooltip, 0.02, Y#, "BONUSES", 255, 255, 255)
+					For j = 0 to 39
+						If Me\Inventory\Items[i + SlotI_Backpack]\Item\Attributes\Value[j] > 0
+							Y# = Y# + 0.06
+							GY_CreateLabel(WToolTip, 0.02, Y#, AttributeNames$(j) + ": +" + Me\Inventory\Items[i + SlotI_Backpack]\Item\Attributes\Value[j], 0, 255, 0)
+						EndIf
+					Next
+					For j = 0 to 19
+						If Me\Inventory\Items[i + SlotI_Backpack]\Item\Resistances[j] > 0
+							Y# = Y# + 0.06
+							GY_CreateLabel(WToolTip, 0.02, Y#, DamageTypes$(j) + ": +" + Me\Inventory\Items[i + SlotI_Backpack]\Item\Resistances[j], 0, 255, 0)
+						EndIf
+					Next
+					GY_CreateLabel(WTooltip, 0.5, Y2#, "PENALTIES", 255, 255, 255)
+					For j = 0 to 39
+						If Me\Inventory\Items[i + SlotI_Backpack]\Item\Attributes\Value[j] < 0
+							Y2# = Y2# + 0.06
+							GY_CreateLabel(WToolTip, 0.5, Y2#, AttributeNames$(j) + ": " + Me\Inventory\Items[i + SlotI_Backpack]\Item\Attributes\Value[j], 255, 0, 0)
+						EndIf
+					Next
+					For j = 0 to 19
+						If Me\Inventory\Items[i + SlotI_Backpack]\Item\Resistances[j] < 0
+							Y2# = Y2# + 0.06
+							GY_CreateLabel(WToolTip, 0.5, Y2#, DamageTypes$(j) + ": " + Me\Inventory\Items[i + SlotI_Backpack]\Item\Resistances[j], 255, 0, 0)
+						EndIf
+					Next
 					GY_GadgetAlpha(WTooltip, 0.85, True)
 						Exit
 						EndIf
@@ -2025,7 +2083,37 @@ EndIf
 						EndIf
 					EndIf
 					ItemDescription$ = TradeItems(i)\Item\MiscData$
-					GY_CreateLabel(WTooltip, 0.02, Y# + 0.07, ItemDescription$, 255, 255, 255)
+										Y# = Y# + 0.07
+					ItemDescription$ = TradeItems(i)\Item\MiscData$
+					GY_CreateLabel(WTooltip, 0.02, Y#, ItemDescription$, 255, 255, 255)
+					Y# = Y# + 0.07
+					Y2# = Y#
+					GY_CreateLabel(WTooltip, 0.02, Y#, "BONUSES", 255, 255, 255)
+					For j = 0 to 39
+						If TradeItems(i)\Item\Attributes\Value[j] > 0
+							Y# = Y# + 0.06
+							GY_CreateLabel(WToolTip, 0.02, Y#, AttributeNames$(j) + ": +" + TradeItems(i)\Item\Attributes\Value[j], 0, 255, 0)
+						EndIf
+					Next
+					For j = 0 to 19
+						If TradeItems(i)\Item\Resistances[j] > 0
+							Y# = Y# + 0.06
+							GY_CreateLabel(WToolTip, 0.02, Y#, DamageTypes$(j) + ": +" + TradeItems(i)\Item\Resistances[j], 0, 255, 0)
+						EndIf
+					Next
+					GY_CreateLabel(WTooltip, 0.5, Y2#, "PENALTIES", 255, 255, 255)
+					For j = 0 to 39
+						If TradeItems(i)\Item\Attributes\Value[j] < 0
+							Y2# = Y2# + 0.06
+							GY_CreateLabel(WToolTip, 0.5, Y2#, AttributeNames$(j) + ": " + TradeItems(i)\Item\Attributes\Value[j], 255, 0, 0)
+						EndIf
+					Next
+					For j = 0 to 19
+						If TradeItems(i)\Item\Resistances[j] < 0
+							Y2# = Y2# + 0.06
+							GY_CreateLabel(WToolTip, 0.5, Y2#, DamageTypes$(j) + ": " + TradeItems(i)\Item\Resistances[j], 255, 0, 0)
+						EndIf
+					Next
 					GY_GadgetAlpha(WTooltip, 0.85, True)
 						Exit
 						EndIf

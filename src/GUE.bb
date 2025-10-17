@@ -1211,8 +1211,18 @@ For i = 0 To 39
 		Item = FUI_ListBoxItem(LItemAttributes, AttributeNames$(i)) : FUI_SendMessage(Item, M_SETDATA, i)
 	EndIf
 Next
-FUI_Label(TItemsAppearance, 900, 22, "Attribute value:")
-Global SItemAttribute = FUI_Spinner(TItemsAppearance, 900, 50, 100, 20, -5000, 5000, 0, 1, DTYPE_INTEGER)
+FUI_Label(TItemsAppearance, 875, 22, "Attribute value:")
+Global SItemAttribute = FUI_Spinner(TItemsAppearance, 875, 50, 100, 20, -5000, 5000, 0, 1, DTYPE_INTEGER)
+
+FUI_Label(TItemsAppearance, 1100, 22, "Resistances:", ALIGN_CENTER)
+Global LItemResistances = FUI_ListBox(TItemsAppearance, 1000, 50, 300, 450)
+For i = 0 To 19
+	If DamageTypes$(i) <> ""
+		Item = FUI_ListBoxItem(LItemResistances, DamageTypes$(i)) : FUI_SendMessage(Item, M_SETDATA, i)
+	EndIf
+Next
+FUI_Label(TItemsAppearance, 1330, 22, "Resistance value:")
+Global SItemResistance = FUI_Spinner(TItemsAppearance, 1330, 50, 100, 20, -5000, 5000, 0, 1, DTYPE_INTEGER)
 
 ; Other
 ;Global BItemStackable = FUI_CheckBox(TItemsOther, 20, 20, "Item can be stacked")
@@ -1252,6 +1262,7 @@ Global CItemMethod = FUI_ComboBox(TItemsGeneral, 740, 210, 350, 20, 10)
 
 ; Set up initial item display
 FUI_SendMessage(LItemAttributes, M_SETINDEX, 1)
+FUI_SendMessage(LItemResistances, M_SETINDEX, 1)
 FUI_SendMessage(CItemSelected, M_SETINDEX, 1)
 UpdateItemDisplay()
 
@@ -5971,6 +5982,19 @@ Cls
 					SelectedItem\Attributes\Value[ID] = E\EventData
 					ItemsSaved = False
 				EndIf
+			
+			; Attributes
+			Case LItemResistances
+				If SelectedItem <> Null
+					ID = FUI_SendMessage(FUI_SendMessage(LItemResistances, M_GETINDEX), M_GETDATA)
+					FUI_SendMessage(SItemResistance, M_SETVALUE, SelectedItem\Resistances[ID])
+				EndIf
+			Case SItemResistance
+				If SelectedItem <> Null
+					ID = FUI_SendMessage(FUI_SendMessage(LItemResistances, M_GETINDEX), M_GETDATA)
+					SelectedItem\Resistances[ID] = E\EventData
+					ItemsSaved = False
+				EndIf
 
 			; Other properties
 			Case BItemStackable
@@ -6021,6 +6045,9 @@ Cls
 					AttIdx = FUI_SendMessage(LItemAttributes, M_GETINDEX)
 					ID = FUI_SendMessage(AttIdx, M_GETDATA)
 					FUI_SendMessage(SItemAttribute, M_SETVALUE, SelectedItem\Attributes\Value[ID])
+					ResIdx = FUI_SendMessage(LItemResistances, M_GETINDEX)
+					ID = FUI_SendMessage(ResIdx, M_GETDATA)
+					FUI_SendMessage(SItemResistance, M_SETVALUE, SelectedItem\Resistances[ID])
 				EndIf
 				UpdateItemDisplay()
 			Case BItemNext
@@ -6032,6 +6059,9 @@ Cls
 					AttIdx = FUI_SendMessage(LItemAttributes, M_GETINDEX)
 					ID = FUI_SendMessage(AttIdx, M_GETDATA)
 					FUI_SendMessage(SItemAttribute, M_SETVALUE, SelectedItem\Attributes\Value[ID])
+					ResIdx = FUI_SendMessage(LItemResistances, M_GETINDEX)
+					ID = FUI_SendMessage(ResIdx, M_GETDATA)
+					FUI_SendMessage(SItemResistance, M_SETVALUE, SelectedItem\Resistances[ID])
 				EndIf
 				UpdateItemDisplay()
 
@@ -7500,6 +7530,7 @@ Function UpdateItemDisplay()
 		FUI_SendMessage(SItemMass, M_SETVALUE, SelectedItem\Mass)
 		FUI_SendMessage(CItemType, M_SETINDEX, SelectedItem\ItemType)
 		FUI_SendMessage(SItemAttribute, M_SETVALUE, SelectedItem\Attributes\Value[FUI_SendMessage(LItemAttributes, M_GETSELECTED)])
+		FUI_SendMessage(SItemResistance, M_SETVALUE, SelectedItem\Resistances[FUI_SendMessage(LItemResistances, M_GETSELECTED)])
 		FUI_SendMessage(BItemStackable, M_SETCHECKED, SelectedItem\Stackable)
 		FUI_SendMessage(BItemTakesDamage, M_SETCHECKED, SelectedItem\TakesDamage)
 		FUI_SendMessage(LItemThumb, M_SETCAPTION, "Item thumbnail texture: " + GetFilename$(EditorTexName$(SelectedItem\ThumbnailTexID)))
