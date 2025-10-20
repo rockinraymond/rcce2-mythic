@@ -6,8 +6,35 @@ Using "RC_Core.rcm"
 ; The context actor for the script is null
 Function Main()
 
-	; Done
-	
+	Player = Actor()
+	ApplyAttributeBonus(Player, "Strength")
+
 	Return
 
+End Function
+
+Function ApplyAttributeBonus(Player, AttributeName$)
+
+	PlayerAmulet1 = ActorAmulet(Player,1)
+	PlayerAmulet2 = ActorAmulet(Player,2)
+	PlayerBelt = ActorBelt(Player)
+	PlayerChest = ActorChest(Player)
+	PlayerFeet = ActorFeet(Player)
+	PlayerHands = ActorHands(Player)
+	PlayerHat = ActorHat(Player)
+	PlayerLegs = ActorLegs(Player)
+	PlayerShield = ActorShield(Player)
+	PlayerWeapon = ActorWeapon(Player)
+	PlayerRing1 = ActorRing(Player,1)
+	PlayerRing2 = ActorRing(Player,2)
+	PlayerRing3 = ActorRing(Player,3)
+	PlayerRing4 = ActorRing(Player,4)
+
+	AttributeBonusValue = ItemAttribute(PlayerAmulet1, AttributeName$) + ItemAttribute(PlayerAmulet2, AttributeName$) + ItemAttribute(PlayerChest, AttributeName$) + ItemAttribute(PlayerFeet, AttributeName$) + ItemAttribute(PlayerHands, AttributeName$) + ItemAttribute(PlayerHat, AttributeName$) + ItemAttribute(PlayerLegs, AttributeName$) + ItemAttribute(PlayerShield, AttributeName$) +  ItemAttribute(PlayerWeapon, AttributeName$) + ItemAttribute(PlayerRing1, AttributeName$) + ItemAttribute(PlayerRing2, AttributeName$) + ItemAttribute(PlayerRing3, AttributeName$) +  ItemAttribute(PlayerRing4, AttributeName$)
+
+	If AttributeBonusValue <> 0
+		AddActorEffect(Player, AttributeName$ + "EquipBns", AttributeName$, AttributeBonusValue, 0, 0)
+	Else
+		DeleteActorEffect(Player, AttributeName$ + "EquipBns")
+	EndIf
 End Function
