@@ -1846,7 +1846,7 @@ EndIf
 					If Y# + 0.4 > 0.99 Then Y# = 0.59
 					If X# + 0.4 > 0.99 Then X# = 0.59
 					If LTooltip <> 0 Then GY_FreeGadget(LTooltip) : LTooltip = 0
-					WTooltip = GY_CreateWindow(Name$, X#, Y#, 0.2, 0.3, True, False, False)
+					WTooltip = GY_CreateWindow(Name$, X#, Y#, 0.2, 0.32, True, False, False)
 					WTooltipReturn = WInventory
 					GY_CreateLabel(WTooltip, 0.02, 0.05, LanguageString$(LS_Type) + " " + GetItemType$(Me\Inventory\Items[i]\Item))
 					If Me\Inventory\Items[i]\Item\TakesDamage = True
@@ -1866,16 +1866,28 @@ EndIf
 					Select Me\Inventory\Items[i]\Item\ItemType
 						Case I_Weapon
 							Dam = Me\Inventory\Items[i]\Item\WeaponDamage
+							Accuracy = Me\Inventory\Items[i]\Item\WeaponAccuracy
+							Speed = Me\Inventory\Items[i]\Item\WeaponSpeed
 							DamType$ = DamageTypes$(Me\Inventory\Items[i]\Item\WeaponDamageType)
 							WepType$ = GetWeaponType$(Me\Inventory\Items[i]\Item)
-							GY_CreateLabel(WTooltip, 0.02, 0.40, LanguageString$(LS_Damage) + " " + Str$(Dam))
-							GY_CreateLabel(WTooltip, 0.02, 0.47, LanguageString$(LS_DamageType) + " " + DamType$)
-							GY_CreateLabel(WTooltip, 0.02, 0.54, LanguageString$(LS_WeaponType) + " " + WepType$)
-							Y# = 0.61
+							WepClass$ = GetWeaponClass$(Me\Inventory\Items[i]\Item)
+							GY_CreateLabel(WTooltip, 0.02, Y#, LanguageString$(LS_Damage) + " " + Str$(Dam))
+							GY_CreateLabel(WTooltip, 0.32, Y#, "Accuracy: " + Str$(Accuracy))
+							GY_CreateLabel(WTooltip, 0.62, Y#, "Speed: " + Str$(Speed))
+							Y# = Y# + 0.07
+							GY_CreateLabel(WTooltip, 0.02, Y#, LanguageString$(LS_DamageType) + " " + DamType$)
+							Y# = Y# + 0.07
+							GY_CreateLabel(WTooltip, 0.02, Y#, LanguageString$(LS_WeaponType) + " " + WepType$)
+							Y# = Y# + 0.07
+							GY_CreateLabel(WTooltip, 0.02, Y#, "Weapon Class: " + WepClass$)
+							Y# = Y# + 0.07
 						Case I_Armour
 							AP = Me\Inventory\Items[i]\Item\ArmourLevel
-							GY_CreateLabel(WTooltip, 0.02, 0.40, LanguageString$(LS_ArmourLevel) + " " + Str$(AP))
-							Y# = 0.47
+							ArmClass$ = GetArmourClass$(Me\Inventory\Items[i]\Item)
+							GY_CreateLabel(WTooltip, 0.02, Y#, LanguageString$(LS_ArmourLevel) + " " + Str$(AP))
+							Y# = Y# + 0.07
+							GY_CreateLabel(WTooltip, 0.02, Y#, "Armor Class: " + ArmClass$)
+							Y# = Y# + 0.07
 						Case I_Ingredient, I_Potion
 							EatEffects = Me\Inventory\Items[i]\Item\EatEffectsLength
 							GY_CreateLabel(WTooltip, 0.02, 0.40, LanguageString$(LS_EffectsLast) + " " + Str$(EatEffects) + " " + LanguageString$(LS_Seconds))
@@ -1895,37 +1907,46 @@ EndIf
 							Y# = Y# + 0.07
 						EndIf
 					EndIf
-					Y# = Y# + 0.07
-					ItemDescription$ = Me\Inventory\Items[i]\Item\MiscData$
-					GY_CreateLabel(WTooltip, 0.02, Y#, ItemDescription$, 255, 255, 255)
-					Y# = Y# + 0.07
+					//Y# = Y# + 0.07
 					Y2# = Y#
-					GY_CreateLabel(WTooltip, 0.02, Y#, "BONUSES", 255, 255, 255)
+					BonusY# = Y#
+					PenaltyY# = Y2#
+					hasBonuses = False
+					hasPenalties = False
+					
 					For j = 0 to 39
 						If Me\Inventory\Items[i]\Item\Attributes\Value[j] > 0
+							hasBonuses = True
 							Y# = Y# + 0.06
 							GY_CreateLabel(WToolTip, 0.02, Y#, AttributeNames$(j) + ": +" + Me\Inventory\Items[i]\Item\Attributes\Value[j], 0, 255, 0)
 						EndIf
 					Next
 					For j = 0 to 19
 						If Me\Inventory\Items[i]\Item\Resistances[j] > 0
+							hasBonuses = True
 							Y# = Y# + 0.06
 							GY_CreateLabel(WToolTip, 0.02, Y#, DamageTypes$(j) + ": +" + Me\Inventory\Items[i]\Item\Resistances[j], 0, 255, 0)
 						EndIf
 					Next
-					GY_CreateLabel(WTooltip, 0.5, Y2#, "PENALTIES", 255, 255, 255)
+					If hasBonuses = True Then GY_CreateLabel(WTooltip, 0.02, BonusY#, "BONUSES", 255, 255, 255)
 					For j = 0 to 39
 						If Me\Inventory\Items[i]\Item\Attributes\Value[j] < 0
+							hasPenalties = True
 							Y2# = Y2# + 0.06
 							GY_CreateLabel(WToolTip, 0.5, Y2#, AttributeNames$(j) + ": " + Me\Inventory\Items[i]\Item\Attributes\Value[j], 255, 0, 0)
 						EndIf
 					Next
 					For j = 0 to 19
 						If Me\Inventory\Items[i]\Item\Resistances[j] < 0
+							hasPenalties = True
 							Y2# = Y2# + 0.06
 							GY_CreateLabel(WToolTip, 0.5, Y2#, DamageTypes$(j) + ": " + Me\Inventory\Items[i]\Item\Resistances[j], 255, 0, 0)
 						EndIf
 					Next
+					If hasPenalties = True Then GY_CreateLabel(WTooltip, 0.5, PenaltyY#, "PENALTIES", 255, 255, 255)
+					Y# = Y# + 0.07
+					ItemDescription$ = Me\Inventory\Items[i]\Item\MiscData$
+					GY_CreateLabel(WTooltip, 0.02, Y#, ItemDescription$, 255, 255, 255)
 					GY_GadgetAlpha(WTooltip, 0.85, True)
 					Exit
 				EndIf
@@ -1942,7 +1963,7 @@ EndIf
 					If Y# + 0.4 > 0.99 Then Y# = 0.59
 					If X# + 0.4 > 0.99 Then X# = 0.59
 					If LTooltip <> 0 Then GY_FreeGadget(LTooltip) : LTooltip = 0
-					WTooltip = GY_CreateWindow(Name$, X#, Y#, 0.2, 0.3, True, False, False)
+					WTooltip = GY_CreateWindow(Name$, X#, Y#, 0.2, 0.32, True, False, False)
 					WTooltipReturn = WTrading
 					GY_CreateLabel(WTooltip, 0.02, 0.05, LanguageString$(LS_Type) + " " + GetItemType$(Me\Inventory\Items[i + SlotI_Backpack]\Item))
 					If Me\Inventory\Items[i + SlotI_Backpack]\Item\TakesDamage = True
@@ -1962,16 +1983,28 @@ EndIf
 					Select Me\Inventory\Items[i + SlotI_Backpack]\Item\ItemType
 						Case I_Weapon
 							Dam = Me\Inventory\Items[i + SlotI_Backpack]\Item\WeaponDamage
+							Accuracy = Me\Inventory\Items[i + SlotI_Backpack]\Item\WeaponAccuracy
+							Speed = Me\Inventory\Items[i + SlotI_Backpack]\Item\WeaponSpeed
 							DamType$ = DamageTypes$(Me\Inventory\Items[i + SlotI_Backpack]\Item\WeaponDamageType)
 							WepType$ = GetWeaponType$(Me\Inventory\Items[i + SlotI_Backpack]\Item)
-							GY_CreateLabel(WTooltip, 0.02, 0.40, LanguageString$(LS_Damage) + " " + Str$(Dam))
-							GY_CreateLabel(WTooltip, 0.02, 0.47, LanguageString$(LS_DamageType) + " " + DamType$)
-							GY_CreateLabel(WTooltip, 0.02, 0.54, LanguageString$(LS_WeaponType) + " " + WepType$)
-							Y# = 0.61
+							WepClass$ = GetWeaponClass$(Me\Inventory\Items[i + SlotI_Backpack]\Item)
+							GY_CreateLabel(WTooltip, 0.02, Y#, LanguageString$(LS_Damage) + " " + Str$(Dam))
+							GY_CreateLabel(WTooltip, 0.32, Y#, "Accuracy: " + Str$(Accuracy))
+							GY_CreateLabel(WTooltip, 0.62, Y#, "Speed: " + Str$(Speed))
+							Y# = Y# + 0.07
+							GY_CreateLabel(WTooltip, 0.02, Y#, LanguageString$(LS_DamageType) + " " + DamType$)
+							Y# = Y# + 0.07
+							GY_CreateLabel(WTooltip, 0.02, Y#, LanguageString$(LS_WeaponType) + " " + WepType$)
+							Y# = Y# + 0.07
+							GY_CreateLabel(WTooltip, 0.02, Y#, "Weapon Class: " + WepClass$)
+							Y# = Y# + 0.07
 						Case I_Armour
 							AP = Me\Inventory\Items[i + SlotI_Backpack]\Item\ArmourLevel
-							GY_CreateLabel(WTooltip, 0.02, 0.40, LanguageString$(LS_ArmourLevel) + " " + Str$(AP))
-							Y# = 0.47
+							ArmClass$ = GetArmourClass(Me\Inventory\Items[i + SlotI_Backpack]\Item)
+							GY_CreateLabel(WTooltip, 0.02, Y#, LanguageString$(LS_ArmourLevel) + " " + Str$(AP))
+							Y# = Y# + 0.07
+							GY_CreateLabel(WTooltip, 0.02, Y#, "Armor Class: " + ArmClass$)
+							Y# = Y# + 0.07
 						Case I_Ingredient, I_Potion
 							EatEffects = Me\Inventory\Items[i + SlotI_Backpack]\Item\EatEffectsLength
 							GY_CreateLabel(WTooltip, 0.02, 0.40, LanguageString$(LS_EffectsLast) + " " + Str$(EatEffects) + " " + LanguageString$(LS_Seconds))
@@ -1991,37 +2024,46 @@ EndIf
 							Y# = Y# + 0.07
 						EndIf
 					EndIf
-					Y# = Y# + 0.07
-					ItemDescription$ = Me\Inventory\Items[i + SlotI_Backpack]\Item\MiscData$
-					GY_CreateLabel(WTooltip, 0.02, Y#, ItemDescription$, 255, 255, 255)
-					Y# = Y# + 0.07
+					//Y# = Y# + 0.07
 					Y2# = Y#
-					GY_CreateLabel(WTooltip, 0.02, Y#, "BONUSES", 255, 255, 255)
+					BonusY# = Y#
+					PenaltyY# = Y2#
+					hasBonuses = False
+					hasPenalties = False
+					
 					For j = 0 to 39
 						If Me\Inventory\Items[i + SlotI_Backpack]\Item\Attributes\Value[j] > 0
+							hasBonuses = True
 							Y# = Y# + 0.06
 							GY_CreateLabel(WToolTip, 0.02, Y#, AttributeNames$(j) + ": +" + Me\Inventory\Items[i + SlotI_Backpack]\Item\Attributes\Value[j], 0, 255, 0)
 						EndIf
 					Next
 					For j = 0 to 19
 						If Me\Inventory\Items[i + SlotI_Backpack]\Item\Resistances[j] > 0
+							hasBonuses = True
 							Y# = Y# + 0.06
 							GY_CreateLabel(WToolTip, 0.02, Y#, DamageTypes$(j) + ": +" + Me\Inventory\Items[i + SlotI_Backpack]\Item\Resistances[j], 0, 255, 0)
 						EndIf
 					Next
-					GY_CreateLabel(WTooltip, 0.5, Y2#, "PENALTIES", 255, 255, 255)
+					If hasBonuses = True Then GY_CreateLabel(WTooltip, 0.02, BonusY#, "BONUSES", 255, 255, 255)
 					For j = 0 to 39
 						If Me\Inventory\Items[i + SlotI_Backpack]\Item\Attributes\Value[j] < 0
+							hasPenalties = True
 							Y2# = Y2# + 0.06
 							GY_CreateLabel(WToolTip, 0.5, Y2#, AttributeNames$(j) + ": " + Me\Inventory\Items[i + SlotI_Backpack]\Item\Attributes\Value[j], 255, 0, 0)
 						EndIf
 					Next
 					For j = 0 to 19
 						If Me\Inventory\Items[i + SlotI_Backpack]\Item\Resistances[j] < 0
+							hasPenalties = True
 							Y2# = Y2# + 0.06
 							GY_CreateLabel(WToolTip, 0.5, Y2#, DamageTypes$(j) + ": " + Me\Inventory\Items[i + SlotI_Backpack]\Item\Resistances[j], 255, 0, 0)
 						EndIf
 					Next
+					If hasPenalties = True Then GY_CreateLabel(WTooltip, 0.5, PenaltyY#, "PENALTIES", 255, 255, 255)
+					Y# = Y# + 0.07
+					ItemDescription$ = Me\Inventory\Items[i + SlotI_Backpack]\Item\MiscData$
+					GY_CreateLabel(WTooltip, 0.02, Y#, ItemDescription$, 255, 255, 255)
 					GY_GadgetAlpha(WTooltip, 0.85, True)
 						Exit
 						EndIf
@@ -2033,7 +2075,7 @@ EndIf
 					If Y# + 0.4 > 0.99 Then Y# = 0.59
 					If X# + 0.4 > 0.99 Then X# = 0.59
 					If LTooltip <> 0 Then GY_FreeGadget(LTooltip) : LTooltip = 0
-					WTooltip = GY_CreateWindow(Name$, X#, Y#, 0.2, 0.3, True, False, False)
+					WTooltip = GY_CreateWindow(Name$, X#, Y#, 0.2, 0.32, True, False, False)
 					WTooltipReturn = WTrading
 					GY_CreateLabel(WTooltip, 0.02, 0.05, LanguageString$(LS_Type) + " " + GetItemType$(TradeItems(i)\Item))
 					If TradeItems(i)\Item\TakesDamage = True
@@ -2053,16 +2095,28 @@ EndIf
 					Select TradeItems(i)\Item\ItemType
 						Case I_Weapon
 							Dam = TradeItems(i)\Item\WeaponDamage
+							Accuracy = TradeItems(i)\Item\WeaponAccuracy
+							Speed = TradeItems(i)\Item\WeaponSpeed
 							DamType$ = DamageTypes$(TradeItems(i)\Item\WeaponDamageType)
 							WepType$ = GetWeaponType$(TradeItems(i)\Item)
-							GY_CreateLabel(WTooltip, 0.02, 0.40, LanguageString$(LS_Damage) + " " + Str$(Dam))
-							GY_CreateLabel(WTooltip, 0.02, 0.47, LanguageString$(LS_DamageType) + " " + DamType$)
-							GY_CreateLabel(WTooltip, 0.02, 0.54, LanguageString$(LS_WeaponType) + " " + WepType$)
-							Y# = 0.61
+							WepClass$ = GetWeaponClass$(TradeItems(i)\Item)
+							GY_CreateLabel(WTooltip, 0.02, Y#, LanguageString$(LS_Damage) + " " + Str$(Dam))
+							GY_CreateLabel(WTooltip, 0.32, Y#, "Accuracy: " + Str$(Accuracy))
+							GY_CreateLabel(WTooltip, 0.62, Y#, "Speed: " + Str$(Speed))
+							Y# = Y# + 0.07
+							GY_CreateLabel(WTooltip, 0.02, Y#, LanguageString$(LS_DamageType) + " " + DamType$)
+							Y# = Y# + 0.07
+							GY_CreateLabel(WTooltip, 0.02, Y#, LanguageString$(LS_WeaponType) + " " + WepType$)
+							Y# = Y# + 0.07
+							GY_CreateLabel(WTooltip, 0.02, Y#, "Weapon Class: " + WepClass$)
+							Y# = Y# + 0.07
 						Case I_Armour
 							AP = TradeItems(i)\Item\ArmourLevel
-							GY_CreateLabel(WTooltip, 0.02, 0.40, LanguageString$(LS_ArmourLevel) + " " + Str$(AP))
-							Y# = 0.47
+							ArmClass$ = GetArmourClass(TradeItems(i)\Item)
+							GY_CreateLabel(WTooltip, 0.02, Y#, LanguageString$(LS_ArmourLevel) + " " + Str$(AP))
+							Y# = Y# + 0.07
+							GY_CreateLabel(WTooltip, 0.02, Y#, "Armor Class: " + ArmClass$)
+							Y# = Y# + 0.07
 						Case I_Ingredient, I_Potion
 							EatEffects = TradeItems(i)\Item\EatEffectsLength
 							GY_CreateLabel(WTooltip, 0.02, 0.40, LanguageString$(LS_EffectsLast) + " " + Str$(EatEffects) + " " + LanguageString$(LS_Seconds))
@@ -2082,38 +2136,45 @@ EndIf
 							Y# = Y# + 0.07
 						EndIf
 					EndIf
-					ItemDescription$ = TradeItems(i)\Item\MiscData$
-										Y# = Y# + 0.07
-					ItemDescription$ = TradeItems(i)\Item\MiscData$
-					GY_CreateLabel(WTooltip, 0.02, Y#, ItemDescription$, 255, 255, 255)
-					Y# = Y# + 0.07
 					Y2# = Y#
-					GY_CreateLabel(WTooltip, 0.02, Y#, "BONUSES", 255, 255, 255)
+					BonusY# = Y#
+					PenaltyY# = Y2#
+					hasBonuses = False
+					hasPenalties = False
+					
 					For j = 0 to 39
 						If TradeItems(i)\Item\Attributes\Value[j] > 0
+							hasBonuses = True
 							Y# = Y# + 0.06
 							GY_CreateLabel(WToolTip, 0.02, Y#, AttributeNames$(j) + ": +" + TradeItems(i)\Item\Attributes\Value[j], 0, 255, 0)
 						EndIf
 					Next
 					For j = 0 to 19
 						If TradeItems(i)\Item\Resistances[j] > 0
+							hasBonuses = True
 							Y# = Y# + 0.06
 							GY_CreateLabel(WToolTip, 0.02, Y#, DamageTypes$(j) + ": +" + TradeItems(i)\Item\Resistances[j], 0, 255, 0)
 						EndIf
 					Next
-					GY_CreateLabel(WTooltip, 0.5, Y2#, "PENALTIES", 255, 255, 255)
+					If hasBonuses = True Then GY_CreateLabel(WTooltip, 0.02, BonusY#, "BONUSES", 255, 255, 255)
 					For j = 0 to 39
 						If TradeItems(i)\Item\Attributes\Value[j] < 0
+							hasPenalties = True
 							Y2# = Y2# + 0.06
 							GY_CreateLabel(WToolTip, 0.5, Y2#, AttributeNames$(j) + ": " + TradeItems(i)\Item\Attributes\Value[j], 255, 0, 0)
 						EndIf
 					Next
 					For j = 0 to 19
 						If TradeItems(i)\Item\Resistances[j] < 0
+							hasPenalties = True
 							Y2# = Y2# + 0.06
 							GY_CreateLabel(WToolTip, 0.5, Y2#, DamageTypes$(j) + ": " + TradeItems(i)\Item\Resistances[j], 255, 0, 0)
 						EndIf
 					Next
+					If hasPenalties = True Then GY_CreateLabel(WTooltip, 0.5, PenaltyY#, "PENALTIES", 255, 255, 255)
+					Y# = Y# + 0.07
+					ItemDescription$ = TradeItems(i)\Item\MiscData$
+					GY_CreateLabel(WTooltip, 0.02, Y#, ItemDescription$, 255, 255, 255)
 					GY_GadgetAlpha(WTooltip, 0.85, True)
 						Exit
 						EndIf

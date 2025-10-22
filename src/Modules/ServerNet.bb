@@ -1626,10 +1626,12 @@ Function UpdateNetwork()
 					Pa$ = Pa$ + RCE_StrFromInt$(Len(It\ExclusiveClass$), 1) + It\ExclusiveClass$
 					Select It\ItemType
 						Case I_Weapon
-							Pa$ = Pa$ + RCE_StrFromInt$(It\WeaponDamage, 2) + RCE_StrFromInt$(It\WeaponDamageType, 2)
-							Pa$ = Pa$ + RCE_StrFromInt$(It\WeaponType, 2) + RCE_StrFromFloat$(It\Range#)
+							Pa$ = Pa$ + RCE_StrFromInt$(It\WeaponDamage, 2) + RCE_StrFromInt$(It\WeaponSpeed, 2) + RCE_StrFromInt$(It\WeaponAccuracy, 2)
+							Pa$ = Pa$ + RCE_StrFromInt$(It\WeaponDamageType, 2)
+							Pa$ = Pa$ + RCE_StrFromInt$(It\WeaponType, 2) + RCE_StrFromInt$(It\WeaponClass, 2) + RCE_StrFromFloat$(It\Range#)
 						Case I_Armour
-							Pa$ = Pa$ + RCE_StrFromInt$(It\ArmourLevel, 2)
+							Pa$ = Pa$ + RCE_StrFromInt$(It\ArmourLevel, 2) + RCE_StrFromInt$(It\ArmourClass, 2)
+							Pa$ = Pa$ + RCE_StrFromInt$(It\MaleTexID, 2) + RCE_StrFromInt$(It\FemaleTexID, 2)
 						Case I_Potion, I_Ingredient
 							Pa$ = Pa$ + RCE_StrFromInt$(It\EatEffectsLength, 2)
 						Case I_Image
@@ -2160,9 +2162,10 @@ Function SendEquippedUpdate(A.ActorInstance)
 
 	; Call script
 	ThreadScript("Equip Change", "Main", Handle(A), 0)
-
+		
 	; Create packet with item IDs
 	Pa$ = "O" + RCE_StrFromInt$(A\RuntimeID, 2)
+	BodyPa$ = ""
 	If A\Inventory\Items[SlotI_Weapon] <> Null
 		Pa$ = Pa$ + RCE_StrFromInt$(A\Inventory\Items[SlotI_Weapon]\Item\ID, 2)
 	Else
@@ -2175,8 +2178,12 @@ Function SendEquippedUpdate(A.ActorInstance)
 	EndIf
 	If A\Inventory\Items[SlotI_Chest] <> Null
 		Pa$ = Pa$ + RCE_StrFromInt$(A\Inventory\Items[SlotI_Chest]\Item\ID, 2)
-	Else
-		Pa$ = Pa$ + RCE_StrFromInt$(65535, 2)
+		;Update Body texture
+		If A\Gender = 0
+			BodyPa$ = "Z" + RCE_StrFromInt$(A\RuntimeID, 2) + Chr$(A\Inventory\Items[SlotI_Chest]\Item\MaleTexID)
+		Else
+			BodyPa$ = "Z" + RCE_StrFromInt$(A\RuntimeID, 2) + Chr$(A\Inventory\Items[SlotI_Chest]\Item\FemaleTexID)
+		EndIf	
 	EndIf
 	If A\Inventory\Items[SlotI_Hat] <> Null
 		Pa$ = Pa$ + RCE_StrFromInt$(A\Inventory\Items[SlotI_Hat]\Item\ID, 2)
@@ -2203,6 +2210,12 @@ Function SendEquippedUpdate(A.ActorInstance)
 	While A2 <> Null
 		If A2\RNID > 0
 			If A2 <> A Then RCE_Send(Host, A2\RNID, P_InventoryUpdate, Pa$, True)
+			If BodyPa$ <> ""
+				RCE_Send(Host, A2\RNID, P_AppearanceUpdate, BodyPa$, True)
+			Else
+				BodyPa$ = "B" + RCE_StrFromInt$(A\RuntimeID, 2) + Chr$(A\BodyTex)
+				RCE_Send(Host, A2\RNID, P_AppearanceUpdate, BodyPa$, True)
+			EndIf
 		EndIf
 		A2 = A2\NextInZone
 	Wend

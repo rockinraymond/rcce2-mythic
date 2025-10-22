@@ -2,7 +2,7 @@ Using "RC_Core.rcm"
 ; Define entry function 'Main'
 
 Function Main()
-giveitem(actor(),"shield",5)
+giveitem(actor(),"armor",5)
 giveitem(actor(),"sword",5)
 NPC = Actor()
 

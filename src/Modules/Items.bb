@@ -17,6 +17,18 @@ Const W_OneHand = 1 ; Weapon types
 Const W_TwoHand = 2
 Const W_Ranged  = 3
 
+Const WC_Sword  = 1 ; Weapon Classes
+Const WC_Dagger = 2
+Const WC_Blunt  = 3
+Const WC_Axe    = 4
+Const WC_Bow    = 5
+Const WC_Polearm= 6
+
+Const AC_Light    = 1 ; Armor Classes
+Const AC_Medium   = 2
+Const AC_Heavy 	  = 3
+Const AC_Clothing = 4
+
 Dim DamageTypes$(19)
 
 Global WeaponDamage, ArmourDamage
@@ -36,9 +48,9 @@ Type Item
 	Field Attributes.Attributes ; An actor attributes object (for extra weapon damage effects, armour use, food eating, etc.)
 	Field TakesDamage           ; True if using this item reduces its health, False for it to be indestructable
 	Field SlotType              ; Should be set to one of the slot type constants in Inventories.bb
-	Field WeaponDamage, WeaponDamageType, WeaponType ; Weapon specific
+	Field WeaponDamage, WeaponAccuracy, WeaponSpeed, WeaponDamageType, WeaponType, WeaponClass ; Weapon specific
 	Field RangedProjectile, RangedAnimation$, Range# ; Ranged weapon specific
-	Field ArmourLevel                                ; Armour specific
+	Field ArmourLevel, ArmourClass, MaleTexID, FemaleTexID                                ; Armour specific
 	Field EatEffectsLength                           ; Potion or ingredients specific
 	Field ImageID                                    ; Image item specific (Texture ID)
 	Field MiscData$                                  ; General use for misc items
@@ -181,6 +193,9 @@ Function CreateItem.Item()
 			I\Value = 1
 			I\Mass = 1
 			I\ImageID = 65535
+			I\MaleTexID = 65535
+			I\FemaleTexID = 65535
+
 			Exit
 		EndIf
 	Next
@@ -208,9 +223,9 @@ Function CreateItemInstance.ItemInstance(Item.Item)
 	I\Item = Item
 	I\ItemHealth = 100
 	I\Attributes = New Attributes
-	For j = 0 To 39
-		I\Attributes\Value[j] = I\Item\Attributes\Value[j]
-	Next
+		For j = 0 To 39
+			I\Attributes\Value[j] = I\Item\Attributes\Value[j]
+		Next
 
 	Return I
 
@@ -271,13 +286,19 @@ Function LoadItems(Filename$)
 			Select I\ItemType
 				Case I_Weapon
 					I\WeaponDamage     = ReadShort(F)
+					I\WeaponAccuracy   = ReadShort(F)
+					I\WeaponSpeed      = ReadShort(F)
 					I\WeaponDamageType = ReadShort(F)
 					I\WeaponType       = ReadShort(F)
+					I\WeaponClass      = ReadShort(F)
 					I\RangedProjectile = ReadShort(F)
 					I\Range#           = ReadFloat#(F)
 					I\RangedAnimation$ = ReadString$(F)
 				Case I_Armour
 					I\ArmourLevel      = ReadShort(F)
+					I\ArmourClass      = ReadShort(F)
+					I\MaleTexID          = ReadShort(F)
+					I\FemaleTexID		= ReadShort(F)
 				Case I_Potion, I_Ingredient
 					I\EatEffectsLength = ReadShort(F)
 				Case I_Image
@@ -322,13 +343,19 @@ Function SaveItems(Filename$)
 			Select I\ItemType
 				Case I_Weapon
 					WriteShort F, I\WeaponDamage
+					WriteShort F, I\WeaponAccuracy
+					WriteShort F, I\WeaponSpeed
 					WriteShort F, I\WeaponDamageType
 					WriteShort F, I\WeaponType
+					WriteShort F, I\WeaponClass
 					WriteShort F, I\RangedProjectile
 					WriteFloat F, I\Range#
 					WriteString F, I\RangedAnimation$
 				Case I_Armour
 					WriteShort F, I\ArmourLevel
+					WriteShort F, I\ArmourClass
+					WriteShort F, I\MaleTexID
+					WriteShort F, I\FemaleTexID
 				Case I_Potion, I_Ingredient
 					WriteShort F, I\EatEffectsLength
 				Case I_Image
@@ -347,6 +374,8 @@ Function SaveItems(Filename$)
 		For I.Item = Each Item
 			WriteLine(G, "Item ID: " + I\ID)
 			WriteLine(G, "Item Name: " + I\Name$)
+			WriteLine(G, "Item Male Texture ID: " + I\MaleTexID)
+			WriteLine(G, "Item Female Texture ID: " + I\FemaleTexID)
 			WriteLine(G, "")
 		Next
 	CloseFile(G)
@@ -403,6 +432,31 @@ Function GetWeaponType$(I.Item)
 		Case W_OneHand : Return LanguageString$(LS_OneHanded)
 		Case W_TwoHand : Return LanguageString$(LS_TwoHanded)
 		Case W_Ranged : Return LanguageString$(LS_Ranged)
+	End Select
+	Return LanguageString$(LS_Unknown)
+
+End Function
+
+Function GetWeaponClass$(I.Item)
+
+	Select I\WeaponClass
+		Case WC_Sword : Return "Sword"
+		Case WC_Dagger : Return "Dagger"
+		Case WC_Axe : Return "Axe"
+		Case WC_Blunt : Return "Blunt"
+		Case WC_Bow : Return "Bow"
+		Case WC_Polearm : Return "Polearm"
+	End Select
+	Return LanguageString$(LS_Unknown)
+
+End Function
+
+Function GetArmourClass$(I.Item)
+
+	Select I\ArmourClass
+		Case AC_Light : Return "Light"
+		Case AC_Medium : Return "Medium"
+		Case AC_Heavy : Return "Heavy"
 	End Select
 	Return LanguageString$(LS_Unknown)
 

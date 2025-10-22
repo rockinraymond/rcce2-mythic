@@ -926,13 +926,19 @@ Function LogIn()
 									Select It\ItemType
 										Case I_Weapon
 											It\WeaponDamage = RCE_IntFromStr(Mid$(Pa$, Offset, 2))
-											It\WeaponDamageType = RCE_IntFromStr(Mid$(Pa$, Offset + 2, 2))
-											It\WeaponType = RCE_IntFromStr(Mid$(Pa$, Offset + 4, 2))
-											It\Range# = RCE_FloatFromStr#(Mid$(Pa$, Offset + 6, 4))
-											Offset = Offset + 10
+											It\WeaponSpeed = RCE_IntFromStr(Mid$(Pa$, Offset + 2, 2))
+											It\WeaponAccuracy = RCE_IntFromStr(Mid$(Pa$, Offset + 4, 2))
+											It\WeaponDamageType = RCE_IntFromStr(Mid$(Pa$, Offset + 6, 2))
+											It\WeaponType = RCE_IntFromStr(Mid$(Pa$, Offset + 8, 2))
+											It\WeaponClass = RCE_IntFromStr(Mid$(Pa$, Offset + 10, 2))
+											It\Range# = RCE_FloatFromStr#(Mid$(Pa$, Offset + 14, 4))
+											Offset = Offset + 16
 										Case I_Armour
 											It\ArmourLevel = RCE_IntFromStr(Mid$(Pa$, Offset, 2))
-											Offset = Offset + 2
+											It\ArmourClass = RCE_IntFromStr(Mid$(Pa$, Offset + 2, 2))
+											It\MaleTexID = RCE_IntFromStr(Mid$(Pa$, Offset + 4, 2))
+											It\FemaleTexID = RCE_IntFromStr(Mid$(Pa$, Offset + 6, 2))
+											Offset = Offset + 8
 										Case I_Potion, I_Ingredient
 											It\EatEffectsLength = RCE_IntFromStr(Mid$(Pa$, Offset, 2))
 											Offset = Offset + 2

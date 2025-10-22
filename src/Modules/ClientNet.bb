@@ -366,6 +366,42 @@ Function UpdateNetwork()
 								EntityTexture AI\EN, GetTexture(BodyTex)
 								UnloadTexture(BodyTex)
 							EndIf
+					; Body (Chest Armor)
+						Case "Z"
+							ChestArmorID = Asc(Right$(M\MessageData$, 1))
+							; Repaint
+							If AI\Gender = 0
+								FaceTex = AI\Actor\MaleFaceIDs[AI\FaceTex]
+								BodyTex = ChestArmorID
+							Else
+								FaceTex = AI\Actor\FemaleFaceIDs[AI\FaceTex]
+								BodyTex = ChestArmorID
+							EndIf
+							If CountSurfaces(AI\EN) > 1 And FaceTex < 65535
+								; Find which surface is body
+								Br = GetSurfaceBrush(GetSurface(AI\EN, 1)) : T = GetBrushTexture(Br)
+								Name$ = TextureName$(T)
+								FreeTexture T : FreeBrush(Br)
+								FaceSurface = GetSurface(AI\EN, 2)
+								BodySurface = GetSurface(AI\EN, 1)
+								If Instr(Upper$(Name$), "HEAD") > 0
+									FaceSurface = GetSurface(AI\EN, 1)
+									BodySurface = GetSurface(AI\EN, 2)
+								EndIf
+
+								; Paint
+								Br = CreateBrush()
+								BrushTexture(Br, GetTexture(BodyTex))
+								PaintSurface(BodySurface, Br)
+								BrushTexture(Br, GetTexture(FaceTex))
+								PaintSurface(FaceSurface, Br)
+								FreeBrush(Br)
+								UnloadTexture(BodyTex)
+								UnloadTexture(FaceTex)
+							Else
+								EntityTexture AI\EN, GetTexture(BodyTex)
+								UnloadTexture(BodyTex)
+							EndIf
 					End Select
 				EndIf
 

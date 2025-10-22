@@ -226,6 +226,13 @@ Function LoadActorInstance3D(A.ActorInstance, Scale# = 1.0, SkipAttachments = Fa
 			; Paint
 			B = CreateBrush()
 			Tex = GetTexture(A\Actor\MaleBodyIDs[BodyTex])
+				If A\Inventory\Items[SlotI_Chest] <> Null
+					If A\Inventory\Items[SlotI_Chest]\Item <> Null
+						If A\Inventory\Items[SlotI_Chest]\Item\MaleTexID < 65535
+							Tex = GetTexture(A\Inventory\Items[SlotI_Chest]\Item\MaleTexID)
+						EndIf
+					EndIf
+				EndIf
 			If Tex <> 0
 				BrushTexture(B, Tex)
 				PaintSurface(BodySurface, B)
@@ -332,6 +339,13 @@ Function LoadActorInstance3D(A.ActorInstance, Scale# = 1.0, SkipAttachments = Fa
 			; Paint
 			B = CreateBrush()
 			Tex = GetTexture(A\Actor\FemaleBodyIDs[BodyTex])
+				If A\Inventory\Items[SlotI_Chest] <> Null
+					If A\Inventory\Items[SlotI_Chest]\Item <> Null
+						If A\Inventory\Items[SlotI_Chest]\Item\FemaleTexID < 65535
+							Tex = GetTexture(A\Inventory\Items[SlotI_Chest]\Item\FemaleTexID)
+						EndIf
+					EndIf
+				EndIf
 			If Tex <> 0
 				BrushTexture(B, Tex)
 				PaintSurface(BodySurface, B)
@@ -659,10 +673,10 @@ Function UpdateActorItems(A.ActorInstance)
 		SetActorShield(A, -1)
 	EndIf
 	If A\Inventory\Items[SlotI_Chest] <> Null
-		If A\Gender = 0
-			SetActorChestArmour(A, A\Inventory\Items[SlotI_Chest]\Item\MMeshID)
-		Else
-			SetActorChestArmour(A, A\Inventory\Items[SlotI_Chest]\Item\FMeshID)
+			If A\Gender = 0
+				SetActorChestArmour(A, A\Inventory\Items[SlotI_Chest]\Item\MMeshID)
+			Else
+				SetActorChestArmour(A, A\Inventory\Items[SlotI_Chest]\Item\FMeshID)
 		EndIf
 	ElseIf A\ChestEN <> 0
 		SetActorChestArmour(A, -1)

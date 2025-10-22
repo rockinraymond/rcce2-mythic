@@ -1141,12 +1141,24 @@ Global SItemMass = FUI_Spinner(TItemsGeneral, 95, 180, 80, 20, 0, 100000, 2, 1, 
 ;Global TItemMiscData = FUI_TextBox(TItemsSpecific, 125, 20, 300, 20)
 ;------------------------------------------------------
 Global LItemWeaponDamage = FUI_Label(TItemsGeneral, 20, 212, "Damage:")
-Global SItemWeaponDamage = FUI_Spinner(TItemsGeneral, 110, 210, 50, 20, 1, 5000, 0, 1, DTYPE_INTEGER)
+Global SItemWeaponDamage = FUI_Spinner(TItemsGeneral, 100, 210, 50, 20, 1, 5000, 0, 1, DTYPE_INTEGER)
+Global LItemWeaponAccuracy = FUI_Label(TItemsGeneral, 160, 212, "Accuracy:")
+Global SItemWeaponAccuracy = FUI_Spinner(TItemsGeneral, 240, 210, 50, 20, 1, 5000, 0, 1, DTYPE_INTEGER)
+Global LItemWeaponSpeed = FUI_Label(TItemsGeneral, 300, 212, "Speed:")
+Global SItemWeaponSpeed = FUI_Spinner(TItemsGeneral, 380, 210, 50, 20, 1, 5000, 0, 1, DTYPE_INTEGER)
 Global LItemWeaponType = FUI_Label(TItemsGeneral, 20, 242, "Weapon type:")
 Global CItemWeaponType = FUI_ComboBox(TItemsGeneral, 110, 240, 100, 20)
 FUI_ComboBoxItem(CItemWeaponType, "One Handed")
 FUI_ComboBoxItem(CItemWeaponType, "Two Handed")
 FUI_ComboBoxItem(CItemWeaponType, "Ranged")
+Global LItemWeaponClass = FUI_Label(TItemsGeneral, 220, 242, "Weapon class	:")
+Global CItemWeaponClass = FUI_ComboBox(TItemsGeneral, 310, 240, 100, 20)
+FUI_ComboBoxItem(CItemWeaponClass, "Sword")
+FUI_ComboBoxItem(CItemWeaponClass, "Dagger")
+FUI_ComboBoxItem(CItemWeaponClass, "Blunt")
+FUI_ComboBoxItem(CItemWeaponClass, "Axe")
+FUI_ComboBoxItem(CItemWeaponClass, "Bow")
+FUI_ComboBoxItem(CItemWeaponClass, "Polearm")
 Global LItemDamageType = FUI_Label(TItemsGeneral, 20, 272, "Damage type:")
 Global CItemDamageType = FUI_ComboBox(TItemsGeneral, 110, 270, 200, 20, 6)
 For i = 0 To 19
@@ -1168,6 +1180,16 @@ Global SItemRange = FUI_Spinner(TItemsGeneral, 110, 360, 80, 20, 0.1, 200.0, 0.0
 
 Global LItemArmourLevel = FUI_Label(TItemsGeneral, 20, 212, "Armour level:")
 Global SItemArmourLevel = FUI_Spinner(TItemsGeneral, 110, 210, 100, 20, 0, 5000, 0, 1, DTYPE_INTEGER)
+Global LItemArmourClass = FUI_Label(TItemsGeneral, 20, 242, "Armour Class:")
+Global CItemArmourClass = FUI_ComboBox(TItemsGeneral, 110, 240, 100, 20)
+FUI_ComboBoxItem(CItemArmourClass, "Light")
+FUI_ComboBoxItem(CItemArmourClass, "Medium")
+FUI_ComboBoxItem(CItemArmourClass, "Heavy")
+FUI_ComboBoxItem(CItemArmourClass, "Clothing")
+Global LItemMaleTexID = FUI_Label(TItemsGeneral, 20, 300, "Male Body Texture: [NONE]")
+Global BItemMaleTexID = FUI_Button(TItemsGeneral, 20, 325, 90, 20, "Change")
+Global LItemFemaleTexID = FUI_Label(TItemsGeneral, 20, 350, "Female Body Texture: [NONE]")
+Global BItemFemaleTexID = FUI_Button(TItemsGeneral, 20, 375, 90, 20, "Change")
 
 Global LItemEatEffects = FUI_Label(TItemsGeneral, 20, 212, "Effects duration:")
 Global SItemEatEffects = FUI_Spinner(TItemsGeneral, 110, 210, 100, 20, 1, 100000, 0, 1, DTYPE_INTEGER, " seconds")
@@ -5893,8 +5915,14 @@ Cls
 			; Specific properties
 			Case SItemWeaponDamage
 				If SelectedItem <> Null Then SelectedItem\WeaponDamage = E\EventData : ItemsSaved = False
+			Case SItemWeaponAccuracy
+				If SelectedItem <> Null Then SelectedItem\WeaponAccuracy = E\EventData : ItemsSaved = False
+			Case SItemWeaponSpeed
+				If SelectedItem <> Null Then SelectedItem\WeaponSpeed = E\EventData : ItemsSaved = False
 			Case CItemWeaponType
 				If SelectedItem <> Null Then SelectedItem\WeaponType = E\EventData : ItemsSaved = False
+			Case CItemWeaponClass
+				If SelectedItem <> Null Then SelectedItem\WeaponClass = E\EventData : ItemsSaved = False
 			Case CItemDamageType
 				If SelectedItem <> Null
 					SelectedItem\WeaponDamageType = FUI_SendMessage(FUI_SendMessage(CItemDamageType, M_GETSELECTED), M_GETDATA)
@@ -5911,6 +5939,8 @@ Cls
 				If SelectedItem <> Null Then SelectedItem\Range# = E\EventData : ItemsSaved = False
 			Case SItemArmourLevel
 				If SelectedItem <> Null Then SelectedItem\ArmourLevel = E\EventData : ItemsSaved = False
+			Case CItemArmourClass
+				If SelectedItem <> Null Then SelectedItem\ArmourClass = E\EventData : ItemsSaved = False
 			Case SItemEatEffects
 				If SelectedItem <> Null Then SelectedItem\EatEffectsLength = E\EventData : ItemsSaved = False
 			Case BItemImageID
@@ -5919,6 +5949,24 @@ Cls
 					If NewTex > -1
 						SelectedItem\ImageID = NewTex
 						FUI_SendMessage(LItemImageID, M_SETTEXT, "Display image: " + GetFilename$(EditorTexName$(SelectedItem\ImageID)))
+						ItemsSaved = False
+					EndIf
+				EndIf
+			Case BItemMaleTexID
+				If SelectedItem <> Null
+					NewTex = ChooseTextureDialog()
+					If NewTex > -1
+						SelectedItem\MaleTexID = NewTex
+						FUI_SendMessage(LItemImageID, M_SETTEXT, "Male Body Texture: " + GetFilename$(EditorTexName$(SelectedItem\MaleTexID)))
+						ItemsSaved = False
+					EndIf
+				EndIf
+			Case BItemFemaleTexID
+				If SelectedItem <> Null
+					NewTex = ChooseTextureDialog()
+					If NewTex > -1
+						SelectedItem\FemaleTexID = NewTex
+						FUI_SendMessage(LItemImageID, M_SETTEXT, "Female Body Texture: " + GetFilename$(EditorTexName$(SelectedItem\FemaleTexID)))
 						ItemsSaved = False
 					EndIf
 				EndIf
@@ -7493,9 +7541,15 @@ Function UpdateItemDisplay()
 
 	; Hide item type specific gadgets
 	FUI_HideGadget(LItemWeaponDamage) : FUI_HideGadget(SItemWeaponDamage)
+	FUI_HideGadget(LItemWeaponAccuracy) : FUI_HideGadget(SItemWeaponAccuracy)
+	FUI_HideGadget(LItemWeaponSpeed) : FUI_HideGadget(SItemWeaponSpeed)
 	FUI_HideGadget(LItemWeaponType) : FUI_HideGadget(CItemWeaponType)
+	FUI_HideGadget(LItemWeaponClass) : FUI_HideGadget(CItemWeaponClass)
 	FUI_HideGadget(LItemDamageType) : FUI_HideGadget(CItemDamageType)
 	FUI_HideGadget(LItemArmourLevel) : FUI_HideGadget(SItemArmourLevel)
+	FUI_HideGadget(LItemArmourClass) : FUI_HideGadget(CItemArmourClass)
+	FUI_HideGadget(LItemMaleTexID) : FUI_HideGadget(BItemMaleTexID)
+	FUI_HideGadget(LItemFemaleTexID) : FUI_HideGadget(BItemFemaleTexID)
 	FUI_HideGadget(LItemEatEffects) : FUI_HideGadget(SItemEatEffects)
 	FUI_HideGadget(LItemImageID) : FUI_HideGadget(BItemImageID)
 	//FUI_HideGadget(LItemMiscData) : FUI_HideGadget(TItemMiscData)
@@ -7601,10 +7655,16 @@ Function UpdateItemDisplay()
 			; Weapon
 			Case I_Weapon
 				FUI_ShowGadget(LItemWeaponDamage) : FUI_ShowGadget(SItemWeaponDamage)
+				FUI_ShowGadget(LItemWeaponAccuracy) : FUI_ShowGadget(SItemWeaponAccuracy)
+				FUI_ShowGadget(LItemWeaponSpeed) : FUI_ShowGadget(SItemWeaponSpeed)
 				FUI_ShowGadget(LItemWeaponType) : FUI_ShowGadget(CItemWeaponType)
+				FUI_ShowGadget(LItemWeaponClass) : FUI_ShowGadget(CItemWeaponClass)
 				FUI_ShowGadget(LItemDamageType) : FUI_ShowGadget(CItemDamageType)
 				FUI_SendMessage(SItemWeaponDamage, M_SETVALUE, SelectedItem\WeaponDamage)
+				FUI_SendMessage(SItemWeaponAccuracy, M_SETVALUE, SelectedItem\WeaponAccuracy)
+				FUI_SendMessage(SItemWeaponSpeed, M_SETVALUE, SelectedItem\WeaponSpeed)
 				FUI_SendMessage(CItemWeaponType, M_SETINDEX, SelectedItem\WeaponType)
+				FUI_SendMessage(CItemWeaponClass, M_SETINDEX, SelectedItem\WeaponClass)
 				Idx = 0
 				For i = 0 To 19
 					If DamageTypes$(i) <> ""
@@ -7628,7 +7688,14 @@ Function UpdateItemDisplay()
 			; Armour
 			Case I_Armour
 				FUI_ShowGadget(LItemArmourLevel) : FUI_ShowGadget(SItemArmourLevel)
+				FUI_ShowGadget(LItemArmourClass) : FUI_ShowGadget(CItemArmourClass)
 				FUI_SendMessage(SItemArmourLevel, M_SETVALUE, SelectedItem\ArmourLevel)
+				FUI_SendMessage(CItemArmourClass, M_SETINDEX, SelectedItem\ArmourClass)
+
+				FUI_ShowGadget(LItemMaleTexID) : FUI_ShowGadget(BItemMaleTexID)
+				FUI_SendMessage(LItemMaleTexID, M_SETTEXT, "Male Body Texture: " + GetFilename$(EditorTexName$(SelectedItem\MaleTexID)))
+				FUI_ShowGadget(LItemFemaleTexID) : FUI_ShowGadget(BItemFemaleTexID)
+				FUI_SendMessage(LItemFemaleTexID, M_SETTEXT, "Female Body Texture: " + GetFilename$(EditorTexName$(SelectedItem\FemaleTexID)))
 			; Potion/ingredient
 			Case I_Potion, I_Ingredient
 				FUI_ShowGadget(LItemEatEffects) : FUI_ShowGadget(SItemEatEffects)

@@ -1,6 +1,20 @@
 Item ID: 0
 Item Name: Sword
+Item Male Texture ID: 0
+Item Female Texture ID: 0
 
 Item ID: 1
-Item Name: Shield
+Item Name: Armor
+Item Male Texture ID: 42
+Item Female Texture ID: 21
+
+Item ID: 2
+Item Name: New item
+Item Male Texture ID: 0
+Item Female Texture ID: 0
+
+Item ID: 3
+Item Name: New item2
+Item Male Texture ID: 65535
+Item Female Texture ID: 65535
 

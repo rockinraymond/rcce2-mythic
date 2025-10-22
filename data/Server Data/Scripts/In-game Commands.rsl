@@ -96,3 +96,11 @@ Function clearEffects()
 	DeleteActorEffect(Player, "Shadow defense Bonus")
 
 End Function
+
+Function ArmorTest()
+giveitem(actor(),"armor",1)
+End Function
+
+Function Sword()
+giveitem(actor(),"sword",1)
+End Function
