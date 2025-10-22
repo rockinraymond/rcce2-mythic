@@ -412,18 +412,24 @@ Repeat
 			; Toggle DM status
 			Case Accounts\DMButton
 				A.Account = First Account
-				For i = 1 To SelectedGadgetItem(Accounts\List) : A = After A : Next
-				If A <> Null Then SetAccountDMStatus(A, Not A\IsDM)
+				For i = 2 To SelectedGadgetItem(Accounts\List) : A = After A : Next
+				If A <> Null
+					SetAccountDMStatus(A, Not A\IsDM)
+					WriteLog(MainLog, "Toggled DM Status: " + A\User$ + " it is now " + Str(A\IsDM))
+				EndIf
 			; Toggle ban status
 			Case Accounts\BanButton
 				A.Account = First Account
-				For i = 1 To SelectedGadgetItem(Accounts\List) : A = After A : Next
-				If A <> Null Then SetAccountBanStatus(A, Not A\IsBanned)
+				For i = 2 To SelectedGadgetItem(Accounts\List) : A = After A : Next
+				If A <> Null
+					SetAccountBanStatus(A, Not A\IsBanned)
+					WriteLog(MainLog, "Toggled Ban Status: " + A\User$ + " it is now " + Str(A\IsBanned))
+				EndIf
 			; Remove account
 			Case Accounts\DeleteButton
 				If Confirm("Really remove account?") = True
 					A.Account = First Account
-					For i = 1 To SelectedGadgetItem(Accounts\List) : A = After A : Next
+					For i = 2 To SelectedGadgetItem(Accounts\List) : A = After A : Next
 					If A <> Null
 						; Remove from counters
 						Accounts\TotalAccounts = Accounts\TotalAccounts - 1
