@@ -456,7 +456,7 @@ Repeat
 			Case Shutdown\ShutDownButton
 				If Confirm("Really Shut Down Server?") = True
 					Shutdown()
-					RuntimeError "Server finished shutting down!"
+					End
 				EndIf
 			; Lock/unlock updates server
 			Case Updates\LockButton
