@@ -31,6 +31,7 @@ Include "Modules\GameServer.bb"           ; Game server module
 Include "Modules\UpdatesServer.bb"        ; Updates server module
 Include "Modules\Packets.bb"              ; Packet types module
 Include "Modules\ServerNet.bb"            ; Server specific network module
+Include "Modules\ServerShutDown.bb"
 //Include "Modules\MySQL.bb"				  ; MySQL functions
 
 Include "Modules\Framework\RCCEApp.bb"
@@ -183,6 +184,7 @@ WriteLog(ChatLog, "** Server started **", True, True)
 Accounts.AccountsWindow = CreateAccountsWindow()
 Game.GameWindow         = CreateGameWindow()
 Updates.UpdatesWindow   = CreateUpdatesWindow()
+Shutdown.ShutdownWindow = CreateShutdownWindow()
 WriteLog(MainLog, "Created server windows...")
 ; Taskbar notification area icon
 ;ggTrayCreate(QueryObject(Accounts\Window, 1))
@@ -450,6 +452,11 @@ Repeat
 						RemoveGadgetItem Accounts\List, SelectedGadgetItem(Accounts\List)
 						SaveAccounts()
 					EndIf
+				EndIf
+			Case Shutdown\ShutDownButton
+				If Confirm("Really Shut Down Server?") = True
+					Shutdown()
+					RuntimeError "Server finished shutting down!"
 				EndIf
 			; Lock/unlock updates server
 			Case Updates\LockButton
