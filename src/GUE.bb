@@ -925,6 +925,15 @@ FUI_ComboBoxItem(CActorSlotAllowed, "Amulet")
 FUI_ComboBoxItem(CActorSlotAllowed, "Backpack")
 FUI_SendMessage(CActorSlotAllowed, M_SETINDEX, 1)
 
+FUI_Label(TActorsGeneral, 20, 462, "Default Damage Type:")
+Global CActorDefaultDamageType = FUI_ComboBox(TActorsGeneral, 20, 482, 200, 20, 6)
+For i = 0 To 19
+	If DamageTypes$(i) <> ""
+		Item = FUI_ComboBoxItem(CActorDefaultDamageType, DamageTypes$(i))
+		FUI_SendMessage(Item, M_SETDATA, i)
+	EndIf
+Next
+
 ; Appearance
 Global LActorMBodyMesh = FUI_Label(TActorsAppearance, 20, 22, "Male Body Mesh: ")
 Global BActorMBodyMesh = FUI_Button(TActorsAppearance, 350, 20, 75, 20, "Change")
@@ -5145,7 +5154,11 @@ Cls
 					SelectedActor\DefaultFaction = FUI_SendMessage(FUI_SendMessage(CActorFaction, M_GETSELECTED), M_GETDATA)
 					ActorsSaved = False
 				EndIf
-
+			Case CActorDefaultDamageType
+				If SelectedActor <> Null
+					SelectedActor\DefaultDamageType = FUI_SendMessage(FUI_SendMessage(CActorDefaultDamageType, M_GETSELECTED), M_GETDATA)
+					ActorsSaved = False
+				EndIf
 			; Actor general
 			Case SActorAttackRange
 				If SelectedActor <> Null Then SelectedActor\AggressiveRange = E\EventData : ActorsSaved = False
@@ -7800,6 +7813,7 @@ Function UpdateActorDisplay()
 		FUI_SendMessage(TActorBlurb, M_SETCAPTION, "")
 		FUI_SendMessage(CActorGenders, M_SETINDEX, 1)
 		FUI_SendMessage(CActorFaction, M_SETINDEX, 1)
+		FUI_SendMessage(CActorDefaultDamageType, M_SETINDEX, 1)
 		FUI_SendMessage(CActorAttacks, M_SETINDEX, 1)
 		FUI_SendMessage(SActorAttackRange, M_SETVALUE, 1)
 		FUI_SendMessage(CActorTrades, M_SETINDEX, 1)
@@ -7849,6 +7863,11 @@ Function UpdateActorDisplay()
 			If FactionNames$(i) <> "" Then Idx = Idx + 1
 		Next
 		FUI_SendMessage(CActorFaction, M_SETINDEX, Idx)
+		Idx = 0
+		For i = 0 To SelectedActor\DefaultDamageType
+			If DamageTypes$(i) <> "" Then Idx = Idx + 1
+		Next
+		FUI_SendMessage(CActorDefaultDamageType, M_SETINDEX, Idx)
 		Found = False
 		For i = 1 To TotalZones
 			FUI_SendMessage(CActorStartArea, M_SETINDEX, i)
