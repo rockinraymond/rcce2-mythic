@@ -921,8 +921,10 @@ Function LogIn()
 									It\ExclusiveRace$ = Mid$(Pa$, Offset + 1, NameLen)
 									Offset = Offset + 1 + NameLen
 									NameLen = RCE_IntFromStr(Mid$(Pa$, Offset, 1))
-									It\ExclusiveClass$ = Mid$(Pa$, Offset + 1, NameLen)
+									It\ExclusiveSkill$ = Mid$(Pa$, Offset + 1, NameLen)
 									Offset = Offset + 1 + NameLen
+									It\SkillReq = RCE_IntFromStr(Mid$(Pa$, Offset, 2))
+									Offset = Offset + 2
 									Select It\ItemType
 										Case I_Weapon
 											It\WeaponDamage = RCE_IntFromStr(Mid$(Pa$, Offset, 2))

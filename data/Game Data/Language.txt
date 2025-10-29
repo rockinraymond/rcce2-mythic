@@ -61,13 +61,13 @@ You are already in the game!
 ; -----
 
 Weapon
-Armour
+Armor
 Ring
 Amulet
 Potion
-Ingredient
+Food
 Image
-Miscellaneous
+Misc
 One handed
 Two handed
 Ranged
@@ -123,7 +123,7 @@ Item can be stacked
 Item cannot be stacked
 Damage Type:
 Weapon Type:
-Armour Level:
+Armor Value:
 Effects last
 seconds
 race only

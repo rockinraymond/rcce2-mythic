@@ -324,9 +324,27 @@ Function ActorAttack(A1.ActorInstance, A2.ActorInstance)
 	EndIf
 
 	; Calculate damage
-	; Normal formula
-	If CombatFormula = 1
+	; Hardcoded combat formula
+	If CombatFormula <> 4
 		AICallForHelp(A2)
+
+		;Declare Attributes
+		StrengthAttribute = FindAttribute("Strength");
+		ToughnessAttribute = FindAttribute("Toughness");
+		DexterityAttribute = FindAttribute("Dexterity");
+		AgilityAttribute = FindAttribute("Agility");
+
+		;Attacker stats
+		AttackStrength = A1\Attributes\Value[StrengthAttribute]
+		AttackDexterity = A1\Attributes\Value[DexterityAttribute]
+		AttackAgility = A1\Attributes\Value[AgilityAttribute]
+
+		;Defender stats
+		DefendToughness = A2\Attributes\Value[ToughnessAttribute]
+		DefendAgility = A2\Attributes\Value[AgilityAttribute]
+		DefendDexterity = A2\Attributes\Value[DexterityAttribute]
+
+
 		; 90% chance to hit
 		ToHit = Rand(100)
 		If ToHit > 10
@@ -369,81 +387,8 @@ Function ActorAttack(A1.ActorInstance, A2.ActorInstance)
 		Else
 			Damage = -1
 		EndIf
-	; No strength bonus or penalty
-	ElseIf CombatFormula = 2
-		AICallForHelp(A2)
-		; 90% chance to hit
-		ToHit = Rand(100)
-		If ToHit > 10
-			; Initial damage
-			If A1\Inventory\Items[SlotI_Weapon] <> Null
-				If A1\Inventory\Items[SlotI_Weapon]\ItemHealth > 0
-					Damage = A1\Inventory\Items[SlotI_Weapon]\Item\WeaponDamage
-					DamageType = A1\Inventory\Items[SlotI_Weapon]\Item\WeaponDamageType
-				Else
-					Damage = (A1\Attributes\Value[StrengthStat] / 8) + Rand(-5, 5)
-					DamageType = A1\Actor\DefaultDamageType
-				EndIf
-			Else
-				Damage = (A1\Attributes\Value[StrengthStat] / 8) + Rand(-5, 5)
-				DamageType = A1\Actor\DefaultDamageType
-			EndIf
+	
 
-			; Critical damage
-			If Rand(1, 10) = 1
-				Damage = Damage * 2
-				If A1\RNID > 0 Then RCE_Send(Host, A1\RNID, P_ChatMessage, Chr$(250) + Chr$(255) + Chr$(225) + Chr$(100) + LanguageString$(LS_CriticalDamage), True)
-			EndIf
-
-			; Armour
-			AP = GetArmourLevel(A2\Inventory) + (A2\Resistances[DamageType] - 100)
-			If ToughnessStat > -1 Then AP = AP + (A2\Attributes\Value[ToughnessStat] / 8)
-			Damage = Damage - AP
-
-			; Minimum of 1
-			If Damage < 1 Then Damage = 1
-		; Miss!
-		Else
-			Damage = -1
-		EndIf
-	; Multiplied formula
-	ElseIf CombatFormula = 3
-		AICallForHelp(A2)
-		; 90% chance to hit
-		ToHit = Rand(100)
-		If ToHit > 10
-			; Initial damage
-			Strength = A1\Attributes\Value[StrengthStat]
-			If A1\Inventory\Items[SlotI_Weapon] <> Null
-				If A1\Inventory\Items[SlotI_Weapon]\ItemHealth > 0
-					Damage = A1\Inventory\Items[SlotI_Weapon]\Item\WeaponDamage * Strength
-					DamageType = A1\Inventory\Items[SlotI_Weapon]\Item\WeaponDamageType
-				Else
-					Damage = Strength + Rand(-10, 10)
-					DamageType = A1\Actor\DefaultDamageType
-				EndIf
-			Else
-				Damage = Strength + Rand(-10, 10)
-				DamageType = A1\Actor\DefaultDamageType
-			EndIf
-
-			; Critical damage
-			If Rand(1, 10) = 1
-				Damage = Damage * 2
-				If A1\RNID > 0 Then RCE_Send(Host, A1\RNID, P_ChatMessage, Chr$(250) + Chr$(255) + Chr$(225) + Chr$(100) + LanguageString$(LS_CriticalDamage), True)
-			EndIf
-
-			; Armour
-			AP = GetArmourLevel(A2\Inventory) + (A2\Resistances[DamageType] - 100)
-			If ToughnessStat > -1 Then AP = AP * A2\Attributes\Value[ToughnessStat] Else AP = AP * AP
-			Damage = Damage - AP
-
-			; Minimum of 1
-			If Damage < 1 Then Damage = 1
-		; Miss!
-		Else
-			Damage = -1
-		EndIf
 	; Scripted
 	ElseIf CombatFormula = 4
 		ThreadScript("Attack", "Main", Handle(A1), Handle(A2))

@@ -1279,9 +1279,17 @@ Global BItemTakesDamage = FUI_CheckBox(TItemsGeneral, 510, 50, "Item takes damag
 FUI_Label(TItemsGeneral, 510, 102, "Item is exclusive to this race:")
 Global CItemExclusiveRace = FUI_ComboBox(TItemsGeneral, 740, 100, 350, 20, 10)
 FUI_ComboBoxItem(CItemExclusiveRace, "None (can be used by any race)")
-FUI_Label(TItemsGeneral, 510, 132, "Item is exclusive to this class:")
-Global CItemExclusiveClass = FUI_ComboBox(TItemsGeneral, 740, 130, 350, 20, 10)
-FUI_ComboBoxItem(CItemExclusiveClass, "None (can be used by any class)")
+FUI_Label(TItemsGeneral, 510, 132, "Skill Requirement:")
+Global CItemExclusiveSkill = FUI_ComboBox(TItemsGeneral, 740, 130, 350, 20, 10)
+FUI_ComboBoxItem(CItemExclusiveSkill, "None (no skill requirements)")
+For i = 0 To 39
+	If AttributeNames$(i) <> ""
+		Item = FUI_ComboBoxItem(CItemExclusiveSkill, AttributeNames$(i)) : FUI_SendMessage(Item, M_SETDATA, i)
+	EndIf
+Next
+FUI_Label(TItemsGeneral, 1150, 132, "Skill Level:")
+Global SItemSkillReq = FUI_Spinner(TItemsGeneral, 1200, 130, 100, 20, -5000, 5000, 0, 1, DTYPE_INTEGER)
+
 FUI_Label(TItemsGeneral, 510, 182, "Item runs this script on right-click:")
 
 Global CItemScript = FUI_ComboBox(TItemsGeneral, 740, 180, 350, 20, 10)
@@ -6071,15 +6079,17 @@ Cls
 					EndIf
 					ItemsSaved = False
 				EndIf
-			Case CItemExclusiveClass
+			Case CItemExclusiveSkill
 				If SelectedItem <> Null
-					If FUI_SendMessage(CItemExclusiveClass, M_GETINDEX) = 1
-						SelectedItem\ExclusiveClass$ = ""
+					If FUI_SendMessage(CItemExclusiveSkill, M_GETINDEX) = 1
+						SelectedItem\ExclusiveSkill$ = ""
 					Else
-						SelectedItem\ExclusiveClass$ = FUI_SendMessage(CItemExclusiveClass, M_GETCAPTION)
+						SelectedItem\ExclusiveSkill$ = FUI_SendMessage(CItemExclusiveSkill, M_GETCAPTION)
 					EndIf
 					ItemsSaved = False
 				EndIf
+			Case SItemSkillReq
+				If SelectedItem <> Null Then SelectedItem\SkillReq = E\EventData : ItemsSaved = False
 			Case CItemScript
 				If SelectedItem <> Null
 					If FUI_SendMessage(CItemScript, M_GETINDEX) = 1
@@ -7582,7 +7592,8 @@ Function UpdateItemDisplay()
 		FUI_SendMessage(BItemStackable, M_SETCHECKED, False)
 		FUI_SendMessage(BItemTakesDamage, M_SETCHECKED, False)
 		FUI_SendMessage(CItemExclusiveRace, M_SETINDEX, 1)
-		FUI_SendMessage(CItemExclusiveClass, M_SETINDEX, 1)
+		FUI_SendMessage(CItemExclusiveSkill, M_SETINDEX, 1)
+		FUI_SendMessage(SItemSkillReq, M_SETVALUE, 0)
 		FUI_SendMessage(CItemScript, M_SETINDEX, 1)
 		FUI_SendMessage(CItemMethod, M_RESET)
 		FUI_SendMessage(LItemThumb, M_SETCAPTION, "Item thumbnail texture: [NONE]")
@@ -7595,6 +7606,7 @@ Function UpdateItemDisplay()
 		FUI_SendMessage(TItemName, M_SETTEXT, SelectedItem\Name$)
 		FUI_SendMessage(SItemValue, M_SETVALUE, SelectedItem\Value)
 		FUI_SendMessage(SItemMass, M_SETVALUE, SelectedItem\Mass)
+		FUI_SendMessage(SItemSkillReq, M_SETVALUE, SelectedItem\SkillReq)
 		FUI_SendMessage(CItemType, M_SETINDEX, SelectedItem\ItemType)
 		FUI_SendMessage(SItemAttribute, M_SETVALUE, SelectedItem\Attributes\Value[FUI_SendMessage(LItemAttributes, M_GETSELECTED)])
 		FUI_SendMessage(SItemResistance, M_SETVALUE, SelectedItem\Resistances[FUI_SendMessage(LItemResistances, M_GETSELECTED)])
@@ -7644,11 +7656,11 @@ Function UpdateItemDisplay()
 				If Upper$(FUI_SendMessage(CItemExclusiveRace, M_GETCAPTION)) = Upper$(SelectedItem\ExclusiveRace$) Then Exit
 			Next
 		EndIf
-		FUI_SendMessage(CItemExclusiveClass, M_SETINDEX, 1)
-		If SelectedItem\ExclusiveClass$ <> ""
-			For i = 2 To TotalClasses + 1
-				FUI_SendMessage(CItemExclusiveClass, M_SETINDEX, i)
-				If Upper$(FUI_SendMessage(CItemExclusiveClass, M_GETCAPTION)) = Upper$(SelectedItem\ExclusiveClass$) Then Exit
+		FUI_SendMessage(CItemExclusiveSkill, M_SETINDEX, 1)
+		If SelectedItem\ExclusiveSkill$ <> ""
+			For i = 0 To 39
+				FUI_SendMessage(CItemExclusiveSkill, M_SETINDEX, i)
+				If Upper$(FUI_SendMessage(CItemExclusiveSkill, M_GETCAPTION)) = Upper$(SelectedItem\ExclusiveSkill$) Then Exit
 			Next
 		EndIf
 
@@ -7734,8 +7746,8 @@ Function UpdateRaceClassLists()
 	FUI_ComboBoxItem(CSpellExclusiveClass, "None (can be used by any class)")
 	FUI_SendMessage(CItemExclusiveRace, M_RESET)
 	FUI_ComboBoxItem(CItemExclusiveRace, "None (can be used by any race)")
-	FUI_SendMessage(CItemExclusiveClass, M_RESET)
-	FUI_ComboBoxItem(CItemExclusiveClass, "None (can be used by any class)")
+	;FUI_SendMessage(CItemExclusiveSkill, M_RESET)
+	;FUI_ComboBoxItem(CItemExclusiveSkill, "None (no skill requirement)")
 	FUI_SendMessage(CSpawnActor, M_RESET)
 	FUI_ComboBoxItem(CSpawnActor, "None")
 
@@ -7761,18 +7773,18 @@ Function UpdateRaceClassLists()
 			TotalRaces = TotalRaces + 1
 		EndIf
 	Next
-	For Ac.Actor = Each Actor
-		Done = False
-		For i = 2 To TotalClasses + 1
-			FUI_SendMessage(CItemExclusiveClass, M_SETINDEX, i)
-			If Upper$(FUI_SendMessage(CItemExclusiveClass, M_GETCAPTION)) = Upper$(Ac\Class$) Then Done = True : Exit
-		Next
-		If Done = False
-			FUI_ComboBoxItem(CItemExclusiveClass, Ac\Class$)
-			FUI_ComboBoxItem(CSpellExclusiveClass, Ac\Class$)
-			TotalClasses = TotalClasses + 1
-		EndIf
-	Next
+	; For Ac.Actor = Each Actor
+	; 	Done = False
+	; 	For i = 2 To TotalClasses + 1
+	; 		FUI_SendMessage(CItemExclusiveClass, M_SETINDEX, i)
+	; 		If Upper$(FUI_SendMessage(CItemExclusiveClass, M_GETCAPTION)) = Upper$(Ac\Class$) Then Done = True : Exit
+	; 	Next
+	; 	If Done = False
+	; 		FUI_ComboBoxItem(CItemExclusiveClass, Ac\Class$)
+	; 		FUI_ComboBoxItem(CSpellExclusiveClass, Ac\Class$)
+	; 		TotalClasses = TotalClasses + 1
+	; 	EndIf
+	; Next
 
 	; Reset selections
 	FUI_SendMessage(CSpawnActor, M_SETINDEX, 1)

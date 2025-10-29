@@ -1298,7 +1298,7 @@ Function UpdateNetwork()
 						II.ItemInstance = CreateItemInstance(ItemList(ItemID))
 						For i = 0 To 49
 							If Me\Inventory\Items[i] = Null Or (ItemInstancesIdentical(II, Me\Inventory\Items[i]) And II\Item\Stackable = True And i >= SlotI_Backpack)
-								If SlotsMatch(ItemList(ItemID), i) And ActorHasSlot(Me\Actor, i, ItemList(ItemID))
+								If SlotsMatch(ItemList(ItemID), i) And ActorHasSlot(Me, i, ItemList(ItemID))
 									; Put in slot
 									If Me\Inventory\Items[i] <> Null
 										FreeItemInstance(Me\Inventory\Items[i])

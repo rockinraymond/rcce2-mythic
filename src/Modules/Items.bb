@@ -38,7 +38,7 @@ Dim ItemList.Item(65534)
 Type Item
 	Field ID
 	Field Name$
-	Field ExclusiveRace$, ExclusiveClass$ ; If this item can only be used by a certain race and/or class
+	Field ExclusiveRace$, ExclusiveSkill$, SkillReq ; If this item can only be used by a certain race and/or class
 	Field Script$, SMethod$      ; Called when the item is right clicked
 	Field ItemType              ; Should be one of the constants above
 	Field Value, Mass           ; Average monetary value, and item weight
@@ -269,7 +269,8 @@ Function LoadItems(Filename$)
 			ItemList(I\ID) = I
 			I\Name$            = ReadString$(F)
 			I\ExclusiveRace$   = ReadString$(F)
-			I\ExclusiveClass$  = ReadString$(F)
+			I\ExclusiveSkill$  = ReadString$(F)
+			I\SkillReq		   = ReadShort(F)
 			I\Script$          = ReadString$(F)
 			I\SMethod$          = ReadString$(F)
 			I\ItemType         = ReadByte(F)
@@ -326,7 +327,8 @@ Function SaveItems(Filename$)
 			WriteShort F, I\ID
 			WriteString F, I\Name$
 			WriteString F, I\ExclusiveRace$
-			WriteString F, I\ExclusiveClass$
+			WriteString F, I\ExclusiveSkill$
+			WriteShort F, I\SkillReq
 			WriteString F, I\Script$
 			WriteString F, I\SMethod$
 			WriteByte F, I\ItemType

@@ -1004,39 +1004,41 @@ Function UpdateNetwork()
 					If Slot >= 0 And Slot < 50 And Amount > 0
 						If AI\Inventory\Items[Slot] <> Null And AI\Inventory\Amounts[Slot] >= Amount
 							If AI\Inventory\Items[Slot]\Item\ItemType = I_Potion Or AI\Inventory\Items[Slot]\Item\ItemType = I_Ingredient
-								If Upper$(AI\Actor\Class$) = Upper$(AI\Inventory\Items[Slot]\Item\ExclusiveClass$) Or Len(AI\Inventory\Items[Slot]\Item\ExclusiveClass$) = 0
+								If (AI\Attributes\Value[FindAttribute(AI\Inventory\Items[Slot]\Item\ExclusiveSkill$)]) >= (AI\Inventory\Items[Slot]\Item\SkillReq) Or Len(AI\Inventory\Items[Slot]\Item\ExclusiveSkill$) = 0
 									If Upper$(AI\Actor\Race$) = Upper$(AI\Inventory\Items[Slot]\Item\ExclusiveRace$) Or Len(AI\Inventory\Items[Slot]\Item\ExclusiveRace$) = 0
 										; Create buff
-										EffectName$ = AI\Inventory\Items[Slot]\Item\Name$
-										Found = False
-										For AE.ActorEffect = Each ActorEffect
-											If AE\Owner = AI
-												If Upper$(AE\Name$) = Upper$(EffectName$)
-													FoundAE.ActorEffect = AE
-													Found = True
-													Exit
+										If AI\Inventory\Items[Slot]\Item\EatEffectsLength > 0
+											EffectName$ = AI\Inventory\Items[Slot]\Item\Name$
+											Found = False
+											For AE.ActorEffect = Each ActorEffect
+												If AE\Owner = AI
+													If Upper$(AE\Name$) = Upper$(EffectName$)
+														FoundAE.ActorEffect = AE
+														Found = True
+														Exit
+													EndIf
 												EndIf
+											Next
+											If Found = False
+												FoundAE = New ActorEffect
+												FoundAE\Attributes = New Attributes
+												FoundAE\Name$ = EffectName$
+												FoundAE\Owner = AI
+												Pa$ = RCE_StrFromInt$(Handle(FoundAE), 4) + RCE_StrFromInt$(AI\Inventory\Items[Slot]\Item\ThumbnailTexID, 2) + FoundAE\Name$
+												RCE_Send(Host, AI\RNID, P_ActorEffect, "A" + Pa$, True)
 											EndIf
-										Next
-										If Found = False
-											FoundAE = New ActorEffect
-											FoundAE\Attributes = New Attributes
-											FoundAE\Name$ = EffectName$
-											FoundAE\Owner = AI
-											Pa$ = RCE_StrFromInt$(Handle(FoundAE), 4) + RCE_StrFromInt$(AI\Inventory\Items[Slot]\Item\ThumbnailTexID, 2) + FoundAE\Name$
-											RCE_Send(Host, AI\RNID, P_ActorEffect, "A" + Pa$, True)
+											FoundAE\CreatedTime = MilliSecs()
+											FoundAE\Length = AI\Inventory\Items[Slot]\Item\EatEffectsLength * 1000
+											For i = 0 To 39
+												If AI\Inventory\Items[Slot]\Attributes\Value[i] <> 0
+													Old = FoundAE\Attributes\Value[i]
+													FoundAE\Attributes\Value[i] = AI\Inventory\Items[Slot]\Attributes\Value[i]
+													Pa$ = RCE_StrFromInt$(i, 1) + RCE_StrFromInt$(FoundAE\Attributes\Value[i] - Old, 4)
+													FoundAE\Owner\Attributes\Value[i] = FoundAE\Owner\Attributes\Value[i] + (FoundAE\Attributes\Value[i] - Old)
+													RCE_Send(Host, FoundAE\Owner\RNID, P_ActorEffect, "E" + Pa$, True)
+												EndIf
+											Next
 										EndIf
-										FoundAE\CreatedTime = MilliSecs()
-										FoundAE\Length = AI\Inventory\Items[Slot]\Item\EatEffectsLength * 1000
-										For i = 0 To 39
-											If AI\Inventory\Items[Slot]\Attributes\Value[i] <> 0
-												Old = FoundAE\Attributes\Value[i]
-												FoundAE\Attributes\Value[i] = AI\Inventory\Items[Slot]\Attributes\Value[i]
-												Pa$ = RCE_StrFromInt$(i, 1) + RCE_StrFromInt$(FoundAE\Attributes\Value[i] - Old, 4)
-												FoundAE\Owner\Attributes\Value[i] = FoundAE\Owner\Attributes\Value[i] + (FoundAE\Attributes\Value[i] - Old)
-												RCE_Send(Host, FoundAE\Owner\RNID, P_ActorEffect, "E" + Pa$, True)
-											EndIf
-										Next
 
 										; Execute Item Script
 										If AI\Inventory\Items[Slot]\Item\Script$ <> ""
@@ -1071,7 +1073,7 @@ Function UpdateNetwork()
 					EndIf
 					If SlotIndex >= 0 And SlotIndex < 50
 						If AI\Inventory\Items[SlotIndex] <> Null
-							If AI\Inventory\Items[SlotIndex]\Item\ExclusiveClass$ = "" Or Upper$(AI\Actor\Race$) = Upper$(AI\Inventory\Items[SlotIndex]\Item\ExclusiveClass$)
+							If (AI\Attributes\Value[FindAttribute(AI\Inventory\Items[SlotIndex]\Item\ExclusiveSkill$)]) >= (AI\Inventory\Items[SlotIndex]\Item\SkillReq) Or Len(AI\Inventory\Items[SlotIndex]\Item\ExclusiveSkill$) = 0
 								If AI\Inventory\Items[SlotIndex]\Item\ExclusiveRace$ = "" Or Upper$(AI\Actor\Race$) = Upper$(AI\Inventory\Items[SlotIndex]\Item\ExclusiveRace$)
 									If AI\Inventory\Items[SlotIndex]\Item\Script$ <> ""
 										If AI\Inventory\Amounts[SlotIndex] > 0
@@ -1187,7 +1189,7 @@ Function UpdateNetwork()
 							If AI <> Null
 								SlotI = RCE_IntFromStr(Mid$(M\MessageData$, 6, 1))
 								If AI\Inventory\Items[SlotI] = Null Or (ItemInstancesIdentical(D\Item, AI\Inventory\Items[SlotI]) And D\Item\Item\Stackable = True And SlotI >= SlotI_Backpack)
-									If SlotsMatch(D\Item\Item, SlotI) And ActorHasSlot(AI\Actor, SlotI, D\Item\Item)
+									If SlotsMatch(D\Item\Item, SlotI) And ActorHasSlot(AI, SlotI, D\Item\Item)
 										; Put into player's inventory
 										If AI\Inventory\Items[SlotI] <> Null
 											Delete AI\Inventory\Items[SlotI]
@@ -1255,7 +1257,7 @@ Function UpdateNetwork()
 								If Mid$(M\MessageData$, 2, 1) = "Y"
 									SlotI = RCE_IntFromStr(Right$(M\MessageData$, 1))
 									If AI\Inventory\Items[SlotI] = Null Or (ItemInstancesIdentical(II, AI\Inventory\Items[SlotI]) And II\Item\Stackable = True And SlotI >= SlotI_Backpack)
-										If SlotsMatch(II\Item, SlotI) And ActorHasSlot(AI\Actor, SlotI, II\Item)
+										If SlotsMatch(II\Item, SlotI) And ActorHasSlot(AI, SlotI, II\Item)
 											If AI\Inventory\Items[SlotI] <> Null
 												Delete AI\Inventory\Items[SlotI]
 											Else
@@ -1623,7 +1625,8 @@ Function UpdateNetwork()
 					For j = 0 To 19 : Pa$ = Pa$ + RCE_StrFromInt$(It\Resistances[j] + 5000, 2) : Next
 					Pa$ = Pa$ + RCE_StrFromInt$(Len(It\Name$), 1) + It\Name$
 					Pa$ = Pa$ + RCE_StrFromInt$(Len(It\ExclusiveRace$), 1) + It\ExclusiveRace$
-					Pa$ = Pa$ + RCE_StrFromInt$(Len(It\ExclusiveClass$), 1) + It\ExclusiveClass$
+					Pa$ = Pa$ + RCE_StrFromInt$(Len(It\ExclusiveSkill$), 1) + It\ExclusiveSkill$
+					Pa$ = Pa$ + RCE_StrFromInt$(It\SkillReq, 2)
 					Select It\ItemType
 						Case I_Weapon
 							Pa$ = Pa$ + RCE_StrFromInt$(It\WeaponDamage, 2) + RCE_StrFromInt$(It\WeaponSpeed, 2) + RCE_StrFromInt$(It\WeaponAccuracy, 2)

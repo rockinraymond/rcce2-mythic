@@ -18,3 +18,13 @@ Item Name: New item2
 Item Male Texture ID: 65535
 Item Female Texture ID: 65535
 
+Item ID: 4
+Item Name: MagicFood
+Item Male Texture ID: 65535
+Item Female Texture ID: 65535
+
+Item ID: 5
+Item Name: Magicitem
+Item Male Texture ID: 65535
+Item Female Texture ID: 65535
+

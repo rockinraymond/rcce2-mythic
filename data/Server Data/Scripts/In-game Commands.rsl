@@ -104,3 +104,11 @@ End Function
 Function Sword()
 giveitem(actor(),"sword",1)
 End Function
+
+function ArmorSkillTest()
+SetAttribute(actor(), "light armor", 5)
+End function
+
+function magicTest()
+SetAttribute(actor(), "magic", 10)
+End function
