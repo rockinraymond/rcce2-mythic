@@ -1616,7 +1616,7 @@ Function UpdateNetwork()
 				For It.Item = Each Item
 					TotalItems = TotalItems + 1
 					ItemsSent = ItemsSent + 1
-					Pa$ = Pa$ + RCE_StrFromInt$(It\ID, 2) + RCE_StrFromInt$(It\ItemType, 1) + RCE_StrFromInt$(It\TakesDamage, 1)
+					Pa$ = Pa$ + RCE_StrFromInt$(It\ID, 2) + RCE_StrFromInt$(It\ItemType, 1) + RCE_StrFromInt$(It\Rarity, 1) + RCE_StrFromInt$(It\TakesDamage, 1)
 					Pa$ = Pa$ + RCE_StrFromInt$(It\Value, 4) + RCE_StrFromInt$(It\Mass, 2) + RCE_StrFromInt$(It\ThumbnailTexID, 2)
 					For j = 0 To 5 : Pa$ = Pa$ + RCE_StrFromInt$(It\Gubbins[j], 1) : Next
 					Pa$ = Pa$ + RCE_StrFromInt$(It\MMeshID, 2) + RCE_StrFromInt$(It\FMeshID, 2) + RCE_StrFromInt$(It\SlotType, 2)

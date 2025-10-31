@@ -29,6 +29,13 @@ Const AC_Medium   = 2
 Const AC_Heavy 	  = 3
 Const AC_Clothing = 4
 
+;Rarity
+Const R_Common = 1
+Const R_Uncommon = 2
+Const R_Rare = 3
+Const R_Epic = 4
+Const R_Mythic = 5
+
 Dim DamageTypes$(19)
 
 Global WeaponDamage, ArmourDamage
@@ -40,7 +47,7 @@ Type Item
 	Field Name$
 	Field ExclusiveRace$, ExclusiveSkill$, SkillReq ; If this item can only be used by a certain race and/or class
 	Field Script$, SMethod$      ; Called when the item is right clicked
-	Field ItemType              ; Should be one of the constants above
+	Field ItemType, Rarity              ; Should be one of the constants above
 	Field Value, Mass           ; Average monetary value, and item weight
 	Field ThumbnailTexID        ; The texture ID for the image seen in the inventory system
 	Field MMeshID, FMeshID      ; Weapon/hat/shield/chest/forearm/shin mesh IDs
@@ -189,6 +196,7 @@ Function CreateItem.Item()
 			I\MMeshID = 65535
 			I\FMeshID = 65535
 			I\ItemType = 1
+			I\Rarity = 1
 			I\SlotType = 1
 			I\Value = 1
 			I\Mass = 1
@@ -274,6 +282,7 @@ Function LoadItems(Filename$)
 			I\Script$          = ReadString$(F)
 			I\SMethod$          = ReadString$(F)
 			I\ItemType         = ReadByte(F)
+			I\Rarity 			= ReadByte(F)
 			I\Value            = ReadInt(F)
 			I\Mass             = ReadShort(F)
 			I\TakesDamage      = ReadByte(F)
@@ -332,6 +341,7 @@ Function SaveItems(Filename$)
 			WriteString F, I\Script$
 			WriteString F, I\SMethod$
 			WriteByte F, I\ItemType
+			WriteByte F, I\Rarity
 			WriteInt F, I\Value
 			WriteShort F, I\Mass
 			WriteByte F, I\TakesDamage
@@ -376,8 +386,7 @@ Function SaveItems(Filename$)
 		For I.Item = Each Item
 			WriteLine(G, "Item ID: " + I\ID)
 			WriteLine(G, "Item Name: " + I\Name$)
-			WriteLine(G, "Item Male Texture ID: " + I\MaleTexID)
-			WriteLine(G, "Item Female Texture ID: " + I\FemaleTexID)
+			WriteLine(G, "Rarity: " + I\Rarity)
 			WriteLine(G, "")
 		Next
 	CloseFile(G)

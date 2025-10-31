@@ -1107,6 +1107,13 @@ FUI_ComboBoxItem(CItemType, "Potion")
 FUI_ComboBoxItem(CItemType, "Food")
 FUI_ComboBoxItem(CItemType, "Image")
 FUI_ComboBoxItem(CItemType, "Other")
+FUI_Label(TItemsGeneral, 250, 82, "Rarity:")
+Global CItemRarity = FUI_ComboBox(TItemsGeneral, 315, 80, 150, 20)
+FUI_ComboBoxItem(CItemRarity, "Common")
+FUI_ComboBoxItem(CItemRarity, "Uncommon")
+FUI_ComboBoxItem(CItemRarity, "Rare")
+FUI_ComboBoxItem(CItemRarity, "Epic")
+FUI_ComboBoxItem(CItemRarity, "Mythic")
 FUI_Label(TItemsGeneral, 20, 112, "Inventory slot:")
 Global CSlotType = FUI_ComboBox(TItemsGeneral, 95, 110, 150, 20)
 FUI_Label(TItemsGeneral, 20, 152, "Value:")
@@ -5919,6 +5926,12 @@ Cls
 					UpdateItemDisplay()
 					ItemsSaved = False
 				EndIf
+			Case CItemRarity
+				If SelectedItem <> Null
+					SelectedItem\Rarity = E\EventData
+					UpdateItemDisplay()
+					ItemsSaved = False
+				EndIf
 			Case CSlotType
 				If SelectedItem <> Null
 					If SelectedItem\ItemType = I_Armour
@@ -7587,6 +7600,7 @@ Function UpdateItemDisplay()
 		FUI_SendMessage(SItemValue, M_SETVALUE, 0)
 		FUI_SendMessage(SItemMass, M_SETVALUE, 0)
 		FUI_SendMessage(CItemType, M_SETINDEX, 1)
+		FUI_SendMessage(CItemRarity, M_SETINDEX, 1)
 		FUI_SendMessage(CSlotType, M_RESET)
 		FUI_SendMessage(SItemAttribute, M_SETVALUE, 0)
 		FUI_SendMessage(BItemStackable, M_SETCHECKED, False)
@@ -7608,6 +7622,7 @@ Function UpdateItemDisplay()
 		FUI_SendMessage(SItemMass, M_SETVALUE, SelectedItem\Mass)
 		FUI_SendMessage(SItemSkillReq, M_SETVALUE, SelectedItem\SkillReq)
 		FUI_SendMessage(CItemType, M_SETINDEX, SelectedItem\ItemType)
+		FUI_SendMessage(CItemRarity, M_SETINDEX, SelectedItem\Rarity)
 		FUI_SendMessage(SItemAttribute, M_SETVALUE, SelectedItem\Attributes\Value[FUI_SendMessage(LItemAttributes, M_GETSELECTED)])
 		FUI_SendMessage(SItemResistance, M_SETVALUE, SelectedItem\Resistances[FUI_SendMessage(LItemResistances, M_GETSELECTED)])
 		FUI_SendMessage(BItemStackable, M_SETCHECKED, SelectedItem\Stackable)

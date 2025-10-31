@@ -2379,6 +2379,117 @@ Function GY_CreateWindow(Title$, X#, Y#, Width#, Height#, HasTitle = True, Close
 
 End Function
 
+Function GY_CreateWindowColoredTitle(Title$, Red, Grn, Blu,  X#, Y#, Width#, Height#, HasTitle = True, Close = True, Min = True, Tex = 0, AutoFreeTex = True)
+
+	GY_ZeroCamera()
+
+	; Window
+	W.GY_Window = New GY_Window
+	W\UserTexture = Tex
+	W\AutoFreeUserTexture = AutoFreeTex
+	Insert W Before First GY_Window
+
+	; Gadget
+	G.GY_Gadget = New GY_Gadget
+	W\Gadget = G
+	G\TypeHandle = Handle(W)
+	G\Width# = Width#
+	G\Height# = Height#
+	G\Alpha# = 1.0
+	G\Caption$ = Title$
+
+	; Main entity
+	G\EN = GY_CreateQuad(GY_Cam)
+	If W\UserTexture = 0
+		EntityTexture(G\EN, GY_Window)
+		GY_ScaleQuad(G\EN, Width#, Height#)
+	Else
+		EntityTexture(G\EN, W\UserTexture)
+		ScaleEntity(G\EN, Width# * 20.0, Height# * 15.0, 1.0)
+	EndIf
+	EntityFX(G\EN, 1 + 8)
+	GY_PositionGadget(Handle(G), X#, Y#)
+
+	; Borders
+	W\LeftEN = GY_CreateQuad(GY_Cam)
+	ScaleEntity(W\LeftEN, 0.005 * 20.0, Height# * 15.0, 1.0)
+	PositionEntity(W\LeftEN, (X# * 20.0) - 10.1, (Y# * -15.0) + 7.5, 10.0)
+	EntityFX(W\LeftEN, 1 + 8)
+	EntityColor(W\LeftEN, GY_BorderR, GY_BorderG, GY_BorderB)
+	EntityParent(W\LeftEN, G\EN)
+
+	W\LowerEN = GY_CreateQuad(GY_Cam)
+	ScaleEntity(W\LowerEN, (Width# + 0.01) * 20.0, 0.005 * 15.0, 1.0)
+	PositionEntity(W\LowerEN, (X# * 20.0) - 10.1, ((Y# + Height#) * -15.0) + 7.5, 10.0)
+	EntityFX(W\LowerEN, 1 + 8)
+	EntityColor(W\LowerEN, GY_BorderR, GY_BorderG, GY_BorderB)
+	EntityParent(W\LowerEN, G\EN)
+
+	W\RightEN = GY_CreateQuad(GY_Cam)
+	ScaleEntity(W\RightEN, 0.005 * 20.0, Height# * 15.0, 1.0)
+	PositionEntity(W\RightEN, ((X# + Width#) * 20.0) - 10.0, (Y# * -15.0) + 7.5, 10.0)
+	EntityColor(W\RightEN, GY_BorderR, GY_BorderG, GY_BorderB)
+	EntityFX(W\RightEN, 1 + 8)
+	EntityParent(W\RightEN, G\EN)
+
+	If HasTitle = True
+		; Title bar
+		W\TitleEN = GY_CreateQuad(GY_Cam)
+		ScaleEntity(W\TitleEN, (Width# + 0.01) * 20.0, 0.03 * 15.0, 1.0)
+		EntityTexture(W\TitleEN, GY_Title)
+		EntityFX(W\TitleEN, 1 + 8)
+		PositionEntity(W\TitleEN, (X# * 20.0) - 10.1, (Y# * -15.0) + 7.95, 10.0)
+		EntityParent(W\TitleEN, G\EN)
+
+		; Text
+		Length = (Width# / 0.02) - 1
+		W\TitleText = GY_Create3DText(X#, Y# - 0.0325, 0.015 * Float#(Length), 0.025, Length, GY_TitleFont, GY_Cam)
+		GY_Set3DText(W\TitleText, G\Caption$)
+		EntityColor(W\TitleText, Red, Grn, Blu)
+		EntityParent(W\TitleText, G\EN)
+
+		; Close button
+		If Close = True
+			W\CloseEN = GY_CreateQuad(GY_Cam)
+			ScaleEntity(W\CloseEN, 0.02 * 20.0, 0.02 * 20.0, 1.0)
+			EntityTexture(W\CloseEN, GY_Close)
+			EntityFX(W\CloseEN, 1 + 8)
+			PositionEntity(W\CloseEN, ((X# + Width#) * 20.0) - 10.4, (Y# * -15.0) + 7.925, 10.0)
+			EntityParent(W\CloseEN, G\EN)
+		EndIf
+
+		; Minimise button
+		If Min = True
+			W\MinEN = GY_CreateQuad(GY_Cam)
+			ScaleEntity(W\MinEN, 0.02 * 20.0, 0.02 * 20.0, 1.0)
+			EntityTexture(W\MinEN, GY_Minimise)
+			EntityFX(W\MinEN, 1 + 8)
+			If Close = True
+				PositionEntity(W\MinEN, ((X# + Width#) * 20.0) - 10.9, (Y# * -15.0) + 7.925, 10.0)
+			Else
+				PositionEntity(W\MinEN, ((X# + Width#) * 20.0) - 10.4, (Y# * -15.0) + 7.925, 10.0)
+			EndIf
+			EntityParent(W\MinEN, G\EN)
+		EndIf
+	; Top border
+	Else
+		W\TopEN = GY_CreateQuad(GY_Cam)
+		ScaleEntity(W\TopEN, (Width# + 0.01) * 20.0, 0.005 * 15.0, 1.0)
+		PositionEntity(W\TopEN, (X# * 20.0) - 10.1, ((Y# - 0.005) * -15.0) + 7.5, 10.0)
+		EntityFX(W\TopEN, 1 + 8)
+		EntityColor(W\TopEN, GY_BorderR, GY_BorderG, GY_BorderB)
+		EntityParent(W\TopEN, G\EN)
+	EndIf
+
+	; Put in front
+	GY_ActivateWindow(Handle(G))
+
+	GY_RestoreCamera()
+
+	Return Handle(G)
+
+End Function
+
 ; Creates a Option window window gadget
 Function GY_CreateWindowOptions(Title$, X#, Y#, Width#, Height#, HasTitle = True, Close = True, Min = True, Tex = 0, AutoFreeTex = True)
 

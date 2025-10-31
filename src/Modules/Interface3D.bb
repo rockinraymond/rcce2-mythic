@@ -1841,12 +1841,34 @@ EndIf
 			For i = 0 To Slots_Inventory
 				If GY_MouseHovering(BSlots(i)) = True And Me\Inventory\Items[i] <> Null
 					Name$ = Me\Inventory\Items[i]\Item\Name$
+					Rarity = Me\Inventory\Items[i]\Item\Rarity
+					NameR = 255
+					NameG = 255
+					NameB = 255
+					Select Rarity
+						Case R_Uncommon
+							NameR = 0
+							NameG = 255
+							NameB = 0
+						Case R_Rare
+							NameR = 0
+							NameG = 0
+							NameB = 255
+						Case R_Epic
+							NameR = 255
+							NameG = 0
+							NameB = 255
+						Case R_Mythic
+							NameR = 255
+							NameG = 255
+							NameB = 0
+					End Select
 					X# = GY_MouseX# + 0.03
 					Y# = GY_MouseY#
 					If Y# + 0.4 > 0.99 Then Y# = 0.59
 					If X# + 0.4 > 0.99 Then X# = 0.59
 					If LTooltip <> 0 Then GY_FreeGadget(LTooltip) : LTooltip = 0
-					WTooltip = GY_CreateWindow(Name$, X#, Y#, 0.2, 0.25, True, False, False)
+					WTooltip = GY_CreateWindowColoredTitle(Name$,NameR,NameG, NameB, X#, Y#, 0.2, 0.25, True, False, False)
 					WTooltipReturn = WInventory
 					Y# = 0.025
 					YInterval# = 0.055
@@ -1969,12 +1991,34 @@ EndIf
 		For i = 0 To 31
 					If GY_MouseHovering(BSlotsMine(i)) = True And Me\Inventory\Items[i + SlotI_Backpack] <> Null
 					Name$ = Me\Inventory\Items[i + SlotI_Backpack]\Item\Name$
+					Rarity = Me\Inventory\Items[i + SlotI_Backpack]\Item\Rarity
+					NameR = 255
+					NameG = 255
+					NameB = 255
+					Select Rarity
+						Case R_Uncommon
+							NameR = 0
+							NameG = 255
+							NameB = 0
+						Case R_Rare
+							NameR = 0
+							NameG = 0
+							NameB = 255
+						Case R_Epic
+							NameR = 255
+							NameG = 0
+							NameB = 255
+						Case R_Mythic
+							NameR = 255
+							NameG = 255
+							NameB = 0
+					End Select
 					X# = GY_MouseX# + 0.03
 					Y# = GY_MouseY#
 					If Y# + 0.4 > 0.99 Then Y# = 0.59
 					If X# + 0.4 > 0.99 Then X# = 0.59
 					If LTooltip <> 0 Then GY_FreeGadget(LTooltip) : LTooltip = 0
-					WTooltip = GY_CreateWindow(Name$, X#, Y#, 0.2, 0.25, True, False, False)
+					WTooltip = GY_CreateWindowColoredTitle(Name$,NameR,NameG,NameB, X#, Y#, 0.2, 0.25, True, False, False)
 					WTooltipReturn = WTrading
 					Y# = 0.025
 					GY_CreateLabel(WTooltip, 0.02, Y#, LanguageString$(LS_Type) + " " + GetItemType$(Me\Inventory\Items[i + SlotI_Backpack]\Item))
@@ -2090,14 +2134,35 @@ EndIf
 						Exit
 						EndIf
 					If GY_MouseHovering(BSlotsHis(i)) = True And TradeItems(i) <> Null
-							Name$ = TradeItems(i)\Item\Name$
-						
+					Name$ = TradeItems(i)\Item\Name$
+					Rarity = TradeItems(i)\Item\Rarity
+					NameR = 255
+					NameG = 255
+					NameB = 255
+					Select Rarity
+						Case R_Uncommon
+							NameR = 0
+							NameG = 255
+							NameB = 0
+						Case R_Rare
+							NameR = 0
+							NameG = 0
+							NameB = 255
+						Case R_Epic
+							NameR = 255
+							NameG = 0
+							NameB = 255
+						Case R_Mythic
+							NameR = 255
+							NameG = 255
+							NameB = 0
+					End Select	
 					X# = GY_MouseX# + 0.03
 					Y# = GY_MouseY#
 					If Y# + 0.4 > 0.99 Then Y# = 0.59
 					If X# + 0.4 > 0.99 Then X# = 0.59
 					If LTooltip <> 0 Then GY_FreeGadget(LTooltip) : LTooltip = 0
-					WTooltip = GY_CreateWindow(Name$, X#, Y#, 0.2, 0.25, True, False, False)
+					WTooltip = GY_CreateWindowColoredTitle(Name$, NameR, NameG, NameB, X#, Y#, 0.2, 0.25, True, False, False)
 					WTooltipReturn = WTrading
 					Y# = 0.025
 					YInterval# = 0.055

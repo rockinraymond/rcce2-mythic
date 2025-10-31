@@ -892,11 +892,12 @@ Function LogIn()
 									It\ID = RCE_IntFromStr(Mid$(Pa$, Offset, 2))
 									ItemList(It\ID) = It
 									It\ItemType = RCE_IntFromStr(Mid$(Pa$, Offset + 2, 1))
-									It\TakesDamage = RCE_IntFromStr(Mid$(Pa$, Offset + 3, 1))
-									It\Value = RCE_IntFromStr(Mid$(Pa$, Offset + 4, 4))
-									It\Mass = RCE_IntFromStr(Mid$(Pa$, Offset + 8, 2))
-									It\ThumbnailTexID = RCE_IntFromStr(Mid$(Pa$, Offset + 10, 2))
-									Offset = Offset + 12
+									It\Rarity = RCE_IntFromStr(Mid$(Pa$, Offset + 3, 1))
+									It\TakesDamage = RCE_IntFromStr(Mid$(Pa$, Offset + 4, 1))
+									It\Value = RCE_IntFromStr(Mid$(Pa$, Offset + 5, 4))
+									It\Mass = RCE_IntFromStr(Mid$(Pa$, Offset + 9, 2))
+									It\ThumbnailTexID = RCE_IntFromStr(Mid$(Pa$, Offset + 11, 2))
+									Offset = Offset + 13
 									For j = 0 To 5
 										It\Gubbins[j] = RCE_IntFromStr(Mid$(Pa$, Offset, 1))
 										Offset = Offset + 1
