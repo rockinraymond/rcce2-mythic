@@ -789,6 +789,8 @@ BAttributeSkill = FUI_CheckBox(TAttributes, 350, 142, "Attribute is a skill")
 BAttributeHidden = FUI_CheckBox(TAttributes, 350, 172, "Hide attribute from players")
 FUI_Label(TAttributes, 20, 472, "Assignable attribute points available at character creation:")
 SAttributeAssignment = FUI_Spinner(TAttributes, 320, 470, 90, 20, 0, 100, AttributeAssignment, 1, DTYPE_INTEGER)
+FUI_Label(TAttributes, 20, 492, "Assignable skill points available at character creation:")
+SSkillAssignment = FUI_Spinner(TAttributes, 320, 490, 90, 20, 0, 100, SkillAssignment, 1, DTYPE_INTEGER)
 
 ; Actors gadgets --------------------------------------------------------------------------------------------------------------------
 
@@ -4122,6 +4124,10 @@ Cls
 				FUI_SendMessage(BAttributeHidden, M_SETCHECKED, AttributeHidden(ID))
 			Case SAttributeAssignment
 				AttributeAssignment = E\EventData
+				StatsSaved = False
+				AttributesChanged = True
+			Case SSkillAssignment
+				SkillAssignment = E\EventData
 				StatsSaved = False
 				AttributesChanged = True
 			Case BAttributeAdd

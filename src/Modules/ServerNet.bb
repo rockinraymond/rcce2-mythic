@@ -1586,7 +1586,8 @@ Function UpdateNetwork()
 			; Fetch actor list request
 			Case P_FetchActors ; :)
 				; Attributes block
-				Pa$ = "A" + RCE_StrFromInt$(AttributeAssignment, 1)
+				Pa$ = "A" + RCE_StrFromInt$(AttributeAssignment, 1) + RCE_StrFromInt$(SkillAssignment, 1)
+				
 				For i = 0 To 39
 					Pa$ = Pa$ + RCE_StrFromInt$(AttributeIsSkill(i), 1) + RCE_StrFromInt$(AttributeHidden(i), 1)
 					Pa$ = Pa$ + RCE_StrFromInt$(Len(AttributeNames$(i)), 1) + AttributeNames$(i)
@@ -2051,16 +2052,17 @@ Function UpdateNetwork()
 										EndIf
 									Next
 									Offset = Offset + 7
-									If AttributeAssignment > 0
+									If AttributeAssignment > 0 Or SkillAssignment > 0
 										TotalAmount = 0
 										For i = 0 To 39
 											Amount = RCE_IntFromStr(Mid$(M\MessageData$, Offset, 1))
 											TotalAmount = TotalAmount + Amount
 											C\Attributes\Value[i] = C\Attributes\Value[i] + Amount
+											C\Attributes\XpMax[i] = C\Attributes\Value[i] * 100
 											Offset = Offset + 1
 										Next
 										; Check for cheating
-										If TotalAmount > AttributeAssignment
+										If TotalAmount > AttributeAssignment + SkillAssignment
 											FreeActorInstance(A\Character[FreeSlot])
 									        RCE_Send(Host, M\FromID, P_CreateCharacter, "N", True)
 											Exists = True : Exit

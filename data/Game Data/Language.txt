@@ -28,7 +28,7 @@ Invalid password!
 Status: Waiting for reply from server...
 Status: Downloading characters from server...
 Invalid character name - it may already be taken
-Points:
+Attribute Points:
 Graphics Options
 Select resolution:
 Enable anti-aliasing

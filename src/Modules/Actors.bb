@@ -145,6 +145,7 @@ End Type
 
 ; Actor attributes (strength, dexterity, health, armour, whatever the user decides)
 Global AttributeAssignment
+Global SkillAssignment
 Dim AttributeNames$(39)
 Dim AttributeIsSkill(39) ; False for a stat (health, strength, armour), True for a skill (fishing, riding)
 Dim AttributeHidden(39)
@@ -655,6 +656,7 @@ Function LoadAttributes(Filename$)
 	If F = 0 Then Return False
 
 		AttributeAssignment = ReadByte(F)
+		SkillAssignment = ReadByte(F)
 		For i = 0 To 39
 			AttributeNames$(i) = ReadString$(F)
 			AttributeIsSkill(i) = ReadByte(F)
@@ -673,6 +675,7 @@ Function SaveAttributes(Filename$)
 	If F = 0 Then Return False
 
 		WriteByte(F, AttributeAssignment)
+		WriteByte(F, SkillAssignment)
 		For i = 0 To 39
 			WriteString(F, AttributeNames$(i))
 			WriteByte(F, AttributeIsSkill(i))
