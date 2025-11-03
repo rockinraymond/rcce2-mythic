@@ -1693,9 +1693,9 @@ Function UpdateInterface()
 		CurrentSkl = 0
 		For i = 0 To 39
 			If AttributeNames$(i) <> "" And AttributeHidden(i) = False And AttributeIsSkill(i) = True
-					GY_UpdateLabel(AttributeXpDisplayNumbers(CurrentSkl), Str(Me\Attributes\Xp[i]) + "/"+ Str(Me\Attributes\XpMax[i]))
+					GY_UpdateLabel(AttributeXpDisplayNumbers(CurrentSkl), "EXP: " + Str(Me\Attributes\Xp[i]) + "/"+ Str(Me\Attributes\XpMax[i]))
 					GY_UpdateProgressBar(AttributeXpDisplays(CurrentSkl), (Float#(Me\Attributes\Xp[i]) / Float#(Me\Attributes\XpMax[i])) * 100.0)
-					GY_UpdateLabel(LSkillVals(CurrentSkl), Me\Attributes\Value[i])
+					GY_UpdateLabel(LSkillNames(CurrentSkl), AttributeNames$(i) + ": " +  Str(Me\Attributes\Value[i]))
 					CurrentSkl = CurrentSkl + 1
 			EndIf
 		Next
@@ -3866,7 +3866,7 @@ Function CreateInterface()
 	For i = 0 To 39
 		If AttributeNames$(i) <> "" And AttributeHidden(i) = False And AttributeIsSkill(i) = False
 			LAttributeNames(AttCount) = GY_CreateLabel(WCharStats, 0.03, 0.38 + (Float#(AttCount) * 0.025), "LONGEST ATTRIBUTE NAME HERE!")
-			LAttributeVals(AttCount) = GY_CreateLabel(WCharStats, 0.33, 0.38 + (Float#(AttCount) * 0.025), "00000 / 00000", 255, 255, 255, Justify_Right)
+			LAttributeVals(AttCount) = GY_CreateLabel(WCharStats, 0.23, 0.38 + (Float#(AttCount) * 0.025), "00000 / 00000", 255, 255, 255, Justify_Right)
 			GY_UpdateLabel(LAttributeNames(AttCount), AttributeNames$(i))
 			GY_UpdateLabel(LAttributeVals(AttCount), "")
 			AttCount = AttCount + 1
@@ -3882,7 +3882,7 @@ Function CreateInterface()
 	For i = 0 To 19
 		If DamageTypes$(i) <> ""
 			LResistanceNames(ResCount) = GY_CreateLabel(WCharStats, 0.03, ResY# + (Float#(ResCount) * 0.025), "LONGEST ATTRIBUTE NAME HERE!")
-			LResistanceVals(ResCount) = GY_CreateLabel(WCharStats, 0.33, ResY# + (Float#(ResCount) * 0.025), "00000 / 00000", 255, 255, 255, Justify_Right)
+			LResistanceVals(ResCount) = GY_CreateLabel(WCharStats, 0.23, ResY# + (Float#(ResCount) * 0.025), "00000 / 00000", 255, 255, 255, Justify_Right)
 			GY_UpdateLabel(LResistanceNames(ResCount), DamageTypes$(i))
 			GY_UpdateLabel(LResistanceVals(ResCount), "")
 			ResCount = ResCount + 1
@@ -3896,14 +3896,14 @@ Function CreateInterface()
 	For i = 0 To 39
 		If AttributeNames$(i) <> "" And AttributeHidden(i) = False And AttributeIsSkill(i) = True
 			LSkillNames(SklCount) = GY_CreateLabel(WCharStats, 0.53, SkillStart + (Float#(SklCount) * 0.05), "LONGEST SKILL NAME HERE!")
-			LSkillVals(SklCount) = GY_CreateLabel(WCharStats, 0.83, SkillStart + (Float#(SklCount) * 0.05), "00000", 255, 255, 255, Justify_Right)
-			GY_UpdateLabel(LSkillNames(SklCount), AttributeNames$(i))
-			GY_UpdateLabel(LSkillVals(SklCount), "")
+			;LSkillVals(SklCount) = GY_CreateLabel(WCharStats, 0.61, SkillStart + (Float#(SklCount) * 0.05), "00000", 255, 255, 255, Justify_Right)
+			GY_UpdateLabel(LSkillNames(SklCount), AttributeNames$(i) + ": " + "")
+			;GY_UpdateLabel(LSkillVals(SklCount), "")
 
 			; Create xp bar
-			AttributeXpDisplayNumbers(SklCount) = GY_CreateLabel(WCharStats, 0.83, SkillStart + 0.025 + (Float#(SklCount) * 0.05), "0000/0000", 255, 255, 255, Justify_Right)
-			AttributeXpDisplays(SklCount) = GY_CreateProgressBar(WCharStats, 0.58, SkillStart + 0.03 + (Float#(SklCount) * 0.05), 0.18, 0.015, 0, 100, 255, 68, 51)
-			GY_CreateLabel(WCharStats, 0.53, SkillStart + 0.025 + (Float#(SklCount) * 0.05), "EXP:", 255, 255, 255)
+			AttributeXpDisplayNumbers(SklCount) = GY_CreateLabel(WCharStats, 0.72, SkillStart + (Float#(SklCount) * 0.05), "EXP: 0000/0000", 255, 255, 255)
+			AttributeXpDisplays(SklCount) = GY_CreateProgressBar(WCharStats, 0.53, SkillStart + 0.03 + (Float#(SklCount) * 0.05), 0.3, 0.015, 0, 100, 255, 68, 51)
+			;GY_CreateLabel(WCharStats, 0.72, SkillStart + (Float#(SklCount) * 0.05), "EXP:", 255, 255, 255)
 			
 			SklCount = SklCount + 1
 		EndIf
