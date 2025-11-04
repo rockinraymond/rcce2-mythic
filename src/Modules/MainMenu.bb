@@ -14,7 +14,7 @@ Dim AttributeIncrease(39)
 Dim SkillDecrease(39)
 Dim SkillIncrease(39)
 Dim PointSpends(39)
-Dim LDescription(9)
+//Dim LDescription(9)
 Dim LEULA(28)
 Dim EULAText$(999)
 Global CharList$, UName$, PWord$
@@ -1966,13 +1966,13 @@ Function CreateChar()
 	
 	; Create the windows
 	If ResolutionType = 1 ; 16:9 ratio [@@]
-		WChar = GY_CreateWindow(LanguageString$(LS_CharacterTitle), 0.01 - 0.12, 0.05, 0.22, 0.4, True, False, False)
-		WStat = GY_CreateWindow(LanguageString$(LS_AttributesTitle), 0.74 + 0.12, 0.05, 0.25, StatWindowHeight#, True, False, False)
-		WSkill = GY_CreateWindow("Skills", 0.74 + 0.12, 0.55, 0.25, StatWindowHeight#, True, False, False)
+		WChar = GY_CreateWindow(LanguageString$(LS_CharacterTitle), 0.01 - 0.12, 0.05, 0.22, 0.18, True, False, False)
+		WStat = GY_CreateWindow(LanguageString$(LS_AttributesTitle), 0.01 - 0.12, 0.3, 0.25, StatWindowHeight#, True, False, False)
+		WSkill = GY_CreateWindow("Skills", 0.74 + 0.12, 0.01, 0.25, StatWindowHeight#, True, False, False)
 	Else
-		WChar = GY_CreateWindow(LanguageString$(LS_CharacterTitle), 0.01, 0.05, 0.22, 0.4, True, False, False)
-		WStat = GY_CreateWindow(LanguageString$(LS_AttributesTitle), 0.74, 0.05, 0.25, StatWindowHeight#, True, False, False)
-		WSkill = GY_CreateWindow("Skills", 0.74, 0.55, 0.25, SkillWindowHeight#, True, False, False)
+		WChar = GY_CreateWindow(LanguageString$(LS_CharacterTitle), 0.01, 0.05, 0.22, 0.18, True, False, False)
+		WStat = GY_CreateWindow(LanguageString$(LS_AttributesTitle), 0.01, 0.3, 0.25, StatWindowHeight#, True, False, False)
+		WSkill = GY_CreateWindow("Skills", 0.74, 0.05, 0.25, SkillWindowHeight#, True, False, False)
 	EndIf
 	
 	; Race list Rebuilt by Cysis145 to fix Bug with selecting Race 
@@ -1998,49 +1998,49 @@ Function CreateChar()
 	GY_DropGadget(BRight)
 
 	; Character options
-	GY_CreateLabel(WChar, 0.5, 0.21, LanguageString$(LS_Gender), 255, 255, 255, Justify_Centre)
-	BNextGender = GY_CreateCustomButton(WChar, 0.86, 0.2, 0.1, 0.07, LoadButtonU("SmallRight"), LoadButtonD("SmallRight"), LoadButtonH("SmallRight"))
-	BPrevGender = GY_CreateCustomButton(WChar, 0.04, 0.2, 0.1, 0.07, LoadButtonU("SmallLeft"), LoadButtonD("SmallLeft"), LoadButtonH("SmallLeft"))
+	GY_CreateLabel(WChar, 0.5, 0.41, LanguageString$(LS_Gender), 255, 255, 255, Justify_Centre)
+	BNextGender = GY_CreateCustomButton(WChar, 0.86, 0.4, 0.1, 0.12, LoadButtonU("SmallRight"), LoadButtonD("SmallRight"), LoadButtonH("SmallRight"))
+	BPrevGender = GY_CreateCustomButton(WChar, 0.04, 0.4, 0.1, 0.12, LoadButtonU("SmallLeft"), LoadButtonD("SmallLeft"), LoadButtonH("SmallLeft"))
 	;BNextGender = GY_CreateButton(WChar, 0.86, 0.2, 0.1, 0.07, ">")
 	;BPrevGender = GY_CreateButton(WChar, 0.04, 0.2, 0.1, 0.07, "<")
-	GY_CreateLabel(WChar, 0.5, 0.34, LanguageString$(LS_Class), 255, 255, 255, Justify_Centre)
-	BNextClass = GY_CreateCustomButton(WChar, 0.86, 0.33, 0.1, 0.07, LoadButtonU("SmallRight"), LoadButtonD("SmallRight"), LoadButtonH("SmallRight"))
-	BPrevClass = GY_CreateCustomButton(WChar, 0.04, 0.33, 0.1, 0.07, LoadButtonU("SmallLeft"), LoadButtonD("SmallLeft"), LoadButtonH("SmallLeft"))
+	; GY_CreateLabel(WChar, 0.5, 0.34, LanguageString$(LS_Class), 255, 255, 255, Justify_Centre)
+	; BNextClass = GY_CreateCustomButton(WChar, 0.86, 0.33, 0.1, 0.07, LoadButtonU("SmallRight"), LoadButtonD("SmallRight"), LoadButtonH("SmallRight"))
+	; BPrevClass = GY_CreateCustomButton(WChar, 0.04, 0.33, 0.1, 0.07, LoadButtonU("SmallLeft"), LoadButtonD("SmallLeft"), LoadButtonH("SmallLeft"))
 	;BNextClass = GY_CreateButton(WChar, 0.86, 0.33, 0.1, 0.07, ">")
 	;BPrevClass = GY_CreateButton(WChar, 0.04, 0.33, 0.1, 0.07, "<")
-	GY_CreateLabel(WChar, 0.5, 0.47, LanguageString$(LS_Hair), 255, 255, 255, Justify_Centre)
-	BNextHair = GY_CreateCustomButton(WChar, 0.86, 0.46, 0.1, 0.07, LoadButtonU("SmallRight"), LoadButtonD("SmallRight"), LoadButtonH("SmallRight"))
-	BPrevHair = GY_CreateCustomButton(WChar, 0.04, 0.46, 0.1, 0.07, LoadButtonU("SmallLeft"), LoadButtonD("SmallLeft"), LoadButtonH("SmallLeft"))
+	GY_CreateLabel(WChar, 0.5, 0.61, LanguageString$(LS_Hair), 255, 255, 255, Justify_Centre)
+	BNextHair = GY_CreateCustomButton(WChar, 0.86, 0.6, 0.1, 0.12, LoadButtonU("SmallRight"), LoadButtonD("SmallRight"), LoadButtonH("SmallRight"))
+	BPrevHair = GY_CreateCustomButton(WChar, 0.04, 0.6, 0.1, 0.12, LoadButtonU("SmallLeft"), LoadButtonD("SmallLeft"), LoadButtonH("SmallLeft"))
 	;BNextHair = GY_CreateButton(WChar, 0.86, 0.46, 0.1, 0.07, ">")
 	;BPrevHair = GY_CreateButton(WChar, 0.04, 0.46, 0.1, 0.07, "<")
-	GY_CreateLabel(WChar, 0.5, 0.60, LanguageString$(LS_Face), 255, 255, 255, Justify_Centre)
-	BNextFace = GY_CreateCustomButton(WChar, 0.86, 0.59, 0.1, 0.07, LoadButtonU("SmallRight"), LoadButtonD("SmallRight"), LoadButtonH("SmallRight"))
-	BPrevFace = GY_CreateCustomButton(WChar, 0.04, 0.59, 0.1, 0.07, LoadButtonU("SmallLeft"), LoadButtonD("SmallLeft"), LoadButtonH("SmallLeft"))
+	; GY_CreateLabel(WChar, 0.5, 0.60, LanguageString$(LS_Face), 255, 255, 255, Justify_Centre)
+	; BNextFace = GY_CreateCustomButton(WChar, 0.86, 0.59, 0.1, 0.07, LoadButtonU("SmallRight"), LoadButtonD("SmallRight"), LoadButtonH("SmallRight"))
+	; BPrevFace = GY_CreateCustomButton(WChar, 0.04, 0.59, 0.1, 0.07, LoadButtonU("SmallLeft"), LoadButtonD("SmallLeft"), LoadButtonH("SmallLeft"))
 	;BNextFace = GY_CreateButton(WChar, 0.86, 0.59, 0.1, 0.07, ">")
 	;BPrevFace = GY_CreateButton(WChar, 0.04, 0.59, 0.1, 0.07, "<")
-	GY_CreateLabel(WChar, 0.5, 0.73, LanguageString$(LS_Beard), 255, 255, 255, Justify_Centre)
-	BNextBeard = GY_CreateCustomButton(WChar, 0.86, 0.72, 0.1, 0.07, LoadButtonU("SmallRight"), LoadButtonD("SmallRight"), LoadButtonH("SmallRight"))
-	BPrevBeard = GY_CreateCustomButton(WChar, 0.04, 0.72, 0.1, 0.07, LoadButtonU("SmallLeft"), LoadButtonD("SmallLeft"), LoadButtonH("SmallLeft"))
-	;BNextBeard = GY_CreateButton(WChar, 0.86, 0.72, 0.1, 0.07, ">")
+	; GY_CreateLabel(WChar, 0.5, 0.73, LanguageString$(LS_Beard), 255, 255, 255, Justify_Centre)
+	; BNextBeard = GY_CreateCustomButton(WChar, 0.86, 0.72, 0.1, 0.07, LoadButtonU("SmallRight"), LoadButtonD("SmallRight"), LoadButtonH("SmallRight"))
+	; BPrevBeard = GY_CreateCustomButton(WChar, 0.04, 0.72, 0.1, 0.07, LoadButtonU("SmallLeft"), LoadButtonD("SmallLeft"), LoadButtonH("SmallLeft"))
+	; ;BNextBeard = GY_CreateButton(WChar, 0.86, 0.72, 0.1, 0.07, ">")
 	;BPrevBeard = GY_CreateButton(WChar, 0.04, 0.72, 0.1, 0.07, "<")
-	GY_CreateLabel(WChar, 0.5, 0.86, LanguageString$(LS_Clothes), 255, 255, 255, Justify_Centre)
-	BNextBody = GY_CreateCustomButton(WChar, 0.86, 0.85, 0.1, 0.07, LoadButtonU("SmallRight"), LoadButtonD("SmallRight"), LoadButtonH("SmallRight"))
-	BPrevBody = GY_CreateCustomButton(WChar, 0.04, 0.85, 0.1, 0.07, LoadButtonU("SmallLeft"), LoadButtonD("SmallLeft"), LoadButtonH("SmallLeft"))
+	GY_CreateLabel(WChar, 0.5, 0.81, LanguageString$(LS_Clothes), 255, 255, 255, Justify_Centre)
+	BNextBody = GY_CreateCustomButton(WChar, 0.86, 0.8, 0.1, 0.12, LoadButtonU("SmallRight"), LoadButtonD("SmallRight"), LoadButtonH("SmallRight"))
+	BPrevBody = GY_CreateCustomButton(WChar, 0.04, 0.8, 0.1, 0.12, LoadButtonU("SmallLeft"), LoadButtonD("SmallLeft"), LoadButtonH("SmallLeft"))
 	;BNextBody = GY_CreateButton(WChar, 0.86, 0.85, 0.1, 0.07, ">")
 	;BPrevBody = GY_CreateButton(WChar, 0.04, 0.85, 0.1, 0.07, "<")
 	
 	; Class description
-	Y# = 0.7
-	For i = 0 To 9
-	If ResolutionType = 1 ; 16:9 ratio [@@]
-		LDescription(i) = GY_CreateLabel(0, 0.01 - 0.12, Y#, String$("W", 50), 255, 255, 255, Justify_Left) ;Justify_Center
-	Else
-		LDescription(i) = GY_CreateLabel(0, 0.01, Y#, String$("W", 50), 255, 255, 255, Justify_Left) ;Justify_Cente
-	EndIf
-		GY_DropGadget(LDescription(i))
-		GY_UpdateLabel(LDescription(i), "")
-		Y# = Y# + 0.025
-	Next
+	; Y# = 0.7
+	; For i = 0 To 9
+	; If ResolutionType = 1 ; 16:9 ratio [@@]
+	; 	LDescription(i) = GY_CreateLabel(0, 0.01 - 0.12, Y#, String$("W", 50), 255, 255, 255, Justify_Left) ;Justify_Center
+	; Else
+	; 	LDescription(i) = GY_CreateLabel(0, 0.01, Y#, String$("W", 50), 255, 255, 255, Justify_Left) ;Justify_Cente
+	; EndIf
+	; 	GY_DropGadget(LDescription(i))
+	; 	GY_UpdateLabel(LDescription(i), "")
+	; 	Y# = Y# + 0.025
+	; Next
 
 	; Name box and Done button
 	;LName = GY_CreateLabel(0, 0.35, 0.86, LanguageString$(LS_CharacterName), 255, 255, 255, Justify_Right)
@@ -2165,7 +2165,7 @@ Function CreateChar()
 			GY_FreeGadget(ClassLab)
 			GY_FreeGadget(RemainingLabel) : GY_FreeGadget(SkillRemainingLabel)
 	
-			For i = 0 To 9 : GY_FreeGadget(LDescription(i)) : Next
+			; For i = 0 To 9 : GY_FreeGadget(LDescription(i)) : Next
 			Return 0
 		EndIf
 
@@ -2264,7 +2264,7 @@ Function CreateChar()
 						;Character Options
 						;FreeEntity(GenderLabel)
 						;GY_FreeGadget(BNextGender)
-						For i = 0 To 9 : GY_FreeGadget(LDescription(i)) : Next
+						; For i = 0 To 9 : GY_FreeGadget(LDescription(i)) : Next
 						Return 2
 					ElseIf Result = 1
 						GY_MessageBox("                   Attention!", LanguageString$(LS_InvalidCharName))
@@ -2282,7 +2282,7 @@ Function CreateChar()
 						;Character Options
 						;FreeEntity(GenderLabel)
 						;GY_FreeGadget(BNextGender)
-						For i = 0 To 9 : GY_FreeGadget(LDescription(i)) : Next
+						; For i = 0 To 9 : GY_FreeGadget(LDescription(i)) : Next
 						Return 1
 					EndIf
 				EndIf
@@ -2366,75 +2366,75 @@ Function CreateChar()
 		EndIf
 
 		; Next/Previous class
-		If GY_ButtonHit(BNextClass) = True
-			Gender = Preview\Gender
-			A.Actor = Preview\Actor
-			Repeat
-				A = After A
-				If A = Null Then A = First Actor
-				If Upper$(A\Race$) = Upper$(Preview\Actor\Race$) And A\Playable = True
-					SafeFreeActorInstance(Preview)
-					Preview.ActorInstance = CreateActorInstance(A)
-					If (Gender = 0 And A\Genders <> 2) Or (Gender = 1 And A\Genders <> 1 And A\Genders <> 3)
-						Preview\Gender = Gender
-					EndIf
-					Result = LoadActorInstance3D(Preview, 1.0, False, False)
-					If Result = False Then RuntimeError("Could not load actor mesh for " + A\Race$ + "!")
-					PlayAnimation(Preview, 1, 0.003, Anim_Idle)
-					PositionEntity Preview\CollisionEN, 30, -(35.0 + EntityY#(Preview\EN, True)), 100
-					;If Preview\ShadowEN <> 0 Then HideEntity(Preview\ShadowEN) [###]
-					If Preview\NametagEN <> 0 Then HideEntity(Preview\NametagEN)
-					PointsToSpend = AttributeAssignment
-					SkillPointsToSpend = SkillAssignment
-					For i = 0 To 39 : PointSpends(i) = 0 : Next
-					SetUpPreview(Preview\Actor)
-					GY_UpdateLabel(RemainingLabel, LanguageString$(LS_AttributePoints) + " " + PointsToSpend)
-					GY_UpdateLabel(SkillRemainingLabel, "Skill Points: " + SkillPointsToSpend)
-					AllowedFace = ActorHasFace(Preview\Actor, Preview\Gender + 1)
-					GY_LockGadget(BNextFace, Not AllowedFace) : GY_LockGadget(BPrevFace, Not AllowedFace)
-					AllowedHair = ActorHasHair(Preview\Actor, Preview\Gender + 1)
-					GY_LockGadget(BNextHair, Not AllowedHair) : GY_LockGadget(BPrevHair, Not AllowedHair)
-					GY_LockGadget(BNextBeard, Not ActorHasBeard(Preview\Actor))
-					GY_LockGadget(BPrevBeard, Not ActorHasBeard(Preview\Actor))
-					GY_LockGadget(BNextGender, Preview\Actor\Genders) : GY_LockGadget(BPrevGender, Preview\Actor\Genders)
-					Exit
-				EndIf
-			Forever
-		ElseIf GY_ButtonHit(BPrevClass) = True
-			Gender = Preview\Gender
-			A.Actor = Preview\Actor
-			Repeat
-				A = Before A
-				If A = Null Then A = Last Actor
-				If Upper$(A\Race$) = Upper$(Preview\Actor\Race$) And A\Playable = True
-					SafeFreeActorInstance(Preview)
-					Preview.ActorInstance = CreateActorInstance(A)
-					If (Gender = 0 And A\Genders <> 2) Or (Gender = 1 And A\Genders <> 1 And A\Genders <> 3)
-						Preview\Gender = Gender
-					EndIf
-					Result = LoadActorInstance3D(Preview, 1.0, False, False)
-					If Result = False Then RuntimeError("Could not load actor mesh for " + A\Race$ + "!")
-					PlayAnimation(Preview, 1, 0.003, Anim_Idle)
-					PositionEntity Preview\CollisionEN, 30, -(35.0 + EntityY#(Preview\EN, True)), 100
-					;If Preview\ShadowEN <> 0 Then HideEntity(Preview\ShadowEN) [###]
-					If Preview\NametagEN <> 0 Then HideEntity(Preview\NametagEN)
-					PointsToSpend = AttributeAssignment
-					SkillPointsToSpend = SkillAssignment
-					For i = 0 To 39 : PointSpends(i) = 0 : Next
-					SetUpPreview(Preview\Actor)
-					GY_UpdateLabel(RemainingLabel, LanguageString$(LS_AttributePoints) + " " + PointsToSpend)
-					GY_UpdateLabel(SkillRemainingLabel, "Skill Points: " + SkillPointsToSpend)
-					AllowedFace = ActorHasFace(Preview\Actor, Preview\Gender + 1)
-					GY_LockGadget(BNextFace, Not AllowedFace) : GY_LockGadget(BPrevFace, Not AllowedFace)
-					AllowedHair = ActorHasHair(Preview\Actor, Preview\Gender + 1)
-					GY_LockGadget(BNextHair, Not AllowedHair) : GY_LockGadget(BPrevHair, Not AllowedHair)
-					GY_LockGadget(BNextBeard, Not ActorHasBeard(Preview\Actor))
-					GY_LockGadget(BPrevBeard, Not ActorHasBeard(Preview\Actor))
-					GY_LockGadget(BNextGender, Preview\Actor\Genders) : GY_LockGadget(BPrevGender, Preview\Actor\Genders)
-					Exit
-				EndIf
-			Forever
-		EndIf
+		; If GY_ButtonHit(BNextClass) = True
+		; 	Gender = Preview\Gender
+		; 	A.Actor = Preview\Actor
+		; 	Repeat
+		; 		A = After A
+		; 		If A = Null Then A = First Actor
+		; 		If Upper$(A\Race$) = Upper$(Preview\Actor\Race$) And A\Playable = True
+		; 			SafeFreeActorInstance(Preview)
+		; 			Preview.ActorInstance = CreateActorInstance(A)
+		; 			If (Gender = 0 And A\Genders <> 2) Or (Gender = 1 And A\Genders <> 1 And A\Genders <> 3)
+		; 				Preview\Gender = Gender
+		; 			EndIf
+		; 			Result = LoadActorInstance3D(Preview, 1.0, False, False)
+		; 			If Result = False Then RuntimeError("Could not load actor mesh for " + A\Race$ + "!")
+		; 			PlayAnimation(Preview, 1, 0.003, Anim_Idle)
+		; 			PositionEntity Preview\CollisionEN, 30, -(35.0 + EntityY#(Preview\EN, True)), 100
+		; 			;If Preview\ShadowEN <> 0 Then HideEntity(Preview\ShadowEN) [###]
+		; 			If Preview\NametagEN <> 0 Then HideEntity(Preview\NametagEN)
+		; 			PointsToSpend = AttributeAssignment
+		; 			SkillPointsToSpend = SkillAssignment
+		; 			For i = 0 To 39 : PointSpends(i) = 0 : Next
+		; 			SetUpPreview(Preview\Actor)
+		; 			GY_UpdateLabel(RemainingLabel, LanguageString$(LS_AttributePoints) + " " + PointsToSpend)
+		; 			GY_UpdateLabel(SkillRemainingLabel, "Skill Points: " + SkillPointsToSpend)
+		; 			AllowedFace = ActorHasFace(Preview\Actor, Preview\Gender + 1)
+		; 			GY_LockGadget(BNextFace, Not AllowedFace) : GY_LockGadget(BPrevFace, Not AllowedFace)
+		; 			AllowedHair = ActorHasHair(Preview\Actor, Preview\Gender + 1)
+		; 			GY_LockGadget(BNextHair, Not AllowedHair) : GY_LockGadget(BPrevHair, Not AllowedHair)
+		; 			GY_LockGadget(BNextBeard, Not ActorHasBeard(Preview\Actor))
+		; 			GY_LockGadget(BPrevBeard, Not ActorHasBeard(Preview\Actor))
+		; 			GY_LockGadget(BNextGender, Preview\Actor\Genders) : GY_LockGadget(BPrevGender, Preview\Actor\Genders)
+		; 			Exit
+		; 		EndIf
+		; 	Forever
+		; ElseIf GY_ButtonHit(BPrevClass) = True
+		; 	Gender = Preview\Gender
+		; 	A.Actor = Preview\Actor
+		; 	Repeat
+		; 		A = Before A
+		; 		If A = Null Then A = Last Actor
+		; 		If Upper$(A\Race$) = Upper$(Preview\Actor\Race$) And A\Playable = True
+		; 			SafeFreeActorInstance(Preview)
+		; 			Preview.ActorInstance = CreateActorInstance(A)
+		; 			If (Gender = 0 And A\Genders <> 2) Or (Gender = 1 And A\Genders <> 1 And A\Genders <> 3)
+		; 				Preview\Gender = Gender
+		; 			EndIf
+		; 			Result = LoadActorInstance3D(Preview, 1.0, False, False)
+		; 			If Result = False Then RuntimeError("Could not load actor mesh for " + A\Race$ + "!")
+		; 			PlayAnimation(Preview, 1, 0.003, Anim_Idle)
+		; 			PositionEntity Preview\CollisionEN, 30, -(35.0 + EntityY#(Preview\EN, True)), 100
+		; 			;If Preview\ShadowEN <> 0 Then HideEntity(Preview\ShadowEN) [###]
+		; 			If Preview\NametagEN <> 0 Then HideEntity(Preview\NametagEN)
+		; 			PointsToSpend = AttributeAssignment
+		; 			SkillPointsToSpend = SkillAssignment
+		; 			For i = 0 To 39 : PointSpends(i) = 0 : Next
+		; 			SetUpPreview(Preview\Actor)
+		; 			GY_UpdateLabel(RemainingLabel, LanguageString$(LS_AttributePoints) + " " + PointsToSpend)
+		; 			GY_UpdateLabel(SkillRemainingLabel, "Skill Points: " + SkillPointsToSpend)
+		; 			AllowedFace = ActorHasFace(Preview\Actor, Preview\Gender + 1)
+		; 			GY_LockGadget(BNextFace, Not AllowedFace) : GY_LockGadget(BPrevFace, Not AllowedFace)
+		; 			AllowedHair = ActorHasHair(Preview\Actor, Preview\Gender + 1)
+		; 			GY_LockGadget(BNextHair, Not AllowedHair) : GY_LockGadget(BPrevHair, Not AllowedHair)
+		; 			GY_LockGadget(BNextBeard, Not ActorHasBeard(Preview\Actor))
+		; 			GY_LockGadget(BPrevBeard, Not ActorHasBeard(Preview\Actor))
+		; 			GY_LockGadget(BNextGender, Preview\Actor\Genders) : GY_LockGadget(BPrevGender, Preview\Actor\Genders)
+		; 			Exit
+		; 		EndIf
+		; 	Forever
+		; EndIf
 
 		; Next/Previous gender
 		If GY_ButtonHit(BNextGender) Or GY_ButtonHit(BPrevGender)
@@ -2451,38 +2451,38 @@ Function CreateChar()
 		EndIf
 
 		; Next/Previous beard
-		If GY_ButtonHit(BNextBeard)
-			Repeat
-				Preview\Beard = Preview\Beard + 1
-				If Preview\Beard > 4
-					Preview\Beard = 0
-					Exit
-				EndIf
-				NextMesh = Preview\Actor\BeardIDs[Preview\Beard]
-			Until NextMesh <> 65535
-			FreeActorInstance3D(Preview)
-			LoadActorInstance3D(Preview, 1.0, False, False)
-			PlayAnimation(Preview, 1, 0.003, Anim_Idle)
-			PositionEntity Preview\CollisionEN, 30, -(35.0 + EntityY#(Preview\EN, True)), 100
-			;If Preview\ShadowEN <> 0 Then HideEntity(Preview\ShadowEN) [###]
-			If Preview\NametagEN <> 0 Then HideEntity(Preview\NametagEN)
-		ElseIf GY_ButtonHit(BPrevBeard)
-			Repeat
-				Preview\Beard = Preview\Beard - 1
-				If Preview\Beard < 0
-					Preview\Beard = 4
-				ElseIf Preview\Beard = 0
-					Exit
-				EndIf
-				NextMesh = Preview\Actor\BeardIDs[Preview\Beard]
-			Until NextMesh <> 65535
-			FreeActorInstance3D(Preview)
-			LoadActorInstance3D(Preview, 1.0, False, False)
-			PlayAnimation(Preview, 1, 0.003, Anim_Idle)
-			PositionEntity Preview\CollisionEN, 30, -(35.0 + EntityY#(Preview\EN, True)), 100
-			;If Preview\ShadowEN <> 0 Then HideEntity(Preview\ShadowEN) [###]
-			If Preview\NametagEN <> 0 Then HideEntity(Preview\NametagEN)
-		EndIf
+		; If GY_ButtonHit(BNextBeard)
+		; 	Repeat
+		; 		Preview\Beard = Preview\Beard + 1
+		; 		If Preview\Beard > 4
+		; 			Preview\Beard = 0
+		; 			Exit
+		; 		EndIf
+		; 		NextMesh = Preview\Actor\BeardIDs[Preview\Beard]
+		; 	Until NextMesh <> 65535
+		; 	FreeActorInstance3D(Preview)
+		; 	LoadActorInstance3D(Preview, 1.0, False, False)
+		; 	PlayAnimation(Preview, 1, 0.003, Anim_Idle)
+		; 	PositionEntity Preview\CollisionEN, 30, -(35.0 + EntityY#(Preview\EN, True)), 100
+		; 	;If Preview\ShadowEN <> 0 Then HideEntity(Preview\ShadowEN) [###]
+		; 	If Preview\NametagEN <> 0 Then HideEntity(Preview\NametagEN)
+		; ElseIf GY_ButtonHit(BPrevBeard)
+		; 	Repeat
+		; 		Preview\Beard = Preview\Beard - 1
+		; 		If Preview\Beard < 0
+		; 			Preview\Beard = 4
+		; 		ElseIf Preview\Beard = 0
+		; 			Exit
+		; 		EndIf
+		; 		NextMesh = Preview\Actor\BeardIDs[Preview\Beard]
+		; 	Until NextMesh <> 65535
+		; 	FreeActorInstance3D(Preview)
+		; 	LoadActorInstance3D(Preview, 1.0, False, False)
+		; 	PlayAnimation(Preview, 1, 0.003, Anim_Idle)
+		; 	PositionEntity Preview\CollisionEN, 30, -(35.0 + EntityY#(Preview\EN, True)), 100
+		; 	;If Preview\ShadowEN <> 0 Then HideEntity(Preview\ShadowEN) [###]
+		; 	If Preview\NametagEN <> 0 Then HideEntity(Preview\NametagEN)
+		; EndIf
 
 		; Next/Previous hair
 		If GY_ButtonHit(BNextHair)
@@ -2562,39 +2562,39 @@ Function CreateChar()
 		EndIf
 
 		; Next/Previous face texture
-		If GY_ButtonHit(BNextFace) = True
-			Repeat
-				Preview\FaceTex = Preview\FaceTex + 1
-				If Preview\FaceTex > 4 Then Preview\FaceTex = 0
-				If Preview\Gender = 0
-					NextTex = Preview\Actor\MaleFaceIDs[Preview\FaceTex]
-				Else
-					NextTex = Preview\Actor\FemaleFaceIDs[Preview\FaceTex]
-				EndIf
-			Until NextTex <> 65535
-			FreeActorInstance3D(Preview)
-			LoadActorInstance3D(Preview, 1.0, False, False)
-			PlayAnimation(Preview, 1, 0.003, Anim_Idle)
-			PositionEntity Preview\CollisionEN, 30, -(35.0 + EntityY#(Preview\EN, True)), 100
-			;If Preview\ShadowEN <> 0 Then HideEntity(Preview\ShadowEN) [###]
-			If Preview\NametagEN <> 0 Then HideEntity(Preview\NametagEN)
-		ElseIf GY_ButtonHit(BPrevFace) = True
-			Repeat
-				Preview\FaceTex = Preview\FaceTex - 1
-				If Preview\FaceTex < 0 Then Preview\FaceTex = 4
-				If Preview\Gender = 0
-					NextTex = Preview\Actor\MaleFaceIDs[Preview\FaceTex]
-				Else
-					NextTex = Preview\Actor\FemaleFaceIDs[Preview\FaceTex]
-				EndIf
-			Until NextTex <> 65535
-			FreeActorInstance3D(Preview)
-			LoadActorInstance3D(Preview, 1.0, False, False)
-			PlayAnimation(Preview, 1, 0.003, Anim_Idle)
-			PositionEntity Preview\CollisionEN, 30, -(35.0 + EntityY#(Preview\EN, True)), 100
-			;If Preview\ShadowEN <> 0 Then HideEntity(Preview\ShadowEN) [###]
-			If Preview\NametagEN <> 0 Then HideEntity(Preview\NametagEN)
-		EndIf
+		; If GY_ButtonHit(BNextFace) = True
+		; 	Repeat
+		; 		Preview\FaceTex = Preview\FaceTex + 1
+		; 		If Preview\FaceTex > 4 Then Preview\FaceTex = 0
+		; 		If Preview\Gender = 0
+		; 			NextTex = Preview\Actor\MaleFaceIDs[Preview\FaceTex]
+		; 		Else
+		; 			NextTex = Preview\Actor\FemaleFaceIDs[Preview\FaceTex]
+		; 		EndIf
+		; 	Until NextTex <> 65535
+		; 	FreeActorInstance3D(Preview)
+		; 	LoadActorInstance3D(Preview, 1.0, False, False)
+		; 	PlayAnimation(Preview, 1, 0.003, Anim_Idle)
+		; 	PositionEntity Preview\CollisionEN, 30, -(35.0 + EntityY#(Preview\EN, True)), 100
+		; 	;If Preview\ShadowEN <> 0 Then HideEntity(Preview\ShadowEN) [###]
+		; 	If Preview\NametagEN <> 0 Then HideEntity(Preview\NametagEN)
+		; ElseIf GY_ButtonHit(BPrevFace) = True
+		; 	Repeat
+		; 		Preview\FaceTex = Preview\FaceTex - 1
+		; 		If Preview\FaceTex < 0 Then Preview\FaceTex = 4
+		; 		If Preview\Gender = 0
+		; 			NextTex = Preview\Actor\MaleFaceIDs[Preview\FaceTex]
+		; 		Else
+		; 			NextTex = Preview\Actor\FemaleFaceIDs[Preview\FaceTex]
+		; 		EndIf
+		; 	Until NextTex <> 65535
+		; 	FreeActorInstance3D(Preview)
+		; 	LoadActorInstance3D(Preview, 1.0, False, False)
+		; 	PlayAnimation(Preview, 1, 0.003, Anim_Idle)
+		; 	PositionEntity Preview\CollisionEN, 30, -(35.0 + EntityY#(Preview\EN, True)), 100
+		; 	;If Preview\ShadowEN <> 0 Then HideEntity(Preview\ShadowEN) [###]
+		; 	If Preview\NametagEN <> 0 Then HideEntity(Preview\NametagEN)
+		; EndIf
 
 		; Camera
       If GY_ButtonDown(BRight) 
@@ -2655,38 +2655,38 @@ Function SetUpPreview(Preview.Actor)
 	Next
 
 	; Word wrap {{}}
-	D$ = Preview\Race$ + " " + Preview\Class$ + ": " + Preview\Description$
-	Gad.GY_Gadget = Object.GY_Gadget(LDescription(0))
-	L = 0
-	While GY_TextWidth#(Gad\EN, D$) > 0.18
-		Found = False
-		For i = Len(D$) To 1 Step -1
-			If Mid$(D$, i, 1) = " "
-				If GY_TextWidth#(Gad\EN, Left$(D$, i - 1)) <= 0.18
-					GY_UpdateLabel(LDescription(L), Left$(D$, i - 1))
-					D$ = Mid$(D$, i + 1)
-					L = L + 1
-					Found = True
-					Exit
-				EndIf
-			EndIf
-		Next
-		If Found = False
-			For i = Len(D$) To 1 Step -1
-				If GY_TextWidth#(Gad\EN, Left$(D$, i - 1)) <= 0.18
-					GY_UpdateLabel(LDescription(L), Left$(D$, i - 1))
-					D$ = Mid$(D$, i)
-					L = L + 1
-					Exit
-				EndIf
-			Next
-		EndIf
-		If L = 9 Then Exit
-	Wend
-	GY_UpdateLabel(LDescription(L), D$)
-	For i = L + 1 To 9
-		GY_UpdateLabel(LDescription(i), "")
-	Next
+	; D$ = Preview\Race$ + " " + Preview\Class$ + ": " + Preview\Description$
+	; Gad.GY_Gadget = Object.GY_Gadget(LDescription(0))
+	; L = 0
+	; While GY_TextWidth#(Gad\EN, D$) > 0.18
+	; 	Found = False
+	; 	For i = Len(D$) To 1 Step -1
+	; 		If Mid$(D$, i, 1) = " "
+	; 			If GY_TextWidth#(Gad\EN, Left$(D$, i - 1)) <= 0.18
+	; 				GY_UpdateLabel(LDescription(L), Left$(D$, i - 1))
+	; 				D$ = Mid$(D$, i + 1)
+	; 				L = L + 1
+	; 				Found = True
+	; 				Exit
+	; 			EndIf
+	; 		EndIf
+	; 	Next
+	; 	If Found = False
+	; 		For i = Len(D$) To 1 Step -1
+	; 			If GY_TextWidth#(Gad\EN, Left$(D$, i - 1)) <= 0.18
+	; 				GY_UpdateLabel(LDescription(L), Left$(D$, i - 1))
+	; 				D$ = Mid$(D$, i)
+	; 				L = L + 1
+	; 				Exit
+	; 			EndIf
+	; 		Next
+	; 	EndIf
+	; 	If L = 9 Then Exit
+	; Wend
+	; GY_UpdateLabel(LDescription(L), D$)
+	; For i = L + 1 To 9
+	; 	GY_UpdateLabel(LDescription(i), "")
+	; Next
 
 End Function
 

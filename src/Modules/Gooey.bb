@@ -495,7 +495,7 @@ Function GY_CreateTextField(Parent, X#, Y#, Width#, AllowedInput, MaxLength, Ini
 	G\EN = GY_CreateQuad(GY_Cam)
 	EntityColor(G\EN, GY_TextFieldBackR, GY_TextFieldBackG, GY_TextFieldBackB)
 	EntityFX(G\EN, 1 + 8)
-	EntityAlpha(G\EN, 0.0)
+	EntityAlpha(G\EN, 1.0)
 	GY_PositionGadget(Handle(G), X#, Y#)
 	GY_ScaleGadget(Handle(G), Width#, 1.0)
 	GY_ScaleGadget(Handle(G), GY_GadgetWidth#(Handle(G), True), 0.03, True)
