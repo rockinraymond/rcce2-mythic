@@ -1169,6 +1169,41 @@ Function Money$(Amount)
 
 End Function
 
+Function MoneyToolTip$(Amount)
+
+	If Money4$ <> ""
+		If 	Str$(Amount / (Money4x * Money3x * Money2x)) <> "0"
+			Amount4$ = Str$(Amount / (Money4x * Money3x * Money2x)) + " " + Money4$ + " ";:
+		Else
+			Amount4$= ""
+		EndIf
+		Amount = Amount Mod (Money4x * Money3x * Money2x)
+	EndIf
+	If Money3$ <> ""
+		If 	Str$(Amount / (Money3x * Money2x)) <> "0"
+			Amount3$ = Str$(Amount / (Money3x * Money2x)) + " " + Money3$ + " ";:
+		Else
+			Amount3$= ""
+		EndIf
+		Amount = Amount Mod (Money3x * Money2x)
+	EndIf
+	If Money2$ <> ""
+		If Str$(Amount / Money2x) <> "0"
+			Amount2$ = Str$(Amount / Money2x) + " " + Money2$ + " ";:
+		Else
+			Amount2$=""
+		EndIf
+		Amount = Amount Mod Money2x
+	EndIf
+	If Str$(Amount) <> "0"
+		Amount1$ = Str$(Amount) + " " + Money1$ ;:Money1$
+	else 
+		Amount1$ = ""
+	EndIf
+	Return Amount4$ + Amount3$ + Amount2$ + Amount1$
+
+End Function
+
 
 Function DisableEntity( AI.ActorInstance )
 	

@@ -1881,7 +1881,7 @@ EndIf
 					Else
 						//GY_CreateLabel(WTooltip, 0.02, 0.12, LanguageString$(LS_Indestructible), 255, 0, 0)
 					EndIf
-					GY_CreateLabel(WTooltip, 0.02, Y#, LanguageString$(LS_Value) + " " + Me\Inventory\Items[i]\Item\Value)
+					GY_CreateLabel(WTooltip, 0.02, Y#, LanguageString$(LS_Value) + " " + MoneyToolTip(Me\Inventory\Items[i]\Item\Value))
 					Y# = Y# + YInterval#
 					GY_CreateLabel(WTooltip, 0.02, Y#, LanguageString$(LS_Mass) + " " + Me\Inventory\Items[i]\Item\Mass)
 					Y# = Y# + YInterval#
@@ -2031,7 +2031,7 @@ EndIf
 					Else
 						//GY_CreateLabel(WTooltip, 0.02, 0.12, LanguageString$(LS_Indestructible), 255, 0, 0)
 					EndIf
-					GY_CreateLabel(WTooltip, 0.02, Y#, LanguageString$(LS_Value) + " " + Me\Inventory\Items[i + SlotI_Backpack]\Item\Value)
+					GY_CreateLabel(WTooltip, 0.02, Y#, LanguageString$(LS_Value) + " " + MoneyToolTip(Me\Inventory\Items[i + SlotI_Backpack]\Item\Value))
 					Y# = Y# + YInterval#
 					GY_CreateLabel(WTooltip, 0.02, Y#, LanguageString$(LS_Mass) + " " + Me\Inventory\Items[i + SlotI_Backpack]\Item\Mass)
 					Y# = Y# + YInterval#
@@ -2175,7 +2175,7 @@ EndIf
 					Else
 						//GY_CreateLabel(WTooltip, 0.02, 0.12, LanguageString$(LS_Indestructible), 255, 0, 0)
 					EndIf
-					GY_CreateLabel(WTooltip, 0.02, Y#, LanguageString$(LS_Value) + " " + TradeItems(i)\Item\Value)
+					GY_CreateLabel(WTooltip, 0.02, Y#, LanguageString$(LS_Value) + " " + MoneyToolTip(TradeItems(i)\Item\Value))
 					Y# = Y# + YInterval#
 					GY_CreateLabel(WTooltip, 0.02, Y#, LanguageString$(LS_Mass) + " " + TradeItems(i)\Item\Mass)
 					Y# = Y# + YInterval#
