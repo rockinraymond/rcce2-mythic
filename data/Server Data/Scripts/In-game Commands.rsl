@@ -112,3 +112,7 @@ End function
 function magicTest()
 SetAttribute(actor(), "magic", 10)
 End function
+
+function ChrTest()
+SetAttribute(actor(), "Charisma", 25)
+End function

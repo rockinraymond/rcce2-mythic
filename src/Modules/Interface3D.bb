@@ -2031,7 +2031,9 @@ EndIf
 					Else
 						//GY_CreateLabel(WTooltip, 0.02, 0.12, LanguageString$(LS_Indestructible), 255, 0, 0)
 					EndIf
-					GY_CreateLabel(WTooltip, 0.02, Y#, LanguageString$(LS_Value) + " " + MoneyToolTip(Me\Inventory\Items[i + SlotI_Backpack]\Item\Value))
+					ItemValue = (Me\Inventory\Items[i + SlotI_Backpack]\Item\Value)
+					If TradeType = 1 Then ItemValue = GetActorTradeValue#(Me, ItemValue, 0)
+					GY_CreateLabel(WTooltip, 0.02, Y#, LanguageString$(LS_Value) + " " + MoneyToolTip(ItemValue))
 					Y# = Y# + YInterval#
 					GY_CreateLabel(WTooltip, 0.02, Y#, LanguageString$(LS_Mass) + " " + Me\Inventory\Items[i + SlotI_Backpack]\Item\Mass)
 					Y# = Y# + YInterval#
@@ -2175,7 +2177,9 @@ EndIf
 					Else
 						//GY_CreateLabel(WTooltip, 0.02, 0.12, LanguageString$(LS_Indestructible), 255, 0, 0)
 					EndIf
-					GY_CreateLabel(WTooltip, 0.02, Y#, LanguageString$(LS_Value) + " " + MoneyToolTip(TradeItems(i)\Item\Value))
+					ItemValue = (TradeItems(i)\Item\Value)
+					If TradeType = 1 Then ItemValue = GetActorTradeValue#(Me, ItemValue, 1)
+					GY_CreateLabel(WTooltip, 0.02, Y#, LanguageString$(LS_Value) + " " + MoneyToolTip(ItemValue))
 					Y# = Y# + YInterval#
 					GY_CreateLabel(WTooltip, 0.02, Y#, LanguageString$(LS_Mass) + " " + TradeItems(i)\Item\Mass)
 					Y# = Y# + YInterval#
@@ -2484,10 +2488,10 @@ EndIf
 				Value = 0
 				For i = 0 To 31
 					If GY_ButtonDown(BSlotsMine(i)) = True And Me\Inventory\Items[i + SlotI_Backpack] <> Null
-						Value = Value - (Me\Inventory\Items[i + SlotI_Backpack]\Item\Value * TradeAmountsMine(i))
+						Value = Value - GetActorTradeValue#(Me, Me\Inventory\Items[i + SlotI_Backpack]\Item\Value * TradeAmountsMine(i), 0)
 					EndIf
 					If GY_ButtonDown(BSlotsHis(i)) = True And TradeItems(i) <> Null
-						Value = Value + (TradeItems(i)\Item\Value * TradeAmountsHis(i))
+						Value = Value + GetActorTradeValue#(Me, (TradeItems(i)\Item\Value * TradeAmountsHis(i)), 1)
 					EndIf
 				Next
 			Else
@@ -3397,11 +3401,11 @@ Function UpdateTrading()
 				GY_SetButtonLabel(BSlotsHis(i), TradeAmounts(i), 100, 255, 0, True)
 			EndIf
 			If GY_ButtonDown(BSlotsMine(i)) = True And Me\Inventory\Items[i + SlotI_Backpack] <> Null
-				Value = Value - (Me\Inventory\Items[i + SlotI_Backpack]\Item\Value * TradeAmountsMine(i))
+				Value = Value - GetActorTradeValue#(Me, Me\Inventory\Items[i + SlotI_Backpack]\Item\Value * TradeAmountsMine(i), 0)
 				GY_SetButtonLabel(BSlotsMine(i), TradeAmountsMine(i), 255, 100, 0, True)
 			EndIf
 			If GY_ButtonDown(BSlotsHis(i)) = True And TradeItems(i) <> Null
-				Value = Value + (TradeItems(i)\Item\Value * TradeAmountsHis(i))
+				Value = Value + GetActorTradeValue#(Me, (TradeItems(i)\Item\Value * TradeAmountsHis(i)), 1)
 				GY_SetButtonLabel(BSlotsHis(i), TradeAmountsHis(i), 255, 100, 0, True)
 			EndIf
 		Next
