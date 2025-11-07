@@ -654,7 +654,7 @@ Function UpdateNetwork()
 										; Alter cost {##}
 										;If Owned = Null 
 											ItemValue = (AI\Inventory\Items[SlotID]\Item\Value * Amount)
-											Change = Change +  GetActorTradeValue#(AI, ItemValue, 0)
+											Change = Change +  GetActorTradeValue(AI, ItemValue, 0)
 										; Add item to scenery inventory if applicable
 										; Else
 										; 	For j = 0 To Owned\InventorySize - 1
@@ -692,7 +692,7 @@ Function UpdateNetwork()
 										; If Owned = Null
 											OldChange = Change
 											ItemValue = (II\Item\Value * II\Assignment)
-											Change = Change - GetActorTradeValue#(AI, ItemValue, 1)
+											Change = Change - GetActorTradeValue(AI, ItemValue, 1)
 										;Remove from scenery inventory if applicable
 										; Else
 										; 	RemoveAmount = II\Assignment

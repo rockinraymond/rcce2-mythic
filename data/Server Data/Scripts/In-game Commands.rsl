@@ -115,4 +115,5 @@ End function
 
 function ChrTest()
 SetAttribute(actor(), "Charisma", 25)
+SetReputation(actor(), 150)
 End function

@@ -1010,13 +1010,14 @@ Function RemoveActorEffectFromActor( AI.ActorInstance, EffectName$ )
 	Return False
 End Function
 
-Function GetActorTradeValue#(AI.ActorInstance, ItemValue, isBuying = 0)
+Function GetActorTradeValue(AI.ActorInstance, ItemValue, isBuying = 0)
 	ItemFloatVal = Float(ItemValue)
 	BaseMod# = 0.2
 	If isBuying = 1 Then BaseMod = 1.8
 
 	ActorCHA# = AI\Attributes\Value[FindAttribute("Charisma")]
-	CHAMod# = ActorCHA * 0.015
+	ActorRep# = AI\Reputation
+	CHAMod# = (ActorCHA * 0.01) + (ActorRep# * 0.003)
 
 
 	PriceMod# = 1.0
@@ -1028,7 +1029,7 @@ Function GetActorTradeValue#(AI.ActorInstance, ItemValue, isBuying = 0)
 		If PriceMod < 1.0 Then PriceMod = 1.0
 	EndIf
 
-	ModdedValue% = ItemFloatVal * PriceMod
+	ModdedValue = Int(ItemFloatVal * PriceMod)
 	If ModdedValue < 1 Then ModdedValue = 1
 
 	Return ModdedValue
