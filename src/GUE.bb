@@ -1901,6 +1901,10 @@ FUI_ToolTip(CSpellScript, "Tip: Scripts must start with  Spell_  to be seen here
 FUI_ComboBoxItem(CSpellScript, "None")
 FUI_Label(TSpells, 20, 392, "Function to start script in:")
 Global CSpellMethod = FUI_ComboBox(TSpells, 250, 390, 350, 20, 10)
+FUI_Label(TSpells, 20, 417, "Ability Type:")
+Global CSpellType = FUI_ComboBox(TSpells, 250, 415, 155, 20)
+FUI_ComboBoxItem(CSpellType, "Spell")
+FUI_ComboBoxItem(CSpellType, "Talent")
 
 ; Init display
 FUI_SendMessage(CSpellSelected, M_SETINDEX, 1)
@@ -5824,6 +5828,11 @@ Cls
 					SelectedSpell\Description$ = E\EventData
 					SpellsSaved = False
 				EndIf
+			Case CSpellType
+			If SelectedSpell <> Null
+					SelectedSpell\SpellType = E\EventData
+					SpellsSaved = False
+				EndIf
 			Case BSpellImageID
 				If SelectedSpell <> Null
 					NewTex = ChooseTextureDialog()
@@ -5935,7 +5944,6 @@ Cls
 			Case CItemRarity
 				If SelectedItem <> Null
 					SelectedItem\Rarity = E\EventData
-					UpdateItemDisplay()
 					ItemsSaved = False
 				EndIf
 			Case CSlotType
@@ -7538,12 +7546,15 @@ Function UpdateSpellDisplay()
 		FUI_SendMessage(CSpellExclusiveClass, M_SETINDEX, 1)
 		FUI_SendMessage(CSpellScript, M_SETINDEX, 1)
 		FUI_SendMessage(CSpellMethod, M_RESET)
+		FUI_SendMessage(CSpellType, M_SETINDEX, 1)
 	; Spell selected, fill in relevant information
 	Else
 		FUI_SendMessage(TSpellName, M_SETCAPTION, SelectedSpell\Name$)
 		FUI_SendMessage(TSpellDesc, M_SETCAPTION, SelectedSpell\Description$)
 		FUI_SendMessage(LSpellImageID, M_SETTEXT, "Display icon: " + GetFilename$(EditorTexName$(SelectedSpell\ThumbnailTexID)))
 		FUI_SendMessage(SSpellCharge, M_SETVALUE, SelectedSpell\RechargeTime / 1000)
+		FUI_SendMessage(CSpellType, M_SETINDEX, SelectedSpell\SpellType)
+		
 
 		; Exclusive race/class
 		FUI_SendMessage(CSpellExclusiveRace, M_SETINDEX, 1)

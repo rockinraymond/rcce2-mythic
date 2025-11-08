@@ -117,3 +117,8 @@ function ChrTest()
 SetAttribute(actor(), "Charisma", 25)
 SetReputation(actor(), 150)
 End function
+
+function TalentTest()
+	AddAbility(Actor(), "TestSkill", 1)
+	AddAbility(Actor(), "FireBall", 1)
+End Function

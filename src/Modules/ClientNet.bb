@@ -724,7 +724,8 @@ Function UpdateNetwork()
 						Me\KnownSpells[Spells] = Sp\ID
 						Sp\ThumbnailTexID = RCE_IntFromStr(Mid$(M\MessageData$, Offset + 4, 2))
 						Sp\RechargeTime = RCE_IntFromStr(Mid$(M\MessageData$, Offset + 6, 2))
-						Offset = Offset + 8
+						Sp\SpellType = RCE_IntFromStr(Mid$(M\MessageData$, Offset + 8, 2))
+						Offset = Offset + 10
 						NameLen = RCE_IntFromStr(Mid$(M\MessageData$, Offset, 2))
 						Sp\Name$ = Mid$(M\MessageData$, Offset + 2, NameLen)
 						Offset = Offset + 2 + NameLen

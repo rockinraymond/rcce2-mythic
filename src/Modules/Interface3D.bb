@@ -1340,6 +1340,13 @@ Function UpdateInterface()
 		EndIf
 		UpdateSpellbook()
 	EndIf
+	If GY_ButtonHit(BShowSpells)
+		SpellView = S_Spell
+		UpdateSpellbook()
+	ElseIf GY_ButtonHit(BShowTalents)
+		SpellView = S_Talent
+		UpdateSpellbook()
+	EndIf
 	; Spell remove confirmed
 	If GY_ButtonHit(BSpellRemoveOK)
 		; Tell server
@@ -3346,32 +3353,34 @@ Function UpdateSpellbook()
 			If KnownSpellSort(Spell) > 0
 				If Me\SpellLevels[KnownSpellSort(Spell) - 1] > 0
 					Sp.Spell = SpellsList(Me\KnownSpells[KnownSpellSort(Spell) - 1])
-					GY_UpdateLabel(LSpellNames(Count), Sp\Name$, 255, 255, 255)
-					GY_UpdateLabel(LSpellLevels(Count), "[Rank" + " " + Me\SpellLevels[KnownSpellSort(Spell) - 1] + "]", 100, 255, 0)
-					
-					Lett = Len(Sp\Description$)
-					If Lett > 26
-						GY_UpdateLabel(LSpellDesc(count), Left$(Sp\Description$,23) + "...", 255, 255, 255) ;Left$(Sp\Description$,26)
-					Else
-						GY_UpdateLabel(LSpellDesc(count), Left$(Sp\Description$,26), 255, 255, 255) ;Left$(Sp\Description$,26)
+					If (SpellView = Sp\SpellType)
+							GY_UpdateLabel(LSpellNames(Count), Sp\Name$, 255, 255, 255)
+							GY_UpdateLabel(LSpellLevels(Count), "[Rank" + " " + Me\SpellLevels[KnownSpellSort(Spell) - 1] + "]", 100, 255, 0)
+							
+							Lett = Len(Sp\Description$)
+							If Lett > 26
+								GY_UpdateLabel(LSpellDesc(count), Left$(Sp\Description$,23) + "...", 255, 255, 255) ;Left$(Sp\Description$,26)
+							Else
+								GY_UpdateLabel(LSpellDesc(count), Left$(Sp\Description$,26), 255, 255, 255) ;Left$(Sp\Description$,26)
+							EndIf
+							
+							;GY_UpdateLabel(LSpellDesc(count), Left$(Sp\Description$,23) + "...", 255, 255, 255)
+							;GY_UpdateLabel(LSpellDesc2(count), Mid$(Sp\Description$,27,52), 255, 255, 255)
+							GYG.GY_Gadget = Object.GY_Gadget(BSpellImgs(Count))
+							EntityTexture GYG\EN, GetTexture(Sp\ThumbnailTexID)
+							GY_LockGadget(BSpellImgs(Count), False)
+							GY_GadgetAlpha(BSpellImgs(Count), 0.85, True)
+							; Change text colour if it's memorised
+							If RequireMemorise
+								For i = 0 To 9
+									If Me\MemorisedSpells[i] = KnownSpellSort(Spell) - 1 Then GY_UpdateLabel(LSpellNames(Count), Sp\Name$, 255, 50, 0) : Exit
+								Next
+							EndIf
+							Count = Count + 1
+						EndIf
 					EndIf
-					
-					;GY_UpdateLabel(LSpellDesc(count), Left$(Sp\Description$,23) + "...", 255, 255, 255)
-					;GY_UpdateLabel(LSpellDesc2(count), Mid$(Sp\Description$,27,52), 255, 255, 255)
-					GYG.GY_Gadget = Object.GY_Gadget(BSpellImgs(Count))
-					EntityTexture GYG\EN, GetTexture(Sp\ThumbnailTexID)
-					GY_LockGadget(BSpellImgs(Count), False)
-					GY_GadgetAlpha(BSpellImgs(Count), 0.85, True)
-					; Change text colour if it's memorised
-					If RequireMemorise
-						For i = 0 To 9
-							If Me\MemorisedSpells[i] = KnownSpellSort(Spell) - 1 Then GY_UpdateLabel(LSpellNames(Count), Sp\Name$, 255, 50, 0) : Exit
-						Next
-					EndIf
-					Count = Count + 1
 				EndIf
-			EndIf
-			Spell = Spell + 1
+				Spell = Spell + 1
 		Until Count = 10 Or Spell = 1000
 	EndIf
 
@@ -3800,6 +3809,8 @@ Function CreateInterface()
 	BPrevSpells = GY_CreateButton(WSpells, 0.01, 0.94, 0.05, 0.05, "<<")
 	BNextSpells = GY_CreateButton(WSpells, 0.94, 0.94, 0.05, 0.05, ">>")
 	LSpellsPage = GY_CreateLabel(WSpells, 0.5, 0.94, Upper$(LanguageString$(LS_MemorisedAbilities)), 255, 255, 255, Justify_Centre)
+	BShowSpells = GY_CreateButton(WSpells, 0, 0, 0.2, 0.05, "Spells")
+	BShowTalents = GY_CreateButton(WSpells, 0.2, 0, 0.2, 0.05, "Talents")
 	X# = 0.01
 	Y# = 0.05
 	ButtonTex = CreateTexture(2, 2)

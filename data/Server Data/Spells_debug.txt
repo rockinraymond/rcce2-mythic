@@ -1,0 +1,8 @@
+Spell ID: 0
+Spell Name: Fireball
+Rarity: 1
+
+Spell ID: 1
+Spell Name: TestSkill
+Rarity: 2
+

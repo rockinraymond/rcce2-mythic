@@ -1,5 +1,8 @@
 ; Note: "Abilities" is the actual name used for spells as they are general purpose effects, not just for magic users!
 
+Const S_Spell     = 1 ; Ability types
+Const S_Talent     = 2
+
 ; Describes a spell
 Dim SpellsList.Spell(65534)
 Global Spells% = 0
@@ -11,6 +14,7 @@ Type Spell
 	Field ExclusiveRace$, ExclusiveClass$ ; If this spell can only be used by a certain race and/or class
 	Field RechargeTime                    ; Time taken to recharge after casting in milliseconds
 	Field Script$, SMethod$                ; Script to run when cast
+	Field SpellType
 End Type
 
 ; A spell which is waiting for memorisation (server side)
@@ -31,6 +35,7 @@ Function CreateSpell.Spell()
 			SpellsList(i) = S
 			S\Name$ = "New ability"
 			S\RechargeTime = 2000
+			S\SpellType = 1
 			Return S
 			Exit
 		EndIf
@@ -57,6 +62,7 @@ Function LoadSpells(Filename$)
 			S\RechargeTime = ReadInt(F)
 			S\Script$ = ReadString$(F)
 			S\SMethod$ = ReadString$(F)
+			S\SpellType = ReadShort(F)
 			Number = Number + 1
 		Wend
 
@@ -81,9 +87,20 @@ Function SaveSpells(Filename$)
 			WriteInt F, S\RechargeTime
 			WriteString F, S\Script$
 			WriteString F, S\SMethod$
+			WriteShort F, S\SpellType
 		Next
 
 	CloseFile(F)
+	; Small edit, allows to quickly find IMPORTANT item values, cysis145
+	G = WriteFile("Data\Server Data\Spells_debug.txt")
+	If G = 0 Then Return False
+		For S.Spell = Each Spell
+			WriteLine(G, "Spell ID: " + S\ID)
+			WriteLine(G, "Spell Name: " + S\Name$)
+			WriteLine(G, "SpellType: " + S\SpellType)
+			WriteLine(G, "")
+		Next
+	CloseFile(G)
 	Return True
 
 End Function

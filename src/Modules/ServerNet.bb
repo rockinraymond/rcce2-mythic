@@ -1916,7 +1916,7 @@ Function UpdateNetwork()
 										Sp.Spell = SpellsList(A\Character[Number]\KnownSpells[i])
 										If( Sp <> Null )
 											Pa$ = Pa$ + RCE_StrFromInt$(A\Character[Number]\SpellLevels[i], 2) + RCE_StrFromInt$(Sp\ID, 2)
-											Pa$ = Pa$ + RCE_StrFromInt$(Sp\ThumbnailTexID, 2) + RCE_StrFromInt$(Sp\RechargeTime, 2)
+											Pa$ = Pa$ + RCE_StrFromInt$(Sp\ThumbnailTexID, 2) + RCE_StrFromInt$(Sp\RechargeTime, 2) + RCE_StrFromInt$(Sp\SpellType, 2)
 											Pa$ = Pa$ + RCE_StrFromInt$(Len(Sp\Name$), 2) + Sp\Name$ + RCE_StrFromInt$(Len(Sp\Description$), 2) + Sp\Description$
 											Pa$ = Pa$ + RCE_StrFromInt$(0, 1)
 											For j = 0 To 9
