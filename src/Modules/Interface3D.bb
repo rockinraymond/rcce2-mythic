@@ -1346,6 +1346,12 @@ Function UpdateInterface()
 	ElseIf GY_ButtonHit(BShowTalents)
 		SpellView = S_Talent
 		UpdateSpellbook()
+	ElseIf GY_ButtonHit(BShowCombats)
+		SpellView = S_Combat
+		UpdateSpellbook()
+	ElseIf GY_ButtonHit(BShowUtils)
+		SpellView = S_Util
+		UpdateSpellbook()
 	EndIf
 	; Spell remove confirmed
 	If GY_ButtonHit(BSpellRemoveOK)
@@ -3809,8 +3815,10 @@ Function CreateInterface()
 	BPrevSpells = GY_CreateButton(WSpells, 0.01, 0.94, 0.05, 0.05, "<<")
 	BNextSpells = GY_CreateButton(WSpells, 0.94, 0.94, 0.05, 0.05, ">>")
 	LSpellsPage = GY_CreateLabel(WSpells, 0.5, 0.94, Upper$(LanguageString$(LS_MemorisedAbilities)), 255, 255, 255, Justify_Centre)
-	BShowSpells = GY_CreateButton(WSpells, 0, 0, 0.2, 0.05, "Spells")
-	BShowTalents = GY_CreateButton(WSpells, 0.2, 0, 0.2, 0.05, "Talents")
+	BShowSpells = GY_CreateButton(WSpells, 0, 0, 0.25, 0.05, "Spells")
+	BShowTalents = GY_CreateButton(WSpells, 0.75, 0, 0.25, 0.05, "Talents")
+	BShowCombats = GY_CreateButton(WSpells, 0.25, 0, 0.25, 0.05, "Combat")
+	BShowUtils = GY_CreateButton(WSpells, 0.5, 0, 0.25, 0.05, "Utility")
 	X# = 0.01
 	Y# = 0.05
 	ButtonTex = CreateTexture(2, 2)

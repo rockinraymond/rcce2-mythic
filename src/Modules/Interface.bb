@@ -129,7 +129,7 @@ Dim LResistanceVals(39)
 ; Spells (abilities) window
 Global WSpells, SpellsVisible = False
 Global BNextSpells, BPrevSpells
-Global BShowSpells, BShowTalents
+Global BShowSpells, BShowTalents, BShowCombats, BShowUtils
 Global LSpellsPage
 Global WSpellRemove, BSpellRemoveOK, BSpellRemoveCancel, SpellRemoveNum = -1
 Global WSpellError, BSpellError
