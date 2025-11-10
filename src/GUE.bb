@@ -91,11 +91,11 @@ WriteLog(GUELog, "** GUE startup log begins **", True, True)
 
 ;Window or fullscreen for editor
 ;############################
-Local GUE_width# = GetSystemMetrics(0) * 0.9
-Local GUE_height# = GetSystemMetrics(1) * 0.8
-If (GUE_width < 1280 And GUE_height< 960)
+Local GUE_width# = 1400
+Local GUE_height# = 1100
+If (GUE_width < 1280 And GUE_height< 1100)
 	GUE_width = 1280
-	GUE_height = 960
+	GUE_height = 1100
 EndIf
 WriteLog(GUELog, "Initialising windowed graphics mode")
 Graphics3D(GUE_width, GUE_height, 0, 2)

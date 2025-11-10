@@ -145,8 +145,9 @@ Function Load_Radar(AreaName$, X#, Y#, Width#, Height#, Interior, BorderTex$ = "
 	; Place and scale it
 	ShowEntity Cam
 	ShowEntity GY_Cam
-	ScaleEntity Radar_Ent1, Width# * 20.0, Height# * 15.0, 1.0
-	PositionEntity Radar_Ent1, (X# * 20.0) - 10.0, (Y# * -15.0) + 7.5, 10.0
+	ScaleEntity Radar_Ent1, Width# * 20.0, Height# * 20.0, 1.0
+	PositionEntity Radar_Ent1, (X# * 20.0) - 10.0, (Y# * -20.0) + 7.5, 10.0
+	EntityAlpha Radar_Ent2, 0.0
 
 End Function
 
@@ -336,7 +337,7 @@ EndIf
 	; Position player marker
  	PercX# = (((Float#(FromFX) + (Float#(AreaShow / 2))) / Float#(Radar_TexSize)) * 100.0) * 0.01
 	PercY# = (((Float#(FromFY) + (Float#(AreaShow / 2))) / Float#(Radar_TexSize)) * 100.0) * 0.01
-    PositionEntity Radar_PlayerEnt, PercX# - 0.45, 0.45 - PercY#, 0.0
+    PositionEntity Radar_PlayerEnt, PercX# - 0.46, 0.46 - PercY#, 0.0
 
 End Function
 

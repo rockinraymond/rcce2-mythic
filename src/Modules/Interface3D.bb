@@ -3088,23 +3088,25 @@ EndIf
 		EndIf
 	EndIf
 
-	; Toggle large map
-	If EscapeHit And GY_ButtonDown(BMap) = True And GY_WindowActive(WLargeMap)
+	; Toggle map (Replaced map image with Radar)
+	If EscapeHit And GY_ButtonDown(BMap) = True ;And GY_WindowActive(WLargeMap)
 		GY_SetButtonState(BMap, False)
 		EscapeHit = False
 	EndIf
-	If (KeyHit(50) And ChatEntry\Alpha# < 0.5 And First TextInput = Null) Or GY_WindowClosed(WLargeMap)
-		GY_SetButtonState(BMap, Not LargeMapVisible)
+	If (KeyHit(50) And ChatEntry\Alpha# < 0.5 And First TextInput = Null) ;Or GY_WindowClosed(WLargeMap)
+		GY_SetButtonState(BMap, Not MapVisible)
 		PlaySound(GY_SBeep)
 	EndIf
-	If GY_ButtonDown(BMap) <> LargeMapVisible
+	If GY_ButtonDown(BMap) <> MapVisible
 		If GY_Modal = False
-			LargeMapVisible = GY_ButtonDown(BMap)
-			If LargeMapVisible = True
-				GY_GadgetAlpha(WLargeMap, 1.0, True)
-				GY_ActivateWindow(WLargeMap)
+			MapVisible = GY_ButtonDown(BMap)
+			If MapVisible = True
+				; GY_GadgetAlpha(WLargeMap, 1.0, True)
+				; GY_ActivateWindow(WLargeMap)
+				Show_Radar()
 			Else
-				GY_GadgetAlpha(WLargeMap, 0.0, True)
+				;GY_GadgetAlpha(WLargeMap, 0.0, True)
+				Hide_Radar()
 			EndIf
 		Else
 			GY_SetButtonState(BMap, False)
@@ -3112,15 +3114,15 @@ EndIf
 	EndIf
 
 	; Toggle radar
-	If KeyHit(19) And ChatEntry\Alpha# < 0.5 And First TextInput = Null
-		ShowRadar = Not ShowRadar
-		PlaySound(GY_SBeep)
-		If ShowRadar = True
-			Show_Radar()
-		Else
-			Hide_Radar()
-		EndIf
-	EndIf
+	; If GY_ButtonDown(BMap) And ChatEntry\Alpha# < 0.5 And First TextInput = Null
+	; 	ShowRadar = Not ShowRadar
+	; 	PlaySound(GY_SBeep)
+	; 	If ShowRadar = True
+	; 		Show_Radar()
+	; 	Else
+	; 		Hide_Radar()
+	; 	EndIf
+	; EndIf
 
 	; Quit  modified by terrier [013]****************************************************************
 		If QuitTimer = True
@@ -3612,7 +3614,7 @@ Function CreateInterface()
 	Next
 
 	; Large map
-	WLargeMap = GY_CreateWindow(LanguageString$(LS_Map), 0.0, 0.1, 0.6, 0.6, False, True, False, 0, False)
+	;WLargeMap = GY_CreateWindow(LanguageString$(LS_Map), 0.0, 0.1, 0.6, 0.6, False, True, False, 0, False)
 
 	; Chat entry
 	ChatEntry\Component = GY_CreateTextField(0, ChatEntry\X# - WX1#, ChatEntry\Y#, ChatEntry\Width#, 0, 100)
@@ -4057,7 +4059,7 @@ Function CreateInterface()
 	GY_GadgetAlpha(WSpellRemove, 0.0, True)
 	GY_GadgetAlpha(WTrading, 0.0, True)
 	GY_GadgetAlpha(WHelp, 0.0, True)
-	GY_GadgetAlpha(WLargeMap, 0.0, True)
+	;GY_GadgetAlpha(WLargeMap, 0.0, True)
 	;########################################################################################
 	;	Hide menu window added by clan_fd on Mar 20, 2014
 	GY_GadgetAlpha(WMenu, 0.0, True)
@@ -4526,7 +4528,7 @@ Function FreeInterface()
 	Next
 
 	; Large map
-	GY_FreeGadget(WLargeMap); = GY_CreateWindow(LanguageString$(LS_Map), 0.15, 0.1, 0.6, 0.8, True, True, False, 0, False)
+	;GY_FreeGadget(WLargeMap); = GY_CreateWindow(LanguageString$(LS_Map), 0.15, 0.1, 0.6, 0.8, True, True, False, 0, False)
 
 	; Chat entry
 	GY_FreeGadget(ChatEntry\Component); = GY_CreateTextField(0, ChatEntry\X#, ChatEntry\Y#, ChatEntry\Width#, 0, 100)

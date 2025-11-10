@@ -1500,7 +1500,7 @@ Function UpdateNetwork()
 					Next
 
 					; Save radar state
-					If OldAreaName$ <> "" Then Save_Radar_Fog(RadarPath$ + Me\Name$ + "-" + OldAreaName$ + ".rdr")
+					;If OldAreaName$ <> "" Then Save_Radar_Fog(RadarPath$ + Me\Name$ + "-" + OldAreaName$ + ".rdr")
 
 					; Remove old actor instances
 					For A.ActorInstance = Each ActorInstance

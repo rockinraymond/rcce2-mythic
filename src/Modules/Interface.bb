@@ -93,7 +93,8 @@ Dim LHelp(14)
 
 ; Radar and map
 Global ShowRadar = False
-Global WLargeMap, LargeMapVisible
+;Global WLargeMap, LargeMapVisible
+Global MapVisible
 
 ; Inventory window
 Global WInventory, InventoryVisible = False
