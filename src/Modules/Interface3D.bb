@@ -1,9 +1,3 @@
-Global WContextMenu = 0
-Global BInteract = 0
-Global BAttack = 0
-Global BExamine = 0
-Global BTrade = 0
-
 ; Alphabetically sorted list of abilities
 Dim KnownSpellSort(999)
 
@@ -1657,8 +1651,8 @@ Function UpdateInterface()
 	;	ClientMode = 1
 	;	Return -1
 	
-	ElseIf GY_ButtonHit(BOptions)
-		GameOptionsMenu()
+	; ElseIf GY_ButtonHit(BOptions)
+	; 	GameOptionsMenu()
 	ElseIf GY_ButtonHit(BExit)
 		GY_GadgetAlpha(WMenu, 0.0, True)
 		QuitActive = True
@@ -3751,7 +3745,7 @@ Function CreateInterface()
 	X# = Chat\X#
 	If Chat\X# <= 0.5 Then X# = X# + 0.035
 	For i = 0 To MaxChatLine
-		ChatLines(i) = GY_CreateLabel(WChat, X# - WX1# + .06, Y#, String$(" ", 75))
+		ChatLines(i) = GY_CreateLabel(WChat, X# + .06, Y#, String$(" ", 75))
 		
 		GY_UpdateLabel(ChatLines(i), "")
 		GY_DropGadget(ChatLines(i))
@@ -3760,9 +3754,9 @@ Function CreateInterface()
 	X# = Chat\X# + 0.005
 	If Chat\X# > 0.5 Then X# = Chat\X# + Chat\Width# - 0.025
 	
-	BHistoryMode = GY_CreateButton(WChat, X# - WX1#, 0.0, 0.08, 0.08, "", False, 0, 0, 0, ActionBarDownTex)
-	BHistoryUp = GY_CreateButton(WChat, X# - WX1#, 0.0, 0.08, 0.08, "", False, 0, 0, 0, ActionBarUpTex)
-    BHistoryDown = GY_CreateButton(WChat, X# - WX1#, 0.08, 0.08, 0.08, "", False, 0, 0, 0, ActionBarDownTex)
+	BHistoryMode = GY_CreateButton(WChat, X#, 0.0, 0.08, 0.08, "", False, 0, 0, 0, ActionBarDownTex)
+	BHistoryUp = GY_CreateButton(WChat, X# , 0.0, 0.08, 0.08, "", False, 0, 0, 0, ActionBarUpTex)
+    BHistoryDown = GY_CreateButton(WChat, X# , 0.08, 0.08, 0.08, "", False, 0, 0, 0, ActionBarDownTex)
 
 	GY_GadgetAlpha(BHistoryMode, 0.85)
 	GY_GadgetAlpha(BHistoryUp, 0.0)
@@ -3776,7 +3770,7 @@ Function CreateInterface()
 	X# = Chat\X#
 	If Chat\X# <= 0.5 Then X# = X# + 0.035
 	For i = 0 To MaxGameLogLine
-		GameLogLines(i) = GY_CreateLabel(WGameLog, X# - WX1# + .06, Y#, String$(" ", 75))
+		GameLogLines(i) = GY_CreateLabel(WGameLog, X# + .06, Y#, String$(" ", 75))
 		
 		GY_UpdateLabel(GameLogLines(i), "")
 		GY_DropGadget(GameLogLines(i))
@@ -3785,9 +3779,9 @@ Function CreateInterface()
 	X# = Chat\X# + 0.005
 	If Chat\X# > 0.5 Then X# = Chat\X# + Chat\Width# - 0.025
 	
-	BHistoryModeGame = GY_CreateButton(WGameLog, X# - WX1#, 0.0, 0.08, 0.08, "", False, 0, 0, 0, ActionBarDownTex)
-	BHistoryUpGame = GY_CreateButton(WGameLog, X# - WX1#, 0.0, 0.08, 0.08, "", False, 0, 0, 0, ActionBarUpTex)
-    BHistoryDownGame = GY_CreateButton(WGameLog, X# - WX1#, 0.08, 0.08, 0.08, "", False, 0, 0, 0, ActionBarDownTex)
+	BHistoryModeGame = GY_CreateButton(WGameLog, X# , 0.0, 0.08, 0.08, "", False, 0, 0, 0, ActionBarDownTex)
+	BHistoryUpGame = GY_CreateButton(WGameLog, X# , 0.0, 0.08, 0.08, "", False, 0, 0, 0, ActionBarUpTex)
+    BHistoryDownGame = GY_CreateButton(WGameLog, X# , 0.08, 0.08, 0.08, "", False, 0, 0, 0, ActionBarDownTex)
 
 	GY_GadgetAlpha(BHistoryModeGame, 0.85)
 	GY_GadgetAlpha(BHistoryUpGame, 0.0)
@@ -3849,19 +3843,19 @@ Function CreateInterface()
 	; Modified by terrier 
 
 
-	WMenu = GY_CreateWindow("Menu", 0.3, 0.3, 0.4, 0.4, True, True, False, LoadTexture("Data\Textures\GUI\MenuBG.png"))
+	WMenu = GY_CreateWindow("Menu", 0.3, 0.3, 0.4, 0.2, True, True, False, LoadTexture("Data\Textures\GUI\MenuBG.png"))
 	
 	;BLogOut = GY_CreateButton(WMenu, 0.05, 0.05, 0.9, 0.14, "Log Out", False)
 
 	;BCharSelect = GY_CreateButton(WMenu, 0.05, 0.24, 0.9, 0.14, "Select Character", False)
 
-	BOptions = GY_CreateButton(WMenu, 0.05, 0.24, 0.9, 0.14, "Options", False)
+	;BOptions = GY_CreateButton(WMenu, 0.05, 0.24, 0.9, 0.14, "Options", False)
 	;BOptions = GY_CreateButton(WMenu, 0.05, 0.43, 0.9, 0.14, "Options", False)
 
-	BHelp = GY_CreateButton(WMenu, 0.05, 0.43, 0.9, 0.14, "Help", True)	
+	BHelp = GY_CreateButton(WMenu, 0.05, 0.15, 0.9, 0.25, "Help", True)	
 	;BHelp = GY_CreateButton(WMenu, 0.05, 0.62, 0.9, 0.14, "Help", True)
 
-	BExit = GY_CreateButton(WMenu, 0.05, 0.62, 0.9, 0.14, "Exit", False)
+	BExit = GY_CreateButton(WMenu, 0.05, 0.45, 0.9, 0.25, "Exit", False)
 	;BExit = GY_CreateButton(WMenu, 0.05, 0.81, 0.9, 0.14, "Exit", False)
 	
 	;	End edit
@@ -3942,7 +3936,7 @@ Function CreateInterface()
 	WHelp = GY_CreateWindow(LanguageString$(LS_Help), 0.25, 0.2, 0.5, 0.6, True, True, False, LoadTexture("Data\Textures\GUI\HelpBG.png"))
 	SHelpScroll = GY_CreateScrollBar(WHelp, 0.9, 0.05, 0.05, 0.9, 0.5)
 	For i = 0 To 14
-		LHelp(i) = GY_CreateLabel(WHelp, 0.05, 0.05 + (Float#(i) * 0.06), "THE LONGEST POSSIBLE HELP LINE ALLOWED GOES IN HERE! XXXXXXXXXX")
+		LHelp(i) = GY_CreateLabel(WHelp, 0.05, 0.05 + (Float#(i) * 0.06), "THE LONGEST POSSIBLE HELP LINE ALLOWED GOES IN HERE! XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX")
 	Next
 	CurrentLine = 0
 	F = ReadFile("Data\Game Data\Help.txt")
@@ -4255,7 +4249,7 @@ Function RedrawQuestLog()
 	Next
 
 	; Buttons
-	If QuestLogVisible Then GY_GadgetAlpha(WQuestLog, 0.85, True)
+	If QuestLogVisible Then GY_GadgetAlpha(WQuestLog, 1.0, True)
 	GY_LockGadget(BPrevQuest, False) : GY_LockGadget(BNextQuest, False)
 	MaxQuest = CountQuests(QuestLog) - 1
 	If MaxQuest < 0
@@ -4571,7 +4565,7 @@ Function FreeInterface()
 	
 	;GY_FreeGadget(BLogOut); = GY_CreateButton(WMenu, 0.05, 0.05, 0.9, 0.14, "Log Out", False)
 	;GY_FreeGadget(BCharSelect); = GY_CreateButton(WMenu, 0.05, 0.24, 0.9, 0.14, "Select Character", False)
-	GY_FreeGadget(BOptions); = GY_CreateButton(WMenu, 0.05, 0.43, 0.9, 0.14, "Options", False)
+	;GY_FreeGadget(BOptions); = GY_CreateButton(WMenu, 0.05, 0.43, 0.9, 0.14, "Options", False)
 	GY_FreeGadget(BHelp); = GY_CreateButton(WMenu, 0.05, 0.62, 0.9, 0.14, "Help", True)
 	GY_FreeGadget(BExit); = GY_CreateButton(WMenu, 0.05, 0.81, 0.9, 0.14, "Exit", False)
 

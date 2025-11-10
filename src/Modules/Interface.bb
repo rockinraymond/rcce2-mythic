@@ -74,7 +74,7 @@ Dim LPartyName(6)
 Global WMenu, MenuVisible = False
 Global BMenu, BLogOut, BCharSelect, BExit
 
-Global BOptions
+;Global BOptions
 
 ;chat boxes
 Global WChat
@@ -82,6 +82,12 @@ Global WGameLog
 
 ;	End edit
 ;##############################################################################################################
+;Context Menu
+Global WContextMenu = 0
+Global BInteract = 0
+Global BAttack = 0
+Global BExamine = 0
+Global BTrade = 0
 
 
 

@@ -528,7 +528,7 @@ Function UpdateNetwork()
 						M\MessageData$ = TradeMsg1$ + TradeMsg2$ + TradeMsg3$
 
 						; Clear trading window
-						GY_GadgetAlpha(WTrading, 0.85, True)
+						GY_GadgetAlpha(WTrading, 1.0, True)
 						GY_ActivateWindow(WTrading)
 						TradingVisible = True
 						GY_Modal = True
