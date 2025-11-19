@@ -1,8 +1,48 @@
 Spell ID: 0
 Spell Name: Fireball
-Rarity: 1
+SpellType: 1
 
 Spell ID: 1
 Spell Name: TestSkill
-Rarity: 2
+SpellType: 2
+
+Spell ID: 2
+Spell Name: New ability1
+SpellType: 3
+
+Spell ID: 3
+Spell Name: New ability2
+SpellType: 4
+
+Spell ID: 4
+Spell Name: New ability3
+SpellType: 1
+
+Spell ID: 5
+Spell Name: New ability4
+SpellType: 3
+
+Spell ID: 6
+Spell Name: New ability5
+SpellType: 4
+
+Spell ID: 7
+Spell Name: New ability6
+SpellType: 2
+
+Spell ID: 8
+Spell Name: New ability7
+SpellType: 1
+
+Spell ID: 9
+Spell Name: New ability8
+SpellType: 2
+
+Spell ID: 10
+Spell Name: New ability9
+SpellType: 3
+
+Spell ID: 11
+Spell Name: New ability10
+SpellType: 2
 

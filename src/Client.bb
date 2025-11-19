@@ -154,7 +154,7 @@ Include "Modules\ShadowsSimple.bb" 		   ; FE Shadows
 
 ;&&& Water edit 
 ;Global frame% = 0 
-;Global dx# = 0.0 
+;Global dx# = 0.0
 ;Global BumpTexA 
 ; terrier
 Global DeltaTimeK# = 1.0
@@ -1042,35 +1042,96 @@ End Function
 
 ; Sorts spells alphabetically
 Function SortSpells()
-
+SpellIndex = 0
+CombatIndex = 0
+UtilIndex = 0
+TalentIndex = 0
 	; Sort known spells
 	For i = 0 To 999
 		KnownSpellSort(i) = 0
+		KnownCombatSort(i) = 0
+		KnownUtilSort(i) = 0
+		KnownTalentSort(i) = 0
 	Next
+	
 	For i = 0 To 999
+	Sp.Spell = SpellsList(Me\KnownSpells[i])
 		If Me\SpellLevels[i] > 0
 			For j = 0 To 999
-				; Free slot in ordered list, fill it
-				If KnownSpellSort(j) = 0
-					KnownSpellSort(j) = i + 1
-					Exit
-				; 	
-;				ElseIf Me\SpellLevels[KnownSpellSort(j) - 1] < 1
-;					KnownSpellSort(j) = i + 1
-;					Exit
-					
-				; Spot taken, insert if this spell is alphabetically previous to the contents
-				Else
-					Sp.Spell = SpellsList(Me\KnownSpells[i])
-					Sp2.Spell = SpellsList(Me\KnownSpells[KnownSpellSort(j) - 1])
-					If HighAlphabetical(Sp\Name$, Sp2\Name$)
-						For k = 999 To j + 1 Step -1
-							KnownSpellSort(k) = KnownSpellSort(k - 1)
-						Next
-						KnownSpellSort(j) = i + 1
-						Exit
-					EndIf
-				EndIf
+				Select Sp\SpellType
+					Case S_Spell
+						; Free slot in ordered list, fill it
+						If KnownSpellSort(SpellIndex) = 0
+							KnownSpellSort(SpellIndex) = i + 1
+							SpellIndex = SpellIndex + 1
+							Exit
+						; Spot taken, insert if this spell is alphabetically previous to the contents
+						Else
+							Sp2.Spell = SpellsList(Me\KnownSpells[KnownSpellSort(SpellIndex) - 1])
+							If HighAlphabetical(Sp\Name$, Sp2\Name$)
+								For k = 999 To j + 1 Step -1
+									KnownSpellSort(k) = KnownSpellSort(k - 1)
+								Next
+								KnownSpellSort(SpellIndex) =  i + 1
+								SpellIndex = SpellIndex + 1
+								Exit
+							EndIf
+						EndIf
+					Case S_Combat
+						; Free slot in ordered list, fill it
+						If KnownCombatSort(CombatIndex) = 0
+							KnownCombatSort(CombatIndex) = i + 1
+							CombatIndex = CombatIndex + 1
+							Exit
+						; Spot taken, insert if this spell is alphabetically previous to the contents
+						Else
+							Sp2.Spell = SpellsList(Me\KnownSpells[KnownCombatSort(CombatIndex) - 1])
+							If HighAlphabetical(Sp\Name$, Sp2\Name$)
+								For k = 999 To j + 1 Step -1
+									KnownCombatSort(k) = KnownCombatSort(k - 1)
+								Next
+								KnownCombatSort(CombatIndex) = i + 1
+								CombatIndex = CombatIndex + 1
+								Exit
+							EndIf
+						EndIf
+					Case S_Util
+						; Free slot in ordered list, fill it
+						If KnownUtilSort(UtilIndex) = 0
+							KnownUtilSort(UtilIndex) = i + 1
+							UtilIndex = UtilIndex + 1
+							Exit
+						; Spot taken, insert if this spell is alphabetically previous to the contents
+						Else
+							Sp2.Spell = SpellsList(Me\KnownSpells[KnownUtilSort(UtilIndex) - 1])
+							If HighAlphabetical(Sp\Name$, Sp2\Name$)
+								For k = 999 To j + 1 Step -1
+									KnownUtilSort(k) = KnownUtilSort(k - 1)
+								Next
+								KnownUtilSort(UtilIndex) = i + 1
+								UtilIndex = UtilIndex + 1
+								Exit
+							EndIf
+						EndIf
+					Case S_Talent
+						; Free slot in ordered list, fill it
+						If KnownTalentSort(TalentIndex) = 0
+							KnownTalentSort(TalentIndex) = i + 1
+							TalentIndex = TalentIndex + 1
+							Exit
+						; Spot taken, insert if this spell is alphabetically previous to the contents
+						Else
+							Sp2.Spell = SpellsList(Me\KnownSpells[KnownTalentSort(TalentIndex) - 1])
+							If HighAlphabetical(Sp\Name$, Sp2\Name$)
+								For k = 999 To j + 1 Step -1
+									KnownTalentSort(k) = KnownTalentSort(k - 1)
+								Next
+								KnownTalentSort(TalentIndex) = i + 1
+								TalentIndex = TalentIndex + 1
+								Exit
+							EndIf
+						EndIf
+				End Select
 			Next
 		EndIf
 	Next

@@ -1,5 +1,37 @@
 ; Alphabetically sorted list of abilities
 Dim KnownSpellSort(999)
+Dim KnownCombatSort(999)
+Dim KnownUtilSort(999)
+Dim KnownTalentSort(999)
+
+Function FindKnownSpellByType.Spell(Me.ActorInstance, TargetSpellType, Spell)
+	Sp.Spell = Null
+	Select TargetSpellType
+		Case S_Spell
+			Sp = SpellsList(Me\KnownSpells[KnownSpellSort(Spell) - 1])
+		Case S_Combat
+			Sp = SpellsList(Me\KnownSpells[KnownCombatSort(Spell) - 1])
+		Case S_Util
+			Sp = SpellsList(Me\KnownSpells[KnownUtilSort(Spell) - 1])
+		Case S_Talent
+			Sp = SpellsList(Me\KnownSpells[KnownTalentSort(Spell) - 1])
+	End Select
+	Return Sp
+End Function
+
+Function KnownSpellArrayByType(Index, TargetSpellType)
+	Select TargetSpellType
+		Case S_Spell
+			Return KnownSpellSort(Index)
+		Case S_Combat
+			Return KnownCombatSort(Index)
+		Case S_Util
+			Return KnownUtilSort(Index)
+		Case S_Talent
+			Return KnownTalentSort(Index)
+	End Select
+End Function
+
 
 ; Creates a text input window and returns the handle
 Function CreateTextInput(Title$, Prompt$, Numeric, ScriptHandle)
@@ -1320,7 +1352,7 @@ Function UpdateInterface()
 	If GY_ButtonHit(BNextSpells)
 		If FirstSpell < 0 
 			FirstSpell = 0
-		ElseIf KnownSpellSort(FirstSpell + 10) > 0
+		ElseIf KnownSpellArrayByType(FirstSpell + 10,SpellView) > 0
 			FirstSpell = FirstSpell + 10
 		EndIf
 		UpdateSpellbook()
@@ -1336,15 +1368,19 @@ Function UpdateInterface()
 	EndIf
 	If GY_ButtonHit(BShowSpells)
 		SpellView = S_Spell
+		FirstSpell = 0
 		UpdateSpellbook()
 	ElseIf GY_ButtonHit(BShowTalents)
 		SpellView = S_Talent
+		FirstSpell = 0
 		UpdateSpellbook()
 	ElseIf GY_ButtonHit(BShowCombats)
 		SpellView = S_Combat
+		FirstSpell = 0
 		UpdateSpellbook()
 	ElseIf GY_ButtonHit(BShowUtils)
 		SpellView = S_Util
+		FirstSpell = 0
 		UpdateSpellbook()
 	EndIf
 	; Spell remove confirmed
@@ -1493,16 +1529,16 @@ Function UpdateInterface()
 					If MouseSlotSource <> -1
 						HideEntity(MouseSlotEN) : MouseSlotAmount = 0 : MouseSlotSource = -1
 					; Otherwise put this in the mouse slot
-					Else
-						Sp.Spell = SpellsList(Me\KnownSpells[KnownSpellSort(FirstSpell + i) - 1])
+					Else		
+						Sp.Spell = FindKnownSpellByType(Me, SpellView,FirstSpell + i)		
 						ShowEntity(MouseSlotEN)
 						EntityTexture(MouseSlotEN, GetTexture(Sp\ThumbnailTexID))
-						MouseSlotAmount = KnownSpellSort(FirstSpell + i) - 1
+						MouseSlotAmount = KnownSpellArrayByType(FirstSpell + i,SpellView) - 1
 						MouseSlotSource = -2
 					EndIf
 				; Left click to fire spell
 				ElseIf GY_ButtonHit(BSpellImgs(i))
-					Num = KnownSpellSort(FirstSpell + i) - 1
+					Num = KnownSpellArrayByType(FirstSpell + i,SpellView) - 1
 					; Recharged
 					If Me\SpellCharge[Num] <= 0
 						Pa$ = RCE_StrFromInt$(Me\KnownSpells[Num], 2)
@@ -1514,6 +1550,7 @@ Function UpdateInterface()
 						Me\SpellCharge[Num] = SpellsList(Me\KnownSpells[Num])\RechargeTime
 					; Not recharged
 					Else
+						Output("Num: " + Num, 255, 50, 255)
 						Output(LanguageString$(LS_AbilityNotRecharged), 255, 50, 50)
 					EndIf
 				EndIf
@@ -1764,8 +1801,9 @@ EndIf
                      If Desc$ = "" Then Desc$ = LanguageString$(LS_NoDescription)
                      Y# = 0.07
 					 LTitle = GY_CreateLabelBig(WTooltip, 0.02, Y#, Sp\Name$)
-					 LRank = GY_CreateLabel(WTooltip, 0.02, Y# + 0.22, "[Rank" + " " + Me\SpellLevels[Me\MemorisedSpells[i]] + "]", 100, 255, 0)
-                     ; Word wrap
+					; RankStr$ = "[Rank" + " " + Me\SpellLevels[Me\KnownSpells[i]] + "]" 
+					;  LRank = GY_CreateLabel(WTooltip, 0.02, Y# + 0.22, RankStr$, 100, 255, 0)
+					 ; Word wrap
                      While Desc$ <> ""
                         LDesc = GY_CreateLabel(WTooltip, 0.02, Y# + 0.42, Desc$)
                         Y# = Y# + 0.18
@@ -2304,8 +2342,8 @@ EndIf
 							Sp = SpellsList(Me\KnownSpells[Me\MemorisedSpells[i]])
 						EndIf
 					Else
-						If KnownSpellSort(FirstSpell + i) > 0
-							Sp = SpellsList(Me\KnownSpells[KnownSpellSort(FirstSpell + i) - 1])
+						If KnownSpellArrayByType(FirstSpell + i, SpellView) > 0
+							Sp = FindKnownSpellByType(Me,SpellView,FirstSpell + i)
 						EndIf
 					EndIf
 					If Sp <> Null
@@ -2328,7 +2366,18 @@ EndIf
 						
 						Y# = 0.07
 						LTitle = GY_CreateLabelBig(WTooltip, 0.02, Y#, Sp\Name$, 0, 0, 255) 
-						LRank = GY_CreateLabel(WTooltip, 0.02, Y# + 0.22, "[Rank" + " " + Me\SpellLevels[Me\MemorisedSpells[i]] + "]", 100, 255, 0)
+						RankStr$ = "[Rank ?]"
+						Select SpellView
+						Case S_Spell
+							RankStr$ = "[Rank" + " " + Me\SpellLevels[Me\KnownSpells[KnownSpellSort(FirstSpell + j) - 1]] + "]"
+						Case S_Combat
+							RankStr$ = "[Rank" + " " + Me\SpellLevels[Me\KnownSpells[KnownCombatSort(FirstSpell + j) - 1]] + "]"
+						Case S_Util
+							RankStr$ = "[Rank" + " " + Me\SpellLevels[Me\KnownSpells[KnownUtilSort(FirstSpell + j) - 1]] + "]"
+						Case S_Talent
+							RankStr$ = "[Rank" + " " + Me\SpellLevels[Me\KnownSpells[KnownTalentSort(FirstSpell + j) - 1]] + "]"
+						End Select
+						LRank = GY_CreateLabel(WTooltip, 0.02, Y# + 0.22, RankStr$, 100, 255, 0)
 						While Desc$ <> ""
 						LDesc = GY_CreateLabel(WTooltip, 0.02, Y# + 0.42, Desc$)
                         Y# = Y# + 0.18
@@ -3352,12 +3401,11 @@ Function UpdateSpellbook()
 		Spell = FirstSpell
 		Count = 0
 		Repeat
-			If KnownSpellSort(Spell) > 0
-				If Me\SpellLevels[KnownSpellSort(Spell) - 1] > 0
-					Sp.Spell = SpellsList(Me\KnownSpells[KnownSpellSort(Spell) - 1])
-					If (SpellView = Sp\SpellType)
+			If KnownSpellArrayByType(Spell,SpellView) > 0
+				If Me\SpellLevels[KnownSpellArrayByType(Spell,SpellView) - 1] > 0
+					Sp.Spell = FindKnownSpellByType(Me, SpellView, Spell)
 							GY_UpdateLabel(LSpellNames(Count), Sp\Name$, 255, 255, 255)
-							GY_UpdateLabel(LSpellLevels(Count), "[Rank" + " " + Me\SpellLevels[KnownSpellSort(Spell) - 1] + "]", 100, 255, 0)
+							GY_UpdateLabel(LSpellLevels(Count), "[Rank" + " " + Me\SpellLevels[KnownSpellArrayByType(Spell,SpellView) - 1] + "]", 100, 255, 0)
 							
 							Lett = Len(Sp\Description$)
 							If Lett > 26
@@ -3379,7 +3427,6 @@ Function UpdateSpellbook()
 								Next
 							EndIf
 							Count = Count + 1
-						EndIf
 					EndIf
 				EndIf
 				Spell = Spell + 1
@@ -4344,7 +4391,7 @@ Function UpdateActionBarIcons()
             Sp.Spell = SpellsList(Me\KnownSpells[Me\MemorisedSpells[Num]])
          Else
             Num = ActionBarSlots(i + Offset) + 1000
-            Sp.Spell = SpellsList(Me\KnownSpells[Num])
+			Sp.Spell = SpellsList(Me\KnownSpells[Num])
          EndIf
          GYG.GY_Gadget = Object.GY_Gadget(BActionBar(i))
          EntityTexture(GYG\EN, GetTexture(Sp\ThumbnailTexID))
