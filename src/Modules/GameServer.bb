@@ -197,7 +197,7 @@ Function FireProjectile(P.Projectile, A1.ActorInstance, A2.ActorInstance)
 	ToHit = Rand(100)
 	If ToHit <= P\HitChance
 		; Calculate damage
-		AP = GetArmourLevel(A2\Inventory) + (A2\Resistances[P\DamageType] - 100)
+		AP = GetArmourLevel(A2) + (A2\Resistances[P\DamageType] - 100)
 		Damage = (P\Damage + Rand(-5, 5)) - AP
 		If Damage < 1 Then Damage = 1
 
@@ -242,72 +242,38 @@ Function ActorAttack(A1.ActorInstance, A2.ActorInstance)
 	YDist# = (A1\Y# - A2\Y#) / 5.0
 	Dist# = (XDist# * XDist#) + (ZDist# * ZDist#) + (YDist# * YDist#)
 
-	; Check if this is actually a projectile attack
-	If A1\Inventory\Items[SlotI_Weapon] <> Null
-		If A1\Inventory\Items[SlotI_Weapon]\Item\WeaponType = W_Ranged
-			If A1\Inventory\Items[SlotI_Weapon]\ItemHealth > 0
-				; Fixed function
-				If CombatFormula <> 4
-					; In range?
-					CheckDist# = A1\Inventory\Items[SlotI_Weapon]\Item\Range# + A1\Actor\Radius# + A2\Actor\Radius#
-					If Dist# > CheckDist# * CheckDist# Then Return False
-
-					; Tell other players in the same area
-					Pa$ = "O" + RCE_StrFromInt$(A1\RuntimeID, 2) + RCE_StrFromInt$(A2\RuntimeID, 2)
-					AInstance.AreaInstance = Object.AreaInstance(A1\ServerArea)
-					A3.ActorInstance = AInstance\FirstInZone
-					While A3 <> Null
-						If A3\RNID > 0
-							If A3 <> A1 And A3 <> A2 Then RCE_Send(Host, A3\RNID, P_AttackActor, Pa$, True)
-						EndIf
-						A3 = A3\NextInZone
-					Wend
-
-					; Launch projectile
-					P.Projectile = ProjectileList(A1\Inventory\Items[SlotI_Weapon]\Item\RangedProjectile)
-					If P <> Null
-						FireProjectile(P, A1, A2)
-						A1\LastAttack = MilliSecs()
-					EndIf
-				; Attack script
-				Else
-					; Check both actors are allowed to engage in combat
-					If A1\Actor\Aggressiveness = 3 Or A2\Actor\Aggressiveness = 3 Then Return False
-					; Check faction ratings
-					If A1\FactionRatings[A2\HomeFaction] > 150 Then Return False
-					; Store time of attack
-					A1\LastAttack = MilliSecs()
-					; Make attacked actor angry if it's defensive
-					If A2\RNID = -1
-						If A2\Actor\Aggressiveness = 1
-							A2\AITarget = A1
-							A2\AIMode = AI_Chase
-						; Or if it's aggressive and has no target...
-						ElseIf A2\Actor\Aggressiveness = 2 And A2\AITarget = Null
-							A2\AITarget = A1
-							A2\AIMode = AI_Chase
-						EndIf
-					EndIf
-					ThreadScript("Attack", "Main", Handle(A1), Handle(A2))
-				EndIf
-				Return True
-			Else
-				If A1\RNID > 0 Then RCE_Send(Host, A1\RNID, P_ChatMessage, Chr$(253) + LanguageString$(LS_WeaponDamaged), True)
-				Return False
-			EndIf
-		EndIf
-	EndIf
-
 	; Check both actors are allowed to engage in combat
 	If A1\Actor\Aggressiveness = 3 Or A2\Actor\Aggressiveness = 3 Then Return False
 
 	; Check faction ratings
 	If A1\FactionRatings[A2\HomeFaction] > 150 Then Return False
 
-	; Check distance is acceptable
-	CheckDist# = 7.0 + A1\Actor\Radius# + A2\Actor\Radius#
-	If Dist# > CheckDist# * CheckDist# Then Return False
+	;Range Check
+	If A1\Inventory\Items[SlotI_Weapon] <> Null 
+		PlayerWeaponType = A1\Inventory\Items[SlotI_Weapon]\Item\WeaponType
+	Else 
+		PlayerWeaponType = 0
+	EndIf
 
+	If PlayerWeaponType = W_Ranged
+		If A1\Inventory\Items[SlotI_Weapon]\ItemHealth > 0
+			CheckDist# = A1\Inventory\Items[SlotI_Weapon]\Item\Range# + A1\Actor\Radius# + A2\Actor\Radius#
+			If Dist# > CheckDist# * CheckDist# Then Return False
+		Else
+			If A1\RNID > 0 Then RCE_Send(Host, A1\RNID, P_ChatMessage, Chr$(253) + LanguageString$(LS_WeaponDamaged), True)
+				Return False
+		EndIf
+		If InventoryHasItem(A1\Inventory, "Arrow", 1) = False
+			If A1\RNID > 0 Then RCE_Send(Host, A1\RNID, P_ChatMessage, Chr$(253) + "You are out of arrows!", True)
+			Return False
+		Else
+			;GiveItem(A1, "Arrow", -1)
+		EndIf
+	Else
+		; Check distance is acceptable
+		CheckDist# = 7.0 + A1\Actor\Radius# + A2\Actor\Radius#
+		If Dist# > CheckDist# * CheckDist# Then Return False
+	EndIf
 	; Store time of attack
 	A1\LastAttack = MilliSecs()
 
@@ -324,62 +290,84 @@ Function ActorAttack(A1.ActorInstance, A2.ActorInstance)
 	EndIf
 
 	; Calculate damage
-	; Hardcoded combat formula
-	If CombatFormula <> 4
+	; Normal formula
+	If CombatFormula = 1
 		AICallForHelp(A2)
-
+		
 		;Declare Attributes
 		StrengthAttribute = FindAttribute("Strength");
 		ToughnessAttribute = FindAttribute("Toughness");
 		DexterityAttribute = FindAttribute("Dexterity");
 		AgilityAttribute = FindAttribute("Agility");
+		BlockSkill = FindAttribute("Block");
 
 		;Attacker stats
-		AttackStrength = A1\Attributes\Value[StrengthAttribute]
-		AttackDexterity = A1\Attributes\Value[DexterityAttribute]
-		AttackAgility = A1\Attributes\Value[AgilityAttribute]
+		AttackStrength =  A1\Attributes\Value[StrengthAttribute] - 10
+		AttackDexterity =  A1\Attributes\Value[DexterityAttribute] - 10
+		AttackAgility =  A1\Attributes\Value[AgilityAttribute] - 10
+		AttackWeaponSkill = GetActorWeaponSkill(A1)
 
+		DamageAttribute = AttackStrength
+		WeaponAccBns = AttackWeaponSkill / 7
+		DamageType = DamageType = A1\Actor\DefaultDamageType
+
+		If A1\Inventory\Items[SlotI_Weapon] <> Null
+			WeaponAccBns = A1\Inventory\Items[SlotI_Weapon]\Item\WeaponAccuracy
+			DamageType = A1\Inventory\Items[SlotI_Weapon]\Item\WeaponDamageType
+			If (A1\Inventory\Items[SlotI_Weapon]\Item\WeaponClass = WC_Bow) Or (A1\Inventory\Items[SlotI_Weapon]\Item\WeaponClass = WC_Dagger) Or ((A1\Inventory\Items[SlotI_Weapon]\Item\WeaponClass = WC_Polearm) And (AttackDexterity > AttackStrength))
+				DamageAttribute = AttackDexterity
+			EndIf
+		EndIf
+
+		TargetHitRoll = AttackWeaponSkill + AttackAgility + WeaponAccBns
+		
 		;Defender stats
-		DefendToughness = A2\Attributes\Value[ToughnessAttribute]
-		DefendAgility = A2\Attributes\Value[AgilityAttribute]
-		DefendDexterity = A2\Attributes\Value[DexterityAttribute]
+		DefendToughness =  A2\Attributes\Value[ToughnessAttribute] - 10
+		DefendAgility =  A2\Attributes\Value[AgilityAttribute] - 10
+		DefendBlock = A2\Attributes\Value[BlockSkill]
 
+		;Target Stats
+		ArmorVal = GetArmourLevel(A2) + DefendToughness
+		DefAGIBns = DefendAgility
+		DefenderResistance = (A2\Resistances[DamageType])
 
-		; 90% chance to hit
-		ToHit = Rand(100)
-		If ToHit > 10
+		If A1\Inventory\Items[SlotI_Chest] <> Null
+			Select A1\Inventory\Items[SlotI_Chest]\Item\ArmourClass
+			Case AC_Medium
+				DefAGIBns = DefAGIBns / 2
+			Case AC_Heavy
+				DefAGIBns = 0
+			End Select
+		EndIf
+		
+
+		TargetHitRoll = AttackWeaponSkill + AttackAgility + WeaponAccBns - ArmorVal - DefAGIBns - DefenderResistance
+		
+		;Roll D100s for hit and block
+		HitRoll = Rand(1,100)
+		
+		BlockRoll = Rand(1,100)
+		If A2\Inventory\Items[SlotI_Shield] = Null Then BlockRoll = 100 
+
+		If (HitRoll < TargetHitRoll) And (BlockRoll > DefendBlock)
 			; Initial damage
-			Strength = A1\Attributes\Value[StrengthStat]
 			If A1\Inventory\Items[SlotI_Weapon] <> Null
 				If A1\Inventory\Items[SlotI_Weapon]\ItemHealth > 0
-					Damage = A1\Inventory\Items[SlotI_Weapon]\Item\WeaponDamage
-					If Strength < Damage
-						Damage = Damage - Rand(5, 8)
-					ElseIf Strength > Damage
-						Damage = Damage + Rand(5, 8)
-					Else
-						Damage = Damage + Rand(-5, 5)
-					EndIf
-					DamageType = A1\Inventory\Items[SlotI_Weapon]\Item\WeaponDamageType
+					Damage = Rand(1,A1\Inventory\Items[SlotI_Weapon]\Item\WeaponDamage) 
 				Else
-					Damage = (Strength / 8) + Rand(-5, 5)
-					DamageType = A1\Actor\DefaultDamageType
+					Damage = Rand(1,AttackWeaponSkill / 7) 
 				EndIf
 			Else
-				Damage = (Strength / 8) + Rand(-5, 5)
-				DamageType = A1\Actor\DefaultDamageType
+				Damage = Rand(1,AttackWeaponSkill / 7) 
 			EndIf
-
+			
+			Damage = Damage + DamageAttribute
+			
 			; Critical damage
-			If Rand(1, 10) = 1
-				Damage = Damage * 2
-				If A1\RNID > 0 Then RCE_Send(Host, A1\RNID, P_ChatMessage, Chr$(250) + Chr$(255) + Chr$(225) + Chr$(100) + LanguageString$(LS_CriticalDamage), True)
-			EndIf
-
-			; Armour
-			AP = GetArmourLevel(A2\Inventory) + (A2\Resistances[DamageType] - 100)
-			If ToughnessStat > -1 Then AP = AP + (A2\Attributes\Value[ToughnessStat] / 8)
-			Damage = Damage - AP
+			 If HitRoll < 3
+			 	Damage = Damage * 3
+			 	If A1\RNID > 0 Then RCE_Send(Host, A1\RNID, P_ChatMessage, Chr$(250) + Chr$(255) + Chr$(225) + Chr$(100) + LanguageString$(LS_CriticalDamage), True)
+			 EndIf
 
 			; Minimum of 1
 			If Damage < 1 Then Damage = 1
@@ -387,13 +375,40 @@ Function ActorAttack(A1.ActorInstance, A2.ActorInstance)
 		Else
 			Damage = -1
 		EndIf
-	
 
 	; Scripted
 	ElseIf CombatFormula = 4
 		ThreadScript("Attack", "Main", Handle(A1), Handle(A2))
 		Goto SkipAttackNet
 	EndIf
+
+	; Apply damage to target actor
+	FinalDamge = A2\Attributes\Value[HealthStat] - Damage
+	If FinalDamge < 0 Then FinalDamge = 0
+	If Damage > 0 Then A2\Attributes\Value[HealthStat] = FinalDamge
+
+	; Tell player(s) if applicable
+	Pa$ = RCE_StrFromInt$(Damage + 1, 2) + RCE_StrFromInt$(DamageType, 1)
+	If A1\RNID > 0
+		RCE_Send(Host, A1\RNID, P_AttackActor, "H" + RCE_StrFromInt$(A2\RuntimeID, 2) + Pa$, True)
+	EndIf
+	If A2\RNID > 0
+		RCE_Send(Host, A2\RNID, P_AttackActor, "Y" + RCE_StrFromInt$(A1\RuntimeID, 2) + Pa$, True)
+	EndIf
+
+	; Tell other players in the same area
+	Pa$ = "O" + RCE_StrFromInt$(A1\RuntimeID, 2) + RCE_StrFromInt$(A2\RuntimeID, 2)
+
+	AInstance.AreaInstance = Object.AreaInstance(A1\ServerArea)
+	A3.ActorInstance = AInstance\FirstInZone
+	While A3 <> Null
+		If A3\RNID > 0
+			If A3 <> A1 And A3 <> A2 Then RCE_Send(Host, A3\RNID, P_AttackActor, Pa$, True)
+		EndIf
+		A3 = A3\NextInZone
+	Wend
+
+	.SkipAttackNet
 
 	; Damage weapon
 	If WeaponDamage = True
@@ -426,36 +441,6 @@ Function ActorAttack(A1.ActorInstance, A2.ActorInstance)
 			EndIf
 		Next
 	EndIf
-
-	; Apply damage to target actor
-	If Damage > 0 Then A2\Attributes\Value[HealthStat] = A2\Attributes\Value[HealthStat] - Damage
-
-	;give xp for skill
-	Params$ = "Unarmed" + "," + Str(Damage)
-	ThreadScript("LevelUp", "giveSkillXp", Handle(A1), 0, Params$)
-
-	; Tell player(s) if applicable
-	Pa$ = RCE_StrFromInt$(Damage + 1, 2) + RCE_StrFromInt$(DamageType, 1)
-	If A1\RNID > 0
-		RCE_Send(Host, A1\RNID, P_AttackActor, "H" + RCE_StrFromInt$(A2\RuntimeID, 2) + Pa$, True)
-	EndIf
-	If A2\RNID > 0
-		RCE_Send(Host, A2\RNID, P_AttackActor, "Y" + RCE_StrFromInt$(A1\RuntimeID, 2) + Pa$, True)
-	EndIf
-
-	; Tell other players in the same area
-	Pa$ = "O" + RCE_StrFromInt$(A1\RuntimeID, 2) + RCE_StrFromInt$(A2\RuntimeID, 2)
-
-	AInstance.AreaInstance = Object.AreaInstance(A1\ServerArea)
-	A3.ActorInstance = AInstance\FirstInZone
-	While A3 <> Null
-		If A3\RNID > 0
-			If A3 <> A1 And A3 <> A2 Then RCE_Send(Host, A3\RNID, P_AttackActor, Pa$, True)
-		EndIf
-		A3 = A3\NextInZone
-	Wend
-
-	.SkipAttackNet
 
 	; If target was a player with pets, make pets attack too
 	If A1\RNID > 0

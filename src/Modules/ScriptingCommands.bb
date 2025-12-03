@@ -43,7 +43,7 @@ End Function
 Function BVM_GETARMOURLEVEL%(Param1%)
 	Actor.ActorInstance = Object.ActorInstance(Param1%)
 	If Actor <> Null
-		Result% = GetArmourLevel(Actor\Inventory)
+		Result% = GetArmourLevel(Actor)
 	EndIf
 Return Result%
 End Function

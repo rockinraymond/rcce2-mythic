@@ -1017,7 +1017,7 @@ Function GetActorTradeValue(AI.ActorInstance, ItemValue, isBuying = 0)
 
 	ActorCHA# = AI\Attributes\Value[FindAttribute("Charisma")]
 	ActorRep# = AI\Reputation
-	CHAMod# = (ActorCHA * 0.01) + (ActorRep# * 0.003)
+	CHAMod# = (ActorCHA * 0.04) + (ActorRep# * 0.003)
 
 
 	PriceMod# = 1.0
@@ -1033,4 +1033,31 @@ Function GetActorTradeValue(AI.ActorInstance, ItemValue, isBuying = 0)
 	If ModdedValue < 1 Then ModdedValue = 1
 
 	Return ModdedValue
+End Function
+
+Function GetActorWeaponSkill(AI.ActorInstance)
+	ActorWeaponClass = -1
+
+	If AI\Inventory\Items[SlotI_Weapon] <> Null Then ActorWeaponClass = AI\Inventory\Items[SlotI_Weapon]\Item\WeaponClass
+	WeaponSkillName$ = "Unarmed"
+	
+	Select ActorWeaponClass
+	Case WC_Sword
+		WeaponSkillName$ = "Swords"
+	Case WC_Axe
+		WeaponSkillName$ = "Axes"
+	Case WC_Blunt
+		WeaponSkillName$ = "Blunt"
+	Case WC_Bow
+		WeaponSkillName$ = "Bows"
+	Case WC_Dagger
+		WeaponSkillName$ = "Daggers"
+	Case WC_Polearm
+		WeaponSkillName$ = "Polearms"
+	Default
+		WeaponSkillName$ = "Unarmed"
+	End Select
+
+	WeaponSkill = FindAttribute(WeaponSkillName$);
+	Return AI\Attributes\Value[WeaponSkill]
 End Function

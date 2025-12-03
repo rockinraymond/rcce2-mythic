@@ -39,13 +39,26 @@ Type Inventory
 End Type
 
 ; Gets the overall armour level for an inventory
-Function GetArmourLevel(I.Inventory)
+Function GetArmourLevel(AI.ActorInstance)
 
 	Local AP = 0
 	For j = SlotI_Shield To SlotI_Feet
-		If I\Items[j] <> Null
-			If I\Items[j]\Item\ItemType = I_Armour
-				If I\Items[j]\ItemHealth > 0 Then AP = AP + I\Items[j]\Item\ArmourLevel
+		If AI\Inventory\Items[j] <> Null
+			If AI\Inventory\Items[j]\Item\ItemType = I_Armour
+				ArmorAttribute = -1
+				Select AI\Inventory\Items[j]\Item\ArmourLevel
+					Case AC_Light
+						ArmorAttribute = FindAttribute("Light Armor");
+					Case AC_Medium
+						ArmorAttribute = FindAttribute("Medium Armor");
+					Case AC_Heavy
+						ArmorAttribute = FindAttribute("Heavy Armor");
+				End Select
+
+				ArmorSkill# = 1.0
+				If ArmorAttribute > -1 Then ArmorSkill = (Float(AI\Attributes\Value[ArmorAttribute]) + 50.0 / 100.0)
+
+				If AI\Inventory\Items[j]\ItemHealth > 0 Then AP = AP + (AI\Inventory\Items[j]\Item\ArmourLevel * ArmorSkill)
 			EndIf
 		EndIf
 	Next
