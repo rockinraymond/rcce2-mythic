@@ -1963,7 +1963,7 @@ Function CreateChar()
 	;StatWindowHeight# = Float#(TotalAttributes + 1) * 0.05
 	
 	StatWindowHeight# = Float#(TotalAttributes + 1) * 0.04
-	SkillWindowHeight# = Float#(TotalSkills + 1) * 0.04
+	SkillWindowHeight# = Float#(TotalSkills + 1) * 0.03
 	
 	; Create the windows
 	If ResolutionType = 1 ; 16:9 ratio [@@]
@@ -2079,8 +2079,8 @@ Function CreateChar()
 			GY_DropGadget(AttributeLabels(Count))
 			GY_SetGadgetData(AttributeLabels(Count), i)
 			If AttributeAssignment > 0
-				AttributeDecrease(Count) = GY_CreateCustomButton(WStat, 0.64, Y# + 0.0052, 0.08, 0.028 / StatWindowHeight#, LoadButtonU("SmallLeft"), LoadButtonD("SmallLeft"), LoadButtonH("SmallLeft"))
-				AttributeIncrease(Count) = GY_CreateCustomButton(WStat, 0.90, Y# + 0.0052, 0.08, 0.028 / StatWindowHeight#, LoadButtonU("SmallRight"), LoadButtonD("SmallRight"), LoadButtonH("SmallRight"))
+				AttributeDecrease(Count) = GY_CreateCustomButton(WStat, 0.64, Y# , 0.08, 0.028 / StatWindowHeight#, LoadButtonU("SmallLeft"), LoadButtonD("SmallLeft"), LoadButtonH("SmallLeft"))
+				AttributeIncrease(Count) = GY_CreateCustomButton(WStat, 0.90, Y#, 0.08, 0.028 / StatWindowHeight#, LoadButtonU("SmallRight"), LoadButtonD("SmallRight"), LoadButtonH("SmallRight"))
 			EndIf
 			Y# = Y# + (0.04 / StatWindowHeight#)
 			Count = Count + 1
@@ -2090,10 +2090,10 @@ Function CreateChar()
 	; Skill assignment list
 	If SkillAssignment > 0
 		SkillPointsToSpend = SkillAssignment
-		SkillRemainingLabel = GY_CreateLabel(WSkill, 0.5, 0.02, "Skill Points: " + SkillPointsToSpend, 255, 50, 50, Justify_Centre)
+		SkillRemainingLabel = GY_CreateLabel(WSkill, 0.5, 0.015, "Skill Points: " + SkillPointsToSpend, 255, 50, 50, Justify_Centre)
 	EndIf
 	;Y# = 0.2675
-	Y# = 0.04 / SkillWindowHeight#
+	Y# = 0.03 / SkillWindowHeight#
 
 	;Y2# = 0.284
 
@@ -2107,10 +2107,10 @@ Function CreateChar()
 			GY_DropGadget(SkillLabels(SkillCount))
 			GY_SetGadgetData(SkillLabels(SkillCount), i)
 			If SkillAssignment > 0
-				SkillDecrease(SkillCount) = GY_CreateCustomButton(WSkill, 0.64, Y# + 0.0052, 0.08, 0.028 / SkillWindowHeight#, LoadButtonU("SmallLeft"), LoadButtonD("SmallLeft"), LoadButtonH("SmallLeft"))
-				SkillIncrease(SkillCount) = GY_CreateCustomButton(WSkill, 0.90, Y# + 0.0052, 0.08, 0.028 / SkillWindowHeight#, LoadButtonU("SmallRight"), LoadButtonD("SmallRight"), LoadButtonH("SmallRight"))
+				SkillDecrease(SkillCount) = GY_CreateCustomButton(WSkill, 0.64, Y#, 0.08, 0.025 / SkillWindowHeight#, LoadButtonU("SmallLeft"), LoadButtonD("SmallLeft"), LoadButtonH("SmallLeft"))
+				SkillIncrease(SkillCount) = GY_CreateCustomButton(WSkill, 0.90, Y#, 0.08, 0.025 / SkillWindowHeight#, LoadButtonU("SmallRight"), LoadButtonD("SmallRight"), LoadButtonH("SmallRight"))
 			EndIf
-			Y# = Y# + (0.04 / SkillWindowHeight#)
+			Y# = Y# + (0.03 / SkillWindowHeight#)
 			SkillCount = SkillCount + 1
 		EndIf
 	Next

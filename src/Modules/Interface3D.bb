@@ -1721,7 +1721,7 @@ Function UpdateInterface()
 	If CharStatsVisible = True
 		; Reputation and gold display
 		GY_UpdateLabel(LReputation, LanguageString$(LS_Reputation) + " " + Me\Reputation)
-		GY_UpdateLabel(LGold, Money$(Me\Gold))
+		;GY_UpdateLabel(LGold, Money$(Me\Gold))
 		GY_UpdateLabel(LLevel, LanguageString$(LS_Level) + " " + Me\Level)
 		GY_UpdateLabel(LXP, LanguageString$(LS_Experience) + " " + Me\XP)
 
@@ -1729,7 +1729,7 @@ Function UpdateInterface()
 		CurrentAtt = 0
 		For i = 0 To 39
 			If AttributeNames$(i) <> "" And AttributeHidden(i) = False And AttributeIsSkill(i) = False
-					GY_UpdateLabel(LAttributeVals(CurrentAtt), Me\Attributes\Value[i] + " / " + Me\Attributes\Maximum[i])
+					GY_UpdateLabel(LAttributeVals(CurrentAtt), Me\Attributes\Value[i])
 					CurrentAtt = CurrentAtt + 1
 			EndIf
 		Next
@@ -3923,11 +3923,11 @@ Function CreateInterface()
 
 ; Stats window
 	WCharStats = GY_CreateWindow(LanguageString$(LS_Character), 0.1, 0.1, 0.5, 0.7, True, True, False, LoadTexture("Data\Textures\GUI\CharBG.png"))
-	GY_CreateLabel(WCharStats, 0.5, 0.03, Me\Name$, 255, 255, 255, Justify_Centre)
-	LReputation = GY_CreateLabel(WCharStats, 0.05, 0.09, LanguageString$(LS_Reputation) + " 00000", 0, 255, 0)
-	LGold = GY_CreateLabel(WCharStats, 0.05, 0.13, "000000000000000000000000000000000000000000000000000000000000", 0, 255, 0)
-	LLevel = GY_CreateLabel(WCharStats, 0.05, 0.17, LanguageString$(LS_Level) + " 0000000", 0, 255, 0)
-	LXP = GY_CreateLabel(WCharStats, 0.05, 0.21, LanguageString$(LS_Experience) + " 0000000000000", 0, 255, 0)
+	GY_CreateLabel(WCharStats, 0.03, 0.03, "Name: " + Me\Name$, 255, 255, 255)
+	;LGold = GY_CreateLabel(WCharStats, 0.05, 0.13, "000000000000000000000000000000000000000000000000000000000000", 255, 255, 255)
+	LLevel = GY_CreateLabel(WCharStats, 0.03, 0.055, LanguageString$(LS_Level) + " 0000000", 255, 255, 255)
+	LXP = GY_CreateLabel(WCharStats, 0.03, 0.08, LanguageString$(LS_Experience) + " 0000000000000", 255, 255, 255)
+	LReputation = GY_CreateLabel(WCharStats, 0.03, 0.105, LanguageString$(LS_Reputation) + " 00000", 255, 255, 255)
 	
 	;Attributes
 	GY_CreateLabel(WCharStats, 0.03, 0.355, LanguageString$(LS_Attributes), 255, 255, 255)
@@ -3936,7 +3936,7 @@ Function CreateInterface()
 	For i = 0 To 39
 		If AttributeNames$(i) <> "" And AttributeHidden(i) = False And AttributeIsSkill(i) = False
 			LAttributeNames(AttCount) = GY_CreateLabel(WCharStats, 0.03, 0.38 + (Float#(AttCount) * 0.025), "LONGEST ATTRIBUTE NAME HERE!")
-			LAttributeVals(AttCount) = GY_CreateLabel(WCharStats, 0.23, 0.38 + (Float#(AttCount) * 0.025), "00000 / 00000", 255, 255, 255, Justify_Right)
+			LAttributeVals(AttCount) = GY_CreateLabel(WCharStats, 0.23, 0.38 + (Float#(AttCount) * 0.025), "00000", 255, 255, 255, Justify_Right)
 			GY_UpdateLabel(LAttributeNames(AttCount), AttributeNames$(i))
 			GY_UpdateLabel(LAttributeVals(AttCount), "")
 			AttCount = AttCount + 1
@@ -3960,19 +3960,25 @@ Function CreateInterface()
 	Next
 	
 	;Skills
-	GY_CreateLabel(WCharStats, 0.53, 0.1, "SKILLS", 255, 255, 255)
+	GY_CreateLabel(WCharStats, 0.4, 0.1, "SKILLS", 255, 255, 255)
 	SklCount = 0
 	SkillStart# = 0.135
 	For i = 0 To 39
 		If AttributeNames$(i) <> "" And AttributeHidden(i) = False And AttributeIsSkill(i) = True
-			LSkillNames(SklCount) = GY_CreateLabel(WCharStats, 0.53, SkillStart + (Float#(SklCount) * 0.05), "LONGEST SKILL NAME HERE!")
+			XPos# = 0.4
+			YPos# = SkillStart + (Float#(SklCount) * 0.05)
+			If SklCount > 11
+				XPos# = 0.7
+				YPos# = SkillStart + (Float#(SklCount - 12) * 0.05)
+			EndIf
+			LSkillNames(SklCount) = GY_CreateLabel(WCharStats, XPos, YPos, "LONGEST SKILL NAME HERE!")
 			;LSkillVals(SklCount) = GY_CreateLabel(WCharStats, 0.61, SkillStart + (Float#(SklCount) * 0.05), "00000", 255, 255, 255, Justify_Right)
 			GY_UpdateLabel(LSkillNames(SklCount), AttributeNames$(i) + ": " + "")
 			;GY_UpdateLabel(LSkillVals(SklCount), "")
 
 			; Create xp bar
-			AttributeXpDisplayNumbers(SklCount) = GY_CreateLabel(WCharStats, 0.72, SkillStart + (Float#(SklCount) * 0.05), "EXP: 0000/0000", 255, 255, 255)
-			AttributeXpDisplays(SklCount) = GY_CreateProgressBar(WCharStats, 0.53, SkillStart + 0.03 + (Float#(SklCount) * 0.05), 0.3, 0.015, 0, 100, 255, 68, 51)
+			AttributeXpDisplayNumbers(SklCount) = GY_CreateLabel(WCharStats, XPos + 0.175, YPos, "EXP: 0000/0000", 255, 255, 255)
+			AttributeXpDisplays(SklCount) = GY_CreateProgressBar(WCharStats, XPos, YPos + 0.03 , 0.27, 0.015, 0, 100, 255, 68, 51)
 			;GY_CreateLabel(WCharStats, 0.72, SkillStart + (Float#(SklCount) * 0.05), "EXP:", 255, 255, 255)
 			
 			SklCount = SklCount + 1
