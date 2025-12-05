@@ -1955,7 +1955,7 @@ EndIf
 							WepClass$ = GetWeaponClass$(Me\Inventory\Items[i]\Item)
 							GY_CreateLabel(WTooltip, 0.02, Y#, LanguageString$(LS_Damage) + " " + Str$(Dam))
 							GY_CreateLabel(WTooltip, 0.32, Y#, "Accuracy: " + Str$(Accuracy))
-							GY_CreateLabel(WTooltip, 0.62, Y#, "Speed: " + Str$(Speed))
+							GY_CreateLabel(WTooltip, 0.62, Y#, "Speed: " + GetAttackSpeedString$(Speed))
 							Y# = Y# + YInterval#
 							GY_CreateLabel(WTooltip, 0.02, Y#, LanguageString$(LS_DamageType) + " " + DamType$)
 							Y# = Y# + YInterval#
@@ -2109,7 +2109,7 @@ EndIf
 							WepClass$ = GetWeaponClass$(Me\Inventory\Items[i + SlotI_Backpack]\Item)
 							GY_CreateLabel(WTooltip, 0.02, Y#, LanguageString$(LS_Damage) + " " + Str$(Dam))
 							GY_CreateLabel(WTooltip, 0.32, Y#, "Accuracy: " + Str$(Accuracy))
-							GY_CreateLabel(WTooltip, 0.62, Y#, "Speed: " + Str$(Speed))
+							GY_CreateLabel(WTooltip, 0.62, Y#, "Speed: " + GetAttackSpeedString$(Speed))
 							Y# = Y# + YInterval#
 							GY_CreateLabel(WTooltip, 0.02, Y#, LanguageString$(LS_DamageType) + " " + DamType$)
 							Y# = Y# + YInterval#
@@ -2257,7 +2257,7 @@ EndIf
 							WepClass$ = GetWeaponClass$(TradeItems(i)\Item)
 							GY_CreateLabel(WTooltip, 0.02, Y#, LanguageString$(LS_Damage) + " " + Str$(Dam))
 							GY_CreateLabel(WTooltip, 0.32, Y#, "Accuracy: " + Str$(Accuracy))
-							GY_CreateLabel(WTooltip, 0.62, Y#, "Speed: " + Str$(Speed))
+							GY_CreateLabel(WTooltip, 0.62, Y#, "Speed: " + GetAttackSpeedString$(Speed))
 							Y# = Y# + YInterval#
 							GY_CreateLabel(WTooltip, 0.02, Y#, LanguageString$(LS_DamageType) + " " + DamType$)
 							Y# = Y# + YInterval#
@@ -3985,7 +3985,7 @@ Function CreateInterface()
 			XPos# = 0.3
 			YPos# = SkillStart + (Float#(SklCount) * 0.05)
 			If SklCount > 11
-				XPos# = 0.6
+				XPos# = 0.65
 				YPos# = SkillStart + (Float#(SklCount - 12) * 0.05)
 			EndIf
 			LSkillNames(SklCount) = GY_CreateLabel(WCharStats, XPos, YPos, "LONGEST SKILL NAME HERE!")
@@ -3995,7 +3995,7 @@ Function CreateInterface()
 
 			; Create xp bar
 			AttributeXpDisplayNumbers(SklCount) = GY_CreateLabel(WCharStats, XPos + 0.175, YPos, "EXP: 0000/0000", 255, 255, 255)
-			AttributeXpDisplays(SklCount) = GY_CreateProgressBar(WCharStats, XPos, YPos + 0.03 , 0.27, 0.015, 0, 100, 255, 68, 51)
+			AttributeXpDisplays(SklCount) = GY_CreateProgressBar(WCharStats, XPos, YPos + 0.03 , 0.285, 0.015, 0, 100, 255, 68, 51)
 			;GY_CreateLabel(WCharStats, 0.72, SkillStart + (Float#(SklCount) * 0.05), "EXP:", 255, 255, 255)
 			
 			SklCount = SklCount + 1

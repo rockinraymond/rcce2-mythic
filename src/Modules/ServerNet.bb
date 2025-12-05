@@ -1168,7 +1168,7 @@ Function UpdateNetwork()
 				AI.ActorInstance = FindActorInstanceFromRNID(M\FromID)
 				If AI <> Null And Len(M\MessageData$) = 2
 					; Check combat delay and whether actor is riding a mount, to prevent cheating
-					If MilliSecs() - AI\LastAttack >= CombatDelay And AI\Mount = Null
+					If MilliSecs() - AI\LastAttack >= (CombatDelay + GetActorAttackSpeed(AI)) And AI\Mount = Null
 						A2.ActorInstance = RuntimeIDList(RCE_IntFromStr(M\MessageData$))
 						If A2 <> Null
 							AInstance.AreaInstance = Object.AreaInstance(AI\ServerArea)

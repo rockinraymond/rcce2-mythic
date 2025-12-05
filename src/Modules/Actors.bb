@@ -1149,9 +1149,6 @@ Function GetActorMaxDamage(AI.ActorInstance)
 	Return ActorMaxDamage
 End Function
 
-
-				
-
 Function GetActorAccuracy(AI.ActorInstance)
 	ActorAccuracy = 1
 	AgilityAttribute = FindAttribute("Agility");
@@ -1165,4 +1162,35 @@ Function GetActorAccuracy(AI.ActorInstance)
 	EndIf
 
 	Return ActorAccuracy
+End Function
+
+Function GetActorAttackSpeed(AI.ActorInstance)
+	AttackSpeed = 0
+	ActorAgility =  AI\Attributes\Value[FindAttribute("Agility")]
+	SpeedIncrement = 400 - ActorAgility
+	If AI\Inventory\Items[SlotI_Weapon] <> Null 
+		ActorWepSpeed = AI\Inventory\Items[SlotI_Weapon]\Item\WeaponSpeed
+		AttackSpeed = ActorWepSpeed * SpeedIncrement
+	EndIf
+	Return AttackSpeed
+End Function
+
+Function GetAttackSpeedString$(AttackSpeed)
+	SpeedString$ = ""
+	Select AttackSpeed
+	Case 1
+		SpeedString$ = "Very Fast"
+	Case 2
+		SpeedString$ = "Fast"
+	Case 3
+		SpeedString$ = "Moderate"
+	Case 4
+		SpeedString$ = "Slow"
+	Case 5
+		SpeedString$ = "Very Slow"
+	Default
+		SpeedString$ = "Fastest"
+	End Select
+	
+	Return SpeedString
 End Function

@@ -47,7 +47,7 @@ Function UpdateCombat()
 			RotateEntity Me\CollisionEN, 0.0, EntityYaw#(Me\CollisionEN) + 180.0, 0.0
 
 			; Attack if enough time elapsed
-			If MilliSecs() - LastAttack > CombatDelay
+			If MilliSecs() - LastAttack > CombatDelay + GetActorAttackSpeed(Me)
 				; Tell server
 				RCE_Send(Connection, PeerToHost, P_AttackActor, RCE_StrFromInt$(A\RuntimeID, 2), True)
 				LastAttack = MilliSecs()
@@ -102,8 +102,8 @@ Function AnimateActorAttack(A.ActorInstance)
 		Anim = Anim_DefaultAttack
 	Else
 		Select A\Inventory\Items[SlotI_Weapon]\Item\WeaponType
-			Case W_OneHand : Anim = Anim_RightAttack
-			Case W_TwoHand : Anim = Anim_TwoHandAttack
+			Case W_OneHand : Anim = Anim_DefaultAttack
+			Case W_TwoHand : Anim = Anim_DefaultAttack
 			Case W_Ranged
 				If A\Gender = 0
 					AS.AnimSet = AnimList(A\Actor\MAnimationSet)

@@ -723,7 +723,7 @@ Function UpdateActorInstances(Broadcast)
 								AI\DestZ# = AI\Z#
 								AI\IsRunning = False
 								; Attempt to hit target
-								If MilliSecs() - AI\LastAttack >= CombatDelay
+								If MilliSecs() - AI\LastAttack >= CombatDelay + GetActorAttackSpeed(AI)
 									Result = ActorAttack(AI, AI\AITarget)
 									If Result = True Then AI\DestX# = AI\X# : AI\DestZ# = AI\Z#
 								EndIf
@@ -790,7 +790,7 @@ Function UpdateActorInstances(Broadcast)
 							AI\DestZ# = AI\AITarget\Z#
 							AI\IsRunning = True
 							; Attempt to hit target
-							If MilliSecs() - AI\LastAttack >= CombatDelay
+							If MilliSecs() - AI\LastAttack >= CombatDelay + GetActorAttackSpeed(AI)
 								Result = ActorAttack(AI, AI\AITarget)
 								If Result = True Then AI\DestX# = AI\X# : AI\DestZ# = AI\Z#
 							EndIf
