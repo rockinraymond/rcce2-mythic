@@ -290,87 +290,57 @@ Function ActorAttack(A1.ActorInstance, A2.ActorInstance)
 	EndIf
 
 	; Calculate damage
-	; Normal formula
-	If CombatFormula = 1
+	; Hardcoded formula
+	If CombatFormula <> 4
 		AICallForHelp(A2)
 		
-		;Declare Attributes
-		StrengthAttribute = FindAttribute("Strength");
-		ToughnessAttribute = FindAttribute("Toughness");
-		DexterityAttribute = FindAttribute("Dexterity");
-		AgilityAttribute = FindAttribute("Agility");
-		BlockSkill = FindAttribute("Block");
-
+		DamageEquipment = False
+		AttackBlocked = False
 		;Attacker stats
-		AttackStrength =  A1\Attributes\Value[StrengthAttribute] - 10
-		AttackDexterity =  A1\Attributes\Value[DexterityAttribute] - 10
-		AttackAgility =  A1\Attributes\Value[AgilityAttribute] - 10
-		AttackWeaponSkill = GetActorWeaponSkill(A1)
-
-		DamageAttribute = AttackStrength
-		WeaponAccBns = AttackWeaponSkill / 7
-		DamageType = DamageType = A1\Actor\DefaultDamageType
-
-		If A1\Inventory\Items[SlotI_Weapon] <> Null
-			WeaponAccBns = A1\Inventory\Items[SlotI_Weapon]\Item\WeaponAccuracy
-			DamageType = A1\Inventory\Items[SlotI_Weapon]\Item\WeaponDamageType
-			If (A1\Inventory\Items[SlotI_Weapon]\Item\WeaponClass = WC_Bow) Or (A1\Inventory\Items[SlotI_Weapon]\Item\WeaponClass = WC_Dagger) Or ((A1\Inventory\Items[SlotI_Weapon]\Item\WeaponClass = WC_Polearm) And (AttackDexterity > AttackStrength))
-				DamageAttribute = AttackDexterity
-			EndIf
-		EndIf
-
-		TargetHitRoll = AttackWeaponSkill + AttackAgility + WeaponAccBns
+		DexterityAttribute = FindAttribute("Dexterity");
+		AttackerCritChance = (A1\Attributes\Value[DexterityAttribute] * 2) / 5
+		AttackerAccuracy = GetActorWeaponSkill(A1)
+		AttackerMaxDamage = GetActorMaxDamage(A1)
+		AttackerDamageAttBNS = GetActorDamageAttributeBNS(A1)
+		
+		DamageType = GetActorDamageType(A1)
 		
 		;Defender stats
-		DefendToughness =  A2\Attributes\Value[ToughnessAttribute] - 10
-		DefendAgility =  A2\Attributes\Value[AgilityAttribute] - 10
-		DefendBlock = A2\Attributes\Value[BlockSkill]
+		ToughnessAttribute = FindAttribute("Toughness");
+		BlockSkill = FindAttribute("Block");
 
-		;Target Stats
-		ArmorVal = GetArmourLevel(A2) + DefendToughness
-		DefAGIBns = DefendAgility
+		DefendToughness =  A2\Attributes\Value[ToughnessAttribute] - 10
+
+		BlockResistance = 0
+		If A2\Inventory\Items[SlotI_Shield] <> Null Then BlockResistance = A2\Inventory\Items[SlotI_Shield]\Item\Resistances[DamageType]
+		DefendBlock = A2\Attributes\Value[BlockSkill] + DefendToughness + BlockResistance - AttackerDamageAttBNS
+
+		ArmorVal = GetArmourLevel(A2)
 		DefenderResistance = (A2\Resistances[DamageType])
 
-		If A1\Inventory\Items[SlotI_Chest] <> Null
-			Select A1\Inventory\Items[SlotI_Chest]\Item\ArmourClass
-			Case AC_Medium
-				DefAGIBns = DefAGIBns / 2
-			Case AC_Heavy
-				DefAGIBns = 0
-			End Select
-		EndIf
-		
-
-		TargetHitRoll = AttackWeaponSkill + AttackAgility + WeaponAccBns - ArmorVal - DefAGIBns - DefenderResistance
+		TargetHitRoll = AttackerAccuracy - ArmorVal - DefenderResistance
 		
 		;Roll D100s for hit and block
 		HitRoll = Rand(1,100)
 		
-		BlockRoll = Rand(1,100)
 		If A2\Inventory\Items[SlotI_Shield] = Null Then BlockRoll = 100 
-
-		If (HitRoll < TargetHitRoll) And (BlockRoll > DefendBlock)
-			; Initial damage
-			If A1\Inventory\Items[SlotI_Weapon] <> Null
-				If A1\Inventory\Items[SlotI_Weapon]\ItemHealth > 0
-					Damage = Rand(1,A1\Inventory\Items[SlotI_Weapon]\Item\WeaponDamage) 
-				Else
-					Damage = Rand(1,AttackWeaponSkill / 7) 
+		If (HitRoll < TargetHitRoll)
+			BlockRoll = Rand(1,100)
+			If (BlockRoll > DefendBlock)
+				DamageEquipment = True
+				Damage = Rand(1,AttackerMaxDamage) + AttackerDamageAttBNS
+				; Critical damage
+				If HitRoll < AttackerCritChance
+					Damage = Damage * 3
+					If A1\RNID > 0 Then RCE_Send(Host, A1\RNID, P_ChatMessage, Chr$(250) + Chr$(255) + Chr$(225) + Chr$(100) + LanguageString$(LS_CriticalDamage), True)
 				EndIf
+				; Minimum of 1
+				If Damage < 1 Then Damage = 1
+			;Blocked!
 			Else
-				Damage = Rand(1,AttackWeaponSkill / 7) 
+			AttackBlocked = True
+			Damage = -1
 			EndIf
-			
-			Damage = Damage + DamageAttribute
-			
-			; Critical damage
-			 If HitRoll < 3
-			 	Damage = Damage * 3
-			 	If A1\RNID > 0 Then RCE_Send(Host, A1\RNID, P_ChatMessage, Chr$(250) + Chr$(255) + Chr$(225) + Chr$(100) + LanguageString$(LS_CriticalDamage), True)
-			 EndIf
-
-			; Minimum of 1
-			If Damage < 1 Then Damage = 1
 		; Miss!
 		Else
 			Damage = -1
@@ -385,7 +355,24 @@ Function ActorAttack(A1.ActorInstance, A2.ActorInstance)
 	; Apply damage to target actor
 	FinalDamge = A2\Attributes\Value[HealthStat] - Damage
 	If FinalDamge < 0 Then FinalDamge = 0
-	If Damage > 0 Then A2\Attributes\Value[HealthStat] = FinalDamge
+	If Damage > 0 
+		A2\Attributes\Value[HealthStat] = FinalDamge
+
+		;give out weapon skill xp
+		WeaponSkillString$ = GetActorWeaponSkillString$(A1)
+		WepXP = Damage * 6
+		WepXpParams$ = WeaponSkillString$ + "," + Str(WepXP)
+		ThreadScript("LevelUp", "giveSkillXp", Handle(A1), 0, WepXpParams$)
+
+		;give out armor skill xp
+		ArmorSkillString$ = GetActorArmorSkillString$(A2)
+		ArmorXP = Damage * 9
+		ArmXpParams$ = ArmorSkillString$ + "," + Str(ArmorXp)
+		ThreadScript("LevelUp", "giveSkillXp", Handle(A2), 0, ArmXpParams$)
+	EndIf
+		
+
+	; give out armor skill xp
 
 	; Tell player(s) if applicable
 	Pa$ = RCE_StrFromInt$(Damage + 1, 2) + RCE_StrFromInt$(DamageType, 1)
@@ -411,7 +398,7 @@ Function ActorAttack(A1.ActorInstance, A2.ActorInstance)
 	.SkipAttackNet
 
 	; Damage weapon
-	If WeaponDamage = True
+	If DamageEquipment = True
 		If A1\Inventory\Items[SlotI_Weapon] <> Null
 			If A1\Inventory\Items[SlotI_Weapon]\ItemHealth > 0
 				If Rand(1, 5) = 1
@@ -426,15 +413,15 @@ Function ActorAttack(A1.ActorInstance, A2.ActorInstance)
 	EndIf
 
 	; Damage armour
-	If ArmourDamage = True
+	If DamageEquipment = True
 		For i = SlotI_Shield To SlotI_Feet
-			If A1\Inventory\Items[i] <> Null
-				If A1\Inventory\Items[i]\ItemHealth > 0
+			If A2\Inventory\Items[i] <> Null
+				If A2\Inventory\Items[i]\ItemHealth > 0
 					If Rand(1, 5) = 1
-						A1\Inventory\Items[i]\ItemHealth = A1\Inventory\Items[i]\ItemHealth - 1
-						If A1\RNID > 0
-							Pa$ = RCE_StrFromInt$(i, 1) + RCE_StrFromInt$(A1\Inventory\Items[i]\ItemHealth, 2)
-							RCE_Send(Host, A1\RNID, P_ItemHealth, Pa$, True)
+						A2\Inventory\Items[i]\ItemHealth = A2\Inventory\Items[i]\ItemHealth - 1
+						If A2\RNID > 0
+							Pa$ = RCE_StrFromInt$(i, 1) + RCE_StrFromInt$(A2\Inventory\Items[i]\ItemHealth, 2)
+							RCE_Send(Host, A2\RNID, P_ItemHealth, Pa$, True)
 						EndIf
 					EndIf
 				EndIf

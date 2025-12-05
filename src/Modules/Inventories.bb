@@ -46,7 +46,7 @@ Function GetArmourLevel(AI.ActorInstance)
 		If AI\Inventory\Items[j] <> Null
 			If AI\Inventory\Items[j]\Item\ItemType = I_Armour
 				ArmorAttribute = -1
-				Select AI\Inventory\Items[j]\Item\ArmourLevel
+				Select AI\Inventory\Items[j]\Item\ArmourClass
 					Case AC_Light
 						ArmorAttribute = FindAttribute("Light Armor");
 					Case AC_Medium
@@ -55,13 +55,29 @@ Function GetArmourLevel(AI.ActorInstance)
 						ArmorAttribute = FindAttribute("Heavy Armor");
 				End Select
 
-				ArmorSkill# = 1.0
-				If ArmorAttribute > -1 Then ArmorSkill = (Float(AI\Attributes\Value[ArmorAttribute]) + 50.0 / 100.0)
+				ArmorSkill# = 0
+				If ArmorAttribute > -1 Then ArmorSkill = AI\Attributes\Value[ArmorAttribute] + 50
 
-				If AI\Inventory\Items[j]\ItemHealth > 0 Then AP = AP + (AI\Inventory\Items[j]\Item\ArmourLevel * ArmorSkill)
+				If AI\Inventory\Items[j]\ItemHealth > 0 Then AP = AP + ((AI\Inventory\Items[j]\Item\ArmourLevel * ArmorSkill) / 100)
 			EndIf
 		EndIf
 	Next
+	;Add toughness
+	ToughnessBNS = AI\Attributes\Value[FindAttribute("Toughness")] - 10
+	AP = AP + ToughnessBNS
+
+	;Adds agility based off armor worn
+	DefAGIBns = AI\Attributes\Value[FindAttribute("Agility")] - 10
+	If AI\Inventory\Items[SlotI_Chest] <> Null
+			Select AI\Inventory\Items[SlotI_Chest]\Item\ArmourClass
+			Case AC_Medium
+				DefAGIBns = DefAGIBns / 2
+			Case AC_Heavy
+				DefAGIBns = 0
+			End Select
+	EndIf
+
+	AP = AP + DefAGIBns
 	Return AP
 
 End Function

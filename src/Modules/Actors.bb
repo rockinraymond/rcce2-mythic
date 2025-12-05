@@ -1017,7 +1017,7 @@ Function GetActorTradeValue(AI.ActorInstance, ItemValue, isBuying = 0)
 
 	ActorCHA# = AI\Attributes\Value[FindAttribute("Charisma")]
 	ActorRep# = AI\Reputation
-	CHAMod# = (ActorCHA * 0.04) + (ActorRep# * 0.003)
+	CHAMod# = (ActorCHA * 0.025) + (ActorRep# * 0.003)
 
 
 	PriceMod# = 1.0
@@ -1060,4 +1060,109 @@ Function GetActorWeaponSkill(AI.ActorInstance)
 
 	WeaponSkill = FindAttribute(WeaponSkillName$);
 	Return AI\Attributes\Value[WeaponSkill]
+End Function
+
+Function GetActorWeaponSkillString$(AI.ActorInstance)
+	ActorWeaponClass = -1
+
+	If AI\Inventory\Items[SlotI_Weapon] <> Null Then ActorWeaponClass = AI\Inventory\Items[SlotI_Weapon]\Item\WeaponClass
+	WeaponSkillName$ = "Unarmed"
+	
+	Select ActorWeaponClass
+	Case WC_Sword
+		WeaponSkillName$ = "Swords"
+	Case WC_Axe
+		WeaponSkillName$ = "Axes"
+	Case WC_Blunt
+		WeaponSkillName$ = "Blunt"
+	Case WC_Bow
+		WeaponSkillName$ = "Bows"
+	Case WC_Dagger
+		WeaponSkillName$ = "Daggers"
+	Case WC_Polearm
+		WeaponSkillName$ = "Polearms"
+	Default
+		WeaponSkillName$ = "Unarmed"
+	End Select
+
+	
+	Return WeaponSkillName$
+End Function
+
+Function GetActorArmorSkillString$(AI.ActorInstance)
+	ActorArmorClass = -1
+
+	If AI\Inventory\Items[SlotI_Chest] <> Null Then ActorArmorClass = AI\Inventory\Items[SlotI_Chest]\Item\ArmourClass
+	ArmorSkillName$ = "none"
+	
+	Select ActorArmorClass
+	Case AC_Light
+		ArmorSkillName$ = "Light Armor"
+	Case AC_Medium
+		ArmorSkillName$ = "Medium Armor"
+	Case AC_Heavy
+		ArmorSkillName$ = "Heavy Armor"
+	Default
+		ArmorSkillName$ = "none"
+	End Select
+
+	Return ArmorSkillName$
+End Function
+
+Function GetActorDamageType(AI.ActorInstance)
+	ActorDamageType = AI\Actor\DefaultDamageType
+	If AI\Inventory\Items[SlotI_Weapon] <> Null Then ActorDamageType = AI\Inventory\Items[SlotI_Weapon]\Item\WeaponClass
+	Return ActorDamageType
+End Function
+
+Function GetActorDamageAttributeBNS(AI.ActorInstance)
+	StrengthAttribute = FindAttribute("Strength");
+	DexterityAttribute = FindAttribute("Dexterity");
+	AttackStrength =  AI\Attributes\Value[StrengthAttribute] - 10
+	AttackDexterity =  AI\Attributes\Value[DexterityAttribute] - 10
+	
+	DamageAttributeBNS = AttackStrength
+	If AI\Inventory\Items[SlotI_Weapon] <> Null
+		If (AI\Inventory\Items[SlotI_Weapon]\Item\WeaponClass = WC_Bow) Or (AI\Inventory\Items[SlotI_Weapon]\Item\WeaponClass = WC_Dagger) Or ((AI\Inventory\Items[SlotI_Weapon]\Item\WeaponClass = WC_Polearm) And (AttackDexterity > AttackStrength))
+			DamageAttribute = AttackDexterity
+		EndIf
+	EndIf
+	
+	Return DamageAttributeBNS
+End Function
+
+Function GetActorMaxDamage(AI.ActorInstance)
+	ActorMaxDamage = 1
+	ActorWeaponSkill = GetActorWeaponSkill(AI)
+
+	If AI\Inventory\Items[SlotI_Weapon] <> Null 
+		If AI\Inventory\Items[SlotI_Weapon]\ItemHealth > 0
+			ActorMaxDamage = AI\Inventory\Items[SlotI_Weapon]\Item\WeaponDamage	
+		Else
+			ActorMaxDamage = ActorWeaponSkill / 7 
+		EndIf
+		
+	Else
+		ActorMaxDamage = ActorWeaponSkill / 7
+	EndIf
+
+	Return ActorMaxDamage
+End Function
+
+
+				
+
+Function GetActorAccuracy(AI.ActorInstance)
+	ActorAccuracy = 1
+	AgilityAttribute = FindAttribute("Agility");
+	AttackAgility =  AI\Attributes\Value[AgilityAttribute] - 10
+	ActorWeaponSkill = GetActorWeaponSkill(AI)
+
+	If AI\Inventory\Items[SlotI_Weapon] <> Null 
+		ActorAccuracy = (AI\Inventory\Items[SlotI_Weapon]\Item\WeaponAccuracy) + ActorWeaponSkill + AttackAgility
+	Else
+		ActorAccuracy = (ActorWeaponSkill / 7) + ActorWeaponSkill + AttackAgility
+	EndIf
+
+	Return ActorAccuracy
 End Function
