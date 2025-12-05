@@ -250,12 +250,12 @@ Function ActorAttack(A1.ActorInstance, A2.ActorInstance)
 
 	;Range Check
 	If A1\Inventory\Items[SlotI_Weapon] <> Null 
-		PlayerWeaponType = A1\Inventory\Items[SlotI_Weapon]\Item\WeaponType
+		PlayerWeaponType = A1\Inventory\Items[SlotI_Weapon]\Item\WeaponClass
 	Else 
 		PlayerWeaponType = 0
 	EndIf
 
-	If PlayerWeaponType = W_Ranged
+	If PlayerWeaponType = WC_Bow
 		If A1\Inventory\Items[SlotI_Weapon]\ItemHealth > 0
 			CheckDist# = A1\Inventory\Items[SlotI_Weapon]\Item\Range# + A1\Actor\Radius# + A2\Actor\Radius#
 			If Dist# > CheckDist# * CheckDist# Then Return False
@@ -263,12 +263,12 @@ Function ActorAttack(A1.ActorInstance, A2.ActorInstance)
 			If A1\RNID > 0 Then RCE_Send(Host, A1\RNID, P_ChatMessage, Chr$(253) + LanguageString$(LS_WeaponDamaged), True)
 				Return False
 		EndIf
-		If InventoryHasItem(A1\Inventory, "Arrow", 1) = False
-			If A1\RNID > 0 Then RCE_Send(Host, A1\RNID, P_ChatMessage, Chr$(253) + "You are out of arrows!", True)
-			Return False
-		Else
+		;If InventoryHasItem(A1\Inventory, "Arrow", 1) = False
+		;	If A1\RNID > 0 Then RCE_Send(Host, A1\RNID, P_ChatMessage, Chr$(253) + "You are out of arrows!", True)
+		;	Return False
+		;Else
 			;GiveItem(A1, "Arrow", -1)
-		EndIf
+		;EndIf
 	Else
 		; Check distance is acceptable
 		CheckDist# = 7.0 + A1\Actor\Radius# + A2\Actor\Radius#

@@ -41,6 +41,9 @@ Function SetActorWeapon(AI.ActorInstance, MeshID)
 		If AI\WeaponEN = 0 Then RuntimeError("Could not load weapon mesh!")
 		EntityAutoFade(AI\WeaponEN, nearFadeModifier * CameraViewRange, farFadeModifier * CameraViewRange)
 		RHand = FindChild(AI\EN, "R_Hand")
+		If AI\Inventory\Items[SlotI_Weapon] <> Null
+			If AI\Inventory\Items[SlotI_Weapon]\Item\WeaponClass = WC_Bow Then RHand = FindChild(AI\EN, "L_Hand")
+		EndIf
 		If RHand = 0 Then RuntimeError(AI\Actor\Race$ + " actor mesh is missing an 'R_Hand' joint!")
 		EntityParent AI\WeaponEN, RHand, False
 		PositionEntity AI\WeaponEN, LoadedMeshX#(MeshID), LoadedMeshY#(MeshID), LoadedMeshZ#(MeshID)
