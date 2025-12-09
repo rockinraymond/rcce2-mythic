@@ -2442,7 +2442,7 @@ Function GY_CreateWindowColoredTitle(Title$, Red, Grn, Blu,  X#, Y#, Width#, Hei
 		EntityParent(W\TitleEN, G\EN)
 
 		; Text
-		Length = (Width# / 0.02) - 1
+		Length = (Width# / 0.01) - 1
 		W\TitleText = GY_Create3DText(X#, Y# - 0.0325, 0.015 * Float#(Length), 0.025, Length, GY_TitleFont, GY_Cam)
 		GY_Set3DText(W\TitleText, G\Caption$)
 		EntityColor(W\TitleText, Red, Grn, Blu)
