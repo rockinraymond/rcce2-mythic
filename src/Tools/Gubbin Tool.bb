@@ -782,7 +782,7 @@ Function SaveAll()
 	If PreviewMesh <> 0
 		SetMeshOffset(SelectedMeshID, TempPosX#, TempPosY#, TempPosZ#)
 		SetMeshScale(SelectedMeshID, TempScale#)
-		SaveRotation()
+		//SaveRotation()
 		AppTitle("Realm Crafter Gubbin Tool")
 		ChangesSaved = True
 	EndIf
