@@ -3,16 +3,16 @@ Item Name: Sword
 Rarity: 4
 
 Item ID: 1
-Item Name: Armor
+Item Name: Leather Armor
 Rarity: 2
 
 Item ID: 2
-Item Name: New item
+Item Name: Chainmail
 Rarity: 1
 
 Item ID: 3
-Item Name: New item2
-Rarity: 1
+Item Name: Plate Armor
+Rarity: 3
 
 Item ID: 4
 Item Name: MagicFood
