@@ -1977,7 +1977,7 @@ Function CreateChar()
 	EndIf
 	
 	; Race list Rebuilt by Cysis145 to fix Bug with selecting Race 
-	CRace = GY_CreateComboBoxS(WChar, 0.05, 0.05, 0.9, 0.5, LanguageString$(LS_Race))
+	CRace = GY_CreateComboBoxS(WChar, 0.05, 0.05, 0.9, 1.5, LanguageString$(LS_Race))
 	For A.Actor = Each Actor
 		If A\Playable = True
 			; Check every previous actor to make sure this race hasn't already been added
