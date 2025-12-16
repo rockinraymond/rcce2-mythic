@@ -22,3 +22,7 @@ Item ID: 5
 Item Name: Magicitem
 Rarity: 5
 
+Item ID: 6
+Item Name: Battle Axe
+Rarity: 1
+
