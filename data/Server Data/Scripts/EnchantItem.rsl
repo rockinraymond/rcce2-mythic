@@ -1,0 +1,14 @@
+Using "RC_Core.rcm"
+Function Main()
+
+	Player = Actor()
+    TargetItem = Parameter(1)
+
+    NameOfItem$ = ItemName(TargetItem)
+
+    Output(Player, "You enchant: " + NameOfItem$, 255, 255, 0)
+	
+
+	Return
+
+End Function

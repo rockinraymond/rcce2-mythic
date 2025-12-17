@@ -523,14 +523,14 @@ Function UpdateInterface()
 	; Keyboard controls
 	If ChatEntry\Alpha# < 0.5 And First TextInput = Null
 		; Jump
-		If ControlHit(Key_Jump) And PlayerHasTouchedDown = True
-			If Me\Mount = Null
-				Me\Y# = JumpStrength# * Gravity#
-				PlayAnimation(Me, 3, 0.05, Anim_Jump)
-				PlayerHasTouchedDown = False
-				RCE_Send(Connection, PeerToHost, P_Jump, "", True)
-			EndIf
-		EndIf
+		; If ControlHit(Key_Jump) And PlayerHasTouchedDown = True
+		; 	If Me\Mount = Null
+		; 		Me\Y# = JumpStrength# * Gravity#
+		; 		PlayAnimation(Me, 3, 0.05, Anim_Jump)
+		; 		PlayerHasTouchedDown = False
+		; 		RCE_Send(Connection, PeerToHost, P_Jump, "", True)
+		; 	EndIf
+		; EndIf
 		; Change camera mode
 		If ControlHit(Key_ChangeViewMode) And ViewMode = 2
 			CamMode = Not CamMode
@@ -2716,6 +2716,56 @@ EndIf
 			HideEntity MouseSlotEN : MouseSlotItem = Null : MouseSlotAmount = 0 : MouseSlotSource = -1
 			EnableInventoryBlanks(True)
 		EndIf
+
+	; Inventory enchant button clicked
+	ElseIf GY_ButtonHit(BInventoryEnchant) > 0
+		If MouseSlotItem <> Null
+			EnchantItem(MouseSlotSource, MouseSlotAmount)
+			If Me\Inventory\Amounts[MouseSlotSource] > 0
+				GY_SetButtonState(BSlots(MouseSlotSource), False)
+				GYG.GY_Gadget = Object.GY_Gadget(BSlots(MouseSlotSource))
+				EntityTexture GYG\EN, GetTexture(Me\Inventory\Items[MouseSlotSource]\Item\ThumbnailTexID)
+				Amount = Me\Inventory\Amounts[MouseSlotSource]
+				If Amount > 1
+					GY_SetButtonLabel(BSlots(MouseSlotSource), Amount, 100, 255, 0, True)
+				Else
+					GY_SetButtonLabel(BSlots(MouseSlotSource), "")
+				EndIf
+			Else
+				GY_SetButtonState(BSlots(MouseSlotSource), True)
+				GY_SetButtonLabel(BSlots(MouseSlotSource), "")
+				GYG.GY_Gadget = Object.GY_Gadget(BSlots(MouseSlotSource))
+				GYB.GY_Button = Object.GY_Button(GYG\TypeHandle)
+				EntityTexture GYB\Gadget\EN, GYB\UserTexture
+			EndIf
+			HideEntity MouseSlotEN : MouseSlotItem = Null : MouseSlotAmount = 0 : MouseSlotSource = -1
+			EnableInventoryBlanks(True)
+		EndIf
+
+	; Inventory repair button clicked
+	ElseIf GY_ButtonHit(BInventoryRepair) > 0
+		If MouseSlotItem <> Null
+			RepairItem(MouseSlotSource, MouseSlotAmount)
+			If Me\Inventory\Amounts[MouseSlotSource] > 0
+				GY_SetButtonState(BSlots(MouseSlotSource), False)
+				GYG.GY_Gadget = Object.GY_Gadget(BSlots(MouseSlotSource))
+				EntityTexture GYG\EN, GetTexture(Me\Inventory\Items[MouseSlotSource]\Item\ThumbnailTexID)
+				Amount = Me\Inventory\Amounts[MouseSlotSource]
+				If Amount > 1
+					GY_SetButtonLabel(BSlots(MouseSlotSource), Amount, 100, 255, 0, True)
+				Else
+					GY_SetButtonLabel(BSlots(MouseSlotSource), "")
+				EndIf
+			Else
+				GY_SetButtonState(BSlots(MouseSlotSource), True)
+				GY_SetButtonLabel(BSlots(MouseSlotSource), "")
+				GYG.GY_Gadget = Object.GY_Gadget(BSlots(MouseSlotSource))
+				GYB.GY_Button = Object.GY_Button(GYG\TypeHandle)
+				EntityTexture GYB\Gadget\EN, GYB\UserTexture
+			EndIf
+			HideEntity MouseSlotEN : MouseSlotItem = Null : MouseSlotAmount = 0 : MouseSlotSource = -1
+			EnableInventoryBlanks(True)
+		EndIf
 	EndIf
 	
 	;-----------------------
@@ -2878,6 +2928,8 @@ EndIf
 				GY_UpdateLabel(LInventoryGold, Money$(Me\Gold))
 				GY_LockGadget(BInventoryDrop)
 				GY_LockGadget(BInventoryEat)
+				GY_LockGadget(BInventoryEnchant)
+				GY_LockGadget(BInventoryRepair)
 				GY_ActivateWindow(WInventory)
 				; Display thumbnails
 				LockTextures()
@@ -4065,6 +4117,8 @@ Function CreateInterface()
 	LInventoryGold = GY_CreateLabel(WInventory, InventoryGold\X#, InventoryGold\Y#, "00000000000000000000000000000000000000000000000000000000")
 	BInventoryDrop = GY_CreateButton(WInventory, InventoryDrop\X#, InventoryDrop\Y#, InventoryDrop\Width#, InventoryDrop\Height#, LanguageString$(LS_Drop))
 	BInventoryEat = GY_CreateButton(WInventory, InventoryEat\X#, InventoryEat\Y#, InventoryEat\Width#, InventoryEat\Height#, LanguageString$(LS_Use))
+	BInventoryEnchant = GY_CreateButton(WInventory, InventoryEat\X#, InventoryEat\Y# + 0.1, InventoryEat\Width#, InventoryEat\Height#, "Enchant")
+	BInventoryRepair = GY_CreateButton(WInventory, InventoryEat\X#, InventoryEat\Y# + 0.2, InventoryEat\Width#, InventoryEat\Height#, "Repair")
 	
 	Tex = LoadTexture("Data\Textures\GUI\Weapon.bmp", 4)
 	CreateInventoryButton(WInventory, SlotI_Weapon, Tex)
@@ -4156,6 +4210,8 @@ Function EnableInventoryBlanks(Disable = False)
 
 	GY_LockGadget(BInventoryDrop, Disable)
 	GY_LockGadget(BInventoryEat, Disable)
+	GY_LockGadget(BInventoryEnchant, Disable)
+	GY_LockGadget(BInventoryRepair, Disable)
 	For i = 0 To Slots_Inventory
 		If BSlots(i) <> 0
 			If Me\Inventory\Items[i] = Null Then GY_LockGadget(BSlots(i), Disable)
@@ -4565,6 +4621,38 @@ Function UseItem(SlotIndex, Amount)
 	EndIf
 
 
+End Function
+
+Function EnchantItem(SlotIndex, Amount)
+DebugLog "Sending Enchant Request"
+	If Me\Inventory\Items[SlotIndex] <> Null
+		If Me\Inventory\Amounts[SlotIndex] >= Amount
+			GY_SetButtonState(BSlots(SlotIndex), False)
+				; Enchant Item script
+				Pa$ = RCE_StrFromInt$(SlotIndex, 1)
+				; If PlayerTarget > 0
+				; 	AI.ActorInstance = Object.ActorInstance(PlayerTarget)
+				; 	Pa$ = Pa$ + RCE_StrFromInt$(AI\RuntimeID, 2)
+				; EndIf
+				RCE_Send(Connection, PeerToHost, P_EnchantScript, Pa$, True)
+			EndIf
+		EndIf
+End Function
+
+Function RepairItem(SlotIndex, Amount)
+	DebugLog "Sending Repair Request"
+	If Me\Inventory\Items[SlotIndex] <> Null
+		If Me\Inventory\Amounts[SlotIndex] >= Amount
+			GY_SetButtonState(BSlots(SlotIndex), False)
+				; Repair Item script
+				Pa$ = RCE_StrFromInt$(SlotIndex, 1)
+				; If PlayerTarget > 0
+				; 	AI.ActorInstance = Object.ActorInstance(PlayerTarget)
+				; 	Pa$ = Pa$ + RCE_StrFromInt$(AI\RuntimeID, 2)
+				; EndIf
+				RCE_Send(Connection, PeerToHost, P_RepairScript, Pa$, True)
+			EndIf
+		EndIf
 End Function
 
 Function FreeInterface()

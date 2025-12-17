@@ -104,7 +104,7 @@ Global MapVisible
 
 ; Inventory window
 Global WInventory, InventoryVisible = False
-Global LInventoryGold, BInventoryDrop, BInventoryEat
+Global LInventoryGold, BInventoryDrop, BInventoryEat, BInventoryEnchant, BInventoryRepair
 Global WAmount, BAmountOK, TAmount, AmountSlot, AmountVisible
 Global MouseSlotEN, MouseSlotItem.ItemInstance, MouseSlotAmount, MouseSlotSource = -1
 Dim BSlots(Slots_Inventory)

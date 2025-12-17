@@ -55,3 +55,5 @@ Const P_ScriptInput        = 53
 Const P_KickedPlayer       = 60
 Const P_Examine            = 61
 Const P_Trade              = 62
+Const P_EnchantScript      = 63
+Const P_RepairScript       = 64

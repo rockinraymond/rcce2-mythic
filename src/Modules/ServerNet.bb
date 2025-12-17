@@ -1063,6 +1063,20 @@ Function UpdateNetwork()
 					EndIf
 				EndIf
 
+			Case P_RepairScript
+				DebugLog "Activate Repair Script!"
+				AI.ActorInstance = FindActorInstanceFromRNID(M\FromID)
+				If AI <> Null And (Len(M\MessageData$) = 1)
+					SlotIndex = RCE_IntFromStr(Left$(M\MessageData$, 1))
+					If SlotIndex >= 0 And SlotIndex < 50
+						If AI\Inventory\Items[SlotIndex] <> Null
+							If AI\Inventory\Amounts[SlotIndex] > 0	
+								ThreadScript("RepairItem", "Main", Handle(AI), 0, Handle(AI\Inventory\Items[SlotIndex]))
+							EndIf
+						EndIf
+					EndIf
+				EndIf
+
 			; A player used an item
 			Case P_ItemScript
 				AI.ActorInstance = FindActorInstanceFromRNID(M\FromID)
@@ -1087,6 +1101,20 @@ Function UpdateNetwork()
 										EndIf
 									EndIf
 								EndIf
+							EndIf
+						EndIf
+					EndIf
+				EndIf
+			
+			Case P_EnchantScript
+				DebugLog "Activate Enchant Script!"
+				AI.ActorInstance = FindActorInstanceFromRNID(M\FromID)
+				If AI <> Null And (Len(M\MessageData$) = 1)
+					SlotIndex = RCE_IntFromStr(Left$(M\MessageData$, 1))
+					If SlotIndex >= 0 And SlotIndex < 50
+						If AI\Inventory\Items[SlotIndex] <> Null
+							If AI\Inventory\Amounts[SlotIndex] > 0	
+								ThreadScript("EnchantItem", "Main", Handle(AI), 0, Handle(AI\Inventory\Items[SlotIndex]))
 							EndIf
 						EndIf
 					EndIf
