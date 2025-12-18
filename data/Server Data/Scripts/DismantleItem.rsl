@@ -1,0 +1,14 @@
+Using "RC_Core.rcm"
+Function Main()
+
+	Player = Actor()
+    TargetItem = Parameter(1)
+
+    NameOfItem$ = ItemName(TargetItem)
+
+    Output(Player, "You dismantle: " + NameOfItem$, 255, 0, 0)
+	
+
+	Return
+
+End Function

@@ -57,3 +57,4 @@ Const P_Examine            = 61
 Const P_Trade              = 62
 Const P_EnchantScript      = 63
 Const P_RepairScript       = 64
+Const P_DismantleScript    = 65
