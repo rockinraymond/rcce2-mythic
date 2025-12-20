@@ -4006,10 +4006,10 @@ Function GY_Load(Camera)
 	GY_ButtonGradient = LoadTexture(GY_Path$ + "\ButtonGradient.bmp", 16 + 32)
 	
 	;Button texture paths Cysis145
-	GY_BorderTop = LoadTexture(GY_Path$ + "\WindowBorder.png", 4) ;+ 16 + 32
-	GY_BorderBottom = LoadTexture(GY_Path$ + "\WindowBorder.png", 4)
-	GY_BorderRight = LoadTexture(GY_Path$ + "\WindowBorder.png", 4)
-	GY_BorderLeft = LoadTexture(GY_Path$ + "\WindowBorder.png", 4)
+	GY_BorderTop = LoadTexture(GY_Path$ + "\ButtonTop.bmp", 4) ;+ 16 + 32
+	GY_BorderBottom = LoadTexture(GY_Path$ + "\ButtonBottom.bmp", 4)
+	GY_BorderRight = LoadTexture(GY_Path$ + "\ButtonRight.bmp", 4)
+	GY_BorderLeft = LoadTexture(GY_Path$ + "\ButtonLeft.bmp", 4)
 	
 ;	GY_BorderTL = LoadTexture(GY_Path$ + "\WindowBorder.png", 4)
 ;	GY_BorderTR = LoadTexture(GY_Path$ + "\WindowBorder.png", 4)
