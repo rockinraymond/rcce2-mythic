@@ -214,25 +214,6 @@ Function LoadArea(Name$, CameraEN, DisplayItems = False, UpdateRottNet = False)
 		ShadowQ = ReadByte(F)
 		ShadowR = ReadByte(F)
 	CloseFile(F)
-	Select ShadowQ
-		Case 0
-			CreateShadow 0
-		Case 1
-			CreateShadow 1
-		Case 2
-			CreateShadow 2
-	End Select
-	
-	Select ShadowR
-		Case 0
-			ShadowRange 50
-		Case 1
-			ShadowRange 75
-		Case 2
-			ShadowRange 100
-		Case 3
-			ShadowRange 130
-	End Select
 	
 	;Season = GetSeason()
 	; Dusk
@@ -242,15 +223,8 @@ Function LoadArea(Name$, CameraEN, DisplayItems = False, UpdateRottNet = False)
 	;ElseIf TimeH = SeasonDawnH(Season)
 	;	ShadowPower 0.0  ;Set Shadow Opacity
 	;EndIf
-
-	ShadowPower 0.4  ;Set Shadow Opacity
-	ShadowColor 255, 255, 255
-	;ShadowLight DefaultLight\EN
-	ShadowTexture = ShadowTexture() ; Gets shadow map
 	
 	;Shadow Fading
-	FadeOutTexture = LoadTexture("Data\Textures\Shadows\fade.png", 59)	
-	ShadowFade FadeOutTexture
 		
 	LockMeshes()
 	LockTextures()
@@ -554,12 +528,11 @@ Function LoadArea(Name$, CameraEN, DisplayItems = False, UpdateRottNet = False)
 
 	; Scenery Shadows cysis145 [010]
 	If S\ReceiveShadow And DisplayItems = False 
-		EntityTexture S\EN, ShadowTexture, 0, 2 
-  	    AttachShadowReceiver S\EN ;helps remove incorrect shadowing 
+		Receive_Shadow S\EN
 	EndIf
 
 	If S\CastShadow And DisplayItems = False 
-		CreateShadowCaster S\EN 
+		Cast_Shadow S\EN
 	EndIf 
 				
 				
@@ -1151,7 +1124,7 @@ Function UnloadArea()
 
 	For S.Scenery = Each Scenery
 		;Shadow
-		FreeShadowCaster% (S\EN)
+		Delete_Shadow_Caster S\EN
 		;FreeShadowReceiver% (S\EN)
 	
 		If S\TextureID < 65535 Then UnloadTexture(S\TextureID)
@@ -1204,8 +1177,8 @@ Function UnloadArea()
 	Delete Each CatchPlane
 
 	;Shadow
-	FreeShadows
-	FreeTexture ShadowTexture
+	;FreeShadows
+	;FreeTexture ShadowTexture
 
 End Function
 

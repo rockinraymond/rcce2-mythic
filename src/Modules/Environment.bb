@@ -31,6 +31,8 @@ Type Sun
 	Field PathAngle#
 	Field ShowFlares
 	Field Flares[10]
+
+	Field CastShadow
 End Type
 
 Function CreateEnvironment()
