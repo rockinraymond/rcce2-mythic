@@ -46,3 +46,19 @@ Item ID: 11
 Item Name: Maul
 Rarity: 1
 
+Item ID: 12
+Item Name: Cudgel
+Rarity: 1
+
+Item ID: 13
+Item Name: Pole Arm
+Rarity: 1
+
+Item ID: 14
+Item Name: Short Spear
+Rarity: 1
+
+Item ID: 15
+Item Name: Long Spear
+Rarity: 1
+
