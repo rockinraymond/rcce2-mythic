@@ -1072,8 +1072,9 @@ updateSplashScreen("Creating items tab")
 
 ; Main
 BItemNew    = FUI_Button(TItems, 20, 20, 100, 20, "New item")
-BItemDelete = FUI_Button(TItems, 150, 20, 100, 20, "Delete item")
-BItemSave   = FUI_Button(TItems, 280, 20, 100, 20, "Save items")
+BItemCopy   = FUI_Button(TItems, 150, 20, 100, 20, "Copy item")
+BItemDelete = FUI_Button(TItems, 280, 20, 100, 20, "Delete item")
+BItemSave   = FUI_Button(TItems, 410, 20, 100, 20, "Save items")
 Global SelectedItem.Item
 ; Selection
 FUI_Label(TItems, 20, 62, "Current item:")
@@ -5911,6 +5912,53 @@ Cls
 				FUI_SendMessage(CItemSelected, M_SETINDEX, TotalItems)
 				UpdateItemDisplay()
 				ItemsSaved = False
+			;Copy Item
+			Case BItemCopy
+				If SelectedItem <> Null
+					It.Item = CreateItem()
+					It\Name$ = SelectedItem\Name$ + " C"
+					It\ExclusiveRace$ = SelectedItem\ExclusiveRace$
+					It\ExclusiveSkill$ = SelectedItem\ExclusiveSkill$
+					It\SkillReq = SelectedItem\SkillReq
+					It\Script$ = SelectedItem\Script$
+					It\SMethod$ = SelectedItem\SMethod$
+					It\ItemType = SelectedItem\ItemType
+					It\Rarity = SelectedItem\Rarity
+					It\Value = SelectedItem\Value
+					It\Mass = SelectedItem\Mass
+					It\ThumbnailTexID = SelectedItem\ThumbnailTexID
+					It\MMeshID = SelectedItem\MMeshID
+					It\FMeshID = SelectedItem\FMeshID
+					For i = 0 To 5 : It\Gubbins[i] = SelectedItem\Gubbins[i] : Next
+					For i = 0 To 39 : It\Attributes\Value[i] = SelectedItem\Attributes\Value[i] : Next
+					For i = 0 To 39 : It\Attributes\Maximum[i] = SelectedItem\Attributes\Maximum[i] : Next
+					For i = 0 To 19 : It\Resistances[i] = SelectedItem\Resistances[i] : Next
+					It\TakesDamage = SelectedItem\TakesDamage
+					It\SlotType = SelectedItem\SlotType
+					It\WeaponDamage = SelectedItem\WeaponDamage
+					It\WeaponAccuracy = SelectedItem\WeaponAccuracy
+					It\WeaponSpeed = SelectedItem\WeaponSpeed
+					It\WeaponDamageType = SelectedItem\WeaponDamageType
+					It\WeaponType = SelectedItem\WeaponType
+					It\WeaponClass = SelectedItem\WeaponClass
+					It\RangedProjectile = SelectedItem\RangedProjectile
+					It\RangedAnimation$ = SelectedItem\RangedAnimation$
+					It\Range# = SelectedItem\Range#
+					It\ArmourLevel = SelectedItem\ArmourLevel
+					It\ArmourClass = SelectedItem\ArmourClass
+					It\MaleTexID = SelectedItem\MaleTexID
+					It\FemaleTexID = SelectedItem\FemaleTexID
+					It\EatEffectsLength = SelectedItem\EatEffectsLength
+					It\ImageID = SelectedItem\ImageID
+					It\MiscData$ = SelectedItem\MiscData$
+					It\Stackable = SelectedItem\Stackable
+					Item = FUI_ComboBoxItem(CItemSelected, It\Name$)
+					FUI_SendMessage(Item, M_SETDATA, It\ID)
+					FUI_SendMessage(CItemSelected, M_SETINDEX, TotalItems + 1)
+					TotalItems = TotalItems + 1
+					UpdateItemDisplay()
+					ItemsSaved = False
+				EndIf
 			; Delete item
 			Case BItemDelete
 				ID = FUI_SendMessage(FUI_SendMessage(CItemSelected, M_GETSELECTED), M_GETDATA)
