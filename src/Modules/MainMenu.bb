@@ -1597,11 +1597,11 @@ Function CharSelect()
 			GY_FreeGadget(BStart) : GY_FreeGadget(BDelete)
 			;GY_FreeGadget(BLeft) : GY_FreeGadget(BRight)
 			HideEntity(Background)
-			;HideEntity(Logo)
+			HideEntity(Logo)
 			If PreviewA <> Null Then SafeFreeActorInstance(PreviewA)
 			Result = CreateChar()
 			If Result = 1 Then GY_MessageBox("Attention!", LanguageString$(LS_CannotCreateChar))
-			;ShowEntity(Logo)
+			ShowEntity(Logo)
 			ShowEntity(Background)
 			Goto RestartCharSelection
 		EndIf
@@ -1827,7 +1827,7 @@ Function CharSelect()
 		If setup = False
 			RotateEntity GPP, 0.0, CamAngle# , 0.0
 			;CamAngle#
-			TFormPoint 0.0, 0.0, -150.0, GPP, 0
+			TFormPoint 0.0, 60.0, -150.0, GPP, 0
 			;TFormPoint 0.0, 120.0, -150.0, GPP, 0
 			PositionEntity Cam, TFormedX#(), TFormedY#(), TFormedZ#()
 			PointEntity Cam, GPP  ;GPP
@@ -1881,7 +1881,7 @@ Function CharSelect()
 			lastUpdateTime = MilliSecs()
 			
 			MoveEntity GPP, dx * value, dy*value, dz*value
-			TFormPoint 0.0, 0.0, -150.0, GPP, 0
+			TFormPoint 0.0, 60.0, -150.0, GPP, 0
 			;TFormPoint 0.0, 120.0, -150.0, GPP, 0
 			PositionEntity Cam, TFormedX#(), TFormedY#(), TFormedZ#()
 			PointEntity Cam, GPP
@@ -1926,7 +1926,7 @@ Function CharSelect()
 	GY_FreeGadget(BStart) : GY_FreeGadget(BDelete)
 	;GY_FreeGadget(BLeft) : GY_FreeGadget(BRight)
 	If PreviewA <> Null Then SafeFreeActorInstance(PreviewA)
-	;FreeEntity(Logo)
+	FreeEntity(Logo)
 	FreeEntity(Background)
 	FreeEntity(Set)
 	FreeEntity(GPP)
@@ -2353,7 +2353,7 @@ Function CreateChar()
 			Preview.ActorInstance = CreateActorInstance(Chosen)
 			Result = LoadActorInstance3D(Preview, 1.0, False, False)
 			If Result = False Then RuntimeError("Could not load actor mesh for " + Chosen\Race$ + "!")
-			;PlayAnimation(Preview, 1, 0.003, Anim_Idle)
+			PlayAnimation(Preview, 1, 0.003, Anim_Idle)
 			PositionEntity Preview\CollisionEN, 30, -(35.0 + EntityY#(Preview\EN, True)), 100
 			;If Preview\ShadowEN <> 0 Then HideEntity(Preview\ShadowEN) [###]
 			If Preview\NametagEN <> 0 Then HideEntity(Preview\NametagEN)

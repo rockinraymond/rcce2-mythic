@@ -1,28 +1,48 @@
 Item ID: 0
-Item Name: Sword
-Rarity: 4
+Item Name: Hand Axe
+Rarity: 1
 
 Item ID: 1
-Item Name: Leather Armor
-Rarity: 2
+Item Name: Battle Axe
+Rarity: 1
 
 Item ID: 2
-Item Name: Chainmail
+Item Name: Great Axe
 Rarity: 1
 
 Item ID: 3
-Item Name: Plate Armor
-Rarity: 3
+Item Name: Dagger
+Rarity: 1
 
 Item ID: 4
-Item Name: MagicFood
-Rarity: 3
+Item Name: Short Sword
+Rarity: 1
 
 Item ID: 5
-Item Name: Magicitem
-Rarity: 5
+Item Name: Long Sword
+Rarity: 1
 
 Item ID: 6
-Item Name: Battle Axe
+Item Name: Scimitar
+Rarity: 1
+
+Item ID: 7
+Item Name: Two-handed Sword
+Rarity: 1
+
+Item ID: 8
+Item Name: Warhammer
+Rarity: 1
+
+Item ID: 9
+Item Name: Mace
+Rarity: 1
+
+Item ID: 10
+Item Name: Morning Star
+Rarity: 1
+
+Item ID: 11
+Item Name: Maul
 Rarity: 1
 
