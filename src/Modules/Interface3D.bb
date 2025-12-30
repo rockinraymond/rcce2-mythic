@@ -1929,8 +1929,8 @@ EndIf
 					GY_CreateLabel(WTooltip, 0.02, Y#, LanguageString$(LS_Type) + " " + GetItemType$(Me\Inventory\Items[i]\Item))
 					Y# = Y# + YInterval#
 					If Me\Inventory\Items[i]\Item\TakesDamage = True
-						Damage = 100 - Me\Inventory\Items[i]\ItemHealth
-						GY_CreateLabel(WTooltip, 0.02, Y#, LanguageString$(LS_Damage) + " " + Str$(Damage) + "%")
+						Damage = Me\Inventory\Items[i]\ItemHealth
+						GY_CreateLabel(WTooltip, 0.02, Y#, "Condition: " + " " + Str$(Damage) + "%")
 						Y# = Y# + YInterval#
 					Else
 						//GY_CreateLabel(WTooltip, 0.02, 0.12, LanguageString$(LS_Indestructible), 255, 0, 0)
@@ -1959,16 +1959,16 @@ EndIf
 							Y# = Y# + YInterval#
 							GY_CreateLabel(WTooltip, 0.02, Y#, LanguageString$(LS_DamageType) + " " + DamType$)
 							Y# = Y# + YInterval#
-							GY_CreateLabel(WTooltip, 0.02, Y#, LanguageString$(LS_WeaponType) + " " + WepType$)
+							GY_CreateLabel(WTooltip, 0.02, Y#, "Weapon Size: " + WepType$)
 							Y# = Y# + YInterval#
-							GY_CreateLabel(WTooltip, 0.02, Y#, "Weapon Class: " + WepClass$)
+							GY_CreateLabel(WTooltip, 0.02, Y#, "Weapon Type: " + WepClass$)
 							Y# = Y# + YInterval#
 						Case I_Armour
 							AP = Me\Inventory\Items[i]\Item\ArmourLevel
 							ArmClass$ = GetArmourClass$(Me\Inventory\Items[i]\Item)
 							GY_CreateLabel(WTooltip, 0.02, Y#, LanguageString$(LS_ArmourLevel) + " " + Str$(AP))
 							Y# = Y# + YInterval#
-							GY_CreateLabel(WTooltip, 0.02, Y#, "Armor Class: " + ArmClass$)
+							GY_CreateLabel(WTooltip, 0.02, Y#, "Armor Type: " + ArmClass$)
 							Y# = Y# + YInterval#
 						Case I_Ingredient, I_Potion
 							EatEffects = Me\Inventory\Items[i]\Item\EatEffectsLength
@@ -2033,7 +2033,22 @@ EndIf
 					If hasPenalties = True Then GY_CreateLabel(WTooltip, 0.5, PenaltyY#, "PENALTIES", 255, 255, 255)
 					Y# = Y# + YInterval#
 					ItemDescription$ = Me\Inventory\Items[i]\Item\MiscData$
-					GY_CreateLabel(WTooltip, 0.02, Y#, ItemDescription$, 255, 255, 255)
+					ItemDescriptionLine1$ = ItemDescription$
+					ItemDescriptionLine2$ = ""
+
+					If Len(ItemDescription$) > 43
+						SplitChar = 0
+						For i = 43 To 1 Step -1
+							If Mid$(ItemDescription$, i, 1) = " " Then SplitChar = i : Exit
+						Next
+						If SplitChar > 0
+							ItemDescriptionLine1$ = Left$(ItemDescription$, SplitChar)
+							ItemDescriptionLine2$ = Mid$(ItemDescription$, SplitChar + 1)
+						EndIf
+					EndIf
+					GY_CreateLabel(WTooltip, 0.02, Y#, ItemDescriptionLine1$, 255, 255, 255)
+					Y# = Y# + YInterval#
+					GY_CreateLabel(WTooltip, 0.02, Y#, ItemDescriptionLine2$, 255, 255, 255)
 					GY_GadgetAlpha(WTooltip, 0.85, True)
 					Exit
 				EndIf
@@ -2079,8 +2094,8 @@ EndIf
 					Y# = Y# + 0.05
 					YInterval# = 0.055
 					If Me\Inventory\Items[i + SlotI_Backpack]\Item\TakesDamage = True
-						Damage = 100 - Me\Inventory\Items[i + SlotI_Backpack]\ItemHealth
-						GY_CreateLabel(WTooltip, 0.02, Y#, LanguageString$(LS_Damage) + " " + Str$(Damage) + "%")
+						Damage = Me\Inventory\Items[i + SlotI_Backpack]\ItemHealth
+						GY_CreateLabel(WTooltip, 0.02, Y#, "Condition: " + " " + Str$(Damage) + "%")
 						Y# = Y# + YInterval#
 					Else
 						//GY_CreateLabel(WTooltip, 0.02, 0.12, LanguageString$(LS_Indestructible), 255, 0, 0)
@@ -2113,16 +2128,16 @@ EndIf
 							Y# = Y# + YInterval#
 							GY_CreateLabel(WTooltip, 0.02, Y#, LanguageString$(LS_DamageType) + " " + DamType$)
 							Y# = Y# + YInterval#
-							GY_CreateLabel(WTooltip, 0.02, Y#, LanguageString$(LS_WeaponType) + " " + WepType$)
+							GY_CreateLabel(WTooltip, 0.02, Y#, "Weapon Size: " + WepType$)
 							Y# = Y# + YInterval#
-							GY_CreateLabel(WTooltip, 0.02, Y#, "Weapon Class: " + WepClass$)
+							GY_CreateLabel(WTooltip, 0.02, Y#, "Weapon Type: " + WepClass$)
 							Y# = Y# + YInterval#
 						Case I_Armour
 							AP = Me\Inventory\Items[i + SlotI_Backpack]\Item\ArmourLevel
 							ArmClass$ = GetArmourClass(Me\Inventory\Items[i + SlotI_Backpack]\Item)
 							GY_CreateLabel(WTooltip, 0.02, Y#, LanguageString$(LS_ArmourLevel) + " " + Str$(AP))
 							Y# = Y# + YInterval#
-							GY_CreateLabel(WTooltip, 0.02, Y#, "Armor Class: " + ArmClass$)
+							GY_CreateLabel(WTooltip, 0.02, Y#, "Armor Type: " + ArmClass$)
 							Y# = Y# + YInterval#
 						Case I_Ingredient, I_Potion
 							EatEffects = Me\Inventory\Items[i + SlotI_Backpack]\Item\EatEffectsLength
@@ -2187,7 +2202,22 @@ EndIf
 					If hasPenalties = True Then GY_CreateLabel(WTooltip, 0.5, PenaltyY#, "PENALTIES", 255, 255, 255)
 					Y# = Y# + YInterval#
 					ItemDescription$ = Me\Inventory\Items[i + SlotI_Backpack]\Item\MiscData$
-					GY_CreateLabel(WTooltip, 0.02, Y#, ItemDescription$, 255, 255, 255)
+					ItemDescriptionLine1$ = ItemDescription$
+					ItemDescriptionLine2$ = ""
+
+					If Len(ItemDescription$) > 43
+						SplitChar = 0
+						For i = 43 To 1 Step -1
+							If Mid$(ItemDescription$, i, 1) = " " Then SplitChar = i : Exit
+						Next
+						If SplitChar > 0
+							ItemDescriptionLine1$ = Left$(ItemDescription$, SplitChar)
+							ItemDescriptionLine2$ = Mid$(ItemDescription$, SplitChar + 1)
+						EndIf
+					EndIf
+					GY_CreateLabel(WTooltip, 0.02, Y#, ItemDescriptionLine1$, 255, 255, 255)
+					Y# = Y# + YInterval#
+					GY_CreateLabel(WTooltip, 0.02, Y#, ItemDescriptionLine2$, 255, 255, 255)
 					GY_GadgetAlpha(WTooltip, 0.85, True)
 						Exit
 						EndIf
@@ -2227,8 +2257,8 @@ EndIf
 					GY_CreateLabel(WTooltip, 0.02, Y#, LanguageString$(LS_Type) + " " + GetItemType$(TradeItems(i)\Item))
 					Y# = Y# + YInterval#
 					If TradeItems(i)\Item\TakesDamage = True
-						Damage = 100 - TradeItems(i)\ItemHealth
-						GY_CreateLabel(WTooltip, 0.02, Y#, LanguageString$(LS_Damage) + " " + Str$(Damage) + "%")
+						Damage = TradeItems(i)\ItemHealth
+						GY_CreateLabel(WTooltip, 0.02, Y#, "Condition: " + " " + Str$(Damage) + "%")
 						Y# = Y# + YInterval#
 					Else
 						//GY_CreateLabel(WTooltip, 0.02, 0.12, LanguageString$(LS_Indestructible), 255, 0, 0)
@@ -2261,16 +2291,16 @@ EndIf
 							Y# = Y# + YInterval#
 							GY_CreateLabel(WTooltip, 0.02, Y#, LanguageString$(LS_DamageType) + " " + DamType$)
 							Y# = Y# + YInterval#
-							GY_CreateLabel(WTooltip, 0.02, Y#, LanguageString$(LS_WeaponType) + " " + WepType$)
+							GY_CreateLabel(WTooltip, 0.02, Y#, "Weapon Size: " + WepType$)
 							Y# = Y# + YInterval#
-							GY_CreateLabel(WTooltip, 0.02, Y#, "Weapon Class: " + WepClass$)
+							GY_CreateLabel(WTooltip, 0.02, Y#, "Weapon Type: " + WepClass$)
 							Y# = Y# + YInterval#
 						Case I_Armour
 							AP = TradeItems(i)\Item\ArmourLevel
 							ArmClass$ = GetArmourClass(TradeItems(i)\Item)
 							GY_CreateLabel(WTooltip, 0.02, Y#, LanguageString$(LS_ArmourLevel) + " " + Str$(AP))
 							Y# = Y# + YInterval#
-							GY_CreateLabel(WTooltip, 0.02, Y#, "Armor Class: " + ArmClass$)
+							GY_CreateLabel(WTooltip, 0.02, Y#, "Armor Type: " + ArmClass$)
 							Y# = Y# + YInterval#
 						Case I_Ingredient, I_Potion
 							EatEffects = TradeItems(i)\Item\EatEffectsLength
@@ -2334,7 +2364,23 @@ EndIf
 					If hasPenalties = True Then GY_CreateLabel(WTooltip, 0.5, PenaltyY#, "PENALTIES", 255, 255, 255)
 					Y# = Y# + YInterval#
 					ItemDescription$ = TradeItems(i)\Item\MiscData$
-					GY_CreateLabel(WTooltip, 0.02, Y#, ItemDescription$, 255, 255, 255)
+					ItemDescriptionLine1$ = ItemDescription$
+					ItemDescriptionLine2$ = ""
+
+					If Len(ItemDescription$) > 43
+						SplitChar = 0
+						For i = 43 To 1 Step -1
+							If Mid$(ItemDescription$, i, 1) = " " Then SplitChar = i : Exit
+						Next
+						If SplitChar > 0
+							ItemDescriptionLine1$ = Left$(ItemDescription$, SplitChar)
+							ItemDescriptionLine2$ = Mid$(ItemDescription$, SplitChar + 1)
+						EndIf
+					EndIf
+					GY_CreateLabel(WTooltip, 0.02, Y#, ItemDescriptionLine1$, 255, 255, 255)
+					Y# = Y# + YInterval#
+					GY_CreateLabel(WTooltip, 0.02, Y#, ItemDescriptionLine2$, 255, 255, 255)
+					
 					GY_GadgetAlpha(WTooltip, 0.85, True)
 						Exit
 						EndIf

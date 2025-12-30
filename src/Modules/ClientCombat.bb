@@ -97,24 +97,42 @@ End Function
 ; Plays an actor's attack animation
 Function AnimateActorAttack(A.ActorInstance)
 
+	If A\Gender = 0
+		AS.AnimSet = AnimList(A\Actor\MAnimationSet)
+	Else
+		AS.AnimSet = AnimList(A\Actor\FAnimationSet)
+	EndIf
+
 	; Choose animation and play it
 	If A\Inventory\Items[SlotI_Weapon] = Null
-		Anim = Anim_DefaultAttack
+		select Rand(1,2)
+			case 1
+			Anim = FindAnimation(AS, "Default attack")
+			case 2
+			Anim = FindAnimation(AS, "Right Hand Attack")
+		End Select
 	Else
-		Select A\Inventory\Items[SlotI_Weapon]\Item\WeaponType
-			Case W_OneHand : Anim = Anim_DefaultAttack
-			Case W_TwoHand : Anim = Anim_DefaultAttack
-			Case W_Ranged
-				If A\Gender = 0
-					AS.AnimSet = AnimList(A\Actor\MAnimationSet)
-				Else
-					AS.AnimSet = AnimList(A\Actor\FAnimationSet)
-				EndIf
-				Anim = FindAnimation(AS, A\Inventory\Items[SlotI_Weapon]\Item\RangedAnimation$)
-				If Anim = -1 Then Anim = Anim_RangedAttack
+		Select A\Inventory\Items[SlotI_Weapon]\Item\WeaponClass
+			Case WC_Dagger 
+				select Rand(1,3)
+					case 1
+					Anim = FindAnimation(AS, "Two hand Attack")
+					case 2
+					Anim = FindAnimation(AS, "Two Hand 2")
+					case 3
+					Anim = FindAnimation(AS, "Two Hand 3")
+					End Select
+			Case WC_Bow: Anim = FindAnimation(AS, "Bow Attack")
+			Default
+				select Rand(1,2)
+					case 1
+					Anim = FindAnimation(AS, "Two hand Attack")
+					case 2
+					Anim = FindAnimation(AS, "Two Hand 2")
+					End Select
 		End Select
 	EndIf
-	PlayAnimation(A, 3, 0.5, Anim, False)
+	PlayAnimation(A, 3, 1, Anim, False)
 
 End Function
 
@@ -151,14 +169,14 @@ Function CombatDamageOutput(AI.ActorInstance, Amount, DType$)
 		ElseIf Amount < 0
 			Output(Name$ + " " + LanguageString$(LS_HitsYou) + " " + Str$(-Amount) + " " + DType$ + " " + LanguageString$(LS_DamageWow), 255, 0, 0)
 		; Miss
-		Else
-			; He missed
-			If DType$ = "1"
-				Output(Name$ + " " + LanguageString$(LS_AttacksYouMisses), 0, 0, 255)
-			; You missed
-			Else
-				Output(LanguageString$(LS_YouAttack) + " " + Name$ + " " + LanguageString$(LS_AndMiss), 0, 0, 255)
-			EndIf
+		; Else
+		; 	; He missed
+		; 	If DType$ = "1"
+		; 		Output(Name$ + " " + LanguageString$(LS_AttacksYouMisses), 0, 0, 255)
+		; 	; You missed
+		; 	Else
+		; 		Output(LanguageString$(LS_YouAttack) + " " + Name$ + " " + LanguageString$(LS_AndMiss), 0, 0, 255)
+		; 	EndIf
 		EndIf
 	; Floating number
 	ElseIf DamageInfoStyle = 3

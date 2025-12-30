@@ -1043,17 +1043,19 @@ Function GetActorWeaponSkill(AI.ActorInstance)
 	
 	Select ActorWeaponClass
 	Case WC_Sword
-		WeaponSkillName$ = "Swords"
+		WeaponSkillName$ = "Long Blades"
 	Case WC_Axe
 		WeaponSkillName$ = "Axes"
 	Case WC_Blunt
-		WeaponSkillName$ = "Blunt"
+		WeaponSkillName$ = "Blunt Weapons"
 	Case WC_Bow
 		WeaponSkillName$ = "Bows"
 	Case WC_Dagger
-		WeaponSkillName$ = "Daggers"
+		WeaponSkillName$ = "Short Blades"
 	Case WC_Polearm
-		WeaponSkillName$ = "Polearms"
+		WeaponSkillName$ = "Polearms/Spears"
+	Case WC_Staff
+		WeaponSkillName$ = "Staves"
 	Default
 		WeaponSkillName$ = "Unarmed"
 	End Select
@@ -1070,17 +1072,19 @@ Function GetActorWeaponSkillString$(AI.ActorInstance)
 	
 	Select ActorWeaponClass
 	Case WC_Sword
-		WeaponSkillName$ = "Swords"
+		WeaponSkillName$ = "Long Blades"
 	Case WC_Axe
 		WeaponSkillName$ = "Axes"
 	Case WC_Blunt
-		WeaponSkillName$ = "Blunt"
+		WeaponSkillName$ = "Blunt Weapons"
 	Case WC_Bow
 		WeaponSkillName$ = "Bows"
 	Case WC_Dagger
-		WeaponSkillName$ = "Daggers"
+		WeaponSkillName$ = "Short Blades"
 	Case WC_Polearm
-		WeaponSkillName$ = "Polearms"
+		WeaponSkillName$ = "Polearms/Spears"
+	Case WC_Staff
+		WeaponSkillName$ = "Staves"
 	Default
 		WeaponSkillName$ = "Unarmed"
 	End Select

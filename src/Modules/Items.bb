@@ -24,6 +24,7 @@ Const WC_Axe    = 4
 Const WC_Bow    = 5
 Const WC_Polearm= 6
 Const WC_Staff  = 7
+Const WC_Wand   = 8
 
 Const AC_Light    = 1 ; Armor Classes
 Const AC_Medium   = 2
@@ -441,9 +442,9 @@ End Function
 Function GetWeaponType$(I.Item)
 
 	Select I\WeaponType
-		Case W_OneHand : Return LanguageString$(LS_OneHanded)
-		Case W_TwoHand : Return LanguageString$(LS_TwoHanded)
-		Case W_Ranged : Return LanguageString$(LS_Ranged)
+		Case W_OneHand : Return "Small"
+		Case W_TwoHand : Return "Medium"
+		Case W_Ranged : Return "Large"
 	End Select
 	Return LanguageString$(LS_Unknown)
 
@@ -452,13 +453,14 @@ End Function
 Function GetWeaponClass$(I.Item)
 
 	Select I\WeaponClass
-		Case WC_Sword : Return "Sword"
-		Case WC_Dagger : Return "Dagger"
+		Case WC_Sword : Return "Long Blade"
+		Case WC_Dagger : Return "Short Blade"
 		Case WC_Axe : Return "Axe"
 		Case WC_Blunt : Return "Blunt"
 		Case WC_Bow : Return "Bow"
 		Case WC_Polearm : Return "Polearm"
 		Case WC_Staff : Return "Staff"
+		Case WC_Wand : Return "Wand"
 	End Select
 	Return LanguageString$(LS_Unknown)
 

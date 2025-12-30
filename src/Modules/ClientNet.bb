@@ -1003,7 +1003,7 @@ Function UpdateNetwork()
 						; And missed
 						ElseIf Damage < 0
 							CombatDamageOutput(A, 0, "0")
-							AnimateActorParry(A)
+							;AnimateActorParry(A)
 						EndIf
 					; Someone else attacked me
 					ElseIf Left$(M\MessageData$, 1) = "Y"
@@ -1031,7 +1031,7 @@ Function UpdateNetwork()
 						ElseIf Damage < 0
 							CombatDamageOutput(A, 0, "1")
 							AnimateActorAttack(A)
-							AnimateActorParry(Me)
+							;AnimateActorParry(Me)
 							PlayActorSound(A, Rand(Speech_Attack1, Speech_Attack2))
 						EndIf
 					; Someone else attacked someone else
