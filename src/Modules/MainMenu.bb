@@ -938,7 +938,7 @@ Function LogIn()
 											It\WeaponDamageType = RCE_IntFromStr(Mid$(Pa$, Offset + 6, 2))
 											It\WeaponType = RCE_IntFromStr(Mid$(Pa$, Offset + 8, 2))
 											It\WeaponClass = RCE_IntFromStr(Mid$(Pa$, Offset + 10, 2))
-											It\Range# = RCE_FloatFromStr#(Mid$(Pa$, Offset + 14, 4))
+											It\Range# = RCE_FloatFromStr#(Mid$(Pa$, Offset + 12, 4))
 											Offset = Offset + 16
 										Case I_Armour
 											It\ArmourLevel = RCE_IntFromStr(Mid$(Pa$, Offset, 2))

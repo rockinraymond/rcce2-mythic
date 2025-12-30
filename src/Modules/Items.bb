@@ -23,6 +23,7 @@ Const WC_Blunt  = 3
 Const WC_Axe    = 4
 Const WC_Bow    = 5
 Const WC_Polearm= 6
+Const WC_Staff  = 7
 
 Const AC_Light    = 1 ; Armor Classes
 Const AC_Medium   = 2
@@ -386,7 +387,7 @@ Function SaveItems(Filename$)
 		For I.Item = Each Item
 			WriteLine(G, "Item ID: " + I\ID)
 			WriteLine(G, "Item Name: " + I\Name$)
-			WriteLine(G, "Rarity: " + I\Rarity)
+			WriteLine(G, "Range: " + I\Range#)
 			WriteLine(G, "")
 		Next
 	CloseFile(G)
@@ -457,6 +458,7 @@ Function GetWeaponClass$(I.Item)
 		Case WC_Blunt : Return "Blunt"
 		Case WC_Bow : Return "Bow"
 		Case WC_Polearm : Return "Polearm"
+		Case WC_Staff : Return "Staff"
 	End Select
 	Return LanguageString$(LS_Unknown)
 

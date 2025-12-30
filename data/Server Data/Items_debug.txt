@@ -1,64 +1,72 @@
 Item ID: 0
 Item Name: Hand Axe
-Rarity: 1
+Range: 0.0
 
 Item ID: 1
 Item Name: Battle Axe
-Rarity: 1
+Range: 0.0
 
 Item ID: 2
 Item Name: Great Axe
-Rarity: 1
+Range: 0.0
 
 Item ID: 3
 Item Name: Dagger
-Rarity: 1
+Range: 0.0
 
 Item ID: 4
 Item Name: Short Sword
-Rarity: 1
+Range: 0.0
 
 Item ID: 5
 Item Name: Long Sword
-Rarity: 1
+Range: 0.0
 
 Item ID: 6
 Item Name: Scimitar
-Rarity: 1
+Range: 0.0
 
 Item ID: 7
 Item Name: Two-handed Sword
-Rarity: 1
+Range: 0.0
 
 Item ID: 8
 Item Name: Warhammer
-Rarity: 1
+Range: 0.0
 
 Item ID: 9
 Item Name: Mace
-Rarity: 1
+Range: 0.0
 
 Item ID: 10
 Item Name: Morning Star
-Rarity: 1
+Range: 0.0
 
 Item ID: 11
 Item Name: Maul
-Rarity: 1
+Range: 0.0
 
 Item ID: 12
 Item Name: Cudgel
-Rarity: 1
+Range: 0.0
 
 Item ID: 13
 Item Name: Pole Arm
-Rarity: 1
+Range: 0.0
 
 Item ID: 14
 Item Name: Short Spear
-Rarity: 1
+Range: 0.0
 
 Item ID: 15
 Item Name: Long Spear
-Rarity: 1
+Range: 0.0
+
+Item ID: 16
+Item Name: Short Bow
+Range: 80.0
+
+Item ID: 17
+Item Name: Long Bow
+Range: 150.0
 

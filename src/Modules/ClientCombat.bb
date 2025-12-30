@@ -30,8 +30,8 @@ Function UpdateCombat()
 		; Get allowed range
 		MaxRange# = 4.0
 		If Me\Inventory\Items[SlotI_Weapon] <> Null
-			If Me\Inventory\Items[SlotI_Weapon]\Item\WeaponType = W_Ranged
-				If Me\Inventory\Items[SlotI_Weapon]\ItemHealth > 0 Then MaxRange# = Me\Inventory\Items[SlotI_Weapon]\Item\Range# - 0.5
+			If Me\Inventory\Items[SlotI_Weapon]\Item\WeaponClass = WC_Bow
+				If Me\Inventory\Items[SlotI_Weapon]\ItemHealth > 0 Then MaxRange# = (Me\Inventory\Items[SlotI_Weapon]\Item\Range#)- 0.5
 			EndIf
 		EndIf
 
