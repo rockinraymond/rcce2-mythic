@@ -78,9 +78,9 @@ End Function
 Function testEffects()
 
 	Player = Actor()
-	AddActorEffect(Player, "Damage Bonus", "Damage Bonus", 5, 30, 0)
-	AddActorEffect(Player, "Attack Bonus", "Attack Bonus", -5, 30, 1)
-	AddActorEffect(Player, "Armor Bonus", "Armor Bonus", 5, 30, 0)
+	AddActorEffect(Player, "Stealth Mod", "Stealth Mod", 50, 30, 1)
+	;AddActorEffect(Player, "Attack Bonus", "Attack Bonus", -5, 30, 1)
+	;AddActorEffect(Player, "Armor Bonus", "Armor Bonus", 5, 30, 0)
 	;AddActorEffect(Player, "Toughness Bonus", "Toughness", 5, 30, 2)
 	;AddActorEffect(Player, "Shadow defense Bonus", "Shadow", 5, 30, 2, 1)
 
@@ -120,6 +120,11 @@ End function
 
 function STrTest()
 SetAttribute(actor(), "Strength", 35)
+
+End function
+
+function STealthTest()
+SetAttribute(actor(), "Stealth", 75)
 
 End function
 

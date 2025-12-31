@@ -1142,11 +1142,13 @@ Function AILookForTargets(AI.ActorInstance)
 			If AI\FactionRatings[A2\HomeFaction] < 150
 				If A2\Actor\Aggressiveness <> 3
 					If A2 <> AI
+						;Aggro Range is based on Targets stealth skill
+						A2AggroRange = GetActorAggroRange#(A2)
 						XDist# = Abs(AI\X# - A2\X#)
 						YDist# = Abs(AI\Y# - A2\Y#)
 						ZDist# = Abs(AI\Z# - A2\Z#)
 						Dist# = (XDist# * XDist#) + (YDist# * YDist#) + (ZDist# * ZDist#)
-						If Dist# < Float#(AI\Actor\AggressiveRange * AI\Actor\AggressiveRange)
+						If Dist# < Float#(A2AggroRange * A2AggroRange)
 							AI\AIMode = AI_Chase
 							AI\AITarget = A2
 						EndIf

@@ -1179,6 +1179,15 @@ Function GetActorAttackSpeed(AI.ActorInstance)
 	Return AttackSpeed
 End Function
 
+Function GetActorAggroRange#(AI.ActorInstance)
+	Stealth = AI\Attributes\Value[FindAttribute("Stealth")]
+	DexBonus = AI\Attributes\Value[FindAttribute("Dexterity")] - 10
+	StealthMod = AI\Attributes\Value[FindAttribute("Stealth Mod")]
+	AggroRange = (125.0 - (Stealth + StealthMod + DexBonus))/2
+	If AggroRange < 5.0 Then AggroRange = 5.0
+	Return AggroRange
+End Function
+
 Function GetAttackSpeedString$(AttackSpeed)
 	SpeedString$ = ""
 	Select AttackSpeed

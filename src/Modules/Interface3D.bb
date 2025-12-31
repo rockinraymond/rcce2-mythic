@@ -1747,6 +1747,7 @@ Function UpdateInterface()
 		GY_UpdateLabel(LArmorPoints, "Defense Rating: " + Str(GetArmourLevel(Me)) + ArmorBnsStr$)
 		GY_UpdateLabel(LDamage, "Max Damage: " + Str(GetActorMaxDamage(Me) + GetActorDamageAttributeBNS(Me)) + DamBnsStr$)
 		GY_UpdateLabel(LAccuracy, "Attack Rating: " + Str(GetActorAccuracy(Me)) + AtkBnsStr$)
+		GY_UpdateLabel(LAggro, "Conspicuousness: " + Str(Int(GetActorAggroRange(Me))))
 
 	; Display attributes
 		CurrentAtt = 0
@@ -4086,24 +4087,25 @@ Function CreateInterface()
 	LArmorPoints = GY_CreateLabel(WCharStats, 0.03, 0.225, "Defense Rating: 000 + 00", 255, 255, 255)
 	LAccuracy = GY_CreateLabel(WCharStats, 0.03, 0.25, "Attack Rating: 000 + 00", 255, 255, 255)
 	LDamage = GY_CreateLabel(WCharStats, 0.03, 0.275, "Max Damage: 000 + 00", 255, 255, 255)
+	LAggro = GY_CreateLabel(WCharStats, 0.03, 0.3, "Conspicuousness: 000", 255, 255, 255)
 	
 	;Attributes
-	GY_CreateLabel(WCharStats, 0.03, 0.33, LanguageString$(LS_Attributes), 255, 255, 255)
+	GY_CreateLabel(WCharStats, 0.03, 0.34, LanguageString$(LS_Attributes), 255, 255, 255)
 	AttCount = 0
 	ResY# = 0
 	For i = 0 To 39
 		If AttributeNames$(i) <> "" And AttributeHidden(i) = False And AttributeIsSkill(i) = False
-			LAttributeNames(AttCount) = GY_CreateLabel(WCharStats, 0.03, 0.355 + (Float#(AttCount) * 0.025), "LONGEST ATTRIBUTE NAME HERE!")
-			LAttributeVals(AttCount) = GY_CreateLabel(WCharStats, 0.23, 0.355 + (Float#(AttCount) * 0.025), "00000", 255, 255, 255, Justify_Right)
+			LAttributeNames(AttCount) = GY_CreateLabel(WCharStats, 0.03, 0.365 + (Float#(AttCount) * 0.025), "LONGEST ATTRIBUTE NAME HERE!")
+			LAttributeVals(AttCount) = GY_CreateLabel(WCharStats, 0.23, 0.365 + (Float#(AttCount) * 0.025), "00000", 255, 255, 255, Justify_Right)
 			GY_UpdateLabel(LAttributeNames(AttCount), AttributeNames$(i))
 			GY_UpdateLabel(LAttributeVals(AttCount), "")
 			AttCount = AttCount + 1
-			ResY# = 0.375 + (Float#(AttCount) * 0.025)
+			ResY# = 0.385 + (Float#(AttCount) * 0.025)
 		EndIf
 	Next
 	
 	;Resistances
-	ResY# = ResY# + 0.01
+	;# = ResY# + 0.01
 	GY_CreateLabel(WCharStats, 0.03, ResY#, "RESISTANCE MODIFIERS", 255, 255, 255)
 	ResY# = ResY# + .03
 	ResCount = 0
