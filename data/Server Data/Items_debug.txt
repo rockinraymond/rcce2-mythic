@@ -70,3 +70,35 @@ Item ID: 17
 Item Name: Long Bow
 Range: 150.0
 
+Item ID: 18
+Item Name: Arrow
+Range: 0.0
+
+Item ID: 19
+Item Name: Quarter Staff
+Range: 0.0
+
+Item ID: 20
+Item Name: Leather Armor
+Range: 0.0
+
+Item ID: 21
+Item Name: Leather Cap
+Range: 0.0
+
+Item ID: 22
+Item Name: Leather Trousers
+Range: 0.0
+
+Item ID: 23
+Item Name: Leather Boots
+Range: 0.0
+
+Item ID: 24
+Item Name: Leather Gloves
+Range: 0.0
+
+Item ID: 25
+Item Name: Leather Belt
+Range: 0.0
+

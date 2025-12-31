@@ -1730,9 +1730,23 @@ Function UpdateInterface()
 		GY_UpdateLabel(LHealth, "Health: " + Str(Me\Attributes\Value[HPAtt]) + "/" + Str(Me\Attributes\Maximum[HPAtt]))
 		GY_UpdateLabel(LMana, "Mana: " + Str(Me\Attributes\Value[MPAtt]) + "/" + Str(Me\Attributes\Maximum[MPAtt]))
 
-		GY_UpdateLabel(LArmorPoints, "Defense Rating: " + Str(GetArmourLevel(Me)))
-		GY_UpdateLabel(LDamage, "Max Damage: " + Str(GetActorMaxDamage(Me) + GetActorDamageAttributeBNS(Me)))
-		GY_UpdateLabel(LAccuracy, "Attack Rating: " + Str(GetActorAccuracy(Me)))
+
+		ArmorBnsStr$ = ""
+		DamBnsStr$ = ""
+		AtkBnsStr$ = ""
+
+		If Me\Attributes\Value[FindAttribute("Armor Bonus")] > 0 Then ArmorBnsStr$ = (" + " + Str(Me\Attributes\Value[FindAttribute("Armor Bonus")]))
+		If Me\Attributes\Value[FindAttribute("Armor Bonus")] < 0 Then ArmorBnsStr$ = (" - " + Str(Abs(Me\Attributes\Value[FindAttribute("Armor Bonus")])))
+		
+		If Me\Attributes\Value[FindAttribute("Damage Bonus")] > 0 Then DamBnsStr$ = (" + " + Str(Me\Attributes\Value[FindAttribute("Damage Bonus")]))
+		If Me\Attributes\Value[FindAttribute("Damage Bonus")] < 0 Then DamBnsStr$ = (" - " + Str(Abs(Me\Attributes\Value[FindAttribute("Damage Bonus")])))
+		
+		If Me\Attributes\Value[FindAttribute("Attack Bonus")] > 0 Then AtkBnsStr$ = (" + " + Str(Me\Attributes\Value[FindAttribute("Attack Bonus")]))
+		If Me\Attributes\Value[FindAttribute("Attack Bonus")] < 0 Then AtkBnsStr$ = (" - " + Str(Abs(Me\Attributes\Value[FindAttribute("Attack Bonus")])))
+
+		GY_UpdateLabel(LArmorPoints, "Defense Rating: " + Str(GetArmourLevel(Me)) + ArmorBnsStr$)
+		GY_UpdateLabel(LDamage, "Max Damage: " + Str(GetActorMaxDamage(Me) + GetActorDamageAttributeBNS(Me)) + DamBnsStr$)
+		GY_UpdateLabel(LAccuracy, "Attack Rating: " + Str(GetActorAccuracy(Me)) + AtkBnsStr$)
 
 	; Display attributes
 		CurrentAtt = 0
@@ -4058,7 +4072,8 @@ Function CreateInterface()
 
 ; Stats window
 	WCharStats = GY_CreateWindow(LanguageString$(LS_Character), 0.1, 0.1, 0.5, 0.7, True, True, False, LoadTexture("Data\Textures\GUI\CharBG.png"))
-	GY_CreateLabel(WCharStats, 0.03, 0.03, "Name: " + Me\Name$, 255, 255, 255)
+	GY_CreateLabel(WCharStats, 0.03, 0.005, "Name: " + Me\Name$, 255, 255, 255)
+	GY_CreateLabel(WCharStats, 0.03, 0.03, "Race: " + Me\Actor\Race$, 255, 255, 255)
 	;LGold = GY_CreateLabel(WCharStats, 0.05, 0.13, "000000000000000000000000000000000000000000000000000000000000", 255, 255, 255)
 	LLevel = GY_CreateLabel(WCharStats, 0.03, 0.055, LanguageString$(LS_Level) + " 0000000", 255, 255, 255)
 	LXP = GY_CreateLabel(WCharStats, 0.03, 0.08, LanguageString$(LS_Experience) + " 0000000000000", 255, 255, 255)
@@ -4068,28 +4083,28 @@ Function CreateInterface()
 	GY_CreateLabel(WCharStats, 0.03, 0.15, "STATS", 255, 255, 255)
 	LHealth = GY_CreateLabel(WCharStats, 0.03, 0.175, "Health:" + " 00000 / 00000", 255, 50, 50)
 	LMana = GY_CreateLabel(WCharStats, 0.03, 0.2, "Mana:" + " 00000 / 00000", 75, 75, 255)
-	LArmorPoints = GY_CreateLabel(WCharStats, 0.03, 0.225, "Defense Rating:" + " 000", 255, 255, 255)
-	LAccuracy = GY_CreateLabel(WCharStats, 0.03, 0.25, "Attack Rating:" + " 000", 255, 255, 255)
-	LDamage = GY_CreateLabel(WCharStats, 0.03, 0.275, "Max Damage:" + " 000", 255, 255, 255)
+	LArmorPoints = GY_CreateLabel(WCharStats, 0.03, 0.225, "Defense Rating: 000 + 00", 255, 255, 255)
+	LAccuracy = GY_CreateLabel(WCharStats, 0.03, 0.25, "Attack Rating: 000 + 00", 255, 255, 255)
+	LDamage = GY_CreateLabel(WCharStats, 0.03, 0.275, "Max Damage: 000 + 00", 255, 255, 255)
 	
 	;Attributes
-	GY_CreateLabel(WCharStats, 0.03, 0.355, LanguageString$(LS_Attributes), 255, 255, 255)
+	GY_CreateLabel(WCharStats, 0.03, 0.33, LanguageString$(LS_Attributes), 255, 255, 255)
 	AttCount = 0
 	ResY# = 0
 	For i = 0 To 39
 		If AttributeNames$(i) <> "" And AttributeHidden(i) = False And AttributeIsSkill(i) = False
-			LAttributeNames(AttCount) = GY_CreateLabel(WCharStats, 0.03, 0.38 + (Float#(AttCount) * 0.025), "LONGEST ATTRIBUTE NAME HERE!")
-			LAttributeVals(AttCount) = GY_CreateLabel(WCharStats, 0.23, 0.38 + (Float#(AttCount) * 0.025), "00000", 255, 255, 255, Justify_Right)
+			LAttributeNames(AttCount) = GY_CreateLabel(WCharStats, 0.03, 0.355 + (Float#(AttCount) * 0.025), "LONGEST ATTRIBUTE NAME HERE!")
+			LAttributeVals(AttCount) = GY_CreateLabel(WCharStats, 0.23, 0.355 + (Float#(AttCount) * 0.025), "00000", 255, 255, 255, Justify_Right)
 			GY_UpdateLabel(LAttributeNames(AttCount), AttributeNames$(i))
 			GY_UpdateLabel(LAttributeVals(AttCount), "")
 			AttCount = AttCount + 1
-			ResY# = 0.4 + (Float#(AttCount) * 0.025)
+			ResY# = 0.375 + (Float#(AttCount) * 0.025)
 		EndIf
 	Next
 	
 	;Resistances
-	ResY# = ResY# + 0.015
-	GY_CreateLabel(WCharStats, 0.03, ResY#, "RESISTANCES", 255, 255, 255)
+	ResY# = ResY# + 0.01
+	GY_CreateLabel(WCharStats, 0.03, ResY#, "RESISTANCE MODIFIERS", 255, 255, 255)
 	ResY# = ResY# + .03
 	ResCount = 0
 	For i = 0 To 19
@@ -4120,7 +4135,7 @@ Function CreateInterface()
 			;GY_UpdateLabel(LSkillVals(SklCount), "")
 
 			; Create xp bar
-			AttributeXpDisplayNumbers(SklCount) = GY_CreateLabel(WCharStats, XPos + 0.175, YPos, "EXP: 0000/0000", 255, 255, 255)
+			AttributeXpDisplayNumbers(SklCount) = GY_CreateLabel(WCharStats, XPos + 0.2, YPos, "EXP: 0000/0000", 255, 255, 255)
 			AttributeXpDisplays(SklCount) = GY_CreateProgressBar(WCharStats, XPos, YPos + 0.03 , 0.285, 0.015, 0, 100, 255, 68, 51)
 			;GY_CreateLabel(WCharStats, 0.72, SkillStart + (Float#(SklCount) * 0.05), "EXP:", 255, 255, 255)
 			

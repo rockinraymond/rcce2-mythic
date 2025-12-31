@@ -113,9 +113,7 @@ Function KillActor(A.ActorInstance, Killer.ActorInstance)
 		If Killer\FactionRatings[A\HomeFaction] < 0 Then Killer\FactionRatings[A\HomeFaction] = 0
 
 		; Give XP to the killer
-		Diff = A\Level - Killer\Level
-		If Diff < 1 Then Diff = 1
-		XP = (Diff * A\Actor\XPMultiplier) + Rand(0, 20)
+		XP = MobXPStandard(A\Level)
 		GiveXP(Killer, XP)
 	EndIf
 
@@ -263,12 +261,12 @@ Function ActorAttack(A1.ActorInstance, A2.ActorInstance)
 			If A1\RNID > 0 Then RCE_Send(Host, A1\RNID, P_ChatMessage, Chr$(253) + LanguageString$(LS_WeaponDamaged), True)
 				Return False
 		EndIf
-		;If InventoryHasItem(A1\Inventory, "Arrow", 1) = False
-		;	If A1\RNID > 0 Then RCE_Send(Host, A1\RNID, P_ChatMessage, Chr$(253) + "You are out of arrows!", True)
-		;	Return False
-		;Else
-			;GiveItem(A1, "Arrow", -1)
-		;EndIf
+		If InventoryHasItem(A1\Inventory, "Arrow", 1) = False
+			If A1\RNID > 0 Then RCE_Send(Host, A1\RNID, P_ChatMessage, Chr$(253) + "You are out of arrows!", True)
+			Return False
+		Else
+			GiveItem(A1, "Arrow", -1)
+		EndIf
 	Else
 		; Check distance is acceptable
 		CheckDist# = 7.0 + A1\Actor\Radius# + A2\Actor\Radius#
@@ -297,15 +295,22 @@ Function ActorAttack(A1.ActorInstance, A2.ActorInstance)
 		DamageEquipment = False
 		AttackBlocked = False
 		;Attacker stats
-		DexterityAttribute = FindAttribute("Dexterity");
+		DexterityAttribute = FindAttribute("Dexterity")
+		DamageBonusAtt = FindAttribute("Damage Bonus")
+		DamageBonus = A1\Attributes\Value[DamageBonusAtt]
+		AttackBonusAtt = FindAttribute("Attack Bonus")
+		AttackBonus = A1\Attributes\Value[AttackBonusAtt]
+
 		AttackerCritChance = (A1\Attributes\Value[DexterityAttribute] * 2) / 5
-		AttackerAccuracy = GetActorWeaponSkill(A1)
+		AttackerAccuracy = GetActorAccuracy(A1)
 		AttackerMaxDamage = GetActorMaxDamage(A1)
 		AttackerDamageAttBNS = GetActorDamageAttributeBNS(A1)
 		
 		DamageType = GetActorDamageType(A1)
 		
 		;Defender stats
+		ArmorBonusAtt = FindAttribute("Armor Bonus")
+		ArmorBonus =  A2\Attributes\Value[ArmorBonusAtt]
 		ToughnessAttribute = FindAttribute("Toughness");
 		BlockSkill = FindAttribute("Block");
 
@@ -315,20 +320,20 @@ Function ActorAttack(A1.ActorInstance, A2.ActorInstance)
 		If A2\Inventory\Items[SlotI_Shield] <> Null Then BlockResistance = A2\Inventory\Items[SlotI_Shield]\Item\Resistances[DamageType]
 		DefendBlock = A2\Attributes\Value[BlockSkill] + DefendToughness + BlockResistance - AttackerDamageAttBNS
 
-		ArmorVal = GetArmourLevel(A2)
+		ArmorVal = GetArmourLevel(A2) + ArmorBonus
 		DefenderResistance = (A2\Resistances[DamageType])
 
 		TargetHitRoll = AttackerAccuracy - ArmorVal - DefenderResistance
 		
 		;Roll D100s for hit and block
-		HitRoll = Rand(1,100)
+		HitRoll = Rand(1,100) + AttackBonus
 		
 		If A2\Inventory\Items[SlotI_Shield] = Null Then BlockRoll = 100 
 		If (HitRoll < TargetHitRoll)
 			BlockRoll = Rand(1,100)
 			If (BlockRoll > DefendBlock)
 				DamageEquipment = True
-				Damage = Rand(1,AttackerMaxDamage) + AttackerDamageAttBNS
+				Damage = Rand(1,AttackerMaxDamage) + AttackerDamageAttBNS + DamageBonus
 				; Critical damage
 				If HitRoll < AttackerCritChance
 					Damage = Damage * 3
@@ -371,9 +376,6 @@ Function ActorAttack(A1.ActorInstance, A2.ActorInstance)
 		ThreadScript("LevelUp", "giveSkillXp", Handle(A2), 0, ArmXpParams$)
 	EndIf
 		
-
-	; give out armor skill xp
-
 	; Tell player(s) if applicable
 	Pa$ = RCE_StrFromInt$(Damage + 1, 2) + RCE_StrFromInt$(DamageType, 1)
 	If A1\RNID > 0
@@ -1185,4 +1187,98 @@ Function AICallForHelp(AI.ActorInstance)
 		Wend
 	EndIf
 
+End Function
+
+Function GiveItem(Actor.ActorInstance, Param2$, Param3%=1)
+	
+	If Actor <> Null
+		ItemName$ = Upper$(Param2$)
+		Amount = Param3%
+		; Find the requested item
+		For It.Item = Each Item
+			If Upper$(It\Name$) = ItemName$
+				; Give
+				If Amount > 0
+					; Check if Actor can use this slot
+					;If( ActorHasSlot(Actor, It\SlotType, It ) )
+						; Human
+						If Actor\RNID > 0
+							; Create the item
+							II.ItemInstance = CreateItemInstance(It)
+							II\Assignment = Amount
+							II\AssignTo = Actor
+							; Ask client to specify a slot to put it in
+							Pa$ = RCE_StrFromInt$(It\ID, 2) + RCE_StrFromInt$(II\Assignment, 2)
+							RCE_Send(Host, Actor\RNID, P_InventoryUpdate, "G" + RCE_StrFromInt$(Handle(II), 4) + Pa$, True)
+						; AI
+						Else
+							II.ItemInstance = CreateItemInstance(It)
+							For i = 0 To Slots_Inventory
+								If Actor\Inventory\Items[i] = Null Or (ItemInstancesIdentical(II, Actor\Inventory\Items[i]) And II\Item\Stackable = True And i >= SlotI_Backpack)
+									If SlotsMatch(It, i)
+										; Only put one item in this slot if it is an equipped slot
+										ThisAmount = Amount
+										If i < SlotI_Backpack Then ThisAmount = 1
+									; Put in slot
+										If Actor\Inventory\Items[i] <> Null
+											FreeItemInstance(Actor\Inventory\Items[i])
+										Else
+											Actor\Inventory\Amounts[i] = 0
+										EndIf
+										Actor\Inventory\Items[i] = II
+										Actor\Inventory\Amounts[i] = Actor\Inventory\Amounts[i] + ThisAmount
+
+										; Visual stuff
+										If i = SlotI_Weapon Or i = SlotI_Shield Or i = SlotI_Hat Or i = SlotI_Chest
+											SendEquippedUpdate(Actor)
+										EndIf
+
+										; If all items have been placed, exit loop
+										Amount = Amount - ThisAmount
+										If Amount = 0 Then Exit
+									EndIf
+								EndIf
+							Next
+						EndIf
+					;EndIf
+				; Take
+				Else
+					Amount = Abs(Amount)
+					For i = 0 To Slots_Inventory
+						If Actor\Inventory\Items[i] <> Null
+							If Actor\Inventory\Items[i]\Item = It
+								AmountTaken = 0
+
+								; Delete item
+								If Actor\Inventory\Amounts[i] <= Amount
+									AmountTaken = Actor\Inventory\Amounts[i]
+									Amount = Amount - Actor\Inventory\Amounts[i]
+									FreeItemInstance(Actor\Inventory\Items[i])
+									Actor\Inventory\Amounts[i] = 0
+								Else
+									Actor\Inventory\Amounts[i] = Actor\Inventory\Amounts[i] - Amount
+									AmountTaken = Amount
+									Amount = 0
+								EndIf
+
+								; Tell player if required
+								If Actor\RNID > 0
+									Pa$ = RCE_StrFromInt$(i, 1) + RCE_StrFromInt$(AmountTaken, 2)
+									RCE_Send(Host, Actor\RNID, P_InventoryUpdate, "T" + Pa$, True)
+								EndIf
+
+								; Update equipment if required
+								If i = SlotI_Weapon Or i = SlotI_Shield Or i = SlotI_Hat
+									SendEquippedUpdate(Actor)
+								EndIf
+
+								If Amount = 0 Then Exit
+							EndIf
+						EndIf
+					Next
+				EndIf
+				Exit
+			EndIf
+		Next
+	EndIf
 End Function

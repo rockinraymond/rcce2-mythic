@@ -1198,3 +1198,31 @@ Function GetAttackSpeedString$(AttackSpeed)
 	
 	Return SpeedString
 End Function
+
+Function MobXPStandard(MobLevel)
+	Select MobLevel
+		Case 1
+			return 25
+		case 2
+			return 75
+		case 3
+			return 145
+		case 4
+			return 240
+		case 5
+			return 360
+		case 6
+			return 500
+		case 7
+			return 670
+		case 8
+			return 875
+		case 9
+			return 1075
+		case 10
+			return 1300
+		default
+			return 10
+	End Select 
+	return 0
+End Function

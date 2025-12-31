@@ -122,6 +122,15 @@ Function AnimateActorAttack(A.ActorInstance)
 					case 3
 					Anim = FindAnimation(AS, "Two Hand 3")
 					End Select
+			Case WC_Polearm 
+				select Rand(1,3)
+					case 1
+					Anim = FindAnimation(AS, "Two hand 3")
+					case 2
+					Anim = FindAnimation(AS, "Two Hand Attack")
+					case 3
+					Anim = FindAnimation(AS, "Two hand 3")
+					End Select
 			Case WC_Bow: Anim = FindAnimation(AS, "Bow Attack")
 			Default
 				select Rand(1,2)
