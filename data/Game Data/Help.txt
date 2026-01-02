@@ -1,11 +1,12 @@
-This is the text that is displayed when your players press the in-game help button.
-
-Typically you would list some common tips, ways of contact and help.
-
-You could also list quick helpful commands or commonly mixed up controls.
-
-
-
-This is the in-game help. You may edit this text by altering the \Data\Game Data\Help.txt file. It has automatic word wrap and scrolling.
-
-So you can make it as long as you like!
+Chat Commands:
+/pm <player name>, <message>: sends a private message to player (don't forget the comma!)
+/p <message>: sends a message to your party
+/yell <message>: sends a message to all players in game
+/offer <player name>,<item name>,<amount>,<gold coins>: opens up trade dialog with specified player by offering a specified amount of an item for a specified amount of gold coins.
+/invite <player name>: invites player to your party
+/accept: accepts party invite
+/leave: leaves current party
+/allplayers: displays number of other players currently in game
+/players: displays number of other players currently in zone
+/me <message>: displays emote message(for role playing)
+/saveme: teleports player to safety in the event of getting stuck(cannot be used in combat)

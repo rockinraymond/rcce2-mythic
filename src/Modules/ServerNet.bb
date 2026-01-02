@@ -289,7 +289,7 @@ Function UpdateNetwork()
 								Wend
 								If AInstance\Area = GameArea Then AddListBoxItem(Game\ChatText, Pa$ + Chr$(13))
 							Case LanguageString$(LS_SCYell)
-								Pa$ = Chr$(253) + "<" + AI\Name$ + "> " + Params$
+								Pa$ = Chr$(235) + "<" + AI\Name$ + "> " + Params$
 								For A2.ActorInstance = Each ActorInstance
 									If A2\RNID > 0
 										If PlayerIgnoring(A2, AI) = 0
@@ -301,7 +301,8 @@ Function UpdateNetwork()
 							Case LanguageString$(LS_SCGM)
 								A.Account = Object.Account(AI\Account)
 								If A\IsDM = True
-									Pa$ = Chr$(254) + "<GM> <" + AI\Name$ + "> " + Params$
+									Pa$ = Chr$(245) + "<GM> <" + AI\Name$ + "> " + Params$
+									RCE_Send(Host, AI\RNID, P_ChatMessage, Pa$, True)
 									For A2.ActorInstance = Each ActorInstance
 										If A2\RNID > 0
 											A.Account = Object.Account(A2\Account)
@@ -312,6 +313,7 @@ Function UpdateNetwork()
 							Case LanguageString$(LS_SCGuildSay)
 								If AI\TeamID > 0
 									Pa$ = Chr$(251) + "<G> <" + AI\Name$ + "> " + Params$
+									RCE_Send(Host, AI\RNID, P_ChatMessage, Pa$, True)
 									For A2.ActorInstance = Each ActorInstance
 										If A2\RNID > 0
 											If A2\TeamID = AI\TeamID Then RCE_Send(Host, A2\RNID, P_ChatMessage, Pa$, True)
@@ -322,6 +324,7 @@ Function UpdateNetwork()
 								Party.Party = Object.Party(AI\PartyID)
 								If Party <> Null
 									Pa$ = Chr$(251) + "<PARTY> <" + AI\Name$ + "> " + Params$
+									RCE_Send(Host, AI\RNID, P_ChatMessage, Pa$, True)
 									For i = 0 To 7
 										If Party\Player[i] <> Null
 											If Party\Player[i] <> AI Then RCE_Send(Host, Party\Player[i]\RNID, P_ChatMessage, Pa$, True)
@@ -331,6 +334,7 @@ Function UpdateNetwork()
 							Case LanguageString$(LS_SCPMSay)
 								Name$ = Upper$(Split$(Params$, 1, ","))
 								Params$ = Split$(Params$, 2, ",")
+								RCE_Send(Host, AI\RNID, P_ChatMessage, Chr$(252) + AI\Name$ + ": " + Params$, True)
 								For A2.ActorInstance = Each ActorInstance
 									If A2\RNID > 0
 										If Upper$(A2\Name$) = Name$

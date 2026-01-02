@@ -1074,12 +1074,16 @@ Function UpdateNetwork()
 				; Special colours
 				If Asc(Left$(M\MessageData$, 1)) = 254
 					Output(Mid$(M\MessageData$, 2), 255, 255, 0)
+				ElseIf Asc(Left$(M\MessageData$, 1)) = 254
+					OutputChat(Mid$(M\MessageData$, 2), 255, 255, 0)
 				ElseIf Asc(Left$(M\MessageData$, 1)) = 253
 					Output(Mid$(M\MessageData$, 2), 255, 50, 50)
+				ElseIf Asc(Left$(M\MessageData$, 1)) = 235
+					OutputChat(Mid$(M\MessageData$, 2), 255, 50, 50)
 				ElseIf Asc(Left$(M\MessageData$, 1)) = 252
-					Output(Mid$(M\MessageData$, 2), 200, 10, 200)
+					OutputChat(Mid$(M\MessageData$, 2), 200, 10, 200)
 				ElseIf Asc(Left$(M\MessageData$, 1)) = 251
-					Output(Mid$(M\MessageData$, 2), 20, 220, 50)
+					OutputChat(Mid$(M\MessageData$, 2), 20, 220, 50)
 				ElseIf Asc(Left$(M\MessageData$, 1)) = 250
 					Red = Asc(Mid$(M\MessageData$, 2, 1))
 					Green = Asc(Mid$(M\MessageData$, 3, 1))
