@@ -643,15 +643,20 @@ Function UpdateNetwork()
 				A.ActorInstance = RuntimeIDList(RuntimeID)
 				If A <> Null
 					FixedSpeed = RCE_IntFromStr(Mid$(M\MessageData$, 3, 1))
-					Speed# = RCE_FloatFromStr#(Mid$(M\MessageData$, 4, 4))
-					Anim$ = Mid$(M\MessageData$, 8)
+					IsLoop = RCE_IntFromStr(Mid$(M\MessageData$, 4, 1))
+					Speed# = RCE_FloatFromStr#(Mid$(M\MessageData$, 5, 4))
+					Anim$ = Mid$(M\MessageData$, 9)
 					If A\Gender = 0
 						ID = FindAnimation(AnimList(A\Actor\MAnimationSet), Anim$)
 					Else
 						ID = FindAnimation(AnimList(A\Actor\FAnimationSet), Anim$)
 					EndIf
 					If ID > -1
-						PlayAnimation(A, 3, Speed#, ID, FixedSpeed)
+						If IsLoop < 1
+							PlayAnimation(A, 3, Speed#, ID, FixedSpeed)
+						else
+							PlayAnimation(A, 1, Speed#, ID, FixedSpeed)
+						endif
 						A\DestX# = EntityX#(A\CollisionEN)
 						A\DestZ# = EntityZ#(A\CollisionEN)
 					EndIf

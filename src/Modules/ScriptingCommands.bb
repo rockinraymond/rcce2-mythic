@@ -1322,10 +1322,10 @@ Function BVM_SETABILITYLEVEL(Param1%, Param2$, Param3%)
 	EndIf
 End Function
 
-Function BVM_ANIMATEACTOR(Param1%, Param2$, Param3#, Param4%=0)
+Function BVM_ANIMATEACTOR(Param1%, Param2$, Param3#, Param4%=0, Param5% = 0)
 	Actor.ActorInstance = Object.ActorInstance(Param1%)
 	If Actor <> Null
-		Pa$ = RCE_StrFromInt$(Actor\RuntimeID, 2) + RCE_StrFromInt$(Param4%, 1)
+		Pa$ = RCE_StrFromInt$(Actor\RuntimeID, 2) + RCE_StrFromInt$(Param4%, 1) + RCE_StrFromInt$(Param5%, 1)
 		Pa$ = Pa$ + RCE_StrFromFloat$(Param3#) + Param2$
 		AInstance.AreaInstance = Object.AreaInstance(Actor\ServerArea)
 		A2.ActorInstance = AInstance\FirstInZone

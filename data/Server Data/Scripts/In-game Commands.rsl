@@ -105,6 +105,12 @@ Function Sword()
 giveitem(actor(),"sword",1)
 End Function
 
+Function Sit()
+AnimateActor(Actor(), "Sit down", 0.5)
+DoEvents(2500)
+AnimateActor(Actor(), "Sit idle", 1, 0,1)
+End Function
+
 function ArmorSkillTest()
 SetAttribute(actor(), "light armor", 5)
 End function
