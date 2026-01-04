@@ -71,14 +71,15 @@ End Function
 Function giveSkillXp()
 
 	Player = Actor()
-	ZZADDSKILLXP(Player, "Swords", 25)
+	XPAMT = Attribute(Player, "Unarmed") * 100
+	ZZADDSKILLXP(Player, "Unarmed", XPAMT)
 
 End Function
 
 Function testEffects()
 
 	Player = Actor()
-	AddActorEffect(Player, "Stealth Mod", "Stealth Mod", 50, 30, 1)
+	AddActorEffect(Player, "unarmed buff", "unarmed", 5, 30, 1)
 	;AddActorEffect(Player, "Attack Bonus", "Attack Bonus", -5, 30, 1)
 	;AddActorEffect(Player, "Armor Bonus", "Armor Bonus", 5, 30, 0)
 	;AddActorEffect(Player, "Toughness Bonus", "Toughness", 5, 30, 2)
@@ -147,4 +148,8 @@ function TalentTest()
 	AddAbility(Actor(), "New ability8", 8)
 	AddAbility(Actor(), "New ability9", 9)
 	AddAbility(Actor(), "New ability10", 10)
+End Function
+
+function unarmedTest()
+	ZZADDSKILLXP(Player, "Unarmed", 30000)
 End Function

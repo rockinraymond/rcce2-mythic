@@ -1886,13 +1886,16 @@ Function BVM_ZZADDSKILLXP(Param1%, Param2$, Param3%)
 				Actor\Attributes\Xp[Attribute] = Actor\Attributes\Xp[Attribute] + Param3%
 				; Level Up Skill
 				If Actor\Attributes\Xp[Attribute] >= Actor\Attributes\XpMax[Attribute]
-					If Actor\Attributes\Value[Attribute] < Actor\Attributes\Maximum[Attribute]
+					OldMax = Actor\Attributes\XpMax[Attribute]
+					If (OldMax / 100) < Actor\Attributes\Maximum[Attribute]
 						;Reset Xp
 						Actor\Attributes\Xp[Attribute] = 0
 						;Increment Skill Level
 						Actor\Attributes\Value[Attribute] = Actor\Attributes\Value[Attribute] + 1
+						;Give Main level XP
+						GiveXP(Actor, OldMax / 10)
 						;Adjust Max Xp
-						Actor\Attributes\XpMax[Attribute] = Actor\Attributes\Value[Attribute] * 100
+						Actor\Attributes\XpMax[Attribute] = OldMax + 100
 						LevelUpPackets = True
 					Else
 						;skill maxxed so xp stays maxxed
