@@ -2307,7 +2307,7 @@ Function CreateChar()
 						EndIf
 					ElseIf GY_ButtonHit(AttributeIncrease(i)) = True
 						Att = GY_GadgetData$(AttributeLabels(i))
-						If PointsToSpend > 0 And (Preview\Attributes\Value[Att] + PointSpends(Att)) < Preview\Attributes\Maximum[Att]
+						If PointsToSpend > 0 And (Preview\Attributes\Value[Att] + PointSpends(Att)) < (Preview\Attributes\Maximum[Att] - 5)
 							PointsToSpend = PointsToSpend - 1
 							PointSpends(Att) = PointSpends(Att) + 1
 							GY_UpdateLabel(AttributeLabels(i), Preview\Attributes\Value[Att] + PointSpends(Att))
@@ -2330,7 +2330,7 @@ Function CreateChar()
 						EndIf
 					ElseIf GY_ButtonHit(SkillIncrease(i)) = True
 						Att = GY_GadgetData$(SkillLabels(i))
-						If  SkillPointsToSpend > 0 And (Preview\Attributes\Value[Att] + PointSpends(Att)) < Preview\Attributes\Maximum[Att]
+						If  SkillPointsToSpend > 0 And (Preview\Attributes\Value[Att] + PointSpends(Att)) < (Preview\Attributes\Maximum[Att] / 2)
 							SkillPointsToSpend = SkillPointsToSpend - 1
 							PointSpends(Att) = PointSpends(Att) + 1
 							GY_UpdateLabel(SkillLabels(i), Preview\Attributes\Value[Att] + PointSpends(Att))
