@@ -1218,7 +1218,7 @@ Global SItemEatEffects = FUI_Spinner(TItemsGeneral, 110, 210, 100, 20, 1, 100000
 Global LItemImageID = FUI_Label(TItemsGeneral, 20, 212, "Display image: [NONE]")
 Global BItemImageID = FUI_Button(TItemsGeneral, 20, 240, 90, 20, "Change")
 Global LItemMiscData = FUI_Label(TItemsGeneral, 20, 400, "Miscellaneous data:")
-Global TItemMiscData = FUI_TextBox(TItemsGeneral, 120, 400, 300, 20)
+Global TItemMiscData = FUI_TextBox(TItemsGeneral, 120, 400, 450, 20)
 
 
 ; Appearance

@@ -102,3 +102,31 @@ Item ID: 25
 Item Name: Leather Belt
 Range: 0.0
 
+Item ID: 26
+Item Name: Chainmail Armor
+Range: 0.0
+
+Item ID: 27
+Item Name: Skull Cap
+Range: 0.0
+
+Item ID: 28
+Item Name: Chainmail Greaves
+Range: 0.0
+
+Item ID: 29
+Item Name: Chainmail Boots
+Range: 0.0
+
+Item ID: 30
+Item Name: Chainmail Gauntlets
+Range: 0.0
+
+Item ID: 31
+Item Name: Chainmail Belt
+Range: 0.0
+
+Item ID: 32
+Item Name: Round Shield
+Range: 0.0
+
