@@ -238,25 +238,75 @@ Function ActorHasSlot(AI.ActorInstance, SlotI, I.Item)
 			EndIf
 		 EndIf
 
-	;checking for two handed items/shields
-		If AI\Inventory\Items[SlotI_Shield] <> Null
-			If I\WeaponType = W_TwoHand
-				Return False
-			ElseIf I\WeaponType = W_Ranged
-				Return False
-			EndIf
-		EndIf
-		
-		If I\SlotType = Slot_Shield
-			If AI\Inventory\Items[SlotI_Weapon] <> Null
-				If AI\Inventory\Items[SlotI_Weapon]\Item\WeaponType = W_TwoHand 
+		;checking for two handed items/shields
+		;normal size races
+		If (A\Race$ <> "Halfling") And (A\Race$ <> "Gnome") And (A\Race$ <> "Dwarf")
+			If AI\Inventory\Items[SlotI_Shield] <> Null
+				If I\WeaponType = W_Large
 					Return False
-				ElseIf AI\Inventory\Items[SlotI_Weapon]\Item\WeaponType = W_Ranged
+				ElseIf I\WeaponClass = WC_Bow
 					Return False
 				EndIf
 			EndIf
+			
+			If I\SlotType = Slot_Shield
+				If AI\Inventory\Items[SlotI_Weapon] <> Null
+					If AI\Inventory\Items[SlotI_Weapon]\Item\WeaponType = W_Large 
+						Return False
+					ElseIf AI\Inventory\Items[SlotI_Weapon]\Item\WeaponClass = WC_Bow
+						Return False
+					EndIf
+				EndIf
+			EndIf
+		;Dwarves
+		ElseIf (A\Race$ = "Dwarf")
+			If AI\Inventory\Items[SlotI_Shield] <> Null
+				If I\WeaponType = W_Large
+					Return False
+				ElseIf I\WeaponClass = WC_Bow
+					Return False
+				EndIf
+			EndIf
+			If I\SlotType = Slot_Shield
+				If AI\Inventory\Items[SlotI_Weapon] <> Null
+					If AI\Inventory\Items[SlotI_Weapon]\Item\WeaponType = W_Large 
+						Return False
+					ElseIf AI\Inventory\Items[SlotI_Weapon]\Item\WeaponClass = WC_Bow
+						Return False
+					EndIf
+				EndIf
+			EndIf
+			If I\WeaponType = W_Large
+				If I\WeaponClass = WC_Bow
+					Return False
+				ElseIf I\WeaponClass = WC_Sword
+					Return False
+				ElseIf I\WeaponClass = WC_Polearm
+					Return False
+				EndIf
+			EndIf
+			;Gnomes and Halflings
+		Else
+			If AI\Inventory\Items[SlotI_Shield] <> Null
+				If I\WeaponType = W_Medium
+					Return False
+				ElseIf I\WeaponClass = WC_Bow
+					Return False
+				EndIf
+			EndIf
+			If I\SlotType = Slot_Shield
+				If AI\Inventory\Items[SlotI_Weapon] <> Null
+					If AI\Inventory\Items[SlotI_Weapon]\Item\WeaponType = W_Medium 
+						Return False
+					ElseIf AI\Inventory\Items[SlotI_Weapon]\Item\WeaponClass = WC_Bow
+						Return False
+					EndIf
+				EndIf
+			EndIf
+			If I\WeaponType = W_Large
+				Return False
+			EndIf
 		EndIf
-		 
 	EndIf
 
 	; Check whether the slot is disabled

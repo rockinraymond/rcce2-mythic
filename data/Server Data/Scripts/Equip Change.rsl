@@ -7,7 +7,23 @@ Using "RC_Core.rcm"
 Function Main()
 
 	Player = Actor()
+
+	;Attributes and Skill Bonuses
 	ApplyAttributeBonus(Player, "Strength")
+	ApplyAttributeBonus(Player, "Dexterity")
+	ApplyAttributeBonus(Player, "Toughness")
+	ApplyAttributeBonus(Player, "Agility")
+	ApplyAttributeBonus(Player, "Constitution")
+	ApplyAttributeBonus(Player, "Intelligence")
+	ApplyAttributeBonus(Player, "Wisdom")
+	ApplyAttributeBonus(Player, "Charisma")
+
+	ApplyAttributeBonus(Player, "Attack Bonus")
+	ApplyAttributeBonus(Player, "Damage Bonus")
+	ApplyAttributeBonus(Player, "Armor Bonus")
+	ApplyAttributeBonus(Player, "Stealth Mod")
+
+
 
 	Return
 

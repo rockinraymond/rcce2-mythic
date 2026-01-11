@@ -13,9 +13,13 @@ Const A_Gloves   = 3
 Const A_Boots    = 4
 Const A_Shield   = 5
 
-Const W_OneHand = 1 ; Weapon types
+Const W_OneHand = 1 ; Weapon types RETROGRADED
 Const W_TwoHand = 2
 Const W_Ranged  = 3
+
+Const W_Small = 1 ; Weapon types
+Const W_Medium = 2
+Const W_Large  = 3
 
 Const WC_Sword  = 1 ; Weapon Classes
 Const WC_Dagger = 2
