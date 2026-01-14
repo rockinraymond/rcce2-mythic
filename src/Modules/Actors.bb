@@ -1235,3 +1235,28 @@ Function MobXPStandard(MobLevel)
 	End Select 
 	return 0
 End Function
+
+Function GetPlayerRaceInfo$(PlayerRace$)
+	RaceDescription$ = ""
+
+	Select PlayerRace$
+		case "Human"
+			RaceDescription$ = "Humans are the most populous race in the Western Lands. They have the potential to be adept in many different things, because of this they do not have any bonuses or penalties to thier attributes or skills nor any notable special abilites."
+		case "Elf"
+			RaceDescription$ = "Elves are perhaps the oldest of the civilized races of the Western Lands. They contain a natural affinity for magic, however they have seem to lost faith in thier deity long ago. Elves may be frail but can be skilled warriors, particulary with swords and bows. They can cast spells in Leather and Chainmail armor and have moderate resistances to spells, wands and paralysis."
+		case "Dwarf"
+			RaceDescription$ = "Dwarves are hardy yet reserved folk known for both craftsmanship and mechnical ability. They are fierce fighters who tend to favor heaiver weapons and armor. They are typically not fond of magic, and are heavily resilient to it. They possess high resistences to spells, wands, paralysis, poison, death ray and dragon breath. Thier short stature prevents them from wielding certain large weapons (two-hand swords, polearms, long bows)."
+		case "Halfling"
+			RaceDescription$ = "Halflings are normally good natured, when they are well fed at least. They have a knack for archery and thier size makes them well suited for sneaking about. They possess a permenant stealth bonus and high resistences to spells/wands, paralysis, poison, death ray and dragon breath. Due to thier small size they must wield medium sized weapons with two hands and are unable to use large weapons at all."
+		case "Gnome"
+			RaceDescription$ = "Gnomes are a whimiscal race of curious minds who take great interest in both magic and technology. Gnomes frequently pratice magic and are even able to cast spells in leather armor. Their hardiness grants high resistences to poison, death ray and dragon breath. Due to thier stature they must wield medium sized weapons with two hands and are unable to use large weapons at all."
+		case "Half Orc"
+			RaceDescription$ = "Half Orcs are the offspring of the foul, usually non-consensual, relations between an Orc and Human. Normally treated as outcasts, they tend to thrive on the harsh life of adventuring. Much like full blooded Orcs, they are not really known for thier magical abilites, but the Orc blood running through them provides them with many traits making them well suited for killing. They also possess limited resistance to death ray and poison."
+		case "Half Elf"
+			RaceDescription$ = "Elves have been known to mingle with Humans thus leading to hybrid offspring. Half Elves share some but not all of the traits of full-blooded elves, however this usually means they are hardier in general as well. They posess a slight but noticiable affinity for magic and archery and can even cast spells in leather armor. Thier humanity also enables closer relations to divine powers. They also possess limited resistances to spells and wands."
+		Default
+			RaceDescription$ = "Still need to write this!"
+	End Select
+
+	Return RaceDescription$
+End Function

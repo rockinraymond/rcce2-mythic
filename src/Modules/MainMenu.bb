@@ -14,7 +14,7 @@ Dim AttributeIncrease(39)
 Dim SkillDecrease(39)
 Dim SkillIncrease(39)
 Dim PointSpends(39)
-//Dim LDescription(9)
+Dim LDescription(9)
 Dim LEULA(28)
 Dim EULAText$(999)
 Global CharList$, UName$, PWord$
@@ -1967,17 +1967,17 @@ Function CreateChar()
 	
 	; Create the windows
 	If ResolutionType = 1 ; 16:9 ratio [@@]
-		WChar = GY_CreateWindow(LanguageString$(LS_CharacterTitle), 0.01 - 0.12, 0.05, 0.22, 0.18, True, False, False)
-		WStat = GY_CreateWindow(LanguageString$(LS_AttributesTitle), 0.01 - 0.12, 0.3, 0.25, StatWindowHeight#, True, False, False)
+		WChar = GY_CreateWindow(LanguageString$(LS_CharacterTitle), 0.01 - 0.12, 0.05, 0.22, 0.33, True, False, False)
+		WStat = GY_CreateWindow(LanguageString$(LS_AttributesTitle), 0.01 - 0.12, 0.45, 0.25, StatWindowHeight#, True, False, False)
 		WSkill = GY_CreateWindow("Skills", 0.74 + 0.12, 0.01, 0.25, StatWindowHeight#, True, False, False)
 	Else
-		WChar = GY_CreateWindow(LanguageString$(LS_CharacterTitle), 0.01, 0.05, 0.22, 0.18, True, False, False)
-		WStat = GY_CreateWindow(LanguageString$(LS_AttributesTitle), 0.01, 0.3, 0.25, StatWindowHeight#, True, False, False)
+		WChar = GY_CreateWindow(LanguageString$(LS_CharacterTitle), 0.01,  0.05, 0.22, 0.33, True, False, False)
+		WStat = GY_CreateWindow(LanguageString$(LS_AttributesTitle), 0.01, 0.45, 0.25, StatWindowHeight#, True, False, False)
 		WSkill = GY_CreateWindow("Skills", 0.74, 0.05, 0.25, SkillWindowHeight#, True, False, False)
 	EndIf
 	
 	; Race list Rebuilt by Cysis145 to fix Bug with selecting Race 
-	CRace = GY_CreateComboBoxS(WChar, 0.05, 0.05, 0.9, 1.5, LanguageString$(LS_Race))
+	CRace = GY_CreateComboBoxS(WChar, 0.05, 0.05, 0.9, .9, LanguageString$(LS_Race))
 	For A.Actor = Each Actor
 		If A\Playable = True
 			; Check every previous actor to make sure this race hasn't already been added
@@ -1999,9 +1999,9 @@ Function CreateChar()
 	GY_DropGadget(BRight)
 
 	; Character options
-	GY_CreateLabel(WChar, 0.5, 0.41, LanguageString$(LS_Gender), 255, 255, 255, Justify_Centre)
-	BNextGender = GY_CreateCustomButton(WChar, 0.86, 0.4, 0.1, 0.12, LoadButtonU("SmallRight"), LoadButtonD("SmallRight"), LoadButtonH("SmallRight"))
-	BPrevGender = GY_CreateCustomButton(WChar, 0.04, 0.4, 0.1, 0.12, LoadButtonU("SmallLeft"), LoadButtonD("SmallLeft"), LoadButtonH("SmallLeft"))
+	GY_CreateLabel(WChar, 0.5, 0.22, LanguageString$(LS_Gender), 255, 255, 255, Justify_Centre)
+	BNextGender = GY_CreateCustomButton(WChar, 0.86, 0.2, 0.1, 0.09, LoadButtonU("SmallRight"), LoadButtonD("SmallRight"), LoadButtonH("SmallRight"))
+	BPrevGender = GY_CreateCustomButton(WChar, 0.04, 0.2, 0.1, 0.09, LoadButtonU("SmallLeft"), LoadButtonD("SmallLeft"), LoadButtonH("SmallLeft"))
 	;BNextGender = GY_CreateButton(WChar, 0.86, 0.2, 0.1, 0.07, ">")
 	;BPrevGender = GY_CreateButton(WChar, 0.04, 0.2, 0.1, 0.07, "<")
 	; GY_CreateLabel(WChar, 0.5, 0.34, LanguageString$(LS_Class), 255, 255, 255, Justify_Centre)
@@ -2009,9 +2009,9 @@ Function CreateChar()
 	; BPrevClass = GY_CreateCustomButton(WChar, 0.04, 0.33, 0.1, 0.07, LoadButtonU("SmallLeft"), LoadButtonD("SmallLeft"), LoadButtonH("SmallLeft"))
 	;BNextClass = GY_CreateButton(WChar, 0.86, 0.33, 0.1, 0.07, ">")
 	;BPrevClass = GY_CreateButton(WChar, 0.04, 0.33, 0.1, 0.07, "<")
-	GY_CreateLabel(WChar, 0.5, 0.61, LanguageString$(LS_Hair), 255, 255, 255, Justify_Centre)
-	BNextHair = GY_CreateCustomButton(WChar, 0.86, 0.6, 0.1, 0.12, LoadButtonU("SmallRight"), LoadButtonD("SmallRight"), LoadButtonH("SmallRight"))
-	BPrevHair = GY_CreateCustomButton(WChar, 0.04, 0.6, 0.1, 0.12, LoadButtonU("SmallLeft"), LoadButtonD("SmallLeft"), LoadButtonH("SmallLeft"))
+	GY_CreateLabel(WChar, 0.5, 0.32, LanguageString$(LS_Hair), 255, 255, 255, Justify_Centre)
+	BNextHair = GY_CreateCustomButton(WChar, 0.86, 0.3, 0.1, 0.09, LoadButtonU("SmallRight"), LoadButtonD("SmallRight"), LoadButtonH("SmallRight"))
+	BPrevHair = GY_CreateCustomButton(WChar, 0.04, 0.3, 0.1, 0.09, LoadButtonU("SmallLeft"), LoadButtonD("SmallLeft"), LoadButtonH("SmallLeft"))
 	;BNextHair = GY_CreateButton(WChar, 0.86, 0.46, 0.1, 0.07, ">")
 	;BPrevHair = GY_CreateButton(WChar, 0.04, 0.46, 0.1, 0.07, "<")
 	; GY_CreateLabel(WChar, 0.5, 0.60, LanguageString$(LS_Face), 255, 255, 255, Justify_Centre)
@@ -2024,24 +2024,20 @@ Function CreateChar()
 	; BPrevBeard = GY_CreateCustomButton(WChar, 0.04, 0.72, 0.1, 0.07, LoadButtonU("SmallLeft"), LoadButtonD("SmallLeft"), LoadButtonH("SmallLeft"))
 	; ;BNextBeard = GY_CreateButton(WChar, 0.86, 0.72, 0.1, 0.07, ">")
 	;BPrevBeard = GY_CreateButton(WChar, 0.04, 0.72, 0.1, 0.07, "<")
-	GY_CreateLabel(WChar, 0.5, 0.81, LanguageString$(LS_Clothes), 255, 255, 255, Justify_Centre)
-	BNextBody = GY_CreateCustomButton(WChar, 0.86, 0.8, 0.1, 0.12, LoadButtonU("SmallRight"), LoadButtonD("SmallRight"), LoadButtonH("SmallRight"))
-	BPrevBody = GY_CreateCustomButton(WChar, 0.04, 0.8, 0.1, 0.12, LoadButtonU("SmallLeft"), LoadButtonD("SmallLeft"), LoadButtonH("SmallLeft"))
+	GY_CreateLabel(WChar, 0.5, 0.42, LanguageString$(LS_Clothes), 255, 255, 255, Justify_Centre)
+	BNextBody = GY_CreateCustomButton(WChar, 0.86, 0.4, 0.1, 0.09, LoadButtonU("SmallRight"), LoadButtonD("SmallRight"), LoadButtonH("SmallRight"))
+	BPrevBody = GY_CreateCustomButton(WChar, 0.04, 0.4, 0.1, 0.09, LoadButtonU("SmallLeft"), LoadButtonD("SmallLeft"), LoadButtonH("SmallLeft"))
 	;BNextBody = GY_CreateButton(WChar, 0.86, 0.85, 0.1, 0.07, ">")
 	;BPrevBody = GY_CreateButton(WChar, 0.04, 0.85, 0.1, 0.07, "<")
 	
-	; Class description
-	; Y# = 0.7
-	; For i = 0 To 9
-	; If ResolutionType = 1 ; 16:9 ratio [@@]
-	; 	LDescription(i) = GY_CreateLabel(0, 0.01 - 0.12, Y#, String$("W", 50), 255, 255, 255, Justify_Left) ;Justify_Center
-	; Else
-	; 	LDescription(i) = GY_CreateLabel(0, 0.01, Y#, String$("W", 50), 255, 255, 255, Justify_Left) ;Justify_Cente
-	; EndIf
-	; 	GY_DropGadget(LDescription(i))
-	; 	GY_UpdateLabel(LDescription(i), "")
-	; 	Y# = Y# + 0.025
-	; Next
+	;Class description
+	Y# = 0.5
+	For i = 0 To 9
+		LDescription(i) = GY_CreateLabel(WChar, 0.01, Y#, String$("W", 50), 255, 255, 255, Justify_Left) ;Justify_Cente
+		GY_DropGadget(LDescription(i))
+		GY_UpdateLabel(LDescription(i), "")
+		Y# = Y# + 0.05
+	Next
 
 	; Name box and Done button
 	;LName = GY_CreateLabel(0, 0.35, 0.86, LanguageString$(LS_CharacterName), 255, 255, 255, Justify_Right)
@@ -2166,7 +2162,7 @@ Function CreateChar()
 			GY_FreeGadget(ClassLab)
 			GY_FreeGadget(RemainingLabel) : GY_FreeGadget(SkillRemainingLabel)
 	
-			; For i = 0 To 9 : GY_FreeGadget(LDescription(i)) : Next
+			 For i = 0 To 9 : GY_FreeGadget(LDescription(i)) : Next
 			Return 0
 		EndIf
 
@@ -2265,7 +2261,7 @@ Function CreateChar()
 						;Character Options
 						;FreeEntity(GenderLabel)
 						;GY_FreeGadget(BNextGender)
-						; For i = 0 To 9 : GY_FreeGadget(LDescription(i)) : Next
+						 For i = 0 To 9 : GY_FreeGadget(LDescription(i)) : Next
 						Return 2
 					ElseIf Result = 1
 						GY_MessageBox("                   Attention!", LanguageString$(LS_InvalidCharName))
@@ -2283,7 +2279,7 @@ Function CreateChar()
 						;Character Options
 						;FreeEntity(GenderLabel)
 						;GY_FreeGadget(BNextGender)
-						; For i = 0 To 9 : GY_FreeGadget(LDescription(i)) : Next
+						 For i = 0 To 9 : GY_FreeGadget(LDescription(i)) : Next
 						Return 1
 					EndIf
 				EndIf
@@ -2307,7 +2303,7 @@ Function CreateChar()
 						EndIf
 					ElseIf GY_ButtonHit(AttributeIncrease(i)) = True
 						Att = GY_GadgetData$(AttributeLabels(i))
-						If PointsToSpend > 0 And (Preview\Attributes\Value[Att] + PointSpends(Att)) < (Preview\Attributes\Maximum[Att] - 5)
+						If PointsToSpend > 0 And (Preview\Attributes\Value[Att] + PointSpends(Att)) < (Preview\Attributes\Value[Att] + 13)
 							PointsToSpend = PointsToSpend - 1
 							PointSpends(Att) = PointSpends(Att) + 1
 							GY_UpdateLabel(AttributeLabels(i), Preview\Attributes\Value[Att] + PointSpends(Att))
@@ -2330,7 +2326,7 @@ Function CreateChar()
 						EndIf
 					ElseIf GY_ButtonHit(SkillIncrease(i)) = True
 						Att = GY_GadgetData$(SkillLabels(i))
-						If  SkillPointsToSpend > 0 And (Preview\Attributes\Value[Att] + PointSpends(Att)) < (Preview\Attributes\Maximum[Att] / 2)
+						If  SkillPointsToSpend > 0 And (Preview\Attributes\Value[Att] + PointSpends(Att)) < (Preview\Attributes\Value[Att] + 25)
 							SkillPointsToSpend = SkillPointsToSpend - 1
 							PointSpends(Att) = PointSpends(Att) + 1
 							GY_UpdateLabel(SkillLabels(i), Preview\Attributes\Value[Att] + PointSpends(Att))
@@ -2655,39 +2651,39 @@ Function SetUpPreview(Preview.Actor)
 		EndIf
 	Next
 
-	; Word wrap {{}}
-	; D$ = Preview\Race$ + " " + Preview\Class$ + ": " + Preview\Description$
-	; Gad.GY_Gadget = Object.GY_Gadget(LDescription(0))
-	; L = 0
-	; While GY_TextWidth#(Gad\EN, D$) > 0.18
-	; 	Found = False
-	; 	For i = Len(D$) To 1 Step -1
-	; 		If Mid$(D$, i, 1) = " "
-	; 			If GY_TextWidth#(Gad\EN, Left$(D$, i - 1)) <= 0.18
-	; 				GY_UpdateLabel(LDescription(L), Left$(D$, i - 1))
-	; 				D$ = Mid$(D$, i + 1)
-	; 				L = L + 1
-	; 				Found = True
-	; 				Exit
-	; 			EndIf
-	; 		EndIf
-	; 	Next
-	; 	If Found = False
-	; 		For i = Len(D$) To 1 Step -1
-	; 			If GY_TextWidth#(Gad\EN, Left$(D$, i - 1)) <= 0.18
-	; 				GY_UpdateLabel(LDescription(L), Left$(D$, i - 1))
-	; 				D$ = Mid$(D$, i)
-	; 				L = L + 1
-	; 				Exit
-	; 			EndIf
-	; 		Next
-	; 	EndIf
-	; 	If L = 9 Then Exit
-	; Wend
-	; GY_UpdateLabel(LDescription(L), D$)
-	; For i = L + 1 To 9
-	; 	GY_UpdateLabel(LDescription(i), "")
-	; Next
+	;Word wrap {{}}
+	D$ = GetPlayerRaceInfo$(Preview\Race$)
+	Gad.GY_Gadget = Object.GY_Gadget(LDescription(0))
+	L = 0
+	While GY_TextWidth#(Gad\EN, D$) > 0.215
+		Found = False
+		For i = Len(D$) To 1 Step -1
+			If Mid$(D$, i, 1) = " "
+				If GY_TextWidth#(Gad\EN, Left$(D$, i - 1)) <= 0.215
+					GY_UpdateLabel(LDescription(L), Left$(D$, i - 1))
+					D$ = Mid$(D$, i + 1)
+					L = L + 1
+					Found = True
+					Exit
+				EndIf
+			EndIf
+		Next
+		If Found = False
+			For i = Len(D$) To 1 Step -1
+				If GY_TextWidth#(Gad\EN, Left$(D$, i - 1)) <= 0.215
+					GY_UpdateLabel(LDescription(L), Left$(D$, i - 1))
+					D$ = Mid$(D$, i)
+					L = L + 1
+					Exit
+				EndIf
+			Next
+		EndIf
+		If L = 9 Then Exit
+	Wend
+	GY_UpdateLabel(LDescription(L), D$)
+	For i = L + 1 To 9
+		GY_UpdateLabel(LDescription(i), "")
+	Next
 
 End Function
 
