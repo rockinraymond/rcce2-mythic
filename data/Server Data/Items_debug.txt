@@ -130,3 +130,7 @@ Item ID: 32
 Item Name: Round Shield
 Range: 0.0
 
+Item ID: 33
+Item Name: Dagger +1
+Range: 0.0
+

@@ -889,6 +889,8 @@ Function UpdateInterface()
 						If AI\Actor\Aggressiveness < 3
 							 ;Check faction rating
 							If Me\FactionRatings[AI\HomeFaction] <= 150 Then AttackTarget = True
+							GY_FreeGadget(WContextMenu)
+							WContextMenu = 0
 						EndIf
 						;*************************************************************************
 					Else
@@ -906,23 +908,29 @@ Function UpdateInterface()
 						Y# = 0.0
 						; Interact button
 						Local interactLabel$ = "Interact"
+						Local iR = 0
+						Local iG = 255
+						Local iB = 0
 						If EntityDistance#(AI\CollisionEN, Me\CollisionEN) > InteractRange
 							interactLabel$ = "Move To"
+							iR = 255
+							iG = 255
+							iB = 255
 						EndIf
-						BInteract = GY_CreateButton(WContextMenu, Y#, 0.0, 1.0, 0.33, interactLabel$, False, 255, 255, 255, LoadTexture("Data\Textures\GUI\ToolTip.png"))
+						BInteract = GY_CreateButton(WContextMenu, Y#, 0.0, 1.0, 0.33, interactLabel$, False, iR, iG, iB)
 						Y# = Y# + 0.33
 						; Attack button (only if target is attackable)
 						If AI\Actor\Aggressiveness < 3 And Me\FactionRatings[AI\HomeFaction] <= 150
-							BAttack = GY_CreateButton(WContextMenu, 0.0, Y#, 1.0, 0.33, "Attack", False, 255, 255, 255, LoadTexture("Data\Textures\GUI\ToolTip.png"))
+							BAttack = GY_CreateButton(WContextMenu, 0.0, Y#, 1.0, 0.33, "Attack", False, 255, 0, 0)
 							Y# = Y# + 0.33
 						EndIf
 						
 						; Examine button
-						BExamine = GY_CreateButton(WContextMenu, 0.0, Y#, 1.0, 0.33, "Examine", False, 255, 255, 255, LoadTexture("Data\Textures\GUI\ToolTip.png"))
+						BExamine = GY_CreateButton(WContextMenu, 0.0, Y#, 1.0, 0.33, "Examine", False, 255, 255, 255)
 						Y# = Y# + 0.33
 						; Trade Button
 						If AI\Actor\TradeMode > 0
-							BTrade = GY_CreateButton(WContextMenu, 0.0, Y#, 1.0, 0.33, "Trade", False, 255, 255, 255, LoadTexture("Data\Textures\GUI\ToolTip.png"))
+							BTrade = GY_CreateButton(WContextMenu, 0.0, Y#, 1.0, 0.33, "Trade", False, 0, 255, 0)
 						EndIf
 
 						AttackTarget = False
@@ -1792,6 +1800,14 @@ EndIf
 			GY_ActivateWindow(WTooltipReturn) : WTooltipReturn = 0
 		EndIf
 		If LTooltip <> 0 Then GY_FreeGadget(LTooltip) : LTooltip = 0
+	EndIf
+
+	If (GY_LeftClick Or GY_RightClick) And (Not GY_WindowActive(WItemContext))
+		If WItemContext <> 0 
+				GY_FreeGadget(WItemContext)
+				WItemContext = 0
+				GY_ActivateWindow(WTooltipReturn) : WTooltipReturn = 0
+		EndIf
 	EndIf
 
    ; Action Bar ToolTip Cysis145 [##]
@@ -2724,27 +2740,59 @@ EndIf
 
 	; Inventory drop button clicked
 	If GY_ButtonHit(BInventoryDrop) > 0
-		If MouseSlotItem <> Null
-			Result = InventoryDrop(Me, MouseSlotSource, MouseSlotAmount, True)
+		If ContextItem <> Null
+			Result = InventoryDrop(Me, ContextSource, ContextAmount, True)
 			If Result <> 0
-				If Me\Inventory\Amounts[MouseSlotSource] > 0
-					GY_SetButtonState(BSlots(MouseSlotSource), False)
-					GYG.GY_Gadget = Object.GY_Gadget(BSlots(MouseSlotSource))
-					EntityTexture GYG\EN, GetTexture(Me\Inventory\Items[MouseSlotSource]\Item\ThumbnailTexID)
-					Amount = Me\Inventory\Amounts[MouseSlotSource]
+				If Me\Inventory\Amounts[ContextSource] > 0
+					GY_SetButtonState(BSlots(ContextSource), False)
+					GYG.GY_Gadget = Object.GY_Gadget(BSlots(ContextSource))
+					EntityTexture GYG\EN, GetTexture(Me\Inventory\Items[ContextSource]\Item\ThumbnailTexID)
+					Amount = Me\Inventory\Amounts[ContextSource]
 					If Amount > 1
-						GY_SetButtonLabel(BSlots(MouseSlotSource), Amount, 100, 255, 0, True)
+						GY_SetButtonLabel(BSlots(ContextSource), Amount, 100, 255, 0, True)
 					Else
-						GY_SetButtonLabel(BSlots(MouseSlotSource), "")
+						GY_SetButtonLabel(BSlots(ContextSource), "")
 					EndIf
 				Else
-					GY_SetButtonState(BSlots(MouseSlotSource), True)
-					GY_SetButtonLabel(BSlots(MouseSlotSource), "")
-					GYG.GY_Gadget = Object.GY_Gadget(BSlots(MouseSlotSource))
+					GY_SetButtonState(BSlots(ContextSource), True)
+					GY_SetButtonLabel(BSlots(ContextSource), "")
+					GYG.GY_Gadget = Object.GY_Gadget(BSlots(ContextSource))
 					GYB.GY_Button = Object.GY_Button(GYG\TypeHandle)
 					EntityTexture GYB\Gadget\EN, GYB\UserTexture
 				EndIf
-				HideEntity MouseSlotEN : MouseSlotItem = Null : MouseSlotAmount = 0 : MouseSlotSource = -1
+				ContextItem = Null : ContextAmount = 0 : ContextSource = -1
+				GY_FreeGadget(WItemContext)
+				WItemContext = 0
+				EnableInventoryBlanks(True)
+				UpdateActorItems(Me)
+			EndIf
+		EndIf
+
+		ElseIf GY_ButtonHit(BInventoryDropAll) > 0
+		If ContextItem <> Null
+		ContextAmount = Me\Inventory\Amounts[ContextSource]
+			Result = InventoryDrop(Me, ContextSource, ContextAmount, True)
+			If Result <> 0
+				If Me\Inventory\Amounts[ContextSource] > 0
+					GY_SetButtonState(BSlots(ContextSource), False)
+					GYG.GY_Gadget = Object.GY_Gadget(BSlots(ContextSource))
+					EntityTexture GYG\EN, GetTexture(Me\Inventory\Items[ContextSource]\Item\ThumbnailTexID)
+					Amount = Me\Inventory\Amounts[ContextSource]
+					If Amount > 1
+						GY_SetButtonLabel(BSlots(ContextSource), Amount, 100, 255, 0, True)
+					Else
+						GY_SetButtonLabel(BSlots(ContextSource), "")
+					EndIf
+				Else
+					GY_SetButtonState(BSlots(ContextSource), True)
+					GY_SetButtonLabel(BSlots(ContextSource), "")
+					GYG.GY_Gadget = Object.GY_Gadget(BSlots(ContextSource))
+					GYB.GY_Button = Object.GY_Button(GYG\TypeHandle)
+					EntityTexture GYB\Gadget\EN, GYB\UserTexture
+				EndIf
+				ContextItem = Null : ContextAmount = 0 : ContextSource = -1
+				GY_FreeGadget(WItemContext)
+				WItemContext = 0
 				EnableInventoryBlanks(True)
 				UpdateActorItems(Me)
 			EndIf
@@ -2755,104 +2803,112 @@ EndIf
 		;-----------------------------------------------------------------------------------------------------------------
 	; Inventory use button clicked
 	ElseIf GY_ButtonHit(BInventoryEat) > 0
-		If MouseSlotItem <> Null
-			UseItem(MouseSlotSource, MouseSlotAmount)
-			If Me\Inventory\Amounts[MouseSlotSource] > 0
-				GY_SetButtonState(BSlots(MouseSlotSource), False)
-				GYG.GY_Gadget = Object.GY_Gadget(BSlots(MouseSlotSource))
-				EntityTexture GYG\EN, GetTexture(Me\Inventory\Items[MouseSlotSource]\Item\ThumbnailTexID)
-				Amount = Me\Inventory\Amounts[MouseSlotSource]
+		If ContextItem <> Null
+			UseItem(ContextSource, ContextAmount)
+			If Me\Inventory\Amounts[ContextSource] > 0
+				GY_SetButtonState(BSlots(ContextSource), False)
+				GYG.GY_Gadget = Object.GY_Gadget(BSlots(ContextSource))
+				EntityTexture GYG\EN, GetTexture(Me\Inventory\Items[ContextSource]\Item\ThumbnailTexID)
+				Amount = Me\Inventory\Amounts[ContextSource]
 				If Amount > 1
-					GY_SetButtonLabel(BSlots(MouseSlotSource), Amount, 100, 255, 0, True)
+					GY_SetButtonLabel(BSlots(ContextSource), Amount, 100, 255, 0, True)
 				Else
-					GY_SetButtonLabel(BSlots(MouseSlotSource), "")
+					GY_SetButtonLabel(BSlots(ContextSource), "")
 				EndIf
 			Else
-				GY_SetButtonState(BSlots(MouseSlotSource), True)
-				GY_SetButtonLabel(BSlots(MouseSlotSource), "")
-				GYG.GY_Gadget = Object.GY_Gadget(BSlots(MouseSlotSource))
+				GY_SetButtonState(BSlots(ContextSource), True)
+				GY_SetButtonLabel(BSlots(ContextSource), "")
+				GYG.GY_Gadget = Object.GY_Gadget(BSlots(ContextSource))
 				GYB.GY_Button = Object.GY_Button(GYG\TypeHandle)
 				EntityTexture GYB\Gadget\EN, GYB\UserTexture
 			EndIf
-			HideEntity MouseSlotEN : MouseSlotItem = Null : MouseSlotAmount = 0 : MouseSlotSource = -1
+			ContextItem = Null : ContextAmount = 0 : ContextSource = -1
+			GY_FreeGadget(WItemContext)
+			WItemContext = 0
 			EnableInventoryBlanks(True)
 		EndIf
 
 	; Inventory enchant button clicked
 	ElseIf GY_ButtonHit(BInventoryEnchant) > 0
-		If MouseSlotItem <> Null
-			EnchantItem(MouseSlotSource, MouseSlotAmount)
-			If Me\Inventory\Amounts[MouseSlotSource] > 0
-				GY_SetButtonState(BSlots(MouseSlotSource), False)
-				GYG.GY_Gadget = Object.GY_Gadget(BSlots(MouseSlotSource))
-				EntityTexture GYG\EN, GetTexture(Me\Inventory\Items[MouseSlotSource]\Item\ThumbnailTexID)
-				Amount = Me\Inventory\Amounts[MouseSlotSource]
+		If ContextItem <> Null
+			EnchantItem(ContextSource, ContextAmount)
+			If Me\Inventory\Amounts[ContextSource] > 0
+				GY_SetButtonState(BSlots(ContextSource), False)
+				GYG.GY_Gadget = Object.GY_Gadget(BSlots(ContextSource))
+				EntityTexture GYG\EN, GetTexture(Me\Inventory\Items[ContextSource]\Item\ThumbnailTexID)
+				Amount = Me\Inventory\Amounts[ContextSource]
 				If Amount > 1
-					GY_SetButtonLabel(BSlots(MouseSlotSource), Amount, 100, 255, 0, True)
+					GY_SetButtonLabel(BSlots(ContextSource), Amount, 100, 255, 0, True)
 				Else
-					GY_SetButtonLabel(BSlots(MouseSlotSource), "")
+					GY_SetButtonLabel(BSlots(ContextSource), "")
 				EndIf
 			Else
-				GY_SetButtonState(BSlots(MouseSlotSource), True)
-				GY_SetButtonLabel(BSlots(MouseSlotSource), "")
-				GYG.GY_Gadget = Object.GY_Gadget(BSlots(MouseSlotSource))
+				GY_SetButtonState(BSlots(ContextSource), True)
+				GY_SetButtonLabel(BSlots(ContextSource), "")
+				GYG.GY_Gadget = Object.GY_Gadget(BSlots(ContextSource))
 				GYB.GY_Button = Object.GY_Button(GYG\TypeHandle)
 				EntityTexture GYB\Gadget\EN, GYB\UserTexture
 			EndIf
-			HideEntity MouseSlotEN : MouseSlotItem = Null : MouseSlotAmount = 0 : MouseSlotSource = -1
+			ContextItem = Null : ContextAmount = 0 : ContextSource = -1
+			GY_FreeGadget(WItemContext)
+			WItemContext = 0
 			EnableInventoryBlanks(True)
 		EndIf
 
 	; Inventory repair button clicked
 	ElseIf GY_ButtonHit(BInventoryRepair) > 0
-		If MouseSlotItem <> Null
-			RepairItem(MouseSlotSource, MouseSlotAmount)
-			If Me\Inventory\Amounts[MouseSlotSource] > 0
-				GY_SetButtonState(BSlots(MouseSlotSource), False)
-				GYG.GY_Gadget = Object.GY_Gadget(BSlots(MouseSlotSource))
-				EntityTexture GYG\EN, GetTexture(Me\Inventory\Items[MouseSlotSource]\Item\ThumbnailTexID)
-				Amount = Me\Inventory\Amounts[MouseSlotSource]
+		If ContextItem <> Null
+			RepairItem(ContextSource, ContextAmount)
+			If Me\Inventory\Amounts[ContextSource] > 0
+				GY_SetButtonState(BSlots(ContextSource), False)
+				GYG.GY_Gadget = Object.GY_Gadget(BSlots(ContextSource))
+				EntityTexture GYG\EN, GetTexture(Me\Inventory\Items[ContextSource]\Item\ThumbnailTexID)
+				Amount = Me\Inventory\Amounts[ContextSource]
 				If Amount > 1
-					GY_SetButtonLabel(BSlots(MouseSlotSource), Amount, 100, 255, 0, True)
+					GY_SetButtonLabel(BSlots(ContextSource), Amount, 100, 255, 0, True)
 				Else
-					GY_SetButtonLabel(BSlots(MouseSlotSource), "")
+					GY_SetButtonLabel(BSlots(ContextSource), "")
 				EndIf
 			Else
-				GY_SetButtonState(BSlots(MouseSlotSource), True)
-				GY_SetButtonLabel(BSlots(MouseSlotSource), "")
-				GYG.GY_Gadget = Object.GY_Gadget(BSlots(MouseSlotSource))
+				GY_SetButtonState(BSlots(ContextSource), True)
+				GY_SetButtonLabel(BSlots(ContextSource), "")
+				GYG.GY_Gadget = Object.GY_Gadget(BSlots(ContextSource))
 				GYB.GY_Button = Object.GY_Button(GYG\TypeHandle)
 				EntityTexture GYB\Gadget\EN, GYB\UserTexture
 			EndIf
-			HideEntity MouseSlotEN : MouseSlotItem = Null : MouseSlotAmount = 0 : MouseSlotSource = -1
+			ContextItem = Null : ContextAmount = 0 : ContextSource = -1
+			GY_FreeGadget(WItemContext)
+			WItemContext = 0
 			EnableInventoryBlanks(True)
 		EndIf
 
 		; Inventory dismantle button clicked
 	ElseIf GY_ButtonHit(BInventoryDismantle) > 0
-		If MouseSlotItem <> Null
-			DismantleItem(MouseSlotSource, MouseSlotAmount)
-			If Me\Inventory\Amounts[MouseSlotSource] > 0
-				GY_SetButtonState(BSlots(MouseSlotSource), False)
-				GYG.GY_Gadget = Object.GY_Gadget(BSlots(MouseSlotSource))
-				EntityTexture GYG\EN, GetTexture(Me\Inventory\Items[MouseSlotSource]\Item\ThumbnailTexID)
-				Amount = Me\Inventory\Amounts[MouseSlotSource]
+		If ContextItem <> Null
+			DismantleItem(ContextSource, ContextAmount)
+			If Me\Inventory\Amounts[ContextSource] > 0
+				GY_SetButtonState(BSlots(ContextSource), False)
+				GYG.GY_Gadget = Object.GY_Gadget(BSlots(ContextSource))
+				EntityTexture GYG\EN, GetTexture(Me\Inventory\Items[ContextSource]\Item\ThumbnailTexID)
+				Amount = Me\Inventory\Amounts[ContextSource]
 				If Amount > 1
-					GY_SetButtonLabel(BSlots(MouseSlotSource), Amount, 100, 255, 0, True)
+					GY_SetButtonLabel(BSlots(ContextSource), Amount, 100, 255, 0, True)
 				Else
-					GY_SetButtonLabel(BSlots(MouseSlotSource), "")
+					GY_SetButtonLabel(BSlots(ContextSource), "")
 				EndIf
 			Else
-				GY_SetButtonState(BSlots(MouseSlotSource), True)
-				GY_SetButtonLabel(BSlots(MouseSlotSource), "")
-				GYG.GY_Gadget = Object.GY_Gadget(BSlots(MouseSlotSource))
+				GY_SetButtonState(BSlots(ContextSource), True)
+				GY_SetButtonLabel(BSlots(ContextSource), "")
+				GYG.GY_Gadget = Object.GY_Gadget(BSlots(ContextSource))
 				GYB.GY_Button = Object.GY_Button(GYG\TypeHandle)
 				EntityTexture GYB\Gadget\EN, GYB\UserTexture
 			EndIf
-			HideEntity MouseSlotEN : MouseSlotItem = Null : MouseSlotAmount = 0 : MouseSlotSource = -1
+			ContextItem = Null : ContextAmount = 0 : ContextSource = -1
+			GY_FreeGadget(WItemContext)
+			WItemContext = 0
 			EnableInventoryBlanks(True)
+			EndIf
 		EndIf
-	EndIf
 
 
 	
@@ -2861,6 +2917,10 @@ EndIf
 	; Inventory slot clicked
 	For i = 0 To Slots_Inventory
 		If GY_ButtonHit(BSlots(i)) > 0
+		If WItemContext <> 0 
+				GY_FreeGadget(WItemContext)
+				WItemContext = 0
+			EndIf
 			; Mouse is empty - pick up item
 			If MouseSlotItem = Null
 				; Pick up all items
@@ -2992,9 +3052,51 @@ EndIf
 					EndIf
 				EndIf
 			EndIf
-		; Item right clicked - use it
+		; Item right clicked - use it ;going to make anew context menu here!
 		ElseIf GY_ButtonRightHit(BSlots(i)) And MouseSlotItem = Null
-			UseItem(i, 1)
+			;UseItem(i, 1)
+			; Create context menu
+			ContextItem = Me\Inventory\Items[i]
+			ContextAmount = 1
+			ContextSource = i
+			NumOfContextButtons = 2
+
+			If ContextItem\Item\TakesDamage > 0 Then NumOfContextButtons = NumOfContextButtons + 1
+			If ContextItem\Item\ItemType < 4 Then NumOfContextButtons = NumOfContextButtons + 1
+			If Me\Inventory\Amounts[i] > 1 Then NumOfContextButtons = NumOfContextButtons + 1
+
+			If WItemContext <> 0 
+				GY_FreeGadget(WItemContext)
+				WItemContext = 0
+			EndIf
+			
+			WItemContext = GY_CreateWindow("", GY_MouseX#, GY_MouseY#, 0.08, NumOfContextButtons * 0.03, false, false, False, CreateTexture(2, 2))
+			WTooltipReturn = WInventory
+			Y# = 0.0
+			; Use button
+			BInventoryEat = GY_CreateButton(WItemContext, Y#, 0.0, 1.0, 1.0 / NumOfContextButtons, "Use", False, 255, 255, 255)
+			Y# = Y# + (1.0 / NumOfContextButtons)
+			; Repair button
+			If Me\Inventory\Items[i]\Item\TakesDamage > 0
+				BInventoryRepair = GY_CreateButton(WItemContext, 0.0, Y#, 1.0, 1.0 / NumOfContextButtons, "Repair", False, 255, 255, 255)
+				Y# = Y# + (1.0 / NumOfContextButtons)
+			EndIf
+			; Enchant/DIsEnchant button
+			If Me\Inventory\Items[i]\Item\ItemType < 4
+				If Me\Inventory\Items[i]\Item\Rarity > 1
+					BInventoryDismantle = GY_CreateButton(WItemContext, 0.0, Y#, 1.0, 1.0 / NumOfContextButtons, "Disenchant", False, 255, 255, 255)
+				Else
+					BInventoryEnchant = GY_CreateButton(WItemContext, 0.0, Y#, 1.0, 1.0 / NumOfContextButtons, "Enchant", False, 255, 255, 255)
+				EndIf
+				Y# = Y# + (1.0 / NumOfContextButtons)
+			EndIf
+			; Drop button
+			BInventoryDrop = GY_CreateButton(WItemContext, 0.0, Y#, 1.0, 1.0 / NumOfContextButtons, "Drop", False, 255, 255, 255)
+			;Drop All
+			IF (Me\Inventory\Amounts[i] > 1)
+				Y# = Y# + (1.0 / NumOfContextButtons)
+				BInventoryDropAll = GY_CreateButton(WItemContext, 0.0, Y#, 1.0, 1.0 / NumOfContextButtons, "Drop All", False, 255, 255, 255)
+			EndIf
 		EndIf
 	Next
 
@@ -3014,11 +3116,11 @@ EndIf
 			If InventoryVisible = True
 				GY_GadgetAlpha(WInventory, 1.0, True);0.75
 				GY_UpdateLabel(LInventoryGold, Money$(Me\Gold))
-				GY_LockGadget(BInventoryDrop)
-				GY_LockGadget(BInventoryEat)
-				GY_LockGadget(BInventoryEnchant)
-				GY_LockGadget(BInventoryRepair)
-				GY_LockGadget(BInventoryDismantle)
+				; GY_LockGadget(BInventoryDrop)
+				; GY_LockGadget(BInventoryEat)
+				; GY_LockGadget(BInventoryEnchant)
+				; GY_LockGadget(BInventoryRepair)
+				; GY_LockGadget(BInventoryDismantle)
 				GY_ActivateWindow(WInventory)
 				; Display thumbnails
 				LockTextures()
@@ -3067,6 +3169,12 @@ EndIf
 					MouseSlotItem = Null
 					MouseSlotAmount = 0
 					HideEntity MouseSlotEN
+				EndIf
+				GY_FreeGadget(WItemContext)
+				WItemContext = 0
+				If ContextItem <> Null
+					ContextItem = Null
+					ContextAmount = 0
 				EndIf
 			EndIf
 		Else
@@ -3209,6 +3317,12 @@ EndIf
 					MouseSlotItem = Null
 					MouseSlotAmount = 0
 					HideEntity MouseSlotEN
+				EndIf
+				GY_FreeGadget(WItemContext)
+				WItemContext = 0
+				If ContextItem <> Null
+					ContextItem = Null
+					ContextAmount = 0
 				EndIf
 				GY_SetButtonState(BInventory, False)
 			; Hide spellbook
@@ -4206,11 +4320,11 @@ Function CreateInterface()
 	Height# = InventoryWindow\Height#
 	WInventory = GY_CreateWindow(LanguageString$(LS_Inventory), X#, Y#, Width#, Height#, True, True, False, LoadTexture("Data\Textures\GUI\InventoryBG.png"))
 	LInventoryGold = GY_CreateLabel(WInventory, InventoryGold\X#, InventoryGold\Y#, "00000000000000000000000000000000000000000000000000000000")
-	BInventoryEat = GY_CreateButton(WInventory, InventoryEat\X#, InventoryEat\Y#, InventoryEat\Width#, InventoryEat\Height#, LanguageString$(LS_Use))
-	BInventoryRepair = GY_CreateButton(WInventory, InventoryEat\X#, InventoryEat\Y# + 0.07, InventoryEat\Width#, InventoryEat\Height#, "Repair")
-	BInventoryEnchant = GY_CreateButton(WInventory, InventoryEat\X#, InventoryEat\Y# + 0.14, InventoryEat\Width#, InventoryEat\Height#, "Enchant")
-	BInventoryDismantle = GY_CreateButton(WInventory, InventoryEat\X#, InventoryEat\Y# + 0.21, InventoryEat\Width#, InventoryEat\Height#, "Dismantle")
-	BInventoryDrop = GY_CreateButton(WInventory, InventoryDrop\X#, InventoryEat\Y# + 0.28, InventoryDrop\Width#, InventoryEat\Height#, LanguageString$(LS_Drop))
+	; BInventoryEat = GY_CreateButton(WInventory, InventoryEat\X#, InventoryEat\Y#, InventoryEat\Width#, InventoryEat\Height#, LanguageString$(LS_Use))
+	; BInventoryRepair = GY_CreateButton(WInventory, InventoryEat\X#, InventoryEat\Y# + 0.07, InventoryEat\Width#, InventoryEat\Height#, "Repair")
+	; BInventoryEnchant = GY_CreateButton(WInventory, InventoryEat\X#, InventoryEat\Y# + 0.14, InventoryEat\Width#, InventoryEat\Height#, "Enchant")
+	; BInventoryDismantle = GY_CreateButton(WInventory, InventoryEat\X#, InventoryEat\Y# + 0.21, InventoryEat\Width#, InventoryEat\Height#, "Dismantle")
+	; BInventoryDrop = GY_CreateButton(WInventory, InventoryDrop\X#, InventoryEat\Y# + 0.28, InventoryDrop\Width#, InventoryEat\Height#, LanguageString$(LS_Drop))
 	
 	Tex = LoadTexture("Data\Textures\GUI\Weapon.bmp", 4)
 	CreateInventoryButton(WInventory, SlotI_Weapon, Tex)
@@ -4300,11 +4414,11 @@ End Function
 ; Enables/disables all the buttons for empty inventory slots
 Function EnableInventoryBlanks(Disable = False)
 
-	GY_LockGadget(BInventoryDrop, Disable)
-	GY_LockGadget(BInventoryEat, Disable)
-	GY_LockGadget(BInventoryEnchant, Disable)
-	GY_LockGadget(BInventoryRepair, Disable)
-	GY_LockGadget(BInventoryDismantle, Disable)
+	; GY_LockGadget(BInventoryDrop, Disable)
+	; GY_LockGadget(BInventoryEat, Disable)
+	; GY_LockGadget(BInventoryEnchant, Disable)
+	; GY_LockGadget(BInventoryRepair, Disable)
+	; GY_LockGadget(BInventoryDismantle, Disable)
 	For i = 0 To Slots_Inventory
 		If BSlots(i) <> 0
 			If Me\Inventory\Items[i] = Null Then GY_LockGadget(BSlots(i), Disable)

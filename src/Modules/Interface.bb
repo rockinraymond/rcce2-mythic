@@ -104,9 +104,10 @@ Global MapVisible
 
 ; Inventory window
 Global WInventory, InventoryVisible = False
-Global LInventoryGold, BInventoryDrop, BInventoryEat, BInventoryEnchant, BInventoryRepair, BInventoryDismantle
+Global LInventoryGold, WItemContext = 0, BInventoryDrop, BInventoryDropAll, BInventoryEat, BInventoryEnchant, BInventoryRepair, BInventoryDismantle
 Global WAmount, BAmountOK, TAmount, AmountSlot, AmountVisible
 Global MouseSlotEN, MouseSlotItem.ItemInstance, MouseSlotAmount, MouseSlotSource = -1
+Global ContextItem.ItemInstance, ContextAmount, ContextSource = -1 ;added for item actions
 Dim BSlots(Slots_Inventory)
 Global WItemWindow, ItemWindowFromInventory ; Image Item Window
 
