@@ -134,3 +134,31 @@ Item ID: 33
 Item Name: Dagger +1
 Range: 0.0
 
+Item ID: 34
+Item Name: Platemail Armor
+Range: 0.0
+
+Item ID: 35
+Item Name: Full Helm
+Range: 0.0
+
+Item ID: 36
+Item Name: Plated Greaves
+Range: 0.0
+
+Item ID: 37
+Item Name: Plated Boots
+Range: 0.0
+
+Item ID: 38
+Item Name: Plated Gauntlets
+Range: 0.0
+
+Item ID: 39
+Item Name: Plated Belt
+Range: 0.0
+
+Item ID: 40
+Item Name: Kite Shield
+Range: 0.0
+
