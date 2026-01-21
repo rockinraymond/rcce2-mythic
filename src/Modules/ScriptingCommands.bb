@@ -1954,6 +1954,14 @@ Function BVM_ATTRIBUTE%(Param1%, Param2$)
 Return Result%
 End Function
 
+Function BVM_ZZACTORINVMASS%(Param1%)
+	Actor.ActorInstance = Object.ActorInstance(Param1%)
+	If Actor <> Null
+		Result% = InventoryMass(Actor\Inventory)
+	EndIf
+Return Result%
+End Function
+
 Function BVM_SETMAXATTRIBUTE(Param1%, Param2$, Param3%)
 	Actor.ActorInstance = Object.ActorInstance(Param1%)
 	If Actor <> Null

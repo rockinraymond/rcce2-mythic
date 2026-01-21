@@ -1208,6 +1208,24 @@ Function GetAttackSpeedString$(AttackSpeed)
 	Return SpeedString
 End Function
 
+Function GetActorLightLoad(AI.ActorInstance)
+	ActorStrength =  AI\Attributes\Value[FindAttribute("Strength")]
+	ActorToughness =  AI\Attributes\Value[FindAttribute("Toughness")]
+
+	CarryBonus = (((ActorStrength + ActorToughness) / 2) - 9) * 5
+	Return 60 + CarryBonus
+
+End Function
+
+Function GetActorHeavyLoad(AI.ActorInstance)
+	ActorStrength =  AI\Attributes\Value[FindAttribute("Strength")]
+	ActorToughness =  AI\Attributes\Value[FindAttribute("Toughness")]
+
+	CarryBonus = (((ActorStrength + ActorToughness) / 2) - 9) * 5
+	Return 150 + CarryBonus
+
+End Function
+
 Function MobXPStandard(MobLevel)
 	Select MobLevel
 		Case 1

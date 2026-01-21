@@ -1,0 +1,33 @@
+Using "RC_Core.rcm"
+; Default equipped items change script for player characters
+; You may alter this script however you like, but DO NOT RENAME OR DELETE IT
+
+; The entry function for this script is always "Main"
+; The context actor for the script is null
+Function Main()
+Player = Actor()
+output(player,"test")
+SetMovementSpeed(Player)
+
+End Function
+
+Function SetMovementSpeed(Player)
+	StandardMovement = 30
+	PlayerMovement = StandardMovement
+	PlayerMass = ZZACTORINVMASS(Player)
+
+	PlayerStrength = Attribute(Player,"Strength")
+	PlayerToughness = Attribute(Player, "Toughness")
+	PlayerCarryBonus = (((PlayerStrength + PlayerToughness) / 2) - 9) * 5
+	PlayerLightLoad = 60 + PlayerCarryBonus
+	PlayerHeavyLoad = 150 + PlayerCarryBonus
+    
+    If PlayerMass > PlayerHeavyLoad
+		PlayerMovement = 0
+	ElseIf PlayerMass > PlayerLightLoad
+		PlayerMovement = PlayerMovement - 10
+	EndIf
+
+	SETATTRIBUTE(Player, "Movement", PlayerMovement)
+
+End Function

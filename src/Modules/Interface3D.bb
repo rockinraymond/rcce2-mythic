@@ -1725,6 +1725,11 @@ Function UpdateInterface()
 		EndIf
 	EndIf
 
+	If InventoryVisible = True
+		GY_UpdateLabel(LInventoryMass, "Carried Weight: " + InventoryMass(Me\Inventory))
+	EndIf
+
+
 	; Update character stats window
 	If CharStatsVisible = True
 		; Reputation and gold display
@@ -3116,6 +3121,9 @@ EndIf
 			If InventoryVisible = True
 				GY_GadgetAlpha(WInventory, 1.0, True);0.75
 				GY_UpdateLabel(LInventoryGold, Money$(Me\Gold))
+				GY_UpdateLabel(LInventoryMass, "Carried Weight: " + InventoryMass(Me\Inventory))
+				GY_UpdateLabel(LInventoryLightLoad, "Light Load: " + GetActorLightLoad(Me))
+				GY_UpdateLabel(LInventoryHeavyLoad, "Heavy Load: " + GetActorHeavyLoad(Me))
 				; GY_LockGadget(BInventoryDrop)
 				; GY_LockGadget(BInventoryEat)
 				; GY_LockGadget(BInventoryEnchant)
@@ -4319,7 +4327,15 @@ Function CreateInterface()
 	Width# = InventoryWindow\Width#
 	Height# = InventoryWindow\Height#
 	WInventory = GY_CreateWindow(LanguageString$(LS_Inventory), X#, Y#, Width#, Height#, True, True, False, LoadTexture("Data\Textures\GUI\InventoryBG.png"))
+	GY_CreateLabel(WInventory, InventoryGold\X#, InventoryGold\Y# - 0.03, "MONEY")
 	LInventoryGold = GY_CreateLabel(WInventory, InventoryGold\X#, InventoryGold\Y#, "00000000000000000000000000000000000000000000000000000000")
+	GY_CreateLabel(WInventory, InventoryGold\X#, InventoryGold\Y# + 0.05, "ENCUMBRANCE")
+	LInventoryLightLoad = GY_CreateLabel(WInventory, InventoryGold\X#, InventoryGold\Y# + 0.08, "Light Load: 00000")
+	LInventoryHeavyLoad = GY_CreateLabel(WInventory, InventoryGold\X#, InventoryGold\Y# + 0.11, "Heavy Load: 00000")
+	LInventoryMass = GY_CreateLabel(WInventory, InventoryGold\X#, InventoryGold\Y# + 0.14, "Carried Weight: 00000")
+
+
+
 	; BInventoryEat = GY_CreateButton(WInventory, InventoryEat\X#, InventoryEat\Y#, InventoryEat\Width#, InventoryEat\Height#, LanguageString$(LS_Use))
 	; BInventoryRepair = GY_CreateButton(WInventory, InventoryEat\X#, InventoryEat\Y# + 0.07, InventoryEat\Width#, InventoryEat\Height#, "Repair")
 	; BInventoryEnchant = GY_CreateButton(WInventory, InventoryEat\X#, InventoryEat\Y# + 0.14, InventoryEat\Width#, InventoryEat\Height#, "Enchant")

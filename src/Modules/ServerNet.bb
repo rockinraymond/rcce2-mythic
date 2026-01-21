@@ -1232,6 +1232,7 @@ Function UpdateNetwork()
 						D.DroppedItem = Object.DroppedItem(RCE_IntFromStr(Mid$(M\MessageData$, 2, 4)))
 						If D <> Null
 							AI.ActorInstance = FindActorInstanceFromRNID(M\FromID)
+							ThreadScript("InventoryUpdate", "Main", Handle(AI), 0)
 							If AI <> Null
 								SlotI = RCE_IntFromStr(Mid$(M\MessageData$, 6, 1))
 								If AI\Inventory\Items[SlotI] = Null Or (ItemInstancesIdentical(D\Item, AI\Inventory\Items[SlotI]) And D\Item\Item\Stackable = True And SlotI >= SlotI_Backpack)
@@ -1269,6 +1270,7 @@ Function UpdateNetwork()
 					; Item dropped
 					Case "D"
 						AI.ActorInstance = FindActorInstanceFromRNID(M\FromID)
+						ThreadScript("InventoryUpdate", "Main", Handle(AI), 0)
 						If AI <> Null
 							Slot = RCE_IntFromStr(Mid$(M\MessageData$, 2, 1))
 							Amount = RCE_IntFromStr(Mid$(M\MessageData$, 3, 2))
@@ -1297,6 +1299,7 @@ Function UpdateNetwork()
 					; Reply to a given item message
 					Case "G"
 						AI.ActorInstance = FindActorInstanceFromRNID(M\FromID)
+						ThreadScript("InventoryUpdate", "Main", Handle(AI), 0)
 						II.ItemInstance = Object.ItemInstance(RCE_IntFromStr(Mid$(M\MessageData$, 3, 4)))
 						If II <> Null And AI <> Null
 							If II\Assignment > 0
@@ -1327,6 +1330,7 @@ Function UpdateNetwork()
 						SlotB = RCE_IntFromStr(Mid$(M\MessageData$, 5, 1))
 						Amount = RCE_IntFromStr(Mid$(M\MessageData$, 6, 2))
 						AI.ActorInstance = RuntimeIDList(RuntimeID)
+						ThreadScript("InventoryUpdate", "Main", Handle(AI), 0)
 						AIFrom.ActorInstance = FindActorInstanceFromRNID(M\FromID)
 						; Check that actor instance is valid (e.g. it isn't trying to change someone else's inventory)
 						If AI <> Null And AIFrom <> Null
