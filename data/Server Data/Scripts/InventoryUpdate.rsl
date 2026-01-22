@@ -18,7 +18,7 @@ Function SetMovementSpeed(Player)
     PlayerArmor = ActorChest(Player)
 
     ArmorClass = ZZITEMARMORCLASS(PlayerArmor)
-     Output(Player, "armor class: " + ArmorClass, 255, 255, 0)
+     ;Output(Player, "armor class: " + ArmorClass, 255, 255, 0)
 
 
     Select ArmorClass
@@ -31,7 +31,7 @@ Function SetMovementSpeed(Player)
     End Select
 
     ArmorRarity = ZZITEMRARITY(PlayerArmor)
-     Output(Player, "rarity: " + ArmorRarity, 255, 255, 0)
+     ;Output(Player, "rarity: " + ArmorRarity, 255, 255, 0)
 
     If (ArmorRarity > 1) ;magic armor bonus
         PlayerMovement = PlayerMovement + 5
@@ -51,7 +51,7 @@ Function SetMovementSpeed(Player)
 		PlayerMovement = PlayerMovement - 10
 	EndIf
 
-    Output(Player, "current Speed: " + PlayerMovement, 255, 255, 0)
+    ;Output(Player, "current Speed: " + PlayerMovement, 255, 255, 0)
 
 	SETATTRIBUTE(Player, "Movement", PlayerMovement)
 
