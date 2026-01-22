@@ -162,3 +162,11 @@ Item ID: 40
 Item Name: Kite Shield
 Range: 0.0
 
+Item ID: 41
+Item Name: Leather Armor +1
+Range: 0.0
+
+Item ID: 42
+Item Name: Chainmail Armor +1
+Range: 0.0
+

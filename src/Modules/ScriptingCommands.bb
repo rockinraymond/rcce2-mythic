@@ -692,6 +692,18 @@ Function BVM_ITEMWEAPONTYPE%(Param1%)
 Return Result%
 End Function
 
+Function BVM_ZZITEMARMORCLASS%(Param1%)
+	Item.ItemInstance = Object.ItemInstance(Param1%)
+	If Item <> Null Then Result% = Item\Item\ArmourClass
+Return Result%
+End Function
+
+Function BVM_ZZITEMRARITY%(Param1%)
+	Item.ItemInstance = Object.ItemInstance(Param1%)
+	If Item <> Null Then Result% = Item\Item\Rarity
+Return Result%
+End Function
+
 Function BVM_ITEMARMOR%(Param1%)
 	Item.ItemInstance = Object.ItemInstance(Param1%)
 	If Item <> Null Then Result% = Item\Item\ArmourLevel

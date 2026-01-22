@@ -6,15 +6,37 @@ Using "RC_Core.rcm"
 ; The context actor for the script is null
 Function Main()
 Player = Actor()
-output(player,"test")
 SetMovementSpeed(Player)
 
 End Function
 
 Function SetMovementSpeed(Player)
-	StandardMovement = 30
+	StandardMovement = 35
 	PlayerMovement = StandardMovement
 	PlayerMass = ZZACTORINVMASS(Player)
+
+    PlayerArmor = ActorChest(Player)
+
+    ArmorClass = ZZITEMARMORCLASS(PlayerArmor)
+     Output(Player, "armor class: " + ArmorClass, 255, 255, 0)
+
+
+    Select ArmorClass
+        case 1 ; leather
+            PlayerMovement = PlayerMovement - 5
+        case 2 ;chain
+            PlayerMovement = PlayerMovement - 7
+        case 3 ;plate
+            PlayerMovement = PlayerMovement - 10
+    End Select
+
+    ArmorRarity = ZZITEMRARITY(PlayerArmor)
+     Output(Player, "rarity: " + ArmorRarity, 255, 255, 0)
+
+    If (ArmorRarity > 1) ;magic armor bonus
+        PlayerMovement = PlayerMovement + 5
+    EndIf
+
 
 	PlayerStrength = Attribute(Player,"Strength")
 	PlayerToughness = Attribute(Player, "Toughness")
@@ -24,9 +46,12 @@ Function SetMovementSpeed(Player)
     
     If PlayerMass > PlayerHeavyLoad
 		PlayerMovement = 0
+        Output(Player, "You are over-encumbered", 255, 0, 0)
 	ElseIf PlayerMass > PlayerLightLoad
 		PlayerMovement = PlayerMovement - 10
 	EndIf
+
+    Output(Player, "current Speed: " + PlayerMovement, 255, 255, 0)
 
 	SETATTRIBUTE(Player, "Movement", PlayerMovement)
 
