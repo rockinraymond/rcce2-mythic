@@ -7,17 +7,55 @@ Using "RC_Core.rcm"
 Function Main()
 
 	Player = Actor()
+	CurrentLevel = ActorLevel(Player)
+	
+	If(CurrentLevel < 5) ;Max level check
+		XP = ActorXP(Player)
+		ActorRace$ = Race(Player)
+		NextXp = 1000 * (2 ^ CurrentLevel)
 
-	XP = ActorXP(Player)
-	Lvl = ActorLevel(Player)
+		If (CurrentLevel - 1) > 0
+			LastXP = 1000 * (2 ^ (CurrentLevel - 1))
+		Else
+			LastXP = 0
+		EndIf
 
-	; Player gets a level-up
-	If (XP > Lvl * 1000)
-		Lvl = Lvl + 1
-		SetActorLevel(Player, Lvl)
-		Output(Player, "You advanced to level " + Lvl + "!")
+		Select ActorRace$
+			case "Elf"
+				NextXp = NextXp * 1.5
+				LastXp = LastXp * 1.5
+			case "Dwarf"
+				NextXp = NextXp * 1.3
+				LastXp = LastXp * 1.3
+			case "Halfling"
+				NextXp = NextXp * 1.3
+				LastXp = LastXp * 1.3
+			case "Gnome"
+				NextXp = NextXp * 1.3
+				LastXp = LastXp * 1.3
+			case "Half Orc"
+				NextXp = NextXp * 1.2
+				LastXp = LastXp * 1.2
+			case "Half Elf"
+				NextXp = NextXp * 1.2
+				LastXp = LastXp * 1.2
+		End Select
+
+	
+		; Player gets a level-up
+		If (XP >= NextXP)
+			Lvl = CurrentLevel + 1
+			SetActorLevel(Player, Lvl)
+			Output(Player, "Congratulations, you have advanced to level " + Lvl + "!",255,255,0)
+		ElseIf (XP < LastXP)
+			Lvl = CurrentLevel - 1
+			If Lvl < 1 Then Return
+			SetActorLevel(Player, Lvl)
+			Output(Player, "You have lost a level and are now level " + Lvl + "!",155,0,255)
+		EndIf
 	EndIf
 
+	
 	Return
 
 End Function

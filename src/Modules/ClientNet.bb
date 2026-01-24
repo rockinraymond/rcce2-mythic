@@ -634,7 +634,7 @@ Function UpdateNetwork()
 				ElseIf Left(M\MessageData$, 1) = "U"
 					Level = RCE_IntFromStr(Mid$(M\MessageData$, 2))
 					Me\Level = Level
-					Me\XP = 0
+					;Me\XP = 0
 				EndIf
 
 			; Animate actor

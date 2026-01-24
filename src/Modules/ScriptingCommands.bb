@@ -1653,7 +1653,7 @@ End Function
 Function BVM_SETACTORLEVEL(Param1%, Param2%)
 	Actor.ActorInstance = Object.ActorInstance(Param1%)
 	If Actor <> Null
-		Actor\XP = 0
+		;Actor\XP = 0
 		Actor\Level = Param2%
 
 		; Tell this player if actor is human
