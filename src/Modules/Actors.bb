@@ -151,6 +151,7 @@ Dim AttributeIsSkill(39) ; False for a stat (health, strength, armour), True for
 Dim AttributeHidden(39)
 Type Attributes
 	Field Value[39]
+	Field BaseValue[39]
 	Field Maximum[39]
 	Field Xp[39]
 	Field XpMax[39]
@@ -228,6 +229,7 @@ Function WriteActorInstance(Stream, A.ActorInstance)
 	WriteShort Stream, A\BodyTex
 	For i = 0 To 39
 		WriteShort Stream, A\Attributes\Value[i]
+		WriteShort Stream, A\Attributes\BaseValue[i]
 		WriteShort Stream, A\Attributes\Maximum[i]
 		WriteShort Stream, A\Attributes\Xp[i]
 		WriteShort Stream, A\Attributes\XpMax[i]
@@ -305,6 +307,7 @@ Function ReadActorInstance.ActorInstance(Stream)
 	A\BodyTex    = ReadShort(Stream)
 	For i = 0 To 39
 		A\Attributes\Value[i]   = ReadShort(Stream)
+		A\Attributes\BaseValue[i]   = ReadShort(Stream)
 		A\Attributes\Maximum[i] = ReadShort(Stream)
 		A\Attributes\Xp[i]   = ReadShort(Stream)
 		A\Attributes\XpMax[i] = ReadShort(Stream)
@@ -413,6 +416,7 @@ Function CreateActorInstance.ActorInstance(Actor.Actor)
 	Next
 	For i = 0 To 39
 		A\Attributes\Value[i] = A\Actor\Attributes\Value[i]
+		A\Attributes\BaseValue[i] = A\Actor\Attributes\Value[i]
 		A\Attributes\Maximum[i] = A\Actor\Attributes\Maximum[i]
 		A\Attributes\Xp[i] = A\Actor\Attributes\Xp[i]
 		A\Attributes\XpMax[i] = A\Actor\Attributes\XpMax[i]
@@ -565,6 +569,7 @@ Function LoadActors(Filename$)
 			A\BloodTexID = ReadShort(F)
 			For i = 0 To 39
 				A\Attributes\Value[i] = ReadShort(F)
+				A\Attributes\BaseValue[i] = ReadShort(F)
 				A\Attributes\Maximum[i] = ReadShort(F)
 				A\Attributes\Xp[i] = ReadShort(F)
 				A\Attributes\XpMax[i] = ReadShort(F)
@@ -623,6 +628,7 @@ Function SaveActors(Filename$)
 			WriteShort(F, A\BloodTexID)
 			For i = 0 To 39
 				WriteShort(F, A\Attributes\Value[i])
+				WriteShort(F, A\Attributes\BaseValue[i])
 				WriteShort(F, A\Attributes\Maximum[i])
 				WriteShort(F, A\Attributes\Xp[i])
 				WriteShort(F, A\Attributes\XpMax[i])

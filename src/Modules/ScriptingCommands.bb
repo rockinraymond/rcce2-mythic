@@ -1957,11 +1957,15 @@ Function BVM_CHANGEATTRIBUTE(Param1%, Param2$, Param3%)
 	EndIf
 End Function
 
-Function BVM_ATTRIBUTE%(Param1%, Param2$)
+Function BVM_ATTRIBUTE%(Param1%, Param2$, Param3% = 0)
 	Actor.ActorInstance = Object.ActorInstance(Param1%)
 	If Actor <> Null
 		Attribute = FindAttribute(Param2$)
-		If Attribute > -1 Then Result% = Actor\Attributes\Value[Attribute]
+		If Param3% = 0
+			If Attribute > -1 Then Result% = Actor\Attributes\Value[Attribute]
+		Else
+			If Attribute > -1 Then Result% = Actor\Attributes\BaseValue[Attribute]
+		EndIf
 	EndIf
 Return Result%
 End Function

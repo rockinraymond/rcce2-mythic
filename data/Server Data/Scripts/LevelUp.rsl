@@ -47,11 +47,39 @@ Function Main()
 			Lvl = CurrentLevel + 1
 			SetActorLevel(Player, Lvl)
 			Output(Player, "Congratulations, you have advanced to level " + Lvl + "!",255,255,0)
+			
+			HpPerLvl = 6 + (Attribute(Player, "Constitution", 1) - 10)
+			If HpPerLvl < 1 Then HpPerLvl = 1
+			NewHp = 10 + (Lvl * HpPerLvl)  
+			SETMaXATTRIBUTE(Player, "Health", NewHp)
+			SETATTRIBUTE(Player, "Health", Attribute(Player, "Health") + HpPerLvl)
+			Output(Player, "Your total Health has increased by " + HpPerLvl + "!",255,255,0)
+
+			ManaPerLvl = 4 + (Attribute(Player, "Intelligence", 1) - 10)
+			If ManaPerLvl < 1 Then ManaPerLvl = 1
+			NewMana = (Lvl * ManaPerLvl)  
+			SETMaXATTRIBUTE(Player, "Mana", NewMana)
+			SETATTRIBUTE(Player, "Mana", Attribute(Player, "Mana") + ManaPerLvl)
+			Output(Player, "Your total Mana has increased by " + ManaPerLvl + "!",255,255,0)
 		ElseIf (XP < LastXP)
 			Lvl = CurrentLevel - 1
 			If Lvl < 1 Then Return
 			SetActorLevel(Player, Lvl)
 			Output(Player, "You have lost a level and are now level " + Lvl + "!",155,0,255)
+
+			HpPerLvl = 6 + (Attribute(Player, "Constitution", 1) - 10)
+			If HpPerLvl < 1 Then HpPerLvl = 1
+			NewHp = 10 + (Lvl * HpPerLvl)  
+			SETMaXATTRIBUTE(Player, "Health", NewHp)
+			If Attribute(Player , "Health") > MaXATTRIBUTE(Player, "Health") Then SETATTRIBUTE(Player, "Health", MaXATTRIBUTE(Player, "Health"))
+			Output(Player, "Your total Health has decreased by " + HpPerLvl + "!",155,0,255)
+
+			ManaPerLvl = 4 + (Attribute(Player, "Intelligence", 1) - 10)
+			If ManaPerLvl < 1 Then ManaPerLvl = 1
+			NewMana = (Lvl * ManaPerLvl)  
+			SETMaXATTRIBUTE(Player, "Mana", NewMana)
+			If Attribute(Player , "Mana") > MaXATTRIBUTE(Player, "Mana") Then SETATTRIBUTE(Player, "Mana", MaXATTRIBUTE(Player, "Mana"))
+			Output(Player, "Your total Mana has decreased by " + ManaPerLvl + "!",155,0,255)
 		EndIf
 	EndIf
 

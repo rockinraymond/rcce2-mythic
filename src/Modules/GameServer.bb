@@ -358,10 +358,10 @@ Function ActorAttack(A1.ActorInstance, A2.ActorInstance)
 	EndIf
 
 	; Apply damage to target actor
-	FinalDamge = A2\Attributes\Value[HealthStat] - Damage
-	If FinalDamge < 0 Then FinalDamge = 0
+	FinalDamage = A2\Attributes\Value[HealthStat] - Damage
+	If FinalDamage < 0 Then FinalDamage = 0
 	If Damage > 0 
-		A2\Attributes\Value[HealthStat] = FinalDamge
+		A2\Attributes\Value[HealthStat] = FinalDamage
 
 		;give out weapon skill xp
 		WeaponSkillString$ = GetActorWeaponSkillString$(A1)

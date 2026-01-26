@@ -170,3 +170,7 @@ Item ID: 42
 Item Name: Chainmail Armor +1
 Range: 0.0
 
+Item ID: 43
+Item Name: Leather Boots +1 Con
+Range: 0.0
+

@@ -2108,9 +2108,18 @@ Function UpdateNetwork()
 											Amount = RCE_IntFromStr(Mid$(M\MessageData$, Offset, 1))
 											TotalAmount = TotalAmount + Amount
 											C\Attributes\Value[i] = C\Attributes\Value[i] + Amount
+											C\Attributes\BaseValue[i] = C\Attributes\Value[i] 
 											C\Attributes\XpMax[i] = C\Attributes\Value[i] * 100
 											Offset = Offset + 1
 										Next
+										;Health and Mana Setup
+										C\Attributes\Maximum[FindAttribute("Health")] = 10 + (6 + (C\Attributes\Value[FindAttribute("Constitution")] - 10))
+										C\Attributes\Value[FindAttribute("Health")] = C\Attributes\Maximum[FindAttribute("Health")]
+
+										C\Attributes\Maximum[FindAttribute("Mana")] = (4 + (C\Attributes\Value[FindAttribute("Intelligence")] - 10))
+										If C\Attributes\Maximum[FindAttribute("Mana")] < 1 Then C\Attributes\Maximum[FindAttribute("Mana")] = 1
+										C\Attributes\Value[FindAttribute("Mana")] = C\Attributes\Maximum[FindAttribute("Mana")]
+
 										; Check for cheating
 										If TotalAmount > AttributeAssignment + SkillAssignment
 											FreeActorInstance(A\Character[FreeSlot])
