@@ -3,7 +3,7 @@
 Const S_Spell     = 1 ; Ability types
 Const S_Talent    = 2
 Const S_Combat    = 3
-Const S_Util      = 4
+Const S_Spirit     = 4
 
 ; Describes a spell
 Dim SpellsList.Spell(65534)

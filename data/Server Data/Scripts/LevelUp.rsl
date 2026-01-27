@@ -61,6 +61,14 @@ Function Main()
 			SETMaXATTRIBUTE(Player, "Mana", NewMana)
 			SETATTRIBUTE(Player, "Mana", Attribute(Player, "Mana") + ManaPerLvl)
 			Output(Player, "Your total Mana has increased by " + ManaPerLvl + "!",255,255,0)
+
+			SpiritPerLvl = 3 + (Attribute(Player, "Wisdom", 1) - 10)
+			If SpiritPerLvl < 1 Then SpiritPerLvl = 1
+			NewSpirit = (Lvl * SpiritPerLvl)  
+			SETMaXATTRIBUTE(Player, "Spirit", NewSpirit)
+			If Attribute(Player , "Spirit") > MaXATTRIBUTE(Player, "Spirit") Then SETATTRIBUTE(Player, "Spirit", MaXATTRIBUTE(Player, "Spirit"))
+			Output(Player, "Your total Spirit has increased by " + SpiritPerLvl + "!",255,255,0)
+
 		ElseIf (XP < LastXP)
 			Lvl = CurrentLevel - 1
 			If Lvl < 1 Then Return
@@ -80,6 +88,13 @@ Function Main()
 			SETMaXATTRIBUTE(Player, "Mana", NewMana)
 			If Attribute(Player , "Mana") > MaXATTRIBUTE(Player, "Mana") Then SETATTRIBUTE(Player, "Mana", MaXATTRIBUTE(Player, "Mana"))
 			Output(Player, "Your total Mana has decreased by " + ManaPerLvl + "!",155,0,255)
+
+			SpiritPerLvl = 3 + (Attribute(Player, "Wisdom", 1) - 10)
+			If SpiritPerLvl < 1 Then SpiritPerLvl = 1
+			NewSpirit = (Lvl * SpiritPerLvl)  
+			SETMaXATTRIBUTE(Player, "Spirit", NewSpirit)
+			If Attribute(Player , "Spirit") > MaXATTRIBUTE(Player, "Spirit") Then SETATTRIBUTE(Player, "Spirit", MaXATTRIBUTE(Player, "Spirit"))
+			Output(Player, "Your total Spirit has decreased by " + SpiritPerLvl + "!",155,0,255)
 		EndIf
 	EndIf
 

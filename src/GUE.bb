@@ -1906,10 +1906,10 @@ FUI_Label(TSpells, 20, 392, "Function to start script in:")
 Global CSpellMethod = FUI_ComboBox(TSpells, 250, 390, 350, 20, 10)
 FUI_Label(TSpells, 20, 417, "Ability Type:")
 Global CSpellType = FUI_ComboBox(TSpells, 250, 415, 155, 20)
-FUI_ComboBoxItem(CSpellType, "Spell")
+FUI_ComboBoxItem(CSpellType, "Magical Spell")
 FUI_ComboBoxItem(CSpellType, "Talent")
 FUI_ComboBoxItem(CSpellType, "Combat")
-FUI_ComboBoxItem(CSpellType, "Utility")
+FUI_ComboBoxItem(CSpellType, "Spiritual Spell")
 
 ; Init display
 FUI_SendMessage(CSpellSelected, M_SETINDEX, 1)

@@ -2120,6 +2120,10 @@ Function UpdateNetwork()
 										If C\Attributes\Maximum[FindAttribute("Mana")] < 1 Then C\Attributes\Maximum[FindAttribute("Mana")] = 1
 										C\Attributes\Value[FindAttribute("Mana")] = C\Attributes\Maximum[FindAttribute("Mana")]
 
+										C\Attributes\Maximum[FindAttribute("Spirit")] = (3 + (C\Attributes\Value[FindAttribute("Wisodom")] - 10))
+										If C\Attributes\Maximum[FindAttribute("Spirit")] < 1 Then C\Attributes\Maximum[FindAttribute("Spirit")] = 1
+										C\Attributes\Value[FindAttribute("Spirit")] = C\Attributes\Maximum[FindAttribute("Spirit")]
+
 										; Check for cheating
 										If TotalAmount > AttributeAssignment + SkillAssignment
 											FreeActorInstance(A\Character[FreeSlot])

@@ -1,7 +1,7 @@
 ; Alphabetically sorted list of abilities
 Dim KnownSpellSort(999)
 Dim KnownCombatSort(999)
-Dim KnownUtilSort(999)
+Dim KnownSpiritSort(999)
 Dim KnownTalentSort(999)
 
 Function FindKnownSpellByType.Spell(Me.ActorInstance, TargetSpellType, Spell)
@@ -11,8 +11,8 @@ Function FindKnownSpellByType.Spell(Me.ActorInstance, TargetSpellType, Spell)
 			Sp = SpellsList(Me\KnownSpells[KnownSpellSort(Spell) - 1])
 		Case S_Combat
 			Sp = SpellsList(Me\KnownSpells[KnownCombatSort(Spell) - 1])
-		Case S_Util
-			Sp = SpellsList(Me\KnownSpells[KnownUtilSort(Spell) - 1])
+		Case S_Spirit
+			Sp = SpellsList(Me\KnownSpells[KnownSpiritSort(Spell) - 1])
 		Case S_Talent
 			Sp = SpellsList(Me\KnownSpells[KnownTalentSort(Spell) - 1])
 	End Select
@@ -25,8 +25,8 @@ Function KnownSpellArrayByType(Index, TargetSpellType)
 			Return KnownSpellSort(Index)
 		Case S_Combat
 			Return KnownCombatSort(Index)
-		Case S_Util
-			Return KnownUtilSort(Index)
+		Case S_Spirit
+			Return KnownSpiritSort(Index)
 		Case S_Talent
 			Return KnownTalentSort(Index)
 	End Select
@@ -1387,7 +1387,7 @@ Function UpdateInterface()
 		FirstSpell = 0
 		UpdateSpellbook()
 	ElseIf GY_ButtonHit(BShowUtils)
-		SpellView = S_Util
+		SpellView = S_Spirit
 		FirstSpell = 0
 		UpdateSpellbook()
 	EndIf
@@ -2463,8 +2463,8 @@ EndIf
 							RankStr$ = "[Rank" + " " + Me\SpellLevels[Me\KnownSpells[KnownSpellSort(FirstSpell + j) - 1]] + "]"
 						Case S_Combat
 							RankStr$ = "[Rank" + " " + Me\SpellLevels[Me\KnownSpells[KnownCombatSort(FirstSpell + j) - 1]] + "]"
-						Case S_Util
-							RankStr$ = "[Rank" + " " + Me\SpellLevels[Me\KnownSpells[KnownUtilSort(FirstSpell + j) - 1]] + "]"
+						Case S_Spirit
+							RankStr$ = "[Rank" + " " + Me\SpellLevels[Me\KnownSpells[KnownSpiritSort(FirstSpell + j) - 1]] + "]"
 						Case S_Talent
 							RankStr$ = "[Rank" + " " + Me\SpellLevels[Me\KnownSpells[KnownTalentSort(FirstSpell + j) - 1]] + "]"
 						End Select
@@ -4130,10 +4130,10 @@ Function CreateInterface()
 	BPrevSpells = GY_CreateButton(WSpells, 0.01, 0.94, 0.05, 0.05, "<<")
 	BNextSpells = GY_CreateButton(WSpells, 0.94, 0.94, 0.05, 0.05, ">>")
 	LSpellsPage = GY_CreateLabel(WSpells, 0.5, 0.94, Upper$(LanguageString$(LS_MemorisedAbilities)), 255, 255, 255, Justify_Centre)
-	BShowSpells = GY_CreateButton(WSpells, 0, 0, 0.25, 0.05, "Spells")
+	BShowSpells = GY_CreateButton(WSpells, 0, 0, 0.25, 0.05, "Magical Spells")
 	BShowTalents = GY_CreateButton(WSpells, 0.75, 0, 0.25, 0.05, "Talents")
-	BShowCombats = GY_CreateButton(WSpells, 0.25, 0, 0.25, 0.05, "Combat")
-	BShowUtils = GY_CreateButton(WSpells, 0.5, 0, 0.25, 0.05, "Utility")
+	BShowCombats = GY_CreateButton(WSpells, 0.5, 0, 0.25, 0.05, "Fighting Moves")
+	BShowUtils = GY_CreateButton(WSpells, 0.25, 0, 0.25, 0.05, "Spiritual Spells")
 	X# = 0.01
 	Y# = 0.05
 	ButtonTex = CreateTexture(2, 2)

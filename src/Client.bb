@@ -1050,7 +1050,7 @@ TalentIndex = 0
 	For i = 0 To 999
 		KnownSpellSort(i) = 0
 		KnownCombatSort(i) = 0
-		KnownUtilSort(i) = 0
+		KnownSpiritSort(i) = 0
 		KnownTalentSort(i) = 0
 	Next
 	
@@ -1095,20 +1095,20 @@ TalentIndex = 0
 								Exit
 							EndIf
 						EndIf
-					Case S_Util
+					Case S_Spirit
 						; Free slot in ordered list, fill it
-						If KnownUtilSort(UtilIndex) = 0
-							KnownUtilSort(UtilIndex) = i + 1
+						If KnownSpiritSort(UtilIndex) = 0
+							KnownSpiritSort(UtilIndex) = i + 1
 							UtilIndex = UtilIndex + 1
 							Exit
 						; Spot taken, insert if this spell is alphabetically previous to the contents
 						Else
-							Sp2.Spell = SpellsList(Me\KnownSpells[KnownUtilSort(UtilIndex) - 1])
+							Sp2.Spell = SpellsList(Me\KnownSpells[KnownSpiritSort(UtilIndex) - 1])
 							If HighAlphabetical(Sp\Name$, Sp2\Name$)
 								For k = 999 To j + 1 Step -1
-									KnownUtilSort(k) = KnownUtilSort(k - 1)
+									KnownSpiritSort(k) = KnownSpiritSort(k - 1)
 								Next
-								KnownUtilSort(UtilIndex) = i + 1
+								KnownSpiritSort(UtilIndex) = i + 1
 								UtilIndex = UtilIndex + 1
 								Exit
 							EndIf
