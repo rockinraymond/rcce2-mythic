@@ -22,9 +22,54 @@ Function Main()
 	ApplyAttributeBonus(Player, "Damage Bonus")
 	ApplyAttributeBonus(Player, "Armor Bonus")
 	ApplyAttributeBonus(Player, "Stealth Mod")
+	ApplyAttributeBonus(Player, "Movement")
 
+	ApplyAttributeBonus(Player, "Long Blades")
+	ApplyAttributeBonus(Player, "Short Blades")
+	ApplyAttributeBonus(Player, "Axes")
+	ApplyAttributeBonus(Player, "Blunt Weapons")
+	ApplyAttributeBonus(Player, "Polearms/Spears")
+	ApplyAttributeBonus(Player, "Bows")
+	ApplyAttributeBonus(Player, "Staves")
+	ApplyAttributeBonus(Player, "Unarmed")
 
+	ApplyAttributeBonus(Player, "Light Armor")
+	ApplyAttributeBonus(Player, "Medium Armor")
+	ApplyAttributeBonus(Player, "Heavy Armor")
+	ApplyAttributeBonus(Player, "Block")
 
+	ApplyAttributeBonus(Player, "Arcane Spells")
+	ApplyAttributeBonus(Player, "Clerical Spells")
+	ApplyAttributeBonus(Player, "Druidic Spells")
+	ApplyAttributeBonus(Player, "Illusion Spells")
+	ApplyAttributeBonus(Player, "Necromancy")
+
+	ApplyAttributeBonus(Player, "Stealth")
+	ApplyAttributeBonus(Player, "Mechanisms")
+	ApplyAttributeBonus(Player, "Locksmith")
+	ApplyAttributeBonus(Player, "Pickpocket")
+
+	ApplyAttributeBonus(Player, "Enchanting")
+	ApplyAttributeBonus(Player, "Alchemy")
+	ApplyAttributeBonus(Player, "Armorer")
+
+	;Resistances + Saving Throws
+	ApplyResistanceBonus(Player, "Blunt")
+	ApplyResistanceBonus(Player, "Edged")
+	ApplyResistanceBonus(Player, "Missile")
+	ApplyResistanceBonus(Player, "Magical")
+	ApplyResistanceBonus(Player, "Frost")
+	ApplyResistanceBonus(Player, "Fire")
+	ApplyResistanceBonus(Player, "Lightning")
+	ApplyResistanceBonus(Player, "Holy")
+	ApplyResistanceBonus(Player, "Unholy")
+	ApplyResistanceBonus(Player, "Poison")
+	ApplyResistanceBonus(Player, "Paralysis")
+	ApplyResistanceBonus(Player, "Spells")
+	ApplyResistanceBonus(Player, "Wands")
+	ApplyResistanceBonus(Player, "Dragon Breath")
+	ApplyResistanceBonus(Player, "Death Ray")
+	
 	Return
 
 End Function
@@ -50,6 +95,32 @@ Function ApplyAttributeBonus(Player, AttributeName$)
 
 	If AttributeBonusValue <> 0
 		AddActorEffect(Player, AttributeName$ + "EquipBns", AttributeName$, AttributeBonusValue, 0, 0)
+	Else
+		DeleteActorEffect(Player, AttributeName$ + "EquipBns")
+	EndIf
+End Function
+
+Function ApplyResistanceBonus(Player, AttributeName$)
+
+	PlayerAmulet1 = ActorAmulet(Player,1)
+	PlayerAmulet2 = ActorAmulet(Player,2)
+	PlayerBelt = ActorBelt(Player)
+	PlayerChest = ActorChest(Player)
+	PlayerFeet = ActorFeet(Player)
+	PlayerHands = ActorHands(Player)
+	PlayerHat = ActorHat(Player)
+	PlayerLegs = ActorLegs(Player)
+	PlayerShield = ActorShield(Player)
+	PlayerWeapon = ActorWeapon(Player)
+	PlayerRing1 = ActorRing(Player,1)
+	PlayerRing2 = ActorRing(Player,2)
+	PlayerRing3 = ActorRing(Player,3)
+	PlayerRing4 = ActorRing(Player,4)
+
+	AttributeBonusValue = ItemAttribute(PlayerAmulet1, AttributeName$) + ItemAttribute(PlayerAmulet2, AttributeName$) + ItemAttribute(PlayerChest, AttributeName$) + ItemAttribute(PlayerFeet, AttributeName$) + ItemAttribute(PlayerHands, AttributeName$) + ItemAttribute(PlayerHat, AttributeName$) + ItemAttribute(PlayerLegs, AttributeName$) + ItemAttribute(PlayerShield, AttributeName$) +  ItemAttribute(PlayerWeapon, AttributeName$) + ItemAttribute(PlayerRing1, AttributeName$) + ItemAttribute(PlayerRing2, AttributeName$) + ItemAttribute(PlayerRing3, AttributeName$) +  ItemAttribute(PlayerRing4, AttributeName$)
+
+	If AttributeBonusValue <> 0
+		AddActorEffect(Player, AttributeName$ + "EquipBns", AttributeName$, AttributeBonusValue, 0, 0, 1)
 	Else
 		DeleteActorEffect(Player, AttributeName$ + "EquipBns")
 	EndIf
