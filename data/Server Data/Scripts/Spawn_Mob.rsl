@@ -1,0 +1,18 @@
+Using "RC_Core.rcm"
+; Define entry function 'Main'
+
+Function Main()
+
+
+
+    If Race(Actor()) = "Orc"
+        giveitem(actor(),"Long Sword",1)
+    ElseIf Race(Actor()) = "Goblin"
+        giveitem(actor(),"dagger",1)
+    ElseIf Race(Actor()) = "Hobgoblin"
+        giveitem(actor(),"short sword",1)
+    ElseIf Race(Actor()) = "Gnoll"
+        giveitem(actor(),"morning star",1)
+    EndIf
+
+End Function
