@@ -13,6 +13,10 @@ Function Main()
         giveitem(actor(),"short sword",1)
     ElseIf Race(Actor()) = "Gnoll"
         giveitem(actor(),"morning star",1)
+    ElseIf Race(Actor()) = "Bugbear"
+        giveitem(actor(),"morning star",1)
+    ElseIf Race(Actor()) = "Dwarf"
+        ;giveitem(actor(),"short sword",1)
     EndIf
 
 End Function
