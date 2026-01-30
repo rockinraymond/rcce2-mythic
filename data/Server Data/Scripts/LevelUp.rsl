@@ -66,7 +66,7 @@ Function Main()
 			If SpiritPerLvl < 1 Then SpiritPerLvl = 1
 			NewSpirit = (Lvl * SpiritPerLvl)  
 			SETMaXATTRIBUTE(Player, "Spirit", NewSpirit)
-			If Attribute(Player , "Spirit") > MaXATTRIBUTE(Player, "Spirit") Then SETATTRIBUTE(Player, "Spirit", MaXATTRIBUTE(Player, "Spirit"))
+			SETATTRIBUTE(Player, "Spirit", Attribute(Player, "Spirit") + SpiritPerLvl)
 			Output(Player, "Your total Spirit has increased by " + SpiritPerLvl + "!",255,255,0)
 
 		ElseIf (XP < LastXP)

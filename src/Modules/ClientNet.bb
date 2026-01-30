@@ -1282,6 +1282,7 @@ Function UpdateNetwork()
 							ShieldID = RCE_IntFromStr(Mid$(M\MessageData$, 6, 2))
 							ChestID = RCE_IntFromStr(Mid$(M\MessageData$, 8, 2))
 							HatID = RCE_IntFromStr(Mid$(M\MessageData$, 10, 2))
+							If HatID = 0 Then HatID = 65535
 							If A\Inventory\Items[SlotI_Weapon] <> Null Then FreeItemInstance(A\Inventory\Items[SlotI_Weapon])
 							If A\Inventory\Items[SlotI_Shield] <> Null Then FreeItemInstance(A\Inventory\Items[SlotI_Shield])
 							If A\Inventory\Items[SlotI_Chest] <> Null Then FreeItemInstance(A\Inventory\Items[SlotI_Chest])

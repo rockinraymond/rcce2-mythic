@@ -303,9 +303,8 @@ Function ActorAttack(A1.ActorInstance, A2.ActorInstance)
 
 		AttackerCritChance = (A1\Attributes\Value[DexterityAttribute] * 2) / 5
 		AttackerAccuracy = GetActorAccuracy(A1)
-		AttackerMaxDamage = GetActorMaxDamage(A1)
 		AttackerDamageAttBNS = GetActorDamageAttributeBNS(A1)
-		
+		AttackerMaxDamage = GetActorMaxDamage(A1) + AttackerDamageAttBNS
 		DamageType = GetActorDamageType(A1)
 		
 		;Defender stats
@@ -333,10 +332,10 @@ Function ActorAttack(A1.ActorInstance, A2.ActorInstance)
 			BlockRoll = Rand(1,100)
 			If (BlockRoll > DefendBlock)
 				DamageEquipment = True
-				Damage = Rand(1,AttackerMaxDamage) + AttackerDamageAttBNS + DamageBonus
+				Damage = Rand(1,AttackerMaxDamage)  + DamageBonus
 				; Critical damage
 				If HitRoll < AttackerCritChance
-					Damage = Damage * 3
+					Damage = AttackerMaxDamage + 1 + DamageBonus
 					If A1\RNID > 0 Then RCE_Send(Host, A1\RNID, P_ChatMessage, Chr$(250) + Chr$(255) + Chr$(225) + Chr$(100) + LanguageString$(LS_CriticalDamage), True)
 				EndIf
 				; Minimum of 1

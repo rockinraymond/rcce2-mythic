@@ -13,7 +13,6 @@ Function Examine()
 	Target = ContextActor()
 
 	Output(Actor(), "This is a " + Name(Target))
-	Output(Actor(), "Hat: " + ItemName(ActorHat(Target)))
 End Function
 
 Function Trade()
