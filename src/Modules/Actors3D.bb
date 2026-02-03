@@ -474,13 +474,13 @@ Function CreateActorNametag(A.ActorInstance)
 	EntityAutoFade(A\NametagEN, 70, 75)
 	If A\RNID = 0
 	;Adding 3rd color options for name tags Cysis145
-		If A\Actor\Aggressiveness = 3
+		If A\Aggressiveness = 3
 			EntityColor(A\NametagEN, 0, 174, 14) ;Non Combatant
 			
-		ElseIf A\Actor\Aggressiveness = 0
+		ElseIf A\Aggressiveness = 0
 			EntityColor(A\NametagEN, 255, 219, 114) ; Passive
 			
-		ElseIf A\Actor\Aggressiveness = 1
+		ElseIf A\Aggressiveness = 1
 			EntityColor(A\NametagEN, 255, 219, 114) ;Defensive
 			
 		Else
@@ -502,13 +502,13 @@ Function CreateActorNametag(A.ActorInstance)
 		EntityAutoFade(EN, 70, 75)
 		If A\RNID = 0
 		;Adding 3rd color options for name tags Cysis145
-			If A\Actor\Aggressiveness = 3 ;Non combatant
+			If A\Aggressiveness = 3 ;Non combatant
 				EntityColor(EN, 0, 174, 14)
 			
-			ElseIf A\Actor\Aggressiveness = 0 ; Passive
+			ElseIf A\Aggressiveness = 0 ; Passive
 				EntityColor(EN, 255, 219, 114)
 				
-			ElseIf A\Actor\Aggressiveness = 1 ; Defensive
+			ElseIf A\Aggressiveness = 1 ; Defensive
 				EntityColor(EN, 255, 219, 114)
 			
 			Else

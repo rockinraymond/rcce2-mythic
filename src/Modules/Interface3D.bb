@@ -493,7 +493,7 @@ Function UpdateInterface()
 			AI = After AI
 			If AI = Null Then AI = First ActorInstance
 			If AI = StartAI Then Exit
-			If AI\Actor\Aggressiveness < 3 And AI\RNID = 0
+			If AI\Aggressiveness < 3 And AI\RNID = 0
 				OldTarget = PlayerTarget
 				PlayerTarget = Handle(AI)
 				MaxLength# = MeshWidth#(AI\EN)
@@ -886,7 +886,7 @@ Function UpdateInterface()
 						; Disable double-clicking for attacks [ref14] ****************************
 						
 						; Check target is a combatant
-						If AI\Actor\Aggressiveness < 3
+						If AI\Aggressiveness < 3
 							 ;Check faction rating
 							If Me\FactionRatings[AI\HomeFaction] <= 150 Then AttackTarget = True
 							GY_FreeGadget(WContextMenu)
@@ -920,7 +920,7 @@ Function UpdateInterface()
 						BInteract = GY_CreateButton(WContextMenu, Y#, 0.0, 1.0, 0.33, interactLabel$, False, iR, iG, iB)
 						Y# = Y# + 0.33
 						; Attack button (only if target is attackable)
-						If AI\Actor\Aggressiveness < 3 And Me\FactionRatings[AI\HomeFaction] <= 150
+						If AI\Aggressiveness < 3 And Me\FactionRatings[AI\HomeFaction] <= 150
 							BAttack = GY_CreateButton(WContextMenu, 0.0, Y#, 1.0, 0.33, "Attack", False, 255, 0, 0)
 							Y# = Y# + 0.33
 						EndIf
@@ -1093,7 +1093,7 @@ Function UpdateInterface()
 			Me\IsRunning = True
 			If Me\Mount <> Null Then Me\Mount\IsRunning = True
 			; Check target is a combatant
-			If AI\Actor\Aggressiveness < 3
+			If AI\Aggressiveness < 3
 				; Check faction rating
 				If Me\FactionRatings[AI\HomeFaction] <= 150 Then AttackTarget = True
 				;AttackTarget = True
@@ -4477,7 +4477,7 @@ Function SetPickModes(Scenery = 0, Actors = 0, NonCombatants = True, DroppedItem
 			EndIf
 		Else
 			If AI <> Me And AI\Rider = Null
-				If AI\Attributes\Value[HealthStat] <= 0 Or (AI\Actor\Aggressiveness = 3 And NonCombatants = False) Or (AI\RNID = True And PvPEnabled = False And NonCombatants = False)
+				If AI\Attributes\Value[HealthStat] <= 0 Or (AI\Aggressiveness = 3 And NonCombatants = False) Or (AI\RNID = True And PvPEnabled = False And NonCombatants = False)
 					EntityPickMode AI\EN, 0, True
 					EntityPickMode AI\CollisionEN, 0
 				ElseIf Actors = 1

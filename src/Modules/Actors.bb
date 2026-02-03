@@ -7,6 +7,7 @@ Const AI_PatrolPause = 4
 Const AI_Pet         = 5
 Const AI_PetChase    = 6
 Const AI_PetWait     = 7
+Const AI_Interact    = 8
 
 ; Speech sounds
 Const Speech_Greet1       = 0
@@ -56,7 +57,7 @@ Type Actor
 	Field FAnimationSet      ; The ID of the female animation set to use
 	Field Playable           ; Can a player be this actor?
 	Field Rideable           ; Can this actor be ridden by another?
-	Field Aggressiveness     ; Aggressiveness - 0 = passive, 1 = attack when provoked, 2 = attack on sight, 3 = no combat
+	Field Aggressiveness     ; Default Aggressiveness - 0 = passive, 1 = attack when provoked, 2 = attack on sight, 3 = no combat
 	Field AggressiveRange    ; From how nearby will the actor detect targets?
 	Field TradeMode          ; 0 = will not trade, 1 = trades for free (pack mules!), 2 = charges for trade (salesman)
 	Field Environment        ; Whether actor walks, swims, flies, etc.
@@ -115,6 +116,7 @@ Type ActorInstance
 	Field TradeResult$
 	Field Underwater
 	Field IgnoreUpdate   ;used to ignore standard update while waiting for client to complete actor moves
+	Field Aggressiveness ; adding this to actor instance so it can be changed at will
 	
 	;Strafing
 	Field WalkingRight
@@ -261,6 +263,8 @@ Function WriteActorInstance(Stream, A.ActorInstance)
 		WriteShort Stream, A\MemorisedSpells[i]
 	Next
 
+	WriteShort Stream, A\Aggressiveness
+
 	; Data for any slaves
 	Slaves = A\NumberOfSlaves
 	While Slaves > 0
@@ -338,6 +342,8 @@ Function ReadActorInstance.ActorInstance(Stream)
 	For i = 0 To 9
 		A\MemorisedSpells[i] = ReadShort(Stream)
 	Next
+
+	A\Aggressiveness = ReadShort(Stream)
 
 	; Slaves
 	For i = 1 To A\NumberOfSlaves
@@ -427,8 +433,9 @@ Function CreateActorInstance.ActorInstance(Actor.Actor)
 	For i = 0 To 9
 		A\MemorisedSpells[i] = 5000 ; No spell memorised
 	Next
+	A\Aggressiveness = A\Actor\Aggressiveness
 	If A\Actor\Genders = 2 Then A\Gender = 1
-	A\Level = 1
+	A\Level = A\Actor\XPMultiplier
 	A\RuntimeID = -1
 	A\LastAttack = MilliSecs()
 	A\SourceSP = -1

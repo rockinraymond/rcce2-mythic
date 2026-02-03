@@ -175,7 +175,7 @@ End Function
 Function FireProjectile(P.Projectile, A1.ActorInstance, A2.ActorInstance)
 
 	; Check both actors are allowed to engage in combat
-	If A1\Actor\Aggressiveness = 3 Or A2\Actor\Aggressiveness = 3 Then Return
+	If A1\Aggressiveness = 3 Or A2\Aggressiveness = 3 Then Return
 
 	; Check faction ratings
 	If A1\FactionRatings[A2\HomeFaction] > 150 Then Return
@@ -213,12 +213,12 @@ Function FireProjectile(P.Projectile, A1.ActorInstance, A2.ActorInstance)
 
 		; Make attacked actor angry if it's defensive
 		If A2\RNID = -1
-			If A2\Actor\Aggressiveness = 1
+			If A2\Aggressiveness = 1
 				A2\AITarget = A1
 				A2\AIMode = AI_Chase
 				AICallForHelp(A2)
 			; Or if it's aggressive and has no target...
-			ElseIf A2\Actor\Aggressiveness = 2 And A2\AITarget = Null
+			ElseIf A2\Aggressiveness = 2 And A2\AITarget = Null
 				A2\AITarget = A1
 				A2\AIMode = AI_Chase
 				AICallForHelp(A2)
@@ -241,7 +241,7 @@ Function ActorAttack(A1.ActorInstance, A2.ActorInstance)
 	Dist# = (XDist# * XDist#) + (ZDist# * ZDist#) + (YDist# * YDist#)
 
 	; Check both actors are allowed to engage in combat
-	If A1\Actor\Aggressiveness = 3 Or A2\Actor\Aggressiveness = 3 Then Return False
+	If A1\Aggressiveness = 3 Or A2\Aggressiveness = 3 Then Return False
 
 	; Check faction ratings
 	If A1\FactionRatings[A2\HomeFaction] > 150 Then Return False
@@ -277,11 +277,11 @@ Function ActorAttack(A1.ActorInstance, A2.ActorInstance)
 
 	; Make attacked actor angry if it's defensive
 	If A2\RNID = -1
-		If A2\Actor\Aggressiveness = 1
+		If A2\Aggressiveness = 1
 			A2\AITarget = A1
 			A2\AIMode = AI_Chase
 		; Or if it's aggressive and has no target...
-		ElseIf A2\Actor\Aggressiveness = 2 And A2\AITarget = Null
+		ElseIf A2\Aggressiveness = 2 And A2\AITarget = Null
 			A2\AITarget = A1
 			A2\AIMode = AI_Chase
 		EndIf
@@ -437,7 +437,7 @@ Function ActorAttack(A1.ActorInstance, A2.ActorInstance)
 			For A3.ActorInstance = Each ActorInstance
 				If A3\Leader = A1
 					Found = Found + 1
-					If A3\Actor\Aggressiveness < 3 And A3\AITarget = Null
+					If A3\Aggressiveness < 3 And A3\AITarget = Null
 						A3\AITarget = A2
 						A3\AIMode = AI_PetChase
 					EndIf
@@ -749,7 +749,7 @@ Function UpdateActorInstances(Broadcast)
 					EndIf
 
 					; Keep updated with leader's target
-					If AI\Actor\Aggressiveness < 3
+					If AI\Aggressiveness < 3
 						If AI\Leader\AITarget <> Null
 							XDist# = AI\Leader\AITarget\X# - AI\Leader\X#
 							ZDist# = AI\Leader\AITarget\Z# - AI\Leader\Z#
@@ -1092,7 +1092,7 @@ Function CommandPet(AI.ActorInstance, Command$, Params$)
 			AI\AITarget = Null
 		; Pet to attack leader's target
 		Case "ATTACK"
-			If AI\Actor\Aggressiveness < 3
+			If AI\Aggressiveness < 3
 				If AI\Leader\AITarget <> Null
 					AI\AITarget = AI\Leader\AITarget
 					AI\AIMode = AI_PetChase
@@ -1133,13 +1133,13 @@ End Function
 ; Makes aggressive NPCs look for and target other actors
 Function AILookForTargets(AI.ActorInstance)
 
-	If AI\Actor\Aggressiveness = 2
+	If AI\Aggressiveness = 2
 		AInstance.AreaInstance = Object.AreaInstance(AI\ServerArea)
 		A2.ActorInstance = AInstance\FirstInZone
 		While A2 <> Null
 			; Must have a faction rating under 50% to be attacked
 			If AI\FactionRatings[A2\HomeFaction] < 150
-				If A2\Actor\Aggressiveness <> 3
+				If A2\Aggressiveness <> 3
 					If A2 <> AI
 						;Aggro Range is based on Targets stealth skill
 						A2AggroRange = GetActorAggroRange#(A2)
@@ -1167,7 +1167,7 @@ Function AICallForHelp(AI.ActorInstance)
 		AInstance.AreaInstance = Object.AreaInstance(AI\ServerArea)
 		A2.ActorInstance = AInstance\FirstInZone
 		While A2 <> Null
-			If A2\Actor\Aggressiveness <> 3 And A2\Actor\Aggressiveness <> 0
+			If A2\Aggressiveness <> 3 And A2\Aggressiveness <> 0
 				If A2\AIMode <> AI_Chase
 					; Must have a faction rating of 90% or more to help, and not be a pet
 					If A2\FactionRatings[AI\HomeFaction] >= 190

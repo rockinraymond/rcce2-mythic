@@ -8,11 +8,11 @@ SpellType: 2
 
 Spell ID: 2
 Spell Name: New ability1
-SpellType: 3
+SpellType: 1
 
 Spell ID: 3
 Spell Name: New ability2
-SpellType: 4
+SpellType: 1
 
 Spell ID: 4
 Spell Name: New ability3
@@ -20,7 +20,7 @@ SpellType: 1
 
 Spell ID: 5
 Spell Name: New ability4
-SpellType: 3
+SpellType: 1
 
 Spell ID: 6
 Spell Name: New ability5

@@ -147,10 +147,13 @@ Function BVM_ACTORZ#(Param1%)
 	Return Result#
 End Function
 
-Function BVM_ACTORAGGRESSIVENESS%(Param1%)
+Function BVM_ACTORAGGRESSIVENESS%(Param1%, Param2% = 0, Param3% = 0)
 	Actor.ActorInstance = Object.ActorInstance(Param1%)
 	If Actor <> Null
-		Result% = Actor\Actor\Aggressiveness
+		Result% = Actor\Aggressiveness
+		If (Param2% > 0)
+			Actor\Aggressiveness = Param3%
+		EndIf
 	EndIf
 Return Result%
 End Function
@@ -518,7 +521,7 @@ Function BVM_SETACTORTARGET(Param1%, Param2%=0)
 	Actor2.ActorInstance = Object.ActorInstance(Param2%)
 	If Actor <> Null
 		If Actor2 <> Null
-			If Actor\Actor\Aggressiveness <> 3 And Actor2\Actor\Aggressiveness <> 3
+			If Actor\Aggressiveness <> 3 And Actor2\Aggressiveness <> 3
 				If Actor2\FactionRatings[Actor\HomeFaction] < 150 Then Actor\AITarget = Actor2
 			EndIf
 		Else
