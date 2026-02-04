@@ -200,6 +200,28 @@ Function CombatDamageOutput(AI.ActorInstance, Amount, DType$)
 
 End Function
 
+Function CombatDamageOutputOthers(Attacker.ActorInstance, Defender.ActorInstance,  Amount, DType$)
+	
+	; Chat message
+	If DamageInfoStyle = 2
+		AttackerName$ = Trim$(Attacker\Name$)
+		If AttackerName$ = "" Then AttackerName$ = Attacker\Actor\Race$
+		DefenderName$ = Trim$(Defender\Name$)
+		If DefenderName$ = "" Then DefenderName$ = Defender\Actor\Race$
+		; You hit him
+		If Amount > 0
+			Output(AttackerName$ + " hit " + DefenderName$ + " " LanguageString$(LS_For) + " " + Str$(Amount) + " " + DType$ + " " + LanguageString$(LS_DamageWow), 210, 210, 0)
+		EndIf
+	; Floating number
+	ElseIf DamageInfoStyle = 3
+		; He hit you
+	
+			CreateFloatingNumber(Defender, Amount, 200, 200, 0)
+		
+	EndIf
+
+End Function
+
 ; Creates a floating number
 Function CreateFloatingNumber(AI.ActorInstance, Amount, R, G, B)
 

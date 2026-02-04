@@ -1007,7 +1007,7 @@ Function UpdateNetwork()
 							EndIf
 						; And missed
 						ElseIf Damage < 0
-							CombatDamageOutput(A, 0, "0")
+							;CombatDamageOutput(A, 0, "0")
 							;AnimateActorParry(A)
 						EndIf
 					; Someone else attacked me
@@ -1034,7 +1034,7 @@ Function UpdateNetwork()
 							EndIf
 						; And missed
 						ElseIf Damage < 0
-							CombatDamageOutput(A, 0, "1")
+							;CombatDamageOutput(A, 0, "1")
 							AnimateActorAttack(A)
 							;AnimateActorParry(Me)
 							PlayActorSound(A, Rand(Speech_Attack1, Speech_Attack2))
@@ -1042,23 +1042,30 @@ Function UpdateNetwork()
 					; Someone else attacked someone else
 					Else
 						RuntimeID = RCE_IntFromStr(Mid$(M\MessageData$, 4, 2))
+						Damage = RCE_IntFromStr(Mid$(M\MessageData$, 6, 2)) - 1
+						DType$ = DamageTypes$(RCE_IntFromStr(Mid$(M\MessageData$, 8, 1)))
 						A2.ActorInstance = RuntimeIDList(RuntimeID)
 						If A2 <> Null
 							AnimateActorAttack(A)
-							A2\Attributes\Value[HealthStat] = A2\Attributes\Value[HealthStat] - Damage
-							PlayAnimation(A2, 3, 0.035, Rand(Anim_FirstHit, Anim_LastHit))
-							PlayActorSound(A, Rand(Speech_Attack1, Speech_Attack2))
-							PlayActorSound(A2, Rand(Speech_Hit1, Speech_Hit2))
-							If A2\Actor\BloodTexID > 0
-								B.BloodSpurt = New BloodSpurt
-								B\Timer = MilliSecs()
-								B\EmitterEN = RP_CreateEmitter(A2\Actor\BloodTexID)
-								PositionEntity(B\EmitterEN, EntityX#(A2\CollisionEN), EntityY#(A2\CollisionEN), EntityZ#(A2\CollisionEN))
-								PointEntity(B\EmitterEN, A\CollisionEN)
-								MoveEntity(B\EmitterEN, 0.0, 0.0, 1.0)
+							If Damage > 0
+								A2\Attributes\Value[HealthStat] = A2\Attributes\Value[HealthStat] - Damage
+								PlayAnimation(A2, 3, 0.035, Rand(Anim_FirstHit, Anim_LastHit))
+								PlayActorSound(A, Rand(Speech_Attack1, Speech_Attack2))
+								PlayActorSound(A2, Rand(Speech_Hit1, Speech_Hit2))
+								CombatDamageOutputOthers(A, A2, Damage, DType$)
+								If A2\Actor\BloodTexID > 0
+									B.BloodSpurt = New BloodSpurt
+									B\Timer = MilliSecs()
+									B\EmitterEN = RP_CreateEmitter(A2\Actor\BloodTexID)
+									PositionEntity(B\EmitterEN, EntityX#(A2\CollisionEN), EntityY#(A2\CollisionEN), EntityZ#(A2\CollisionEN))
+									PointEntity(B\EmitterEN, A\CollisionEN)
+									MoveEntity(B\EmitterEN, 0.0, 0.0, 1.0)
+								EndIf
+								PointEntity A\CollisionEN, A2\CollisionEN
+								RotateEntity A\CollisionEN, 0.0, EntityYaw#(A\CollisionEN) + 180.0, 0.0
+							ElseIf Damage < 0
+								PlayActorSound(A, Rand(Speech_Attack1, Speech_Attack2))
 							EndIf
-							PointEntity A\CollisionEN, A2\CollisionEN
-							RotateEntity A\CollisionEN, 0.0, EntityYaw#(A\CollisionEN) + 180.0, 0.0
 						EndIf
 					EndIf
 					If A = CharInteract Then UpdateCharInteractionWindow()

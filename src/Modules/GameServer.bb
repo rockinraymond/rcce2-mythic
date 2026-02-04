@@ -285,7 +285,18 @@ Function ActorAttack(A1.ActorInstance, A2.ActorInstance)
 			A2\AITarget = A1
 			A2\AIMode = AI_Chase
 		EndIf
+
+		;chance that if it has a current target it will change targets
+		If A2\AITarget <> A1
+			If Rand(1,5) = 1
+				A2\AITarget = A1
+				A2\AIMode = AI_Chase
+			EndIf
+		EndIf
 	EndIf
+
+	
+
 
 	; Calculate damage
 	; Hardcoded formula
@@ -385,7 +396,7 @@ Function ActorAttack(A1.ActorInstance, A2.ActorInstance)
 	EndIf
 
 	; Tell other players in the same area
-	Pa$ = "O" + RCE_StrFromInt$(A1\RuntimeID, 2) + RCE_StrFromInt$(A2\RuntimeID, 2)
+	Pa$ = "O" + RCE_StrFromInt$(A1\RuntimeID, 2) + RCE_StrFromInt$(A2\RuntimeID, 2) + RCE_StrFromInt$(Damage + 1, 2) + RCE_StrFromInt$(DamageType, 1)
 
 	AInstance.AreaInstance = Object.AreaInstance(A1\ServerArea)
 	A3.ActorInstance = AInstance\FirstInZone
@@ -700,10 +711,17 @@ Function UpdateActorInstances(Broadcast)
 
 					; Lost target
 					If AI\AITarget = Null
-						AI\AIMode = AI_Patrol
-						AI\DestX# = AInstance\Area\WaypointX#[AI\CurrentWaypoint]
-						AI\DestZ# = AInstance\Area\WaypointZ#[AI\CurrentWaypoint]
-						AI\IsRunning = False
+						IF AI\Leader = Null
+							AI\AIMode = AI_Patrol
+							AI\DestX# = AInstance\Area\WaypointX#[AI\CurrentWaypoint]
+							AI\DestZ# = AInstance\Area\WaypointZ#[AI\CurrentWaypoint]
+							AI\IsRunning = False
+						Else
+							AI\AIMode = AI_Pet
+							AI\DestX# = AI\Leader\X#
+							AI\DestZ# = AI\Leader\Z#
+							AI\IsRunning = AI\Leader\IsRunning
+						EndIf
 					; Chase target
 					Else
 						; Target left game

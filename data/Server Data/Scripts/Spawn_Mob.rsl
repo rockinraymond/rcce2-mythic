@@ -16,7 +16,44 @@ Function Main()
     ElseIf Race(Actor()) = "Bugbear"
         giveitem(actor(),"morning star",1)
     ElseIf Race(Actor()) = "Dwarf"
-        ;giveitem(actor(),"short sword",1)
+        SETATTRIBUTE(Actor(), "Strength", 12)
+        SETATTRIBUTE(Actor(), "Toughness", 14)
+        SETATTRIBUTE(Actor(), "Agility", 10)
+        SETATTRIBUTE(Actor(), "Dexterity", 9)
+
+        giveitem(actor(),"battle axe",1)
+        giveitem(actor(), "chainmail armor", 1)
+        giveitem(actor(), "round shield", 1)
+    ElseIf Race(Actor()) = "Human"
+        SETATTRIBUTE(Actor(), "Strength", 11)
+        SETATTRIBUTE(Actor(), "Toughness", 11)
+        SETATTRIBUTE(Actor(), "Agility", 11)
+        SETATTRIBUTE(Actor(), "Dexterity", 1)
+
+        giveitem(actor(),"mace",1)
+        giveitem(actor(), "chainmail armor", 1)
+        giveitem(actor(), "round shield", 1)
+    
+    ElseIf Race(Actor()) = "elf"
+        SETATTRIBUTE(Actor(), "Strength", 9)
+        SETATTRIBUTE(Actor(), "Toughness", 10)
+        SETATTRIBUTE(Actor(), "Agility", 12)
+        SETATTRIBUTE(Actor(), "Dexterity", 10)
+
+        giveitem(actor(),"short bow",1)
+        giveitem(actor(), "leather armor", 1)
+        giveitem(actor(), "arrow", 100)
+
+    
+    ElseIf Race(Actor()) = "halfling"
+        SETATTRIBUTE(Actor(), "Strength", 9)
+        SETATTRIBUTE(Actor(), "Toughness", 10)
+        SETATTRIBUTE(Actor(), "Agility", 12)
+        SETATTRIBUTE(Actor(), "Dexterity", 10)
+
+        giveitem(actor(),"short sword",1)
+        giveitem(actor(), "leather armor", 1)
+        
     EndIf
 
 End Function

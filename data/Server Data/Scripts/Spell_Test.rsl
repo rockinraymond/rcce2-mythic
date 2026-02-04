@@ -2,21 +2,27 @@ Using "RC_Core.rcm"
 
 
 function setPassive()
-	Target = ActorTarget(Actor())
+	Target = ContextActor()
 	ACTORAGGRESSIVENESS(Target, 1, 0)
 End Function
 
 function setDefensive()
-	Target = ActorTarget(Actor())
+	Target = ContextActor()
 	ACTORAGGRESSIVENESS(Target, 1, 1)
 End Function
 
 function setAggresive()
-	Target = ActorTarget(Actor())
+	Target = ContextActor()
 	ACTORAGGRESSIVENESS(Target, 1, 2)
 End Function
 
 function setNonCombat()
-	Target = ActorTarget(Actor())
+	Target = ContextActor()
 	ACTORAGGRESSIVENESS(Target, 1, 3)
+End Function
+
+function recruit()
+	Player = Actor()
+	Target = ContextActor()
+	SetLeader(Target, Player)
 End Function
