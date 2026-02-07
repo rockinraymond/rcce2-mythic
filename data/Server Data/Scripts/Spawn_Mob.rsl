@@ -34,7 +34,7 @@ Function Main()
         giveitem(actor(), "chainmail armor", 1)
         giveitem(actor(), "round shield", 1)
     
-    ElseIf Race(Actor()) = "elf"
+    ElseIf Race(Actor()) = "Elf"
         SETATTRIBUTE(Actor(), "Strength", 9)
         SETATTRIBUTE(Actor(), "Toughness", 10)
         SETATTRIBUTE(Actor(), "Agility", 12)
@@ -45,7 +45,7 @@ Function Main()
         giveitem(actor(), "arrow", 100)
 
     
-    ElseIf Race(Actor()) = "halfling"
+    ElseIf Race(Actor()) = "Halfling"
         SETATTRIBUTE(Actor(), "Strength", 9)
         SETATTRIBUTE(Actor(), "Toughness", 10)
         SETATTRIBUTE(Actor(), "Agility", 12)

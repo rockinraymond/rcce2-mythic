@@ -950,9 +950,19 @@ Function UpdateNetwork()
 						A\Rider\Mount = Null
 						A\Rider = Null
 					EndIf
-
+					;Pet killed it display message
+					If Len(M\MessageData$) > 4
+						RuntimeID = RCE_IntFromStr(Mid$(M\MessageData$, 3, 2))
+						LeaderID = RCE_IntFromStr(Mid$(M\MessageData$, 5, 2))
+						Killer.ActorInstance = RuntimeIDList(RuntimeID)
+						KillerLeader.ActorInstance = RuntimeIDList(LeaderID)
+						Name$ = Trim$(A\Name$)
+						KillerName$ = Trim$(Killer\Name$)
+						If Name$ = "" Then Name$ = A\Actor\Race$
+						If KillerName$ = "" Then KillerName$ = Killer\Actor\Race$
+						If KillerLeader = Me Then Output(KillerName$ + " has killed " + Name$ + "!", 0, 225, 0)
 					; If I killed it, display message
-					If Len(M\MessageData$) > 2
+					ElseIf Len(M\MessageData$) > 2
 						RuntimeID = RCE_IntFromStr(Mid$(M\MessageData$, 3, 2))
 						Killer.ActorInstance = RuntimeIDList(RuntimeID)
 						Name$ = Trim$(A\Name$)
@@ -1044,6 +1054,7 @@ Function UpdateNetwork()
 						RuntimeID = RCE_IntFromStr(Mid$(M\MessageData$, 4, 2))
 						Damage = RCE_IntFromStr(Mid$(M\MessageData$, 6, 2)) - 1
 						DType$ = DamageTypes$(RCE_IntFromStr(Mid$(M\MessageData$, 8, 1)))
+						Alignment = RCE_IntFromStr(Mid$(M\MessageData$, 9, 1))
 						A2.ActorInstance = RuntimeIDList(RuntimeID)
 						If A2 <> Null
 							AnimateActorAttack(A)
@@ -1052,7 +1063,7 @@ Function UpdateNetwork()
 								PlayAnimation(A2, 3, 0.035, Rand(Anim_FirstHit, Anim_LastHit))
 								PlayActorSound(A, Rand(Speech_Attack1, Speech_Attack2))
 								PlayActorSound(A2, Rand(Speech_Hit1, Speech_Hit2))
-								CombatDamageOutputOthers(A, A2, Damage, DType$)
+								CombatDamageOutputOthers(A, A2, Damage, DType$, Alignment)
 								If A2\Actor\BloodTexID > 0
 									B.BloodSpurt = New BloodSpurt
 									B\Timer = MilliSecs()

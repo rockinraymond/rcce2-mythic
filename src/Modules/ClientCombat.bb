@@ -200,8 +200,21 @@ Function CombatDamageOutput(AI.ActorInstance, Amount, DType$)
 
 End Function
 
-Function CombatDamageOutputOthers(Attacker.ActorInstance, Defender.ActorInstance,  Amount, DType$)
-	
+Function CombatDamageOutputOthers(Attacker.ActorInstance, Defender.ActorInstance,  Amount, DType$, Alignment)
+
+	R = 225
+	G = 225
+	B = 0
+	;determine color of text based on if party members and or pets are in combat, if not the messages will be yellow/neutral
+	If Alignment = 2
+		R = 0
+		G = 225
+		B = 0
+	ElseIf Alignment = 3
+		R = 225
+		G = 0
+		B = 0
+	EndIf
 	; Chat message
 	If DamageInfoStyle = 2
 		AttackerName$ = Trim$(Attacker\Name$)
@@ -210,13 +223,13 @@ Function CombatDamageOutputOthers(Attacker.ActorInstance, Defender.ActorInstance
 		If DefenderName$ = "" Then DefenderName$ = Defender\Actor\Race$
 		; You hit him
 		If Amount > 0
-			Output(AttackerName$ + " hit " + DefenderName$ + " " LanguageString$(LS_For) + " " + Str$(Amount) + " " + DType$ + " " + LanguageString$(LS_DamageWow), 210, 210, 0)
+			Output(AttackerName$ + " hit " + DefenderName$ + " " + LanguageString$(LS_For) + " " + Str$(Amount) + " " + DType$ + " " + LanguageString$(LS_DamageWow), R, G, B)
 		EndIf
 	; Floating number
 	ElseIf DamageInfoStyle = 3
 		; He hit you
 	
-			CreateFloatingNumber(Defender, Amount, 200, 200, 0)
+			CreateFloatingNumber(Defender, Amount, R, G, B)
 		
 	EndIf
 

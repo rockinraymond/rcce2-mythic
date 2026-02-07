@@ -82,13 +82,13 @@ Function GiveXP(A.ActorInstance, XP, IgnoreParty = 0)
 	EndIf
 
 	; Add gain to character
-	A\XP = A\XP + XP
+		A\XP = A\XP + XP
 
-	; Call script and tell player if it's a human character
-	If A\RNID > 0
-		ThreadScript("LevelUp", "Main", Handle(A), 0)
-		RCE_Send(Host, A\RNID, P_XPUpdate, "M" + RCE_StrFromInt$(XP, 4), True)
-	EndIf
+		; Call script and tell player if it's a human character
+		If A\RNID > 0
+			ThreadScript("LevelUp", "Main", Handle(A), 0)
+			RCE_Send(Host, A\RNID, P_XPUpdate, "M" + RCE_StrFromInt$(XP, 4), True)
+		EndIf
 
 End Function
 
@@ -99,6 +99,7 @@ Function KillActor(A.ActorInstance, Killer.ActorInstance)
 	If A\RNID < 0
 		Pa$ = RCE_StrFromInt$(A\RuntimeID, 2)
 		If Killer <> Null Then Pa$ = Pa$ + RCE_StrFromInt$(Killer\RuntimeID, 2)
+		If Killer\Leader <> Null Then Pa$ = Pa$ + RCE_StrFromInt$(Killer\Leader\RuntimeID, 2)
 		AInstance.AreaInstance = Object.AreaInstance(A\ServerArea)
 		A2.ActorInstance = AInstance\FirstInZone
 		While A2 <> Null
@@ -373,17 +374,19 @@ Function ActorAttack(A1.ActorInstance, A2.ActorInstance)
 	If Damage > 0 
 		A2\Attributes\Value[HealthStat] = FinalDamage
 
-		;give out weapon skill xp
-		WeaponSkillString$ = GetActorWeaponSkillString$(A1)
-		WepXP = Damage * 6
-		WepXpParams$ = WeaponSkillString$ + "," + Str(WepXP)
-		ThreadScript("LevelUp", "giveSkillXp", Handle(A1), 0, WepXpParams$)
+		If A1\RNID > 0
+			;give out weapon skill xp
+			WeaponSkillString$ = GetActorWeaponSkillString$(A1)
+			WepXP = Damage * 6
+			WepXpParams$ = WeaponSkillString$ + "," + Str(WepXP)
+			ThreadScript("LevelUp", "giveSkillXp", Handle(A1), 0, WepXpParams$)
 
-		;give out armor skill xp
-		ArmorSkillString$ = GetActorArmorSkillString$(A2)
-		ArmorXP = Damage * 9
-		ArmXpParams$ = ArmorSkillString$ + "," + Str(ArmorXp)
-		ThreadScript("LevelUp", "giveSkillXp", Handle(A2), 0, ArmXpParams$)
+			;give out armor skill xp
+			ArmorSkillString$ = GetActorArmorSkillString$(A2)
+			ArmorXP = Damage * 9
+			ArmXpParams$ = ArmorSkillString$ + "," + Str(ArmorXp)
+			ThreadScript("LevelUp", "giveSkillXp", Handle(A2), 0, ArmXpParams$)
+		EndIf
 	EndIf
 		
 	; Tell player(s) if applicable
@@ -402,7 +405,13 @@ Function ActorAttack(A1.ActorInstance, A2.ActorInstance)
 	A3.ActorInstance = AInstance\FirstInZone
 	While A3 <> Null
 		If A3\RNID > 0
-			If A3 <> A1 And A3 <> A2 Then RCE_Send(Host, A3\RNID, P_AttackActor, Pa$, True)
+			If A3 <> A1 And A3 <> A2
+				Alignment = 1 ;neutral
+				If A1\Leader = A3 Then Alignment = 2 ;friendly
+				If A2\Leader = A3 Then Alignment = 3 ;hostile
+				Pa$ = Pa$ + RCE_StrFromInt$(Alignment, 1)
+				RCE_Send(Host, A3\RNID, P_AttackActor, Pa$, True)
+			EndIf
 		EndIf
 		A3 = A3\NextInZone
 	Wend
