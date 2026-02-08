@@ -592,6 +592,7 @@ Function UpdateInterface()
 					Me\Mount\WalkingBackward = WasBack
 					RotateEntity(Me\Mount\CollisionEN, 0, EntityYaw#(Me\CollisionEN), 0)
 				EndIf
+				CamYaw# = EntityYaw#(Me\CollisionEN)
 								
 			; Turn left
 			ElseIf ControlDown(Key_TurnLeft)
@@ -606,6 +607,7 @@ Function UpdateInterface()
 					Me\Mount\WalkingBackward = WasBack
 					RotateEntity(Me\Mount\CollisionEN, 0, EntityYaw#(Me\CollisionEN), 0)
 				EndIf
+				CamYaw# = EntityYaw#(Me\CollisionEN)
 			EndIf
 		EndIf
 
@@ -877,64 +879,64 @@ Function UpdateInterface()
 					ShowEntity(ActorSelectEN)
 
 					; Double clicking the target makes you run towards it and attack if in range [~~~]
-					If IsDouble = True And OldTarget = PlayerTarget
-						SetDestination(Me, PickedX#(), PickedZ#(), PickedY#())
+					; If IsDouble = True And OldTarget = PlayerTarget
+					; 	SetDestination(Me, PickedX#(), PickedZ#(), PickedY#())
 						
-						Me\IsRunning = True
-						If Me\Mount <> Null Then Me\Mount\IsRunning = True
+					; 	Me\IsRunning = True
+					; 	If Me\Mount <> Null Then Me\Mount\IsRunning = True
 						
-						; Disable double-clicking for attacks [ref14] ****************************
+					; 	; Disable double-clicking for attacks [ref14] ****************************
 						
-						; Check target is a combatant
-						If AI\Aggressiveness < 3
-							 ;Check faction rating
-							If Me\FactionRatings[AI\HomeFaction] <= 150 Then AttackTarget = True
-							GY_FreeGadget(WContextMenu)
-							WContextMenu = 0
-						EndIf
-						;*************************************************************************
-					Else
+					; 	; Check target is a combatant
+					; 	If AI\Aggressiveness < 3
+					; 		 ;Check faction rating
+					; 		If Me\FactionRatings[AI\HomeFaction] <= 150 Then AttackTarget = True
+					; 		GY_FreeGadget(WContextMenu)
+					; 		WContextMenu = 0
+					; 	EndIf
+					; 	;*************************************************************************
+					; Else
 						If CharInteractVisible
 							UpdateCharInteractionWindow()
+							; Create context menu
+							If WContextMenu <> 0 
+							GY_FreeGadget(WContextMenu)
+							WContextMenu = 0
+							EndIf
+							WContextMenu = GY_CreateWindowInter("Actions", GY_MouseX#, GY_MouseY#, 0.1, 0.08, True, True, False, CreateTexture(2, 2))
+							Y# = 0.0
+							; Interact button
+							Local interactLabel$ = "Interact"
+							Local iR = 0
+							Local iG = 255
+							Local iB = 0
+							If EntityDistance#(AI\CollisionEN, Me\CollisionEN) > InteractRange
+								interactLabel$ = "Move To"
+								iR = 255
+								iG = 255
+								iB = 255
+							EndIf
+							BInteract = GY_CreateButton(WContextMenu, Y#, 0.0, 1.0, 0.33, interactLabel$, False, iR, iG, iB)
+							Y# = Y# + 0.33
+							; Attack button (only if target is attackable)
+							If AI\Aggressiveness < 3 And Me\FactionRatings[AI\HomeFaction] <= 150
+								BAttack = GY_CreateButton(WContextMenu, 0.0, Y#, 1.0, 0.33, "Attack", False, 255, 0, 0)
+								Y# = Y# + 0.33
+							EndIf
+							
+							; Examine button
+							BExamine = GY_CreateButton(WContextMenu, 0.0, Y#, 1.0, 0.33, "Examine", False, 255, 255, 255)
+							Y# = Y# + 0.33
+							; Trade Button
+							If AI\Actor\TradeMode > 0
+								BTrade = GY_CreateButton(WContextMenu, 0.0, Y#, 1.0, 0.33, "Trade", False, 0, 255, 0)
+							EndIf
 						Else
 							CreateCharInteractionWindow(AI)
 						EndIf
-						; Create context menu
-						If WContextMenu <> 0 
-							GY_FreeGadget(WContextMenu)
-							WContextMenu = 0
-						EndIf
-						WContextMenu = GY_CreateWindowInter("Actions", GY_MouseX#, GY_MouseY#, 0.1, 0.08, True, True, False, CreateTexture(2, 2))
-						Y# = 0.0
-						; Interact button
-						Local interactLabel$ = "Interact"
-						Local iR = 0
-						Local iG = 255
-						Local iB = 0
-						If EntityDistance#(AI\CollisionEN, Me\CollisionEN) > InteractRange
-							interactLabel$ = "Move To"
-							iR = 255
-							iG = 255
-							iB = 255
-						EndIf
-						BInteract = GY_CreateButton(WContextMenu, Y#, 0.0, 1.0, 0.33, interactLabel$, False, iR, iG, iB)
-						Y# = Y# + 0.33
-						; Attack button (only if target is attackable)
-						If AI\Aggressiveness < 3 And Me\FactionRatings[AI\HomeFaction] <= 150
-							BAttack = GY_CreateButton(WContextMenu, 0.0, Y#, 1.0, 0.33, "Attack", False, 255, 0, 0)
-							Y# = Y# + 0.33
-						EndIf
 						
-						; Examine button
-						BExamine = GY_CreateButton(WContextMenu, 0.0, Y#, 1.0, 0.33, "Examine", False, 255, 255, 255)
-						Y# = Y# + 0.33
-						; Trade Button
-						If AI\Actor\TradeMode > 0
-							BTrade = GY_CreateButton(WContextMenu, 0.0, Y#, 1.0, 0.33, "Trade", False, 0, 255, 0)
-						EndIf
-
 						AttackTarget = False
-					EndIf
+					//EndIf
 					;HideEntity(ClickMarkerEN) ;{@@@~}
 				; Target is a dropped item
 				ElseIf Target$ = "D"
@@ -1085,6 +1087,8 @@ Function UpdateInterface()
 
 	; Attack selected actor with the attack key
 	If ControlHit(Key_Attack)
+		GY_FreeGadget(WContextMenu)
+		WContextMenu = 0
 		AI.ActorInstance = Object.ActorInstance(PlayerTarget)
 		If AI <> Null
 			SetDestination(Me, EntityX#(AI\CollisionEN), EntityZ#(AI\CollisionEN), EntityY#(AI\CollisionEN))
@@ -1117,9 +1121,13 @@ Function UpdateInterface()
 
 	; Switch action bars
 	If GY_ButtonHit(BPrevBar)
+	GY_FreeGadget(WContextMenu)
+		WContextMenu = 0
 		If ActionBarStart > 1 Then ActionBarStart = ActionBarStart - 1
 		UpdateActionBarIcons()
 	ElseIf GY_ButtonHit(BNextBar)
+	GY_FreeGadget(WContextMenu)
+		WContextMenu = 0
 		If ActionBarStart < 3 Then ActionBarStart = ActionBarStart + 1
 		UpdateActionBarIcons()
 	EndIf
@@ -1127,6 +1135,8 @@ Function UpdateInterface()
 	For i = 0 To 11
 		; Left clicked
 		If GY_ButtonHit(BActionBar(i))
+		GY_FreeGadget(WContextMenu)
+		WContextMenu = 0
 			Slot = i
 			If ActionBarStart = 2
 				Slot = Slot + 12
@@ -1241,6 +1251,8 @@ Function UpdateInterface()
 		If i < 10 Then FScan = 2 + i Else FScan = 2 + i
 		;If i < 10 Then FScan = 59 + i Else FScan = 77 + i
 		If KeyHit(FScan)
+		GY_FreeGadget(WContextMenu)
+		WContextMenu = 0
 			Slot = i
 			If ActionBarStart = 2
 				Slot = Slot + 12
@@ -3115,6 +3127,8 @@ EndIf
 		PlaySound(GY_SBeep)
 	EndIf
 	If GY_ButtonDown(BInventory) <> InventoryVisible
+		GY_FreeGadget(WContextMenu)
+		WContextMenu = 0
 		If GY_Modal = False
 			InventoryVisible = GY_ButtonDown(BInventory)
 			; Show inventory
@@ -3209,6 +3223,8 @@ EndIf
 		PlaySound(GY_SBeep)
 	EndIf
 	If GY_ButtonDown(BQuestLog) <> QuestLogVisible
+		GY_FreeGadget(WContextMenu)
+		WContextMenu = 0
 		If GY_Modal = False
 			QuestLogVisible = GY_ButtonDown(BQuestLog)
 			If QuestLogVisible = True
@@ -3234,6 +3250,8 @@ EndIf
 		PlaySound(GY_SBeep)
 	EndIf
 	If GY_ButtonDown(BParty) <> PartyVisible
+	GY_FreeGadget(WContextMenu)
+		WContextMenu = 0
 		If GY_Modal = False
 			PartyVisible = GY_ButtonDown(BParty)
 			If PartyVisible = True
@@ -3282,6 +3300,8 @@ EndIf
 		PlaySound(GY_SBeep)
 	EndIf
 	If GY_ButtonDown(BCharStats) <> CharStatsVisible
+		GY_FreeGadget(WContextMenu)
+		WContextMenu = 0
 		If GY_Modal = False ;this may need to be commented out.
 			CharStatsVisible = GY_ButtonDown(BCharStats)
 			If CharStatsVisible = True
@@ -3306,8 +3326,11 @@ EndIf
 	If (KeyHit(37) And ChatEntry\Alpha# < 0.5 And First TextInput = Null) Or GY_WindowClosed(WSpells) ;Changed keybinding to K
 		GY_SetButtonState(BSpells, Not SpellsVisible)
 		PlaySound(GY_SBeep)
+		
 	EndIf
 	If GY_ButtonDown(BSpells) <> SpellsVisible
+		GY_FreeGadget(WContextMenu)
+		WContextMenu = 0
 		If GY_Modal = False
 			SpellsVisible = GY_ButtonDown(BSpells)
 			; Show spellbook
@@ -3362,6 +3385,8 @@ EndIf
 	EndIf
 	
 	If GY_ButtonDown(BMenu) <> MenuVisible
+		GY_FreeGadget(WContextMenu)
+		WContextMenu = 0
 		If GY_Modal = False
 			MenuVisible = GY_ButtonDown(BMenu)  
 			If MenuVisible = True
@@ -3413,6 +3438,8 @@ EndIf
 		PlaySound(GY_SBeep)
 	EndIf
 	If GY_ButtonDown(BMap) <> MapVisible
+		GY_FreeGadget(WContextMenu)
+		WContextMenu = 0
 		If GY_Modal = False
 			MapVisible = GY_ButtonDown(BMap)
 			If MapVisible = True
