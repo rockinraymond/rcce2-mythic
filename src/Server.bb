@@ -547,7 +547,7 @@ Repeat
 					If UpdateArea\Instances[j]\Spawned[i] < UpdateArea\SpawnMax[i]
 						If UpdateArea\Instances[j]\SpawnLast[i] = 0
 							UpdateArea\Instances[j]\SpawnLast[i] = MilliSecs()
-						ElseIf MilliSecs() - UpdateArea\Instances[j]\SpawnLast[i] > UpdateArea\SpawnFrequency[i] * 1000
+						ElseIf MilliSecs() - UpdateArea\Instances[j]\SpawnLast[i] > UpdateArea\SpawnFrequency[i] * 60000
 							 If ActorList(UpdateArea\SpawnActor[i]) <> Null
 							WriteLog(MainLog, "Spawning AI actor: " + ActorList(UpdateArea\SpawnActor[i])\Race$ + " in zone: " + UpdateArea\Name$)
 							AI.ActorInstance = CreateActorInstance.ActorInstance(ActorList(UpdateArea\SpawnActor[i]))

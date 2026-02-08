@@ -1741,7 +1741,7 @@ Global GWaypointOptions = FUI_GroupBox(TZones, GUE_width - 224, 47, 210, GUE_hei
 	FUI_ToolTip(CSpawnDeathScript, "Tip: Scripts must start with  Death_  to be seen here.")
 	FUI_ComboBoxItem(CSpawnDeathScript, "None")
 	FUI_Label(GWaypointOptions, 5, 320, "Spawn delay:")
-	Global SSpawnFrequency = FUI_Spinner(GWaypointOptions, 5, 340, 195, 20, 0, 10000, 5, 1, DTYPE_INTEGER, " seconds")
+	Global SSpawnFrequency = FUI_Spinner(GWaypointOptions, 5, 340, 195, 20, 0, 10000, 5, 1, DTYPE_INTEGER, " minutes")
 	FUI_Label(GWaypointOptions, 5, 370, "Number to spawn:")
 	Global SSpawnMax = FUI_Spinner(GWaypointOptions, 5, 390, 195, 20, 1, 100, 5, 1, DTYPE_INTEGER)
 	FUI_Label(GWaypointOptions, 5, 420, "Auto-movement range:")
