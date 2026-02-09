@@ -741,7 +741,11 @@ Function UpdateActorInstances(Broadcast)
 							XDist# = AI\X# - AI\AITarget\X#
 							ZDist# = AI\Z# - AI\AITarget\Z#
 							Dist# = (XDist# * XDist#) + (ZDist# * ZDist#)
-							CheckDist# = 4.0 + AI\Actor\Radius# + AI\AITarget\Actor\Radius#
+							ActorCombatRange = 4.0
+							If AI\Inventory\Items[SlotI_Weapon] <> Null
+								If AI\Inventory\Items[SlotI_Weapon]\Item\Range# > 0 Then ActorCombatRange = AI\Inventory\Items[SlotI_Weapon]\Item\Range#
+							EndIf
+							CheckDist# = ActorCombatRange + AI\Actor\Radius# + AI\AITarget\Actor\Radius#
 							If Dist# > CheckDist# * CheckDist#
 								AI\DestX# = AI\AITarget\X#
 								AI\DestZ# = AI\AITarget\Z#

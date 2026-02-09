@@ -290,6 +290,7 @@ Next
 
 ; Startup script if present
 ThreadScript("Startup", "Main", 0, 0)
+PreLoadSpawns()
 
 ; Unlock server if commandline argument present
 If Instr(Upper$(CommandLine$()), "-UNLOCK") > 0
@@ -570,7 +571,7 @@ Repeat
 						UpdateArea\Instances[j]\SpawnLast[i] = 0
 					EndIf
 				Next
-
+				
 				For AI.ActorInstance = Each ActorInstance
 					If AI\RuntimeID > -1 And AI\RNID > 0
 						AInstance.AreaInstance = Object.AreaInstance(AI\ServerArea)
