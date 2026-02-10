@@ -713,6 +713,8 @@ Function UpdateActorInstances(Broadcast)
 					EndIf
 				; Attack mode
 				ElseIf AI\AIMode = AI_Chase
+					; Look for targets now and then
+					If Rand(1, 10) = 1 Then AILookForTargets(AI)
 					; Target dead
 					If AI\AITarget <> Null
 						If AI\AITarget\Attributes\Value[HealthStat] <= 0 Then AI\AITarget = Null

@@ -1708,6 +1708,8 @@ Global GTriggerOptions = FUI_GroupBox(TZones, GUE_width - 224, 47, 210, GUE_heig
 	Global LTriggerMethod = FUI_Label(GTriggerOptions, 100, 80, "", ALIGN_CENTER)
 	FUI_Label(GTriggerOptions, 5, 110, "Trigger ID:")
 	Global LZoneTriggerID = FUI_Label(GTriggerOptions, 100, 130, "", ALIGN_CENTER)
+	;FUI_Label(GTriggerOptions, 5, 160, "Trigger delay:")
+	;Global SZoneTriggerDelay = FUI_Spinner(GTriggerOptions, 5, 180, 195, 20, 0, 10000, 5, 1, DTYPE_INTEGER, " minutes")
 
 ; Waypoint placement panel
 ;Global GWaypoint = FUI_GroupBox(TZones, 800, 47, 165, 580, "Waypoint placement")
