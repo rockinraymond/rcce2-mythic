@@ -229,10 +229,12 @@ Function LoadActorInstance3D(A.ActorInstance, Scale# = 1.0, SkipAttachments = Fa
 			; Paint
 			B = CreateBrush()
 			Tex = GetTexture(A\Actor\MaleBodyIDs[BodyTex])
-				If A\Inventory\Items[SlotI_Chest] <> Null
-					If A\Inventory\Items[SlotI_Chest]\Item <> Null
-						If A\Inventory\Items[SlotI_Chest]\Item\MaleTexID < 65535
-							Tex = GetTexture(A\Inventory\Items[SlotI_Chest]\Item\MaleTexID)
+				If A\Actor\Playable > 0
+					If A\Inventory\Items[SlotI_Chest] <> Null
+						If A\Inventory\Items[SlotI_Chest]\Item <> Null
+							If A\Inventory\Items[SlotI_Chest]\Item\MaleTexID < 65535
+								Tex = GetTexture(A\Inventory\Items[SlotI_Chest]\Item\MaleTexID)
+							EndIf
 						EndIf
 					EndIf
 				EndIf
@@ -342,10 +344,12 @@ Function LoadActorInstance3D(A.ActorInstance, Scale# = 1.0, SkipAttachments = Fa
 			; Paint
 			B = CreateBrush()
 			Tex = GetTexture(A\Actor\FemaleBodyIDs[BodyTex])
-				If A\Inventory\Items[SlotI_Chest] <> Null
-					If A\Inventory\Items[SlotI_Chest]\Item <> Null
-						If A\Inventory\Items[SlotI_Chest]\Item\FemaleTexID < 65535
-							Tex = GetTexture(A\Inventory\Items[SlotI_Chest]\Item\FemaleTexID)
+				If A\Actor\Playable > 0
+					If A\Inventory\Items[SlotI_Chest] <> Null
+						If A\Inventory\Items[SlotI_Chest]\Item <> Null
+							If A\Inventory\Items[SlotI_Chest]\Item\FemaleTexID < 65535
+								Tex = GetTexture(A\Inventory\Items[SlotI_Chest]\Item\FemaleTexID)
+							EndIf
 						EndIf
 					EndIf
 				EndIf
