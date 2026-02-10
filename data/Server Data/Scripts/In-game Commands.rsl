@@ -61,6 +61,7 @@ Function Heal()
 		; Set health to maximum
 		Max = MaxAttribute(Player, "Health")
 		SetAttribute(Player, "Health", Max)
+		SetAttribute(Player, "Mana", MaxAttribute(Player,"Mana"))
 	EndIf
 
 	; Done
@@ -136,7 +137,7 @@ SetAttribute(actor(), "Stealth", 75)
 End function
 
 function TalentTest()
-	AddAbility(Actor(), "TestSkill", 1)
+	AddAbility(Actor(), "Magic Missile", 1)
 	AddAbility(Actor(), "FireBall", 1)
 	AddAbility(Actor(), "New ability1", 1)
 	AddAbility(Actor(), "New ability2", 2)

@@ -678,7 +678,7 @@ If TotalProjectiles = 0
 	FUI_SendMessage(CProjSelected, M_DELETEINDEX, 1)
 EndIf
 ; Properties
-G = FUI_GroupBox(TProjectiles, 20, 100, 610, 340, "Projectile properties")
+G = FUI_GroupBox(TProjectiles, 20, 100, 610, 500, "Projectile properties")
 FUI_Label(G, 10, 22, "Projectile name:")
 Global TProjName = FUI_TextBox(G, 100, 20, 320, 20)
 Global LProjMesh = FUI_Label(G, 10, 52, "Projectile mesh: [NONE]")
@@ -713,6 +713,32 @@ For i = 0 To 19
 Next
 FUI_Label(G, 10, 292, "Movement speed:")
 Global SProjSpeed = FUI_Spinner(G, 100, 290, 90, 20, 1, 100, 0, 1, DTYPE_INTEGER, "%")
+
+FUI_Label(G, 10, 322, "Governing Skill:")
+Global CProjectileSkill = FUI_ComboBox(G, 100, 320, 350, 20, 10)
+FUI_ComboBoxItem(CProjectileSkill, "None (no skill mod)")
+For i = 0 To 39
+	If AttributeNames$(i) <> ""
+		Item = FUI_ComboBoxItem(CProjectileSkill, AttributeNames$(i)) : FUI_SendMessage(Item, M_SETDATA,  Handle(C))
+	EndIf
+Next
+FUI_Label(G, 10, 352, "Governing Skill:")
+Global CProjectileAttribute = FUI_ComboBox(G, 100, 350, 350, 20, 10)
+FUI_ComboBoxItem(CProjectileAttribute, "None (no attribute mod)")
+For i = 0 To 39
+	If AttributeNames$(i) <> ""
+		Item = FUI_ComboBoxItem(CProjectileAttribute, AttributeNames$(i)) : FUI_SendMessage(Item, M_SETDATA,  Handle(C))
+	EndIf
+Next
+
+FUI_Label(G, 10, 382, "Save type:")
+Global CProjSaveType = FUI_ComboBox(G, 100, 380, 200, 20, 6)
+For i = 0 To 19
+	If DamageTypes$(i) <> ""
+		Item = FUI_ComboBoxItem(CProjSaveType, DamageTypes$(i))
+		FUI_SendMessage(Item, M_SETDATA, i)
+	EndIf
+Next
 
 ; Init display
 FUI_SendMessage(CProjSelected, M_SETINDEX, 1)
@@ -4040,8 +4066,31 @@ Cls
 					SelectedProj\DamageType = FUI_SendMessage(FUI_SendMessage(CProjDamageType, M_GETSELECTED), M_GETDATA)
 					ProjectilesSaved = False
 				EndIf
+			Case CProjSaveType
+				If SelectedProj <> Null
+					SelectedProj\SaveType = FUI_SendMessage(FUI_SendMessage(CProjSaveType, M_GETSELECTED), M_GETDATA)
+					ProjectilesSaved = False
+				EndIf
 			Case SProjSpeed
 				If SelectedProj <> Null Then SelectedProj\Speed = E\EventData : ProjectilesSaved = False
+			Case CProjectileSkill
+				If SelectedProj <> Null
+					If FUI_SendMessage(CProjectileSkill, M_GETINDEX) = 1
+						SelectedProj\Skill$ = ""
+					Else
+						SelectedProj\Skill$ = FUI_SendMessage(CProjectileSkill, M_GETCAPTION)
+					EndIf
+					ProjectilesSaved = False
+				EndIf
+			Case CProjectileAttribute
+				If SelectedProj <> Null
+					If FUI_SendMessage(CProjectileAttribute, M_GETINDEX) = 1
+						SelectedProj\Attribute$ = ""
+					Else
+						SelectedProj\Attribute$ = FUI_SendMessage(CProjectileAttribute, M_GETCAPTION)
+					EndIf
+					ProjectilesSaved = False
+				EndIf
 
 			; Projectile navigation
 			Case CProjSelected
@@ -6751,10 +6800,12 @@ Cls
 						DamageTypes$(i) = E\EventData
 						FUI_SendMessage(CItemDamageType, M_RESET)
 						FUI_SendMessage(CProjDamageType, M_RESET)
+						FUI_SendMessage(CProjSaveType, M_RESET)
 						FUI_SendMessage(CWaterDamageType, M_RESET)
 						For i = 0 To 19
 							If DamageTypes$(i) <> ""
 								Item = FUI_ComboBoxItem(CItemDamageType, DamageTypes$(i)) : FUI_SendMessage(Item, M_SETDATA, i)
+								Item = FUI_ComboBoxItem(CProjSaveType, DamageTypes$(i)) : FUI_SendMessage(Item, M_SETDATA, i)
 								Item = FUI_ComboBoxItem(CProjDamageType, DamageTypes$(i)) : FUI_SendMessage(Item, M_SETDATA, i)
 								Item = FUI_ComboBoxItem(CWaterDamageType, DamageTypes$(i)) : FUI_SendMessage(Item, M_SETDATA, i)
 							EndIf
@@ -7536,7 +7587,10 @@ Function UpdateProjectileDisplay()
 		FUI_SendMessage(SProjHitChance, M_SETVALUE, 1)
 		FUI_SendMessage(SProjDamage, M_SETVALUE, 1)
 		FUI_SendMessage(CProjDamageType, M_SETINDEX, 1)
+		FUI_SendMessage(CProjSaveType, M_SETINDEX, 1)
 		FUI_SendMessage(SProjSpeed, M_SETVALUE, 1)
+		FUI_SendMessage(CProjectileAttribute, M_SETINDEX, 1)
+		FUI_SendMessage(CProjectileSkill, M_SETINDEX, 1)
 	; Projectile selected, fill in relevant information
 	Else
 		FUI_SendMessage(TProjName, M_SETCAPTION, SelectedProj\Name$)
@@ -7579,7 +7633,30 @@ Function UpdateProjectileDisplay()
 				EndIf
 			EndIf
 		Next
+		For i = 0 To 19
+			If DamageTypes$(i) <> ""
+				Idx = Idx + 1
+				If i = SelectedProj\SaveType
+					FUI_SendMessage(CProjSaveType, M_SETINDEX, Idx)
+					Exit
+				EndIf
+			EndIf
+		Next
 		FUI_SendMessage(SProjSpeed, M_SETVALUE, SelectedProj\Speed)
+		FUI_SendMessage(CProjectileSkill, M_SETINDEX, 1)
+		If SelectedProj\Skill$ <> ""
+			For i = 0 To 39
+				FUI_SendMessage(CProjectileSkill, M_SETINDEX, i)
+				If Upper$(FUI_SendMessage(CProjectileSkill, M_GETCAPTION)) = Upper$(SelectedProj\Skill$) Then Exit
+			Next
+		EndIf
+		FUI_SendMessage(CProjectileAttribute, M_SETINDEX, 1)
+		If SelectedProj\Attribute$ <> ""
+			For i = 0 To 39
+				FUI_SendMessage(CProjectileAttribute, M_SETINDEX, i)
+				If Upper$(FUI_SendMessage(CProjectileAttribute, M_GETCAPTION)) = Upper$(SelectedProj\Attribute$) Then Exit
+			Next
+		EndIf
 	EndIf
 
 End Function

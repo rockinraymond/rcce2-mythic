@@ -194,10 +194,11 @@ Function FireProjectile(P.Projectile, A1.ActorInstance, A2.ActorInstance)
 
 	; Does the projectile hit the target?
 	ToHit = Rand(100)
+	HitChance = P\HitChance + A1\Attributes\Value[FindAttribute(P\Skill$)] - A2\Resistances[P\SaveType]
 	If ToHit <= P\HitChance
 		; Calculate damage
-		AP = GetArmourLevel(A2) + (A2\Resistances[P\DamageType] - 100)
-		Damage = (P\Damage + Rand(-5, 5)) - AP
+		DefenderResistance = (A2\Resistances[P\DamageType])
+		Damage = Rand(1, P\Damage) + (A1\Attributes\Value[FindAttribute(P\Attribute$)] - 10 ) - (DefenderResistance / 10)
 		If Damage < 1 Then Damage = 1
 
 		; Apply damage
@@ -225,6 +226,11 @@ Function FireProjectile(P.Projectile, A1.ActorInstance, A2.ActorInstance)
 				AICallForHelp(A2)
 			EndIf
 		EndIf
+
+		;give out skill xp
+			SKillXP = Damage * 6
+			SkillXpParams$ = P\Skill$ + "," + Str(SkillXP)
+			ThreadScript("LevelUp", "giveSkillXp", Handle(A1), 0, SkillXpParams$)
 
 		; Death
 		If A2\Attributes\Value[HealthStat] <= 0 Then KillActor(A2, A1)
@@ -296,9 +302,6 @@ Function ActorAttack(A1.ActorInstance, A2.ActorInstance)
 		EndIf
 	EndIf
 
-	
-
-
 	; Calculate damage
 	; Hardcoded formula
 	If CombatFormula <> 4
@@ -344,7 +347,7 @@ Function ActorAttack(A1.ActorInstance, A2.ActorInstance)
 			BlockRoll = Rand(1,100)
 			If (BlockRoll > DefendBlock)
 				DamageEquipment = True
-				Damage = Rand(1,AttackerMaxDamage)  + DamageBonus
+				Damage = Rand(1,AttackerMaxDamage)  + DamageBonus - (DefenderResistance / 10)
 				; Critical damage
 				If HitRoll < AttackerCritChance
 					Damage = AttackerMaxDamage + 1 + DamageBonus

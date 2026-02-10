@@ -1,0 +1,85 @@
+Using "RC_Core.rcm"
+;
+; Date/Time: 14:27:55 on 17/04/2012
+; By Terrier on GIULIANI-PC
+
+Function Main()
+
+    Player = Actor()
+    Target = ContextActor()
+
+    SpellCost = 1
+    ResourceName$ = "Mana"
+    SpellName$ = "Magic Missile"
+    ProjectileName$ = "Magic Missile"
+    SkillName$ = "Arcane Spells"
+
+
+    If CastingChecks(Player, Target) < 1
+        Return
+    EndIf   
+
+    ;Check the mana
+    ResourceAmt = Attribute(Player, ResourceName$)
+    If(ResourceAmt < SpellCost)
+        Output(Player, "Not enough " + ResourceName$, 255, 0, 0)
+        Return
+    EndIf
+    SetAttribute(Player, ResourceName$, ResourceAmt - SpellCost)
+
+
+    ;Particles and casting animation
+    AnimateActor(Player, "Cast Magic", 0.015, 1)
+    Output(Player, "Casting " + SpellName$, 255, 0, 255) 
+	AddActorEffect(Player, "Casting", "None", 0, 2,0)
+    
+    ;create progress bar
+	bar = CreateProgressBar(Player,200,0,225,.4,.8,.2,.04,9,0,"Magic Missile")
+	Repeat
+	UpdateProgressBar(Player,bar,i)
+    DoEvents(100)
+    i =  i + 1
+    If(Attribute(Player, "Health") < 0)
+        Output(Player, "You cannot cast spells when you are dead",255, 255, 0)
+        Return
+    EndIf
+	Until i = 20
+	DeleteProgressBar(Player,Bar)
+    ZZADDSKILLXP(Player, SkillName$, SpellCost * 10)
+    
+    FireProjectile(Player, Target, ProjectileName$)
+
+    Return
+
+End Function
+
+Function CastingChecks(Player,Target)
+    ;is player dead?
+    If(Attribute(Player, "Health") < 0)
+        Output(Player, "You cannot cast spells when you are dead",255, 255, 0)
+        Return 0
+    EndIf
+
+    ;Casting Check
+    If ActorHasEffect(Player, "Casting")
+        OutPut(Player, "You are already casting a spell!", 255, 0, 255)
+    Return 0
+    EndIf
+
+    ;NPC Check
+    If (Actoraggressiveness(Target) = 3)
+	    Output(Player, "No Valid Target Selected", 255, 50, 50)
+	    Return 0
+    EndIf
+
+    ;Check if the target is correct?
+    If(Target = 0)
+        Output(Player, "No Valid Target Selected",255, 50, 50)
+        Return 0
+    EndIf
+
+    Return 1
+
+End Function
+
+
