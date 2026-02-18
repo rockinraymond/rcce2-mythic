@@ -2050,10 +2050,10 @@ EndIf
 					hasPenalties = False
 					
 					For j = 0 to 39
-						If Me\Inventory\Items[i]\Item\Attributes\Value[j] > 0
+						If Me\Inventory\Items[i]\Attributes\Value[j] > 0
 							hasBonuses = True
 							Y# = Y# + YInterval#
-							GY_CreateLabel(WToolTip, 0.02, Y#, AttributeNames$(j) + ": +" + Me\Inventory\Items[i]\Item\Attributes\Value[j], 0, 255, 0)
+							GY_CreateLabel(WToolTip, 0.02, Y#, AttributeNames$(j) + ": +" + Me\Inventory\Items[i]\Attributes\Value[j], 0, 255, 0)
 						EndIf
 					Next
 					For j = 0 to 19
@@ -2065,10 +2065,10 @@ EndIf
 					Next
 					If hasBonuses = True Then GY_CreateLabel(WTooltip, 0.02, BonusY#, "BONUSES", 255, 255, 255)
 					For j = 0 to 39
-						If Me\Inventory\Items[i]\Item\Attributes\Value[j] < 0
+						If Me\Inventory\Items[i]\Attributes\Value[j] < 0
 							hasPenalties = True
 							Y2# = Y2# + YInterval#
-							GY_CreateLabel(WToolTip, 0.5, Y2#, AttributeNames$(j) + ": " + Me\Inventory\Items[i]\Item\Attributes\Value[j], 255, 0, 0)
+							GY_CreateLabel(WToolTip, 0.5, Y2#, AttributeNames$(j) + ": " + Me\Inventory\Items[i]\Attributes\Value[j], 255, 0, 0)
 						EndIf
 					Next
 					For j = 0 to 19
@@ -2219,10 +2219,10 @@ EndIf
 					hasPenalties = False
 					
 					For j = 0 to 39
-						If Me\Inventory\Items[i + SlotI_Backpack]\Item\Attributes\Value[j] > 0
+						If Me\Inventory\Items[i + SlotI_Backpack]\Attributes\Value[j] > 0
 							hasBonuses = True
 							Y# = Y# + YInterval#
-							GY_CreateLabel(WToolTip, 0.02, Y#, AttributeNames$(j) + ": +" + Me\Inventory\Items[i + SlotI_Backpack]\Item\Attributes\Value[j], 0, 255, 0)
+							GY_CreateLabel(WToolTip, 0.02, Y#, AttributeNames$(j) + ": +" + Me\Inventory\Items[i + SlotI_Backpack]\Attributes\Value[j], 0, 255, 0)
 						EndIf
 					Next
 					For j = 0 to 19
@@ -2234,10 +2234,10 @@ EndIf
 					Next
 					If hasBonuses = True Then GY_CreateLabel(WTooltip, 0.02, BonusY#, "BONUSES", 255, 255, 255)
 					For j = 0 to 39
-						If Me\Inventory\Items[i + SlotI_Backpack]\Item\Attributes\Value[j] < 0
+						If Me\Inventory\Items[i + SlotI_Backpack]\Attributes\Value[j] < 0
 							hasPenalties = True
 							Y2# = Y2# + YInterval#
-							GY_CreateLabel(WToolTip, 0.5, Y2#, AttributeNames$(j) + ": " + Me\Inventory\Items[i + SlotI_Backpack]\Item\Attributes\Value[j], 255, 0, 0)
+							GY_CreateLabel(WToolTip, 0.5, Y2#, AttributeNames$(j) + ": " + Me\Inventory\Items[i + SlotI_Backpack]\Attributes\Value[j], 255, 0, 0)
 						EndIf
 					Next
 					For j = 0 to 19
@@ -2381,10 +2381,10 @@ EndIf
 					hasPenalties = False
 					
 					For j = 0 to 39
-						If TradeItems(i)\Item\Attributes\Value[j] > 0
+						If TradeItems(i)\Attributes\Value[j] > 0
 							hasBonuses = True
 							Y# = Y# + YInterval#
-							GY_CreateLabel(WToolTip, 0.02, Y#, AttributeNames$(j) + ": +" + TradeItems(i)\Item\Attributes\Value[j], 0, 255, 0)
+							GY_CreateLabel(WToolTip, 0.02, Y#, AttributeNames$(j) + ": +" + TradeItems(i)\Attributes\Value[j], 0, 255, 0)
 						EndIf
 					Next
 					For j = 0 to 19
@@ -2396,10 +2396,10 @@ EndIf
 					Next
 					If hasBonuses = True Then GY_CreateLabel(WTooltip, 0.02, BonusY#, "BONUSES", 255, 255, 255)
 					For j = 0 to 39
-						If TradeItems(i)\Item\Attributes\Value[j] < 0
+						If TradeItems(i)\Attributes\Value[j] < 0
 							hasPenalties = True
 							Y2# = Y2# + YInterval#
-							GY_CreateLabel(WToolTip, 0.5, Y2#, AttributeNames$(j) + ": " + TradeItems(i)\Item\Attributes\Value[j], 255, 0, 0)
+							GY_CreateLabel(WToolTip, 0.5, Y2#, AttributeNames$(j) + ": " + TradeItems(i)\Attributes\Value[j], 255, 0, 0)
 						EndIf
 					Next
 					For j = 0 to 19

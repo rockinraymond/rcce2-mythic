@@ -1313,6 +1313,7 @@ Function UpdateNetwork()
 												AI\Inventory\Amounts[SlotI] = 0
 											EndIf
 											AI\Inventory\Items[SlotI] = II
+											AI\LastGivenItem = AI\Inventory\Items[SlotI]
 											AI\Inventory\Amounts[SlotI] = AI\Inventory\Amounts[SlotI] + II\Assignment
 											II\Assignment = 0
 											If SlotI < SlotI_Backpack Then SendEquippedUpdate(AI)

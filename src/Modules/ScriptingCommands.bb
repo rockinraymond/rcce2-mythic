@@ -413,6 +413,7 @@ Function BVM_SPAWNITEM(Param1$, Param2%, Param3$, Param4#, Param5#, Param6#, Par
 				WriteLog(MainLog, "Error: Cannot spawn item in instance #" + Str$(Instance) + " of " + Zone\Name$ + " as the instance does not exist")
 			EndIf
 			D\ServerHandle = Handle(Zone\Instances[Instance])
+			Zone\Instances[Instance]\LastSpawnedItem = D\Item
 			; Tell other players in the area
 			Pa$ = RCE_StrFromInt$(D\Amount, 2) + RCE_StrFromFloat$(D\X#) + RCE_StrFromFloat$(D\Y#) + RCE_StrFromFloat$(D\Z#)
 			Pa$ = Pa$ + RCE_StrFromInt$(Handle(D), 4) + ItemInstanceToString$(D\Item)
@@ -423,6 +424,20 @@ Function BVM_SPAWNITEM(Param1$, Param2%, Param3$, Param4#, Param5#, Param6#, Par
 			Wend
 		EndIf
 	EndIf
+End Function
+
+Function BVM_ZZLASTSPAWNEDITEM%(Param1$, Param2% = 0)
+	
+	Zone.Area = FindArea(Param1$)
+	If Zone <> Null
+		Instance = Param2%
+		If Zone\Instances[Instance] = Null
+			Instance = 0
+			WriteLog(MainLog, "Error: Cannot find spawned item in instance #" + Str$(Instance) + " of " + Zone\Name$ + " as the instance does not exist")
+		EndIf
+		If Zone\Instances[Instance]\LastSpawnedItem <> Null Then Return Handle(Zone\Instances[Instance]\LastSpawnedItem)
+	EndIf
+	Return 0
 End Function
 
 Function BVM_SETACTORGENDER(Param1%, Param2%)
@@ -756,6 +771,45 @@ Function BVM_ITEMATTRIBUTE%(Param1%, Param2$)
 Return Result%
 End Function
 
+Function BVM_ZZSETITEMATTRIBUTE(Param1%, Param2$, Param3%)
+	Item.ItemInstance = Object.ItemInstance(Param1%)
+	If Item <> Null
+		Attribute = FindAttribute(Param2$)
+		Item\Attributes\Value[Attribute] = Param3%
+		; If item belongs to a human player, tell them the new attribute
+		Done = False
+		For AI.ActorInstance = Each ActorInstance
+			If AI\RNID > 0
+				For i = 0 To Slots_Inventory
+					If AI\Inventory\Items[i] = Item
+						Pa$ = "A" + RCE_StrFromInt$(i, 1) + RCE_StrFromInt$(Item\Attributes\Value[Attribute] + 5000, 2) + RCE_StrFromInt(Attribute, 1)
+						RCE_Send(Host, AI\RNID, P_InventoryUpdate, Pa$, True)
+						ThreadScript("Equip Change", "Main", Handle(AI), 0)
+						Done = True
+						Exit
+					EndIf
+				Next
+			EndIf
+			If Done = True Then Exit
+		Next
+		Done = False
+		For D.DroppedItem = Each DroppedItem
+			If D\Item = Item
+				ZoneInstance.AreaInstance = Object.AreaInstance(D\ServerHandle)
+				; Tell other players in the area
+				Pa$ = RCE_StrFromInt$(Item\Attributes\Value[Attribute] + 5000, 2) + RCE_StrFromInt(Attribute, 1) + RCE_StrFromInt$(Handle(D), 4)
+				A2.ActorInstance = ZoneInstance\FirstInZone
+				While A2 <> Null
+					If A2\RNID > 0 Then RCE_Send(Host, A2\RNID, P_InventoryUpdate, "U" + Pa$, True)
+					A2 = A2\NextInZone
+				Wend
+				Done = True
+			EndIf
+			If Done = True Then Exit
+		Next
+	EndIf
+End Function
+
 Function BVM_PLAYERINGAME%(Param1%)
 	Actor.ActorInstance = Object.ActorInstance(Param1%)
 	If Actor <> Null
@@ -994,8 +1048,12 @@ End Function
 Function BVM_ACTORBACKPACK%(Param1%, Param2%)
 	Actor.ActorInstance = Object.ActorInstance(Param1)
 	If Actor <> Null
+		If Param2 = -1
+		Result% = Handle(Actor\LastGivenItem)
+		Else
 		Num = Param2 - 1
 		Result% = Handle(Actor\Inventory\Items[SlotI_Backpack + Num])
+		EndIf
 	EndIf
 Return Result
 End Function

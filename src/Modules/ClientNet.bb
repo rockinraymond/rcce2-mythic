@@ -1164,6 +1164,14 @@ Function UpdateNetwork()
 						If Me\Inventory\Items[SlotI] <> Null
 							Me\Inventory\Items[SlotI]\ItemHealth = Amount
 						EndIf
+					; An item attribute has changed
+					Case "A"
+						SlotI = RCE_IntFromStr(Mid$(M\MessageData$, 2, 1))
+						Amount = RCE_IntFromStr(Mid$(M\MessageData$, 3, 2)) - 5000
+						Attribute = RCE_IntFromStr(Mid$(M\MessageData$, 5, 1))
+						If Me\Inventory\Items[SlotI] <> Null
+							Me\Inventory\Items[SlotI]\Attributes\Value[Attribute] = Amount
+						EndIf
 					; An item has been taken from my inventory
 					Case "T"
 						SlotI = RCE_IntFromStr(Mid$(M\MessageData$, 2, 1))
@@ -1243,6 +1251,17 @@ Function UpdateNetwork()
 								FreeEntity(DItem\EN)
 								Delete DItem\Item
 								Delete DItem
+								Exit
+							EndIf
+						Next
+					;dropped item attribute updated
+					Case "U"
+						Amount = RCE_IntFromStr(Mid$(M\MessageData$, 2, 2)) - 5000
+						Attribute = RCE_IntFromStr(Mid$(M\MessageData$, 4, 1))
+						TargetItemHandle$ = Str(RCE_IntFromStr(Mid$(M\MessageData$, 5,4)))
+						For DItem.DroppedItem = Each DroppedItem
+							If Str(DItem\ServerHandle) = TargetItemHandle$
+								DItem\Item\Attributes\Value[Attribute] = Amount
 								Exit
 							EndIf
 						Next

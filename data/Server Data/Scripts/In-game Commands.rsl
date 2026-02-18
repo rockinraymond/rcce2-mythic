@@ -100,12 +100,19 @@ Function clearEffects()
 End Function
 
 Function ArmorTest()
-giveitem(actor(),"armor",1)
+;giveitem(actor(),"Leather Armor +1",1)
+spawnitem("Leather Armor +1",1,actorzone(actor()),actorx(actor()),actory(actor()),actorz(actor()))
+doevents(100)
+;newarmor = ACTORBACKPACK(Actor(), -1)
+newarmor = ZZLASTSPAWNEDITEM(actorZone(actor()))
+
+;SETITEMHEALTH(newarmor,50)
+ZZSETITEMATTRIBUTE(newarmor, "Charisma", -4)
+ZZSETITEMATTRIBUTE(newarmor, "Agility", 3)
+ZZSETITEMATTRIBUTE(newarmor, "Toughness", 2)
+
 End Function
 
-Function Sword()
-giveitem(actor(),"sword",1)
-End Function
 
 Function Sit()
 AnimateActor(Actor(), "Sit down", 0.5)

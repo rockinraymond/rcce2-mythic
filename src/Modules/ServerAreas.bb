@@ -50,6 +50,7 @@ Type AreaInstance
 	Field FirstInZone.ActorInstance ; Head of linked list containing all actor instances in a zone
 	Field CurrentWeather, CurrentWeatherTime
 	Field SpawnLast[999], Spawned[999]
+	Field LastSpawnedItem.ItemInstance ;used for creating magic items
 	;Field OwnedScenery.OwnedScenery[499] ; {##}
 End Type
 

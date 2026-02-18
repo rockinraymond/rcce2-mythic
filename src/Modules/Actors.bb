@@ -117,6 +117,7 @@ Type ActorInstance
 	Field Underwater
 	Field IgnoreUpdate   ;used to ignore standard update while waiting for client to complete actor moves
 	Field Aggressiveness ; adding this to actor instance so it can be changed at will
+	Field LastGivenItem.ItemInstance ; used for magic item creation via scripting
 	
 	;Strafing
 	Field WalkingRight
