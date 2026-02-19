@@ -1172,6 +1172,14 @@ Function UpdateNetwork()
 						If Me\Inventory\Items[SlotI] <> Null
 							Me\Inventory\Items[SlotI]\Attributes\Value[Attribute] = Amount
 						EndIf
+					; An item resistance has changed
+					Case "Q"
+						SlotI = RCE_IntFromStr(Mid$(M\MessageData$, 2, 1))
+						Amount = RCE_IntFromStr(Mid$(M\MessageData$, 3, 2)) - 5000
+						Resistance = RCE_IntFromStr(Mid$(M\MessageData$, 5, 1))
+						If Me\Inventory\Items[SlotI] <> Null
+							Me\Inventory\Items[SlotI]\Resistances[Resistance] = Amount
+						EndIf
 					; An item has been taken from my inventory
 					Case "T"
 						SlotI = RCE_IntFromStr(Mid$(M\MessageData$, 2, 1))
@@ -1262,6 +1270,17 @@ Function UpdateNetwork()
 						For DItem.DroppedItem = Each DroppedItem
 							If Str(DItem\ServerHandle) = TargetItemHandle$
 								DItem\Item\Attributes\Value[Attribute] = Amount
+								Exit
+							EndIf
+						Next
+					;dropped item resistance updated
+					Case "V"
+						Amount = RCE_IntFromStr(Mid$(M\MessageData$, 2, 2)) - 5000
+						Resistance = RCE_IntFromStr(Mid$(M\MessageData$, 4, 1))
+						TargetItemHandle$ = Str(RCE_IntFromStr(Mid$(M\MessageData$, 5,4)))
+						For DItem.DroppedItem = Each DroppedItem
+							If Str(DItem\ServerHandle) = TargetItemHandle$
+								DItem\Item\Resistances[Resistance] = Amount
 								Exit
 							EndIf
 						Next

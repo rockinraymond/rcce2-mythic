@@ -762,11 +762,16 @@ Function BVM_SETITEMHEALTH(Param1%, Param2%)
 	EndIf
 End Function
 
-Function BVM_ITEMATTRIBUTE%(Param1%, Param2$)
+Function BVM_ITEMATTRIBUTE%(Param1%, Param2$, Param3% = 0)
 	Item.ItemInstance = Object.ItemInstance(Param1%)
 	If Item <> Null
-		Attribute = FindAttribute(Param2$)
-		If Attribute > -1 Then Result% = Item\Attributes\Value[Attribute]
+		If Param3% = 0
+			Attribute = FindAttribute(Param2$)
+			If Attribute > -1 Then Result% = Item\Attributes\Value[Attribute]
+		Else
+			Resistance = FindDamageType(Param2$)
+			If Resistance > -1 Then Result% = Item\Resistances[Resistance]
+		EndIf
 	EndIf
 Return Result%
 End Function
@@ -801,6 +806,45 @@ Function BVM_ZZSETITEMATTRIBUTE(Param1%, Param2$, Param3%)
 				A2.ActorInstance = ZoneInstance\FirstInZone
 				While A2 <> Null
 					If A2\RNID > 0 Then RCE_Send(Host, A2\RNID, P_InventoryUpdate, "U" + Pa$, True)
+					A2 = A2\NextInZone
+				Wend
+				Done = True
+			EndIf
+			If Done = True Then Exit
+		Next
+	EndIf
+End Function
+
+Function BVM_ZZSETITEMRESISTANCE(Param1%, Param2$, Param3%)
+	Item.ItemInstance = Object.ItemInstance(Param1%)
+	If Item <> Null
+		Resistance = FindDamageType(Param2$)
+		Item\Resistances[Resistance] = Param3%
+		; If item belongs to a human player, tell them the new attribute
+		Done = False
+		For AI.ActorInstance = Each ActorInstance
+			If AI\RNID > 0
+				For i = 0 To Slots_Inventory
+					If AI\Inventory\Items[i] = Item
+						Pa$ = "Q" + RCE_StrFromInt$(i, 1) + RCE_StrFromInt$(Item\Resistances[Resistance] + 5000, 2) + RCE_StrFromInt(Resistance, 1)
+						RCE_Send(Host, AI\RNID, P_InventoryUpdate, Pa$, True)
+						ThreadScript("Equip Change", "Main", Handle(AI), 0)
+						Done = True
+						Exit
+					EndIf
+				Next
+			EndIf
+			If Done = True Then Exit
+		Next
+		Done = False
+		For D.DroppedItem = Each DroppedItem
+			If D\Item = Item
+				ZoneInstance.AreaInstance = Object.AreaInstance(D\ServerHandle)
+				; Tell other players in the area
+				Pa$ = RCE_StrFromInt$(Item\Resistances[Resistance] + 5000, 2) + RCE_StrFromInt(Resistance, 1) + RCE_StrFromInt$(Handle(D), 4)
+				A2.ActorInstance = ZoneInstance\FirstInZone
+				While A2 <> Null
+					If A2\RNID > 0 Then RCE_Send(Host, A2\RNID, P_InventoryUpdate, "V" + Pa$, True)
 					A2 = A2\NextInZone
 				Wend
 				Done = True

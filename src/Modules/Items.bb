@@ -76,6 +76,7 @@ Type ItemInstance
 	Field Item.Item
 	Field Attributes.Attributes ; Replaces Item\Attributes which is merely the default item attributes
 	Field ItemHealth            ; The amount of damage (percentage) the item has left before breaking
+	Field Resistances[19]
 	Field Assignment, AssignTo.ActorInstance  ; Server use only - Assignment is > 0 if item instance is created but not assigned an inventory slot yet
 End Type
 
@@ -91,7 +92,7 @@ End Type
 ; Returns the correct length in bytes of an item instance in string form
 Function ItemInstanceStringLength()
 
-	Return 83
+	Return 123
 
 End Function
 
@@ -105,6 +106,9 @@ Function ItemInstanceToString$(I.ItemInstance)
 		Pa$ = Pa$ + RCE_StrFromInt$(I\Attributes\Value[j] + 5000, 2)
 	Next
 	Pa$ = Pa$ + RCE_StrFromInt$(I\ItemHealth, 1)
+	For k = 0 to 19
+		Pa$ = Pa$ + RCE_StrFromInt$(I\Resistances[k] + 5000, 2)
+	Next
 
 	Return Pa$
 
@@ -125,6 +129,12 @@ Function ItemInstanceFromString.ItemInstance(Pa$)
 			Offset = Offset + 2
 		Next
 		I\ItemHealth = RCE_IntFromStr(Mid$(Pa$, Offset, 1))
+		Offset = Offset + 1
+		For k = 0 To 19
+			RCE_IntFromStr(Mid$(Pa$, Offset, 2))
+			I\Resistances[K] = RCE_IntFromStr(Mid$(Pa$, Offset, 2)) - 5000
+			Offset = Offset + 2
+		Next
 	Else
 		WriteLog(MainLog, "Item Removal: Item with ID " + ID + " has been removed from actor as it is no longer existant!")
 		Offset = 3
@@ -133,6 +143,12 @@ Function ItemInstanceFromString.ItemInstance(Pa$)
 			Offset = Offset + 2
 		Next
 		RCE_IntFromStr(Mid$(Pa$, Offset, 1))
+		Offset = Offset + 1
+		For k = 0 To 19
+			RCE_IntFromStr(Mid$(Pa$, Offset, 2))
+			Offset = Offset + 2
+		Next
+
 	EndIf
 
 	Return I
@@ -149,6 +165,9 @@ Function WriteItemInstance(Stream, I.ItemInstance)
 		WriteShort Stream, I\Attributes\Value[j] + 5000
 	Next
 	WriteByte Stream, I\ItemHealth
+	For k = 0 To 19
+		WriteShort Stream, I\Resistances[k] + 5000
+	Next
 
 	Return True
 
@@ -167,6 +186,9 @@ Function ReadItemInstance.ItemInstance(Stream)
 			I\Attributes\Value[j] = ReadShort(Stream) - 5000
 		Next
 		I\ItemHealth = ReadByte(Stream)
+		For k = 0 To 19
+			I\Resistances[k] = ReadShort(Stream) - 5000
+		Next
 	Else
 		WriteLog(MainLog, "Item not found: Item with ID " + ID + " has been found during the character loading.!")
 		; Jump the block
@@ -184,6 +206,9 @@ Function ItemInstancesIdentical(A.ItemInstance, B.ItemInstance)
 	If A\ItemHealth <> B\ItemHealth Then Return False
 	For i = 0 To 39
 		If A\Attributes\Value[i] <> B\Attributes\Value[i] Then Return False
+	Next
+	For j = 1 To 19
+		If A\Resistances[j] <> B\Resistances[j] Then Return False
 	Next
 
 	Return True
@@ -240,6 +265,9 @@ Function CreateItemInstance.ItemInstance(Item.Item)
 		For j = 0 To 39
 			I\Attributes\Value[j] = I\Item\Attributes\Value[j]
 		Next
+	For k = 0 To 19
+			I\Resistances[k] = I\Item\Resistances[k]
+		Next
 
 	Return I
 
@@ -254,6 +282,9 @@ Function CopyItemInstance.ItemInstance(A.ItemInstance)
 	I\ItemHealth = A\ItemHealth
 	For j = 0 To 39
 		I\Attributes\Value[j] = A\Attributes\Value[j]
+	Next
+	For k = 0 To 19
+		I\Resistances[k] = A\Resistances[k]
 	Next
 
 	Return I
