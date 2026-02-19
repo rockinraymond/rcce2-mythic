@@ -4222,43 +4222,44 @@ Function CreateInterface()
 
 ; Stats window
 	WCharStats = GY_CreateWindow(LanguageString$(LS_Character), 0.1, 0.1, 0.5, 0.7, True, True, False, LoadTexture("Data\Textures\GUI\CharBG.png"))
-	GY_CreateLabel(WCharStats, 0.03, 0.005, "Name: " + Me\Name$, 255, 255, 255)
-	GY_CreateLabel(WCharStats, 0.03, 0.03, "Race: " + Me\Actor\Race$, 255, 255, 255)
+	GY_CreateLabel(WCharStats, 0.03, 0.03, "Name: " + Me\Name$, 255, 255, 255)
+	GY_CreateLabel(WCharStats, 0.03, 0.055, "Race: " + Me\Actor\Race$, 255, 255, 255)
 	;LGold = GY_CreateLabel(WCharStats, 0.05, 0.13, "000000000000000000000000000000000000000000000000000000000000", 255, 255, 255)
-	LLevel = GY_CreateLabel(WCharStats, 0.03, 0.055, LanguageString$(LS_Level) + " 0000000", 255, 255, 255)
-	LXP = GY_CreateLabel(WCharStats, 0.03, 0.08, LanguageString$(LS_Experience) + " 0000000000000", 255, 255, 255)
-	LReputation = GY_CreateLabel(WCharStats, 0.03, 0.105, LanguageString$(LS_Reputation) + " 00000", 255, 255, 255)
+	LLevel = GY_CreateLabel(WCharStats, 0.03, 0.08, LanguageString$(LS_Level) + " 0000000", 255, 255, 255)
+	LXP = GY_CreateLabel(WCharStats, 0.03, 0.105, LanguageString$(LS_Experience) + " 0000000000000", 255, 255, 255)
+	LReputation = GY_CreateLabel(WCharStats, 0.03, 0.13, LanguageString$(LS_Reputation) + " 00000", 255, 255, 255)
 
 	;STATS
-	GY_CreateLabel(WCharStats, 0.03, 0.15, "STATS", 255, 255, 255)
-	LHealth = GY_CreateLabel(WCharStats, 0.03, 0.175, "Health:" + " 00000 / 00000", 255, 50, 50)
-	LMana = GY_CreateLabel(WCharStats, 0.03, 0.2, "Mana:" + " 00000 / 00000", 75, 75, 255)
-	LArmorPoints = GY_CreateLabel(WCharStats, 0.03, 0.225, "Defense Rating: 000 + 00", 255, 255, 255)
-	LAccuracy = GY_CreateLabel(WCharStats, 0.03, 0.25, "Attack Rating: 000 + 00", 255, 255, 255)
-	LDamage = GY_CreateLabel(WCharStats, 0.03, 0.275, "Max Damage: 000 + 00", 255, 255, 255)
-	LAggro = GY_CreateLabel(WCharStats, 0.03, 0.3, "Conspicuousness: 000", 255, 255, 255)
+	GY_CreateLabel(WCharStats, 0.03, 0.2, "STATS", 255, 255, 255)
+	LHealth = GY_CreateLabel(WCharStats, 0.03, 0.225, "Health:" + " 00000 / 00000", 255, 50, 50)
+	LMana = GY_CreateLabel(WCharStats, 0.03, 0.25, "Mana:" + " 00000 / 00000", 75, 75, 255)
+	LArmorPoints = GY_CreateLabel(WCharStats, 0.03, 0.275, "Defense Rating: 000 + 00", 255, 255, 255)
+	LAccuracy = GY_CreateLabel(WCharStats, 0.03, 0.3, "Attack Rating: 000 + 00", 255, 255, 255)
+	LDamage = GY_CreateLabel(WCharStats, 0.03, 0.325, "Max Damage: 000 + 00", 255, 255, 255)
+	LAggro = GY_CreateLabel(WCharStats, 0.03, 0.35, "Conspicuousness: 000", 255, 255, 255)
 	
 	;Attributes
-	GY_CreateLabel(WCharStats, 0.03, 0.34, LanguageString$(LS_Attributes), 255, 255, 255)
+	GY_CreateLabel(WCharStats, 0.03, 0.42, LanguageString$(LS_Attributes), 255, 255, 255)
 	AttCount = 0
 	ResY# = 0
 	For i = 0 To 39
 		If AttributeNames$(i) <> "" And AttributeHidden(i) = False And AttributeIsSkill(i) = False
-			LAttributeNames(AttCount) = GY_CreateLabel(WCharStats, 0.03, 0.365 + (Float#(AttCount) * 0.025), "LONGEST ATTRIBUTE NAME HERE!")
-			LAttributeVals(AttCount) = GY_CreateLabel(WCharStats, 0.23, 0.365 + (Float#(AttCount) * 0.025), "00000", 255, 255, 255, Justify_Right)
+			LAttributeNames(AttCount) = GY_CreateLabel(WCharStats, 0.03, 0.445 + (Float#(AttCount) * 0.025), "LONGEST ATTRIBUTE NAME HERE!")
+			LAttributeVals(AttCount) = GY_CreateLabel(WCharStats, 0.23, 0.445 + (Float#(AttCount) * 0.025), "00000", 255, 255, 255, Justify_Right)
 			GY_UpdateLabel(LAttributeNames(AttCount), AttributeNames$(i))
 			GY_UpdateLabel(LAttributeVals(AttCount), "")
 			AttCount = AttCount + 1
-			ResY# = 0.385 + (Float#(AttCount) * 0.025)
+			ResY# = 0.465 + (Float#(AttCount) * 0.025)
 		EndIf
 	Next
 	
 	;Resistances
 	;# = ResY# + 0.01
+	ResY# = .68
 	GY_CreateLabel(WCharStats, 0.03, ResY#, "RESISTANCE MODIFIERS", 255, 255, 255)
 	ResY# = ResY# + .03
 	ResCount = 0
-	For i = 0 To 19
+	For i = 0 To 8
 		If DamageTypes$(i) <> ""
 			LResistanceNames(ResCount) = GY_CreateLabel(WCharStats, 0.03, ResY# + (Float#(ResCount) * 0.025), "LONGEST ATTRIBUTE NAME HERE!")
 			LResistanceVals(ResCount) = GY_CreateLabel(WCharStats, 0.23, ResY# + (Float#(ResCount) * 0.025), "00000", 255, 255, 255, Justify_Right)
@@ -4267,11 +4268,27 @@ Function CreateInterface()
 			ResCount = ResCount + 1
 		EndIf
 	Next
+
+	;Saving Throws
+	ResY# = .68
+	GY_CreateLabel(WCharStats, 0.3, ResY#, "SAVING THROW MODIFERS", 255, 255, 255)
+	ResY# = ResY# + .03
+	
+	For i = 9 To 19
+		If DamageTypes$(i) <> ""
+			LResistanceNames(ResCount) = GY_CreateLabel(WCharStats, 0.3, ResY# + (Float#(ResCount -9) * 0.025), "LONGEST ATTRIBUTE NAME HERE!")
+			LResistanceVals(ResCount) = GY_CreateLabel(WCharStats, 0.5, ResY# + (Float#(ResCount -9) * 0.025), "00000", 255, 255, 255, Justify_Right)
+			GY_UpdateLabel(LResistanceNames(ResCount), DamageTypes$(i))
+			GY_UpdateLabel(LResistanceVals(ResCount), "")
+			ResCount = ResCount + 1
+		EndIf
+	Next
+
 	
 	;Skills
-	GY_CreateLabel(WCharStats, 0.3, 0.15, "SKILLS", 255, 255, 255)
+	GY_CreateLabel(WCharStats, 0.3, 0.03, "SKILLS", 255, 255, 255)
 	SklCount = 0
-	SkillStart# = 0.185
+	SkillStart# = 0.055
 	For i = 0 To 39
 		If AttributeNames$(i) <> "" And AttributeHidden(i) = False And AttributeIsSkill(i) = True
 			XPos# = 0.3
