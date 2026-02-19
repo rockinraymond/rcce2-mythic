@@ -271,13 +271,13 @@ FoamTextureDX#=0
 
 
 	; Display triangles rendered cysis145
-	If ResolutionType = 1 ; 16:9 ratio
- 		Text 1200,60,"Polygons: " + TrisRendered()
-		Text 1200,80,"FPS: " + FramesPS()
-	Else
-		Text 1100,60,"Polygons: " + TrisRendered()
-		Text 1100,80,"FPS: " + FramesPS()
-	EndIf
+	; If ResolutionType = 1 ; 16:9 ratio
+ 	; 	Text 1200,60,"Polygons: " + TrisRendered()
+	; 	Text 1200,80,"FPS: " + FramesPS()
+	; Else
+	; 	Text 1100,60,"Polygons: " + TrisRendered()
+	; 	Text 1100,80,"FPS: " + FramesPS()
+	; EndIf
 		
 	CameraProjMode(GY_Cam, 1)
 	; Render GUI
