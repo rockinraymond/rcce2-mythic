@@ -1953,8 +1953,8 @@ EndIf
 							NameG = 255
 							NameB = 0
 						Case R_Rare
-							NameR = 0
-							NameG = 0
+							NameR = 100
+							NameG = 100
 							NameB = 255
 						Case R_Epic
 							NameR = 255

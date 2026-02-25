@@ -1146,7 +1146,7 @@ FUI_ComboBoxItem(CItemRarity, "Mythic")
 FUI_Label(TItemsGeneral, 20, 112, "Inventory slot:")
 Global CSlotType = FUI_ComboBox(TItemsGeneral, 95, 110, 150, 20)
 FUI_Label(TItemsGeneral, 20, 152, "Value:")
-Global SItemValue = FUI_Spinner(TItemsGeneral, 95, 150, 80, 20, 0, 10000000, 2, 1, DTYPE_INTEGER)
+Global SItemValue = FUI_Spinner(TItemsGeneral, 95, 150, 80, 20, 0, 100000000, 2, 1, DTYPE_INTEGER)
 FUI_Label(TItemsGeneral, 20, 182, "Mass:")
 Global SItemMass = FUI_Spinner(TItemsGeneral, 95, 180, 80, 20, 0, 100000, 2, 1, DTYPE_INTEGER, " kg")
 

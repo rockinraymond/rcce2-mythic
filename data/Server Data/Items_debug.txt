@@ -171,6 +171,294 @@ Item Name: Chainmail Armor +1
 Range: 0.0
 
 Item ID: 43
-Item Name: Leather Boots +1 Con
+Item Name: Leather Boots +1
+Range: 0.0
+
+Item ID: 44
+Item Name: Hand Axe +1
+Range: 0.0
+
+Item ID: 45
+Item Name: Battle Axe +1
+Range: 0.0
+
+Item ID: 46
+Item Name: Great Axe +2
+Range: 0.0
+
+Item ID: 47
+Item Name: Short Sword +1
+Range: 0.0
+
+Item ID: 48
+Item Name: Long Sword +1
+Range: 0.0
+
+Item ID: 49
+Item Name: Scimitar +1
+Range: 0.0
+
+Item ID: 50
+Item Name: Two-handed Sword +1
+Range: 0.0
+
+Item ID: 51
+Item Name: Warhammer +1
+Range: 0.0
+
+Item ID: 52
+Item Name: Mace +1
+Range: 0.0
+
+Item ID: 53
+Item Name: Pole Arm +1
+Range: 0.0
+
+Item ID: 54
+Item Name: Short Spear +1
+Range: 0.0
+
+Item ID: 55
+Item Name: Long Spear +1
+Range: 0.0
+
+Item ID: 56
+Item Name: Short Bow +1
+Range: 80.0
+
+Item ID: 57
+Item Name: Long Bow +1
+Range: 150.0
+
+Item ID: 58
+Item Name: Quarter Staff +1
+Range: 0.0
+
+Item ID: 59
+Item Name: Leather Cap +1
+Range: 0.0
+
+Item ID: 60
+Item Name: Leather Trousers +1
+Range: 0.0
+
+Item ID: 61
+Item Name: Leather Gloves +1
+Range: 0.0
+
+Item ID: 62
+Item Name: Leather Belt +1
+Range: 0.0
+
+Item ID: 63
+Item Name: Skull Cap +1
+Range: 0.0
+
+Item ID: 64
+Item Name: Chainmail Greaves +1
+Range: 0.0
+
+Item ID: 65
+Item Name: Chainmail Boots +1
+Range: 0.0
+
+Item ID: 66
+Item Name: Chainmail Gauntlets +1
+Range: 0.0
+
+Item ID: 67
+Item Name: Chainmail Belt +1
+Range: 0.0
+
+Item ID: 68
+Item Name: Round Shield +1
+Range: 0.0
+
+Item ID: 69
+Item Name: Platemail Armor +1
+Range: 0.0
+
+Item ID: 70
+Item Name: Full Helm +1
+Range: 0.0
+
+Item ID: 71
+Item Name: Plated Greaves +1
+Range: 0.0
+
+Item ID: 72
+Item Name: Plated Boots +1
+Range: 0.0
+
+Item ID: 73
+Item Name: Plated Gauntlets +1
+Range: 0.0
+
+Item ID: 74
+Item Name: Plated Belt +1
+Range: 0.0
+
+Item ID: 75
+Item Name: Kite Shield +1
+Range: 0.0
+
+Item ID: 76
+Item Name: Dagger +2
+Range: 0.0
+
+Item ID: 77
+Item Name: Leather Armor +2
+Range: 0.0
+
+Item ID: 78
+Item Name: Chainmail Armor +2
+Range: 0.0
+
+Item ID: 79
+Item Name: Leather Boots +2
+Range: 0.0
+
+Item ID: 80
+Item Name: Hand Axe +2
+Range: 0.0
+
+Item ID: 81
+Item Name: Battle Axe +2
+Range: 0.0
+
+Item ID: 82
+Item Name: Short Sword +2
+Range: 0.0
+
+Item ID: 83
+Item Name: Long Sword +2
+Range: 0.0
+
+Item ID: 84
+Item Name: Scimitar +2
+Range: 0.0
+
+Item ID: 85
+Item Name: Two-handed Sword +2
+Range: 0.0
+
+Item ID: 86
+Item Name: Warhammer +2
+Range: 0.0
+
+Item ID: 87
+Item Name: Mace +2
+Range: 0.0
+
+Item ID: 88
+Item Name: Morning Star +1
+Range: 0.0
+
+Item ID: 89
+Item Name: Morning Star +2
+Range: 0.0
+
+Item ID: 90
+Item Name: Maul +1
+Range: 0.0
+
+Item ID: 91
+Item Name: Maul +2
+Range: 0.0
+
+Item ID: 92
+Item Name: Pole Arm +2
+Range: 0.0
+
+Item ID: 93
+Item Name: Short Spear +2
+Range: 0.0
+
+Item ID: 94
+Item Name: Long Spear +2
+Range: 0.0
+
+Item ID: 95
+Item Name: Short Bow +2
+Range: 80.0
+
+Item ID: 96
+Item Name: Long Bow +2
+Range: 150.0
+
+Item ID: 97
+Item Name: Quarter Staff +2
+Range: 0.0
+
+Item ID: 98
+Item Name: Leather Cap +2
+Range: 0.0
+
+Item ID: 99
+Item Name: Leather Trousers +2
+Range: 0.0
+
+Item ID: 100
+Item Name: Leather Gloves +2
+Range: 0.0
+
+Item ID: 101
+Item Name: Leather Belt +2
+Range: 0.0
+
+Item ID: 102
+Item Name: Skull Cap +2
+Range: 0.0
+
+Item ID: 103
+Item Name: Chainmail Greaves +2
+Range: 0.0
+
+Item ID: 104
+Item Name: Chainmail Boots +2
+Range: 0.0
+
+Item ID: 105
+Item Name: Chainmail Gauntlets +2
+Range: 0.0
+
+Item ID: 106
+Item Name: Chainmail Belt +2
+Range: 0.0
+
+Item ID: 107
+Item Name: Round Shield +2
+Range: 0.0
+
+Item ID: 108
+Item Name: Platemail Armor +2
+Range: 0.0
+
+Item ID: 109
+Item Name: Full Helm +2
+Range: 0.0
+
+Item ID: 110
+Item Name: Plated Greaves +2
+Range: 0.0
+
+Item ID: 111
+Item Name: Plated Boots +2
+Range: 0.0
+
+Item ID: 112
+Item Name: Plated Gauntlets +2
+Range: 0.0
+
+Item ID: 113
+Item Name: Plated Belt +2
+Range: 0.0
+
+Item ID: 114
+Item Name: Kite Shield +2
+Range: 0.0
+
+Item ID: 115
+Item Name: Platemail Armor +3
 Range: 0.0
 
