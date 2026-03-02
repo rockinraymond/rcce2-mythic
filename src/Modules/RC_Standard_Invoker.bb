@@ -78,6 +78,7 @@ Function BVM_InitStringConst_BVM_MAIN_CMD_SET_DEF_$()
 	s = s + "Function ITEMDAMAGE<BVM_ITEMDAMAGE>%(PARAM1%)"+Chr(10)
 	s = s + "Function ITEMDAMAGETYPE<BVM_ITEMDAMAGETYPE>$(PARAM1%)"+Chr(10)
 	s = s + "Function ITEMWEAPONTYPE<BVM_ITEMWEAPONTYPE>%(PARAM1%)"+Chr(10)
+	s = s + "Function ZZITEMWEAPONCLASS<BVM_ZZITEMWEAPONCLASS>%(PARAM1%)"+Chr(10)
 	s = s + "Function ZZITEMARMORCLASS<BVM_ZZITEMARMORCLASS>%(PARAM1%)"+Chr(10)
 	s = s + "Function ZZITEMRARITY<BVM_ZZITEMRARITY>%(PARAM1%)"+Chr(10)
 	s = s + "Function ITEMARMOR<BVM_ITEMARMOR>%(PARAM1%)"+Chr(10)
@@ -1717,16 +1718,19 @@ Function BVM_Invoke%(withTimeOut% = 0)
 			Case 582
 				iparam0% = BVM_PopInt()
 				BVM_PushInt(BVM_ZZITEMRARITY(iparam0%))
-			case 583
+			Case 583
+				iparam0% = BVM_PopInt()
+				BVM_PushInt(BVM_ZZITEMWEAPONCLASS(iparam0%))
+			case 584
 				iparam1% = BVM_PopInt()
 				sparam0$ = BVM_PopString()
 				BVM_PushInt(BVM_ZZLASTSPAWNEDITEM(sparam0$, iparam1%))
-			Case 584
+			Case 585
 				iparam2% = BVM_PopInt()
 				sparam1$ = BVM_PopString()
 				iparam0% = BVM_PopInt()
 				BVM_PushInt(BVM_ZZSETITEMATTRIBUTE(iparam0%, sparam1$, iparam2%))
-			Case 585
+			Case 586
 				iparam2% = BVM_PopInt()
 				sparam1$ = BVM_PopString()
 				iparam0% = BVM_PopInt()

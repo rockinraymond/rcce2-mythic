@@ -710,6 +710,12 @@ Function BVM_ITEMWEAPONTYPE%(Param1%)
 Return Result%
 End Function
 
+Function BVM_ZZITEMWEAPONCLASS%(Param1%)
+	Item.ItemInstance = Object.ItemInstance(Param1%)
+	If Item <> Null Then Result% = Item\Item\WeaponClass
+Return Result%
+End Function
+
 Function BVM_ZZITEMARMORCLASS%(Param1%)
 	Item.ItemInstance = Object.ItemInstance(Param1%)
 	If Item <> Null Then Result% = Item\Item\ArmourClass

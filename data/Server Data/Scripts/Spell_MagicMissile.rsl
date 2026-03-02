@@ -78,7 +78,134 @@ Function CastingChecks(Player,Target)
         Return 0
     EndIf
 
+    ;Check Equipment
+    If ArcaneEquipmentCheck(Player) < 1
+        Output(Player, "You cannot cast arcane spells with your current equipment",255, 50, 50)
+        Return 0
+    EndIf
+
     Return 1
+
+End Function
+
+Function ArcaneEquipmentCheck(Player)
+    Result = 1
+
+    ;Actor Equipment
+    PlayerWeapon = ActorWeapon(Player)
+    PlayerShield = ActorShield(Player)
+    PlayerChest = ActorChest(Player)
+    PlayerHat = ActorHat(Player)
+    PlayerLegs = ActorLegs(Player)
+    PlayerHands = ActorHands(Player)
+    PlayerFeet = ActorFeet(Player)
+    PlayerBelt = ActorBelt(Player)
+
+    PlayerRace$ = Race(Player)
+
+
+    If PlayerShield > 0
+        Result = 0
+    EndIf
+
+    Select PlayerRace$
+        Case "Elf"
+            If ZZITEMARMORCLASS(PlayerChest) = 3
+                Result = 0
+            EndIf
+            If ZZITEMARMORCLASS(PlayerHat) = 3
+                Result = 0
+            EndIf
+            If ZZITEMARMORCLASS(PlayerLegs) = 3
+                Result = 0
+            EndIf
+            If ZZITEMARMORCLASS(PlayerHands) = 3
+                Result = 0
+            EndIf
+            If ZZITEMARMORCLASS(PlayerFeet) = 3
+                Result = 0
+            EndIf
+            If ZZITEMARMORCLASS(PlayerBelt) = 3
+                Result = 0
+            EndIf
+            If ItemWeaponType(PlayerWeapon) = 3 
+                Result = 0
+            EndIf
+
+        Case "Gnome"
+            If (ZZITEMARMORCLASS(PlayerChest) = 3) OR (ZZITEMARMORCLASS(PlayerChest) = 2)
+                Result = 0
+            EndIf
+            If (ZZITEMARMORCLASS(PlayerHat) = 3) OR (ZZITEMARMORCLASS(PlayerHat) = 2)
+                Result = 0
+            EndIf
+            If (ZZITEMARMORCLASS(PlayerLegs) = 3) OR (ZZITEMARMORCLASS(PlayerLegs) = 2)
+                Result = 0
+            EndIf
+            If (ZZITEMARMORCLASS(PlayerHands) = 3) OR (ZZITEMARMORCLASS(PlayerHands) = 2)
+                Result = 0
+            EndIf
+            If (ZZITEMARMORCLASS(PlayerFeet) = 3) OR (ZZITEMARMORCLASS(PlayerFeet) = 2)
+                Result = 0
+            EndIf
+            If (ZZITEMARMORCLASS(PlayerBelt) = 3) OR (ZZITEMARMORCLASS(PlayerBelt) = 2)
+                Result = 0
+            EndIf
+            If (ItemWeaponType(PlayerWeapon) = 3) OR (ItemWeaponType(PlayerWeapon) = 2)
+                Result = 0
+            EndIf
+
+        Case "Half Elf"
+           If (ZZITEMARMORCLASS(PlayerChest) = 3) OR (ZZITEMARMORCLASS(PlayerChest) = 2)
+                Result = 0
+            EndIf
+            If (ZZITEMARMORCLASS(PlayerHat) = 3) OR (ZZITEMARMORCLASS(PlayerHat) = 2)
+                Result = 0
+            EndIf
+            If (ZZITEMARMORCLASS(PlayerLegs) = 3) OR (ZZITEMARMORCLASS(PlayerLegs) = 2)
+                Result = 0
+            EndIf
+            If (ZZITEMARMORCLASS(PlayerHands) = 3) OR (ZZITEMARMORCLASS(PlayerHands) = 2)
+                Result = 0
+            EndIf
+            If (ZZITEMARMORCLASS(PlayerFeet) = 3) OR (ZZITEMARMORCLASS(PlayerFeet) = 2)
+                Result = 0
+            EndIf
+            If (ZZITEMARMORCLASS(PlayerBelt) = 3) OR (ZZITEMARMORCLASS(PlayerBelt) = 2)
+                Result = 0
+            EndIf
+            If ItemWeaponType(PlayerWeapon) = 3 
+                Result = 0
+            EndIf
+
+        Default
+            If (ZZITEMARMORCLASS(PlayerChest) = 3) OR (ZZITEMARMORCLASS(PlayerChest) = 2) OR (ZZITEMARMORCLASS(PlayerChest) = 1)
+                Result = 0
+            EndIf
+            If (ZZITEMARMORCLASS(PlayerChest) = 3) OR (ZZITEMARMORCLASS(PlayerChest) = 2) OR (ZZITEMARMORCLASS(PlayerChest) = 1)
+                Result = 0
+            EndIf
+            If (ZZITEMARMORCLASS(PlayerChest) = 3) OR (ZZITEMARMORCLASS(PlayerChest) = 2) OR (ZZITEMARMORCLASS(PlayerChest) = 1)
+                Result = 0
+            EndIf
+            If (ZZITEMARMORCLASS(PlayerChest) = 3) OR (ZZITEMARMORCLASS(PlayerChest) = 2) OR (ZZITEMARMORCLASS(PlayerChest) = 1)
+                Result = 0
+            EndIf
+            If (ZZITEMARMORCLASS(PlayerChest) = 3) OR (ZZITEMARMORCLASS(PlayerChest) = 2) OR (ZZITEMARMORCLASS(PlayerChest) = 1)
+                Result = 0
+            EndIf
+            If (ZZITEMARMORCLASS(PlayerChest) = 3) OR (ZZITEMARMORCLASS(PlayerChest) = 2) OR (ZZITEMARMORCLASS(PlayerChest) = 1)
+                Result = 0
+            EndIf
+            If ItemWeaponType(PlayerWeapon) = 3 
+                Result = 0
+            EndIf
+            If (ZZITEMWEAPONCLASS(PlayerWeapon) > 0) AND (ZZITEMWEAPONCLASS(PlayerWeapon) < 7)
+                Result = 0
+            EndIf
+    End Select
+
+    Return Result
 
 End Function
 
