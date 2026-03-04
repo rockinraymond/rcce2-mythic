@@ -41,6 +41,7 @@ Function Main()
     i =  i + 1
     If(Attribute(Player, "Health") < 0)
         Output(Player, "You cannot cast spells when you are dead",255, 255, 0)
+        DeleteProgressBar(Player,Bar)
         Return
     EndIf
 	Until i = 20

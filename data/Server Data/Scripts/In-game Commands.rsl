@@ -88,6 +88,22 @@ Function testEffects()
 
 End Function
 
+Function Respawn()
+
+	Player = Actor()
+
+	If Attribute(Player, "Health") > 0
+		Output(Player, "You are not dead!",255,0,0)
+	Else
+		
+		SetAttribute(Actor(), "Health", 1)
+		; Warp back to area start
+		Warp(Actor(), ActorZone(Actor()), "Start")
+	EndIf
+	Return
+End Function
+
+
 Function clearEffects()
 
 	Player = Actor()

@@ -730,7 +730,7 @@ Function UpdateInterface()
 
 	; Update context menu if it exists
 	If WContextMenu <> 0
-		If PlayerTarget > 0
+		If PlayerTarget > 0 And (Me\Attributes\Value[HealthStat] > 0)
 			AI.ActorInstance = Object.ActorInstance(PlayerTarget)
 			; Handle Interact button
 			If GY_ButtonHit(BInteract)
@@ -941,7 +941,7 @@ Function UpdateInterface()
 				; Target is a dropped item
 				ElseIf Target$ = "D"
 					; In range - pick it up if room in inventory
-					If EntityDistance#(Result, Me\EN) < 25.0
+					If (EntityDistance#(Result, Me\EN) < 15.0) And (Me\Attributes\Value[HealthStat] > 0)
 						UsedClick = True
 
 						DItem.DroppedItem = Object.DroppedItem(EntityName$(Result))
@@ -1162,8 +1162,12 @@ Function UpdateInterface()
 							AI.ActorInstance = Object.ActorInstance(PlayerTarget)
 							Pa$ = Pa$ + RCE_StrFromInt$(AI\RuntimeID, 2)
 						EndIf
-						RCE_Send(Connection, PeerToHost, P_SpellUpdate, "F" + Pa$, True)
-						Me\SpellCharge[Num] = RechargeTime
+						If (Me\Attributes\Value[HealthStat] > 0)
+							RCE_Send(Connection, PeerToHost, P_SpellUpdate, "F" + Pa$, True)
+							Me\SpellCharge[Num] = RechargeTime
+						Else
+							Output("You cannot use abilites while dead!", 255, 50, 50)
+						EndIf
 						
 						;[654]
 						RechargeTime = RechargeTime - 1000
@@ -1276,8 +1280,12 @@ Function UpdateInterface()
 						AI.ActorInstance = Object.ActorInstance(PlayerTarget)
 						Pa$ = Pa$ + RCE_StrFromInt$(AI\RuntimeID, 2)
 					EndIf
-					RCE_Send(Connection, PeerToHost, P_SpellUpdate, "F" + Pa$, True)
-					Me\SpellCharge[Num] = RechargeTime
+					If (Me\Attributes\Value[HealthStat] > 0)
+						RCE_Send(Connection, PeerToHost, P_SpellUpdate, "F" + Pa$, True)
+						Me\SpellCharge[Num] = RechargeTime
+					Else
+						Output("You cannot use abilites while dead!", 255, 50, 50)
+					EndIf
 					
 				;[654] fixing cooldown reset bug in action bar
 						RechargeTime = RechargeTime - 1000
@@ -1566,8 +1574,12 @@ Function UpdateInterface()
 							AI.ActorInstance = Object.ActorInstance(PlayerTarget)
 							Pa$ = Pa$ + RCE_StrFromInt$(AI\RuntimeID, 2)
 						EndIf
-						RCE_Send(Connection, PeerToHost, P_SpellUpdate, "F" + Pa$, True)
-						Me\SpellCharge[Num] = SpellsList(Me\KnownSpells[Num])\RechargeTime
+						If (Me\Attributes\Value[HealthStat] > 0)
+							RCE_Send(Connection, PeerToHost, P_SpellUpdate, "F" + Pa$, True)
+							Me\SpellCharge[Num] = SpellsList(Me\KnownSpells[Num])\RechargeTime
+						Else
+							Output("You cannot use abilites while dead!", 255, 50, 50)
+						EndIf
 					; Not recharged
 					Else
 						Output("Num: " + Num, 255, 50, 255)
@@ -4758,31 +4770,31 @@ End Function
 ; Eats/equips/calls the script for an item
 Function UseItem(SlotIndex, Amount)
 
-	If Me\Inventory\Items[SlotIndex] <> Null
+	If (Me\Inventory\Items[SlotIndex] <> Null ) And (Me\Attributes\Value[HealthStat] > 0)
 		If Me\Inventory\Amounts[SlotIndex] >= Amount
 			GY_SetButtonState(BSlots(SlotIndex), False)
 
 			; Eat food
-			If Me\Inventory\Items[SlotIndex]\Item\ItemType = I_Potion Or Me\Inventory\Items[SlotIndex]\Item\ItemType = I_Ingredient
-				If Me\Inventory\Items[SlotIndex]\Item\ExclusiveSkill$ = "" Or (Me\Attributes\Value[FindAttribute(Me\Inventory\Items[SlotIndex]\Item\ExclusiveSkill$)]) >= (Me\Inventory\Items[SlotIndex]\Item\SkillReq)
-					If Me\Inventory\Items[SlotIndex]\Item\ExclusiveRace$ = "" Or Upper$(Me\Inventory\Items[SlotIndex]\Item\ExclusiveRace$) = Upper$(Me\Actor\Race$)
-						RCE_Send(Connection, PeerToHost, P_EatItem, RCE_StrFromInt$(SlotIndex, 1) + RCE_StrFromInt$(Amount, 2), True)
-						Me\Inventory\Amounts[SlotIndex] = Me\Inventory\Amounts[SlotIndex] - Amount
-						If Me\Inventory\Amounts[SlotIndex] <= 0
-							Me\Inventory\Items[SlotIndex] = Null
-							GY_SetButtonState(BSlots(SlotIndex), True)
-							GY_SetButtonLabel(BSlots(SlotIndex), "")
-							GYG.GY_Gadget = Object.GY_Gadget(BSlots(SlotIndex))
-							GYB.GY_Button = Object.GY_Button(GYG\TypeHandle)
-							EntityTexture(GYB\Gadget\EN, GYB\UserTexture)
-							EnableInventoryBlanks(True)
-						Else
-							GY_SetButtonLabel(BSlots(SlotIndex), Me\Inventory\Amounts[SlotIndex], 100, 255, 0, True)
-						EndIf
-					EndIf
-				EndIf
+			; If Me\Inventory\Items[SlotIndex]\Item\ItemType = I_Potion Or Me\Inventory\Items[SlotIndex]\Item\ItemType = I_Ingredient
+			; 	If Me\Inventory\Items[SlotIndex]\Item\ExclusiveSkill$ = "" Or (Me\Attributes\Value[FindAttribute(Me\Inventory\Items[SlotIndex]\Item\ExclusiveSkill$)]) >= (Me\Inventory\Items[SlotIndex]\Item\SkillReq)
+			; 		If Me\Inventory\Items[SlotIndex]\Item\ExclusiveRace$ = "" Or Upper$(Me\Inventory\Items[SlotIndex]\Item\ExclusiveRace$) = Upper$(Me\Actor\Race$)
+			; 			RCE_Send(Connection, PeerToHost, P_EatItem, RCE_StrFromInt$(SlotIndex, 1) + RCE_StrFromInt$(Amount, 2), True)
+			; 			Me\Inventory\Amounts[SlotIndex] = Me\Inventory\Amounts[SlotIndex] - Amount
+			; 			If Me\Inventory\Amounts[SlotIndex] <= 0
+			; 				Me\Inventory\Items[SlotIndex] = Null
+			; 				GY_SetButtonState(BSlots(SlotIndex), True)
+			; 				GY_SetButtonLabel(BSlots(SlotIndex), "")
+			; 				GYG.GY_Gadget = Object.GY_Gadget(BSlots(SlotIndex))
+			; 				GYB.GY_Button = Object.GY_Button(GYG\TypeHandle)
+			; 				EntityTexture(GYB\Gadget\EN, GYB\UserTexture)
+			; 				EnableInventoryBlanks(True)
+			; 			Else
+			; 				GY_SetButtonLabel(BSlots(SlotIndex), Me\Inventory\Amounts[SlotIndex], 100, 255, 0, True)
+			; 			EndIf
+			; 		EndIf
+			; 	EndIf
 				
-			ElseIf Me\Inventory\Items[SlotIndex]\Item\ItemType = I_Image
+			If Me\Inventory\Items[SlotIndex]\Item\ItemType = I_Image
 				; Image item
 				Pa$ = RCE_StrFromInt$(SlotIndex, 1)
 				RCE_Send(Connection, PeerToHost, P_ItemScript, Pa$, True)
@@ -4891,7 +4903,7 @@ Function UseItem(SlotIndex, Amount)
 End Function
 
 Function EnchantItem(SlotIndex, Amount)
-	If Me\Inventory\Items[SlotIndex] <> Null
+	If (Me\Inventory\Items[SlotIndex] <> Null ) And (Me\Attributes\Value[HealthStat] > 0)
 		If Me\Inventory\Amounts[SlotIndex] >= Amount
 			GY_SetButtonState(BSlots(SlotIndex), False)
 				; Enchant Item script
@@ -4906,7 +4918,7 @@ Function EnchantItem(SlotIndex, Amount)
 End Function
 
 Function RepairItem(SlotIndex, Amount)
-	If Me\Inventory\Items[SlotIndex] <> Null
+	If (Me\Inventory\Items[SlotIndex] <> Null ) And (Me\Attributes\Value[HealthStat] > 0)
 		If Me\Inventory\Amounts[SlotIndex] >= Amount
 			GY_SetButtonState(BSlots(SlotIndex), False)
 				; Repair Item script
@@ -4921,7 +4933,7 @@ Function RepairItem(SlotIndex, Amount)
 End Function
 
 Function DismantleItem(SlotIndex, Amount)
-	If Me\Inventory\Items[SlotIndex] <> Null
+	If (Me\Inventory\Items[SlotIndex] <> Null ) And (Me\Attributes\Value[HealthStat] > 0)
 		If Me\Inventory\Amounts[SlotIndex] >= Amount
 			GY_SetButtonState(BSlots(SlotIndex), False)
 				; Repair Item script
