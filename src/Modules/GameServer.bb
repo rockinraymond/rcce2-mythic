@@ -173,8 +173,8 @@ Function KillActor(A.ActorInstance, Killer.ActorInstance)
 End Function
 
 ; Fires a projectile from one actor at another
-Function FireProjectile(P.Projectile, A1.ActorInstance, A2.ActorInstance)
-
+Function FireProjectile%(P.Projectile, A1.ActorInstance, A2.ActorInstance)
+	TargetIsHit = 0
 	; Check both actors are allowed to engage in combat
 	If A1\Aggressiveness = 3 Or A2\Aggressiveness = 3 Then Return
 
@@ -194,9 +194,10 @@ Function FireProjectile(P.Projectile, A1.ActorInstance, A2.ActorInstance)
 
 	; Does the projectile hit the target?
 	ToHit = Rand(100)
-	HitChance = P\HitChance + A1\Attributes\Value[FindAttribute(P\Skill$)] - A2\Resistances[P\SaveType]
+	HitChance = P\HitChance + A1\Attributes\Value[FindAttribute(P\Skill$)] - A2\Resistances[P\SaveType] - A2\Attributes\Value[FindAttribute("Armor Bonus")]
 	If ToHit <= P\HitChance
 		; Calculate damage
+		TargetIsHit = 1
 		DefenderResistance = (A2\Resistances[P\DamageType])
 		Damage = Rand(1, P\Damage) + (A1\Attributes\Value[FindAttribute(P\Attribute$)] - 10 ) - (DefenderResistance / 10)
 		If Damage < 1 Then Damage = 1
@@ -235,7 +236,7 @@ Function FireProjectile(P.Projectile, A1.ActorInstance, A2.ActorInstance)
 		; Death
 		If A2\Attributes\Value[HealthStat] <= 0 Then KillActor(A2, A1)
 	EndIf
-
+	Return TargetIsHit
 End Function
 
 ; Makes one actor instance attack another

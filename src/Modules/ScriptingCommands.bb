@@ -1203,13 +1203,13 @@ Function BVM_SETACTORGROUP(Param1%, Param2%)
 	If Actor <> Null Then Actor\TeamID = Param2%
 End Function
 
-Function BVM_FIREPROJECTILE(Param1%, Param2%, Param3$)
+Function BVM_FIREPROJECTILE%(Param1%, Param2%, Param3$)
 	PID = FindProjectile(Param3$)
 	If PID > -1
 		A1.ActorInstance = Object.ActorInstance(Param1%)
 		If A1 <> Null
 			A2.ActorInstance = Object.ActorInstance(Param2%)
-			If A2 <> Null Then FireProjectile(ProjectileList(PID), A1, A2)
+			If A2 <> Null Then Return FireProjectile%(ProjectileList(PID), A1, A2)
 		EndIf
 	EndIf
 End Function

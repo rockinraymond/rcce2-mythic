@@ -14,6 +14,9 @@ Function Main()
     ProjectileName$ = "Magic Missile"
     SkillName$ = "Arcane Spells"
 
+    PlayerName$ = Name(Player)
+    TargetName$ = Name(Target)
+
 
     If CastingChecks(Player, Target) < 1
         Return
@@ -48,8 +51,15 @@ Function Main()
 	DeleteProgressBar(Player,Bar)
     ZZADDSKILLXP(Player, SkillName$, SpellCost * 10)
     
-    FireProjectile(Player, Target, ProjectileName$)
+    TargetIsHit = FireProjectile(Player, Target, ProjectileName$)
 
+    If TargetIsHit > 0
+        Output(Player, "Your " + SpellName$ + " hit " + TargetName$ + "!",150, 100, 255)
+        Output(Target, PlayerName$ + "'s " + SpellName$ + " hit you!", 255, 100, 150)
+    Else
+        Output(Player, "Your " + SpellName$ + " has missed " + TargetName$ + "!",255, 255, 100)
+        Output(Target, PlayerName$ + "'s " + SpellName$ + " has missed!", 255, 255, 100)
+    EndIf
     Return
 
 End Function

@@ -204,7 +204,7 @@ Function CombatDamageOutputOthers(Attacker.ActorInstance, Defender.ActorInstance
 
 	R = 225
 	G = 225
-	B = 0
+	B = 255
 	;determine color of text based on if party members and or pets are in combat, if not the messages will be yellow/neutral
 	If Alignment = 2
 		R = 0
