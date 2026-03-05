@@ -1190,14 +1190,17 @@ Function UpdateInterface()
 					EndIf
 				; Item
 				ElseIf ActionBarSlots(Slot) < 65535
+					ItemFound = 0
 					For i = 0 To Slots_Inventory
 						If Me\Inventory\Items[i] <> Null
 							If Me\Inventory\Items[i]\Item\ID = ActionBarSlots(Slot)
 								UseItem(i, 1)
+								ItemFound = 1
 								Exit
 							EndIf
 						EndIf
 					Next
+					If ItemFound < 1 Then Output("You do not possess this item!", 255, 50, 50)
 				EndIf
 			; Add item to this slot
 			ElseIf MouseSlotSource >= 0
@@ -4872,6 +4875,19 @@ Function UseItem(SlotIndex, Amount)
 							UpdateActorItems(Me)
 						EndIf
 						EnableInventoryBlanks(True)
+					Else
+						Result = InventorySwap(Me, SlotIndex, SlotI_Weapon, Amount)
+						If Result = True
+							GY_SetButtonState(BSlots(SlotIndex), False)
+							GY_SetButtonState(BSlots(SlotI_Weapon), True)
+							; Update icons
+							GYG.GY_Gadget = Object.GY_Gadget(BSlots(SlotI_Weapon))
+							EntityTexture(GYG\EN, GetTexture(Me\Inventory\Items[SlotI_Weapon]\Item\ThumbnailTexID))
+							GYG.GY_Gadget = Object.GY_Gadget(BSlots(SlotIndex))
+							EntityTexture(GYG\EN, GetTexture(Me\Inventory\Items[SlotIndex]\Item\ThumbnailTexID))	
+							GY_SetButtonState(BSlots(SlotIndex), True)
+							UpdateActorItems(Me)
+						EndIf
 					EndIf
 				; Equip armour
 				ElseIf Me\Inventory\Items[SlotIndex]\Item\ItemType = I_Armour And SlotIndex >= SlotI_Backpack
@@ -4893,6 +4909,19 @@ Function UseItem(SlotIndex, Amount)
 							UpdateActorItems(Me)
 						EndIf
 						EnableInventoryBlanks(True)
+					Else
+						Result = InventorySwap(Me, SlotIndex, i, Amount)
+						If Result = True
+							GY_SetButtonState(BSlots(SlotIndex), False)
+							GY_SetButtonState(BSlots(i), True)
+							; Update icons
+							GYG.GY_Gadget = Object.GY_Gadget(BSlots(i))
+							EntityTexture(GYG\EN, GetTexture(Me\Inventory\Items[i]\Item\ThumbnailTexID))
+							GYG.GY_Gadget = Object.GY_Gadget(BSlots(SlotIndex))
+							EntityTexture(GYG\EN, GetTexture(Me\Inventory\Items[SlotIndex]\Item\ThumbnailTexID))	
+							GY_SetButtonState(BSlots(SlotIndex), True)
+							UpdateActorItems(Me)
+						EndIf
 					EndIf
 				EndIf
 			EndIf
