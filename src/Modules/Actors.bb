@@ -149,15 +149,15 @@ End Type
 ; Actor attributes (strength, dexterity, health, armour, whatever the user decides)
 Global AttributeAssignment
 Global SkillAssignment
-Dim AttributeNames$(39)
-Dim AttributeIsSkill(39) ; False for a stat (health, strength, armour), True for a skill (fishing, riding)
-Dim AttributeHidden(39)
+Dim AttributeNames$(49)
+Dim AttributeIsSkill(49) ; False for a stat (health, strength, armour), True for a skill (fishing, riding)
+Dim AttributeHidden(49)
 Type Attributes
-	Field Value[39]
-	Field BaseValue[39]
-	Field Maximum[39]
-	Field Xp[39]
-	Field XpMax[39]
+	Field Value[49]
+	Field BaseValue[49]
+	Field Maximum[49]
+	Field Xp[49]
+	Field XpMax[49]
 	Field My_ID ; Required for MySQL
 End Type
 
@@ -230,7 +230,7 @@ Function WriteActorInstance(Stream, A.ActorInstance)
 	WriteShort Stream, A\Hair
 	WriteShort Stream, A\Beard
 	WriteShort Stream, A\BodyTex
-	For i = 0 To 39
+	For i = 0 to 49
 		WriteShort Stream, A\Attributes\Value[i]
 		WriteShort Stream, A\Attributes\BaseValue[i]
 		WriteShort Stream, A\Attributes\Maximum[i]
@@ -310,7 +310,7 @@ Function ReadActorInstance.ActorInstance(Stream)
 	A\Hair       = ReadShort(Stream)
 	A\Beard      = ReadShort(Stream)
 	A\BodyTex    = ReadShort(Stream)
-	For i = 0 To 39
+	For i = 0 to 49
 		A\Attributes\Value[i]   = ReadShort(Stream)
 		A\Attributes\BaseValue[i]   = ReadShort(Stream)
 		A\Attributes\Maximum[i] = ReadShort(Stream)
@@ -374,9 +374,9 @@ Function CreateActor.Actor()
 			A\ID = i
 			ActorList(A\ID) = A
 			A\Attributes = New Attributes
-			For i = 0 To 39 : A\Attributes\Maximum[i] = 100 : Next
-			For i = 0 To 39 : A\Attributes\Xp[i] = 0 : Next
-			For i = 0 To 39 : A\Attributes\XpMax[i] = 100 : Next
+			For i = 0 to 49 : A\Attributes\Maximum[i] = 100 : Next
+			For i = 0 to 49 : A\Attributes\Xp[i] = 0 : Next
+			For i = 0 to 49 : A\Attributes\XpMax[i] = 100 : Next
 			For i = 0 To 7
 				A\MeshIDs[i] = 65535
 				If i <= 4
@@ -421,7 +421,7 @@ Function CreateActorInstance.ActorInstance(Actor.Actor)
 	For i = 0 To 99
 		A\FactionRatings[i] = FactionDefaultRatings(A\HomeFaction, i)
 	Next
-	For i = 0 To 39
+	For i = 0 to 49
 		A\Attributes\Value[i] = A\Actor\Attributes\Value[i]
 		A\Attributes\BaseValue[i] = A\Actor\Attributes\Value[i]
 		A\Attributes\Maximum[i] = A\Actor\Attributes\Maximum[i]
@@ -575,7 +575,7 @@ Function LoadActors(Filename$)
 			For i = 0 To 15 : A\FSpeechIDs[i] = ReadShort(F) : Next
 ;			For i = 0 To 5  : A\HairColours[i] = ReadInt(F) : Next
 			A\BloodTexID = ReadShort(F)
-			For i = 0 To 39
+			For i = 0 to 49
 				A\Attributes\Value[i] = ReadShort(F)
 				A\Attributes\BaseValue[i] = ReadShort(F)
 				A\Attributes\Maximum[i] = ReadShort(F)
@@ -634,7 +634,7 @@ Function SaveActors(Filename$)
 			For i = 0 To 15 : WriteShort(F, A\FSpeechIDs[i]) : Next
 ;			For i = 0 To 5  : WriteInt(F, A\HairColours[i]) : Next
 			WriteShort(F, A\BloodTexID)
-			For i = 0 To 39
+			For i = 0 to 49
 				WriteShort(F, A\Attributes\Value[i])
 				WriteShort(F, A\Attributes\BaseValue[i])
 				WriteShort(F, A\Attributes\Maximum[i])
@@ -671,7 +671,7 @@ Function LoadAttributes(Filename$)
 
 		AttributeAssignment = ReadByte(F)
 		SkillAssignment = ReadByte(F)
-		For i = 0 To 39
+		For i = 0 to 49
 			AttributeNames$(i) = ReadString$(F)
 			AttributeIsSkill(i) = ReadByte(F)
 			AttributeHidden(i) = ReadByte(F)
@@ -690,7 +690,7 @@ Function SaveAttributes(Filename$)
 
 		WriteByte(F, AttributeAssignment)
 		WriteByte(F, SkillAssignment)
-		For i = 0 To 39
+		For i = 0 to 49
 			WriteString(F, AttributeNames$(i))
 			WriteByte(F, AttributeIsSkill(i))
 			WriteByte(F, AttributeHidden(i))
@@ -705,7 +705,7 @@ End Function
 Function FindAttribute(Name$)
 
 	Name$ = Upper$(Name$)
-	For i = 0 To 39
+	For i = 0 to 49
 		If Upper$(AttributeNames$(i)) = Name$ Then Return i
 	Next
 	Return -1
@@ -952,7 +952,7 @@ Function CreateActorEffect.ActorEffect( AI.ActorInstance, Effects.Attributes, Ef
 	EndIf
 	FoundAE\CreatedTime = MilliSecs()
 	FoundAE\Length = EffectLength%
-	For i = 0 To 39
+	For i = 0 to 49
 		If Effects\Value[i] <> 0
 			Old = FoundAE\Attributes\Value[i]
 			FoundAE\Attributes\Value[i] = AI\Inventory\Items[Slot]\Attributes\Value[i]
@@ -978,7 +978,7 @@ Function DestroyActorEffect( AE.ActorEffect )
 		; Tell client if applicable
 		If AE\Owner\RNID > 0
 			Pa$ = RCE_StrFromInt$(Handle(AE), 4)
-			For i = 0 To 39
+			For i = 0 to 49
 				Pa$ = Pa$ + RCE_StrFromInt$(AE\Attributes\Value[i], 4)
 			Next
 			RCE_Send(Host, AE\Owner\RNID, P_ActorEffect, "R" + Pa$, True)
@@ -986,7 +986,7 @@ Function DestroyActorEffect( AE.ActorEffect )
 
 		DebugLog("Fixing Actor Effect on " + AE\Owner\Name)
 		; Remove effect
-		For i = 0 To 39
+		For i = 0 to 49
 			If AE\Attributes\Value[i] <> 0 Then DebugLog("Fixing Attribute " + i + " by " + (- AE\Attributes\Value[i]) )
 			AE\Owner\Attributes\Value[i] = AE\Owner\Attributes\Value[i] - AE\Attributes\Value[i]
 		Next
@@ -1004,14 +1004,14 @@ Function RemoveActorEffectFromActor( AI.ActorInstance, EffectName$ )
 			If Upper$(AE\Name$) = Upper$(EffectName$)
 				If AE\Owner\RNID > 0
 				Pa$ = RCE_StrFromInt$(Handle(AE), 4)
-					For i = 0 To 39
+					For i = 0 to 49
 						Pa$ = Pa$ + RCE_StrFromInt$(AE\Attributes\Value[i], 4)
 					Next
 					RCE_Send(Host, AE\Owner\RNID, P_ActorEffect, "R" + Pa$, True)
 				EndIf
 				
 				; Remove effect
-				For i = 0 To 39
+				For i = 0 to 49
 					AE\Owner\Attributes\Value[i] = AE\Owner\Attributes\Value[i] - AE\Attributes\Value[i]
 				Next
 			

@@ -496,7 +496,7 @@ Function UpdateActorInstances(Broadcast)
 					; Tell client if applicable
 					If AE\Owner\RNID > 0
 						Pa$ = RCE_StrFromInt$(Handle(AE), 4)
-						For i = 0 To 39
+						For i = 0 to 49
 							Pa$ = Pa$ + RCE_StrFromInt$(AE\Attributes\Value[i], 4)
 						Next
 						RCE_Send(Host, AE\Owner\RNID, P_ActorEffect, "R" + Pa$, True)
@@ -508,7 +508,7 @@ Function UpdateActorInstances(Broadcast)
 					EndIf
 
 					; Remove effect
-					For i = 0 To 39
+					For i = 0 to 49
 						AE\Owner\Attributes\Value[i] = AE\Owner\Attributes\Value[i] - AE\Attributes\Value[i]
 					Next
 					For i = 0 To 19

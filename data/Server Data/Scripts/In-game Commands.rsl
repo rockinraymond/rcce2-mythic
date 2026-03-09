@@ -123,10 +123,8 @@ doevents(100)
 newarmor = ZZLASTSPAWNEDITEM(actorZone(actor()))
 
 ;SETITEMHEALTH(newarmor,50)
-ZZSETITEMRESISTANCE(newarmor, "Shadow", -4)
-ZZSETITEMRESISTANCE(newarmor, "Fire", 4)
-ZZSETITEMATTRIBUTE(newarmor, "Agility", 3)
-ZZSETITEMATTRIBUTE(newarmor, "Toughness", -2)
+ZZSETITEMATTRIBUTE(newarmor, "ATK Speed Bonus", 4)
+
 
 End Function
 

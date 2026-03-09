@@ -444,7 +444,7 @@ Function UpdateNetwork()
 							Exit
 						EndIf
 					Next
-					For i = 0 To 39
+					For i = 0 to 49
 						Amount = RCE_IntFromStr(Mid$(M\MessageData$, 6 + (i * 4), 4))
 						Me\Attributes\Value[i] = Me\Attributes\Value[i] - Amount
 					Next

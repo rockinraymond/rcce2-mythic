@@ -127,12 +127,12 @@ Dim ServerTradeIDs(31)
 ; Char stats window
 Global WCharStats, CharStatsVisible = False
 Global LReputation, LGold, LLevel, LXP, LHealth, LArmorPoints, LMana, LDamage, LAccuracy, LAggro, BNextAttribute, BPrevAttribute, FirstAttribute
-Dim LAttributeNames(39)
-Dim LAttributeVals(39)
-Dim LSkillNames(39)
-Dim LSkillVals(39)
-Dim LResistanceNames(39)
-Dim LResistanceVals(39)
+Dim LAttributeNames(49)
+Dim LAttributeVals(49)
+Dim LSkillNames(49)
+Dim LSkillVals(49)
+Dim LResistanceNames(49)
+Dim LResistanceVals(49)
 
 ; Spells (abilities) window
 Global WSpells, SpellsVisible = False
@@ -219,10 +219,10 @@ Global ChatEntry.InterfaceComponent          ; Chat input box (fixed height)
 Global BuffsArea.InterfaceComponent          ; Actor effect (buff) icons area
 Global Radar.InterfaceComponent              ; Radar map
 Global Compass.InterfaceComponent            ; Compass
-Dim AttributeDisplays.InterfaceComponent(39) ; Bars for character attributes
-Dim AttributeDisplayNumbers(39)              ; Number displays for character attribute bars
-Dim AttributeXpDisplays(39) ; Bars for character attributes
-Dim AttributeXpDisplayNumbers(39)              ; Number displays for character attribute bars
+Dim AttributeDisplays.InterfaceComponent(49) ; Bars for character attributes
+Dim AttributeDisplayNumbers(49)              ; Number displays for character attribute bars
+Dim AttributeXpDisplays(49) ; Bars for character attributes
+Dim AttributeXpDisplayNumbers(49)              ; Number displays for character attribute bars
 Global InventoryWindow.InterfaceComponent    ; Inventory window
 Global InventoryDrop.InterfaceComponent      ; Inventory drop button
 Global InventoryEat.InterfaceComponent       ; Inventory use button
@@ -305,7 +305,7 @@ End Function
 
 ; Writes the data for any interface component to a stream
 Function WriteInterfaceComponent(IC.InterfaceComponent, Stream)
-
+	If IC = Null Then IC = New InterfaceComponent
 	WriteFloat(Stream, IC\X#)
 	WriteFloat(Stream, IC\Y#)
 	WriteFloat(Stream, IC\Width#)
@@ -343,7 +343,9 @@ Function LoadInterfaceSettings(Filename$)
 		Chat\Texture = ReadShort(F)
 		ChatEntry = New InterfaceComponent
 		ReadInterfaceComponent(ChatEntry, F)
-		For i = 0 To 39
+		For i = 0 to 49
+		;For i = 0 to 39
+
 			AttributeDisplays(i) = New InterfaceComponent
 			ReadInterfaceComponent(AttributeDisplays(i), F)
 		Next
@@ -383,7 +385,7 @@ Function SaveInterfaceSettings(Filename$)
 		WriteInterfaceComponent(Chat, F)
 		WriteShort(F, Chat\Texture)
 		WriteInterfaceComponent(ChatEntry, F)
-		For i = 0 To 39
+		For i = 0 to 49
 			WriteInterfaceComponent(AttributeDisplays(i), F)
 		Next
 		WriteInterfaceComponent(BuffsArea, F)

@@ -1297,7 +1297,7 @@ Function BVM_DELETEACTOREFFECT(Param1%, Param2$)
 				If Upper$(AE\Name$) = EffectName$
 					If AE\Owner\RNID > 0
 						Pa$ = RCE_StrFromInt$(Handle(AE), 4)
-						For i = 0 To 39
+						For i = 0 to 49
 							Pa$ = Pa$ + RCE_StrFromInt$(AE\Attributes\Value[i], 4)
 						Next
 						RCE_Send(Host, AE\Owner\RNID, P_ActorEffect, "R" + Pa$, True)
@@ -1308,7 +1308,7 @@ Function BVM_DELETEACTOREFFECT(Param1%, Param2$)
 						RCE_Send(Host, AE\Owner\RNID, P_ActorEffect, "Q" + Pa$, True)
 					EndIf
 
-					For i = 0 To 39
+					For i = 0 to 49
 						AE\Owner\Attributes\Value[i] = AE\Owner\Attributes\Value[i] - AE\Attributes\Value[i]
 					Next
 					For i = 0 To 19

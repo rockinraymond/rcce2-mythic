@@ -360,7 +360,7 @@ Function My_SaveActorInstance(A.ActorInstance, Q.QuestLog, C.ActionbarData, IsSl
 	FreeSQLQuery(SQLQuery(hSQL, "UPDATE `rc_actorinstance` SET `actorid` = '"+A\Actor\ID+"', `area` = '"+A\Area$+"',`name` = '"+A\Name$+"',`tag` = '"+A\Tag$+"',`teamid` = '"+A\TeamID%+"',`x` = '"+A\X#+"',`y` = '"+A\Y#+"',`z` = '"+A\Z#+"',`gender` = '"+A\Gender+"',`xp` = '"+A\XP+"',`level` = '"+A\Level+"',`face` = '"+A\FaceTex+"',`hair` = '"+A\Hair+"',`beard` = '"+A\Beard+"',`body` = '"+A\BodyTex+"',`script` = '"+A\Script$+"',`dscript` = '"+A\DeathScript$+"',`rep` = '"+A\Reputation+"',`gold` = '"+A\Gold+"',`slaves` = '"+A\NumberOfSlaves+"',`homefaction` = '"+A\HomeFaction+"', `isslave` = '"+IsSlave+"', `slot` = '"+Parent+"', `xpbarlev` = '"+A\XPBarLevel+"' WHERE `id` = '"+A\My_ID+"'"))
 	
 	; Update their attributes
-	For i = 0 To 39
+	For i = 0 to 49
 		FreeSQLQuery(SQLQuery(hSQL, "UPDATE `rc_attributes` SET `aval` = '"+A\Attributes\Value[i]+"', `amax` = '"+A\Attributes\Maximum[i]+"' WHERE `id` = '"+(A\Attribute_ID + i)+"'"))
 	Next
 
@@ -373,13 +373,13 @@ Function My_SaveActorInstance(A.ActorInstance, Q.QuestLog, C.ActionbarData, IsSl
 			FreeSQLQuery(SQLQuery(hSQL, "UPDATE `rc_items` SET `iid` = '65535', `iheal` = '0', `iamnt` = '0' WHERE `item_id` = '"+(A\Inventory\My_ID + i)+"'"))
 
 			; Item attributes
-			For j = 0 To 39
+			For j = 0 to 49
 				FreeSQLQuery(SQLQuery(hSQL, "UPDATE `rc_itemvals` SET `val` = '0' WHERE `id` = '"+(A\Inventory\My_AttrID + (i * 40) + j)+"'"))
 			Next
 		Else
 			FreeSQLQuery(SQLQuery(hSQL, "UPDATE `rc_items` SET `iid` = '"+A\Inventory\Items[i]\Item\ID+"', `iheal` = '"+A\Inventory\Items[i]\ItemHealth+"', `iamnt` = '"+A\Inventory\Amounts[i]+"' WHERE `item_id` = '"+(A\Inventory\My_ID + i)+"'"))
 			
-			For j = 0 To 39
+			For j = 0 to 49
 				FreeSQLQuery(SQLQuery(hSQL, "UPDATE `rc_itemvals` SET `val` = '"+(A\Inventory\Items[i]\Attributes\Value[j])+"' WHERE `id` = '"+(A\Inventory\My_AttrID + (i * 40) + j)+"'"))
 			Next
 
@@ -499,7 +499,7 @@ Function My_NewActorInstance(A.ActorInstance, Q.Questlog, c.ActionbarData, IsSla
 	f = 15
 	
 	; Add Attributes
-	For i = 0 To 39
+	For i = 0 to 49
 		BBSetInt(byc,f + 0,A\Attributes\Value[i])
 		BBSetInt(byc,f + 1,A\Attributes\Maximum[i])
 		f = f + 2
@@ -600,7 +600,7 @@ Function My_LoadActorInstance.ActorInstance(ActID, Q.Questlog, C.ActionBarData, 
 	; Query attributes
 	AttributeResult = SQLQuery(hSQL, "SELECT * FROM `rc_attributes` WHERE `actor_id` = '"+ActID+"' ORDER BY `id` ASC")
 	
-	For i = 0 To 39
+	For i = 0 to 49
 		
 		; Get the data
 		AttributeRow = SQLFetchRow(AttributeResult)
@@ -649,7 +649,7 @@ Function My_LoadActorInstance.ActorInstance(ActID, Q.Questlog, C.ActionBarData, 
 					; Query its attributes
 					ItemAttributeResult = SQLQuery(hSQL, "SELECT * FROM `rc_itemvals` WHERE `item_id` = '"+(A\Inventory\My_ID + i)+"' ORDER BY `id` ASC")
 					
-					For j = 0 To 39
+					For j = 0 to 49
 						; Get Data
 						ItemAttributeRow = SQLFetchRow(ItemAttributeResult)
 						
@@ -668,7 +668,7 @@ Function My_LoadActorInstance.ActorInstance(ActID, Q.Questlog, C.ActionBarData, 
 				
 				; Query attributes
 				ItemAttributeResult = SQLQuery(hSQL, "SELECT * FROM `rc_itemvals` WHERE `item_id` = '"+(A\Inventory\My_ID + i)+"' ORDER BY `id` ASC")
-				For j = 0 To 39
+				For j = 0 to 49
 				
 					; Get and set data
 					ItemAttributeRow = SQLFetchRow(ItemAttributeResult)

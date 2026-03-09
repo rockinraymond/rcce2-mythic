@@ -1035,7 +1035,7 @@ Function UpdateNetwork()
 											EndIf
 											FoundAE\CreatedTime = MilliSecs()
 											FoundAE\Length = AI\Inventory\Items[Slot]\Item\EatEffectsLength * 1000
-											For i = 0 To 39
+											For i = 0 to 49
 												If AI\Inventory\Items[Slot]\Attributes\Value[i] <> 0
 													Old = FoundAE\Attributes\Value[i]
 													FoundAE\Attributes\Value[i] = AI\Inventory\Items[Slot]\Attributes\Value[i]
@@ -1639,7 +1639,7 @@ Function UpdateNetwork()
 				; Attributes block
 				Pa$ = "A" + RCE_StrFromInt$(AttributeAssignment, 1) + RCE_StrFromInt$(SkillAssignment, 1)
 				
-				For i = 0 To 39
+				For i = 0 to 49
 					Pa$ = Pa$ + RCE_StrFromInt$(AttributeIsSkill(i), 1) + RCE_StrFromInt$(AttributeHidden(i), 1)
 					Pa$ = Pa$ + RCE_StrFromInt$(Len(AttributeNames$(i)), 1) + AttributeNames$(i)
 				Next
@@ -1673,7 +1673,7 @@ Function UpdateNetwork()
 					For j = 0 To 5 : Pa$ = Pa$ + RCE_StrFromInt$(It\Gubbins[j], 1) : Next
 					Pa$ = Pa$ + RCE_StrFromInt$(It\MMeshID, 2) + RCE_StrFromInt$(It\FMeshID, 2) + RCE_StrFromInt$(It\SlotType, 2)
 					Pa$ = Pa$ + RCE_StrFromInt$(It\Stackable, 1)
-					For j = 0 To 39 : Pa$ = Pa$ + RCE_StrFromInt$(It\Attributes\Value[j] + 5000, 2) : Next
+					For j = 0 to 49 : Pa$ = Pa$ + RCE_StrFromInt$(It\Attributes\Value[j] + 5000, 2) : Next
 					For j = 0 To 19 : Pa$ = Pa$ + RCE_StrFromInt$(It\Resistances[j] + 5000, 2) : Next
 					Pa$ = Pa$ + RCE_StrFromInt$(Len(It\Name$), 1) + It\Name$
 					Pa$ = Pa$ + RCE_StrFromInt$(Len(It\ExclusiveRace$), 1) + It\ExclusiveRace$
@@ -1732,7 +1732,7 @@ Function UpdateNetwork()
 					Pa$ = Pa$ + RCE_StrFromInt$(Ac\MAnimationSet, 2) + RCE_StrFromInt$(Ac\FAnimationSet, 2)
 					Pa$ = Pa$ + RCE_StrFromFloat$(Ac\Scale#)
 					Pa$ = Pa$ + RCE_StrFromInt$(Ac\DefaultFaction, 1)
-					For i = 0 To 39
+					For i = 0 to 49
 						Pa$ = Pa$ + RCE_StrFromInt$(Ac\Attributes\Value[i], 2)
 						Pa$ = Pa$ + RCE_StrFromInt$(Ac\Attributes\Maximum[i], 2)
 						Pa$ = Pa$ + RCE_StrFromInt$(Ac\Attributes\Xp[i], 2)
@@ -1931,7 +1931,7 @@ Function UpdateNetwork()
 								Pa$ = RCE_StrFromInt$(A\Character[Number]\Gold, 4) + RCE_StrFromInt$(A\Character[Number]\Reputation, 2)
 								Pa$ = Pa$ + RCE_StrFromInt$(A\Character[Number]\Level, 2) + RCE_StrFromInt$(A\Character[Number]\XP, 4)
 								Pa$ = Pa$ + RCE_StrFromInt$(A\Character[Number]\HomeFaction, 1)
-								For i = 0 To 39
+								For i = 0 to 49
 									Pa$ = Pa$ + RCE_StrFromInt$(A\Character[Number]\Attributes\Value[i], 2)
 									Pa$ = Pa$ + RCE_StrFromInt$(A\Character[Number]\Attributes\Maximum[i], 2)
 									Pa$ = Pa$ + RCE_StrFromInt$(A\Character[Number]\Attributes\Xp[i], 2)
@@ -2105,7 +2105,7 @@ Function UpdateNetwork()
 									Offset = Offset + 7
 									If AttributeAssignment > 0 Or SkillAssignment > 0
 										TotalAmount = 0
-										For i = 0 To 39
+										For i = 0 to 49
 											Amount = RCE_IntFromStr(Mid$(M\MessageData$, Offset, 1))
 											TotalAmount = TotalAmount + Amount
 											C\Attributes\Value[i] = C\Attributes\Value[i] + Amount

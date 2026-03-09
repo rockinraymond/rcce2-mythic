@@ -1795,7 +1795,7 @@ Function UpdateInterface()
 
 	; Display attributes
 		CurrentAtt = 0
-		For i = 0 To 39
+		For i = 0 to 49
 			If AttributeNames$(i) <> "" And AttributeHidden(i) = False And AttributeIsSkill(i) = False
 					GY_UpdateLabel(LAttributeVals(CurrentAtt), Me\Attributes\Value[i])
 					CurrentAtt = CurrentAtt + 1
@@ -1803,7 +1803,7 @@ Function UpdateInterface()
 		Next
 	;Display skills
 		CurrentSkl = 0
-		For i = 0 To 39
+		For i = 0 to 49
 			If AttributeNames$(i) <> "" And AttributeHidden(i) = False And AttributeIsSkill(i) = True
 					GY_UpdateLabel(AttributeXpDisplayNumbers(CurrentSkl), "EXP: " + Str(Me\Attributes\Xp[i]) + "/"+ Str(Me\Attributes\XpMax[i]))
 					GY_UpdateProgressBar(AttributeXpDisplays(CurrentSkl), (Float#(Me\Attributes\Xp[i]) / Float#(Me\Attributes\XpMax[i])) * 100.0)
@@ -1917,7 +1917,7 @@ EndIf
          Next
 
 			; Attribute bars
-			For i = 0 To 39
+			For i = 0 to 49
 				If AttributeDisplays(i)\Component <> 0
 					If GY_MouseHovering(AttributeDisplays(i)\Component)
 						LTooltip = GY_CreateLabel(0, GY_MouseX#, GY_MouseY# + 0.03, AttributeNames$(i))
@@ -2068,7 +2068,7 @@ EndIf
 					hasBonuses = False
 					hasPenalties = False
 					
-					For j = 0 to 39
+					For j = 0 to 49
 						If Me\Inventory\Items[i]\Attributes\Value[j] > 0
 							hasBonuses = True
 							Y# = Y# + YInterval#
@@ -2083,7 +2083,7 @@ EndIf
 						EndIf
 					Next
 					If hasBonuses = True Then GY_CreateLabel(WTooltip, 0.02, BonusY#, "BONUSES", 255, 255, 255)
-					For j = 0 to 39
+					For j = 0 to 49
 						If Me\Inventory\Items[i]\Attributes\Value[j] < 0
 							hasPenalties = True
 							Y2# = Y2# + YInterval#
@@ -2237,7 +2237,7 @@ EndIf
 					hasBonuses = False
 					hasPenalties = False
 					
-					For j = 0 to 39
+					For j = 0 to 49
 						If Me\Inventory\Items[i + SlotI_Backpack]\Attributes\Value[j] > 0
 							hasBonuses = True
 							Y# = Y# + YInterval#
@@ -2252,7 +2252,7 @@ EndIf
 						EndIf
 					Next
 					If hasBonuses = True Then GY_CreateLabel(WTooltip, 0.02, BonusY#, "BONUSES", 255, 255, 255)
-					For j = 0 to 39
+					For j = 0 to 49
 						If Me\Inventory\Items[i + SlotI_Backpack]\Attributes\Value[j] < 0
 							hasPenalties = True
 							Y2# = Y2# + YInterval#
@@ -2399,7 +2399,7 @@ EndIf
 					hasBonuses = False
 					hasPenalties = False
 					
-					For j = 0 to 39
+					For j = 0 to 49
 						If TradeItems(i)\Attributes\Value[j] > 0
 							hasBonuses = True
 							Y# = Y# + YInterval#
@@ -2414,7 +2414,7 @@ EndIf
 						EndIf
 					Next
 					If hasBonuses = True Then GY_CreateLabel(WTooltip, 0.02, BonusY#, "BONUSES", 255, 255, 255)
-					For j = 0 to 39
+					For j = 0 to 49
 						If TradeItems(i)\Attributes\Value[j] < 0
 							hasPenalties = True
 							Y2# = Y2# + YInterval#
@@ -3547,7 +3547,7 @@ EndIf
 	;***********************************************************************************************
 
 	; Attribute displays
-	For i = 0 To 39
+	For i = 0 to 49
 		If AttributeDisplays(i)\Component <> 0
 			GY_UpdateProgressBar(AttributeDisplays(i)\Component, (Float#(Me\Attributes\Value[i]) / Float#(Me\Attributes\Maximum[i])) * 100.0)
 			GY_UpdateLabel(AttributeDisplayNumbers(i), Str$(Me\Attributes\Value[i]) + " / " + Str$(Me\Attributes\Maximum[i]))	
@@ -3937,7 +3937,7 @@ Function CreateInterface()
 	EndIf
 
 	; Attribute displays
-	For i = 0 To 39
+	For i = 0 to 49
 		If AttributeDisplays(i)\Width# > 0.0 And AttributeDisplays(i)\Height# > 0.0
 			; Create bar
 			R = AttributeDisplays(i)\R : G = AttributeDisplays(i)\G : B = AttributeDisplays(i)\B
@@ -4261,7 +4261,7 @@ Function CreateInterface()
 	GY_CreateLabel(WCharStats, 0.03, 0.42, LanguageString$(LS_Attributes), 255, 255, 255)
 	AttCount = 0
 	ResY# = 0
-	For i = 0 To 39
+	For i = 0 to 49
 		If AttributeNames$(i) <> "" And AttributeHidden(i) = False And AttributeIsSkill(i) = False
 			LAttributeNames(AttCount) = GY_CreateLabel(WCharStats, 0.03, 0.445 + (Float#(AttCount) * 0.025), "LONGEST ATTRIBUTE NAME HERE!")
 			LAttributeVals(AttCount) = GY_CreateLabel(WCharStats, 0.23, 0.445 + (Float#(AttCount) * 0.025), "00000", 255, 255, 255, Justify_Right)
@@ -4308,7 +4308,7 @@ Function CreateInterface()
 	GY_CreateLabel(WCharStats, 0.3, 0.03, "SKILLS", 255, 255, 255)
 	SklCount = 0
 	SkillStart# = 0.055
-	For i = 0 To 39
+	For i = 0 to 49
 		If AttributeNames$(i) <> "" And AttributeHidden(i) = False And AttributeIsSkill(i) = True
 			XPos# = 0.3
 			YPos# = SkillStart + (Float#(SklCount) * 0.05)
@@ -5005,7 +5005,7 @@ Function FreeInterface()
 
 
 	; Attribute displays
-	For i = 0 To 39
+	For i = 0 to 49
 		If AttributeDisplays(i)\Width# > 0.0 And AttributeDisplays(i)\Height# > 0.0
 			GY_FreeGadget(AttributeDisplays(i)\Component); = GY_CreateProgressBar(0, X#, Y#, W#, H#, 50, 100, R, G, B)
 			GY_FreeGadget(AttributeDisplayNumbers(i)); = GY_CreateLabel(0, X#, Y#, "00000 / 00000", 255, 255, 255, Justify_Centre)

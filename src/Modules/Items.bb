@@ -102,7 +102,7 @@ Function ItemInstanceToString$(I.ItemInstance)
 	If I = Null Then Return ""
 
 	Pa$ = RCE_StrFromInt$(I\Item\ID, 2)
-	For j = 0 To 39
+	For j = 0 to 49
 		Pa$ = Pa$ + RCE_StrFromInt$(I\Attributes\Value[j] + 5000, 2)
 	Next
 	Pa$ = Pa$ + RCE_StrFromInt$(I\ItemHealth, 1)
@@ -124,7 +124,7 @@ Function ItemInstanceFromString.ItemInstance(Pa$)
 	If ItemList(id) <> Null
 		I.ItemInstance = CreateItemInstance(ItemList(id))
 		Offset = 3
-		For j = 0 To 39
+		For j = 0 to 49
 			I\Attributes\Value[j] = RCE_IntFromStr(Mid$(Pa$, Offset, 2)) - 5000
 			Offset = Offset + 2
 		Next
@@ -138,7 +138,7 @@ Function ItemInstanceFromString.ItemInstance(Pa$)
 	Else
 		WriteLog(MainLog, "Item Removal: Item with ID " + ID + " has been removed from actor as it is no longer existant!")
 		Offset = 3
-		For j = 0 To 39
+		For j = 0 to 49
 			RCE_IntFromStr(Mid$(Pa$, Offset, 2))
 			Offset = Offset + 2
 		Next
@@ -161,7 +161,7 @@ Function WriteItemInstance(Stream, I.ItemInstance)
 	If I = Null Then WriteShort Stream, 65535 : Return
 
 	WriteShort Stream, I\Item\ID
-	For j = 0 To 39
+	For j = 0 to 49
 		WriteShort Stream, I\Attributes\Value[j] + 5000
 	Next
 	WriteByte Stream, I\ItemHealth
@@ -182,7 +182,7 @@ Function ReadItemInstance.ItemInstance(Stream)
 	Local I.ItemInstance = Null
 	If ItemList(ID) <> Null
 		I.ItemInstance = CreateItemInstance(ItemList(ID))
-		For j = 0 To 39
+		For j = 0 to 49
 			I\Attributes\Value[j] = ReadShort(Stream) - 5000
 		Next
 		I\ItemHealth = ReadByte(Stream)
@@ -204,7 +204,7 @@ Function ItemInstancesIdentical(A.ItemInstance, B.ItemInstance)
 	If A = Null Or B = Null Then Return False
 	If A\Item <> B\Item Then Return False
 	If A\ItemHealth <> B\ItemHealth Then Return False
-	For i = 0 To 39
+	For i = 0 to 49
 		If A\Attributes\Value[i] <> B\Attributes\Value[i] Then Return False
 	Next
 	For j = 1 To 19
@@ -262,7 +262,7 @@ Function CreateItemInstance.ItemInstance(Item.Item)
 	I\Item = Item
 	I\ItemHealth = 100
 	I\Attributes = New Attributes
-		For j = 0 To 39
+		For j = 0 to 49
 			I\Attributes\Value[j] = I\Item\Attributes\Value[j]
 		Next
 	For k = 0 To 19
@@ -280,7 +280,7 @@ Function CopyItemInstance.ItemInstance(A.ItemInstance)
 	I\Attributes = New Attributes
 	I\Item = A\Item
 	I\ItemHealth = A\ItemHealth
-	For j = 0 To 39
+	For j = 0 to 49
 		I\Attributes\Value[j] = A\Attributes\Value[j]
 	Next
 	For k = 0 To 19
@@ -329,7 +329,7 @@ Function LoadItems(Filename$)
 			I\FMeshID           = ReadShort(F)
 			I\SlotType         = ReadShort(F)
 			I\Stackable        = ReadByte(F)
-			For j = 0 To 39 : I\Attributes\Value[j] = ReadShort(F) - 5000 : Next
+			For j = 0 to 49 : I\Attributes\Value[j] = ReadShort(F) - 5000 : Next
 			Select I\ItemType
 				Case I_Weapon
 					I\WeaponDamage     = ReadShort(F)
@@ -388,7 +388,7 @@ Function SaveItems(Filename$)
 			WriteShort F, I\FMeshID
 			WriteShort F, I\SlotType
 			WriteByte F, I\Stackable
-			For j = 0 To 39 : WriteShort F, I\Attributes\Value[j] + 5000 : Next
+			For j = 0 to 49 : WriteShort F, I\Attributes\Value[j] + 5000 : Next
 			Select I\ItemType
 				Case I_Weapon
 					WriteShort F, I\WeaponDamage

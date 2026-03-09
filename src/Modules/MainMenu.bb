@@ -7,13 +7,13 @@ Dim CharFaceTex(9)
 Dim CharHair(9)
 Dim CharBeard(9)
 Dim CharBodyTex(9)
-Dim AttributeLabels(39)
-Dim SkillLabels(39)
-Dim AttributeDecrease(39)
-Dim AttributeIncrease(39)
-Dim SkillDecrease(39)
-Dim SkillIncrease(39)
-Dim PointSpends(39)
+Dim AttributeLabels(49)
+Dim SkillLabels(49)
+Dim AttributeDecrease(49)
+Dim AttributeIncrease(49)
+Dim SkillDecrease(49)
+Dim SkillIncrease(49)
+Dim PointSpends(49)
 Dim LDescription(9)
 Dim LEULA(28)
 Dim EULAText$(999)
@@ -819,7 +819,7 @@ Function LogIn()
 								AttributeAssignment = RCE_IntFromStr(Mid$(Pa$, 2, 1))
 								SkillAssignment = RCE_IntFromStr(Mid$(Pa$, 3, 1))
 								Offset = 4
-								For i = 0 To 39
+								For i = 0 to 49
 									AttributeIsSkill(i) = RCE_IntFromStr(Mid$(Pa$, Offset, 1))
 									AttributeHidden(i) = RCE_IntFromStr(Mid$(Pa$, Offset + 1, 1))
 									NameLen = RCE_IntFromStr(Mid$(Pa$, Offset + 2, 1))
@@ -911,7 +911,7 @@ Function LogIn()
 									It\SlotType = RCE_IntFromStr(Mid$(Pa$, Offset + 4, 2))
 									It\Stackable = RCE_IntFromStr(Mid$(Pa$, Offset + 6, 1))
 									Offset = Offset + 7
-									For j = 0 To 39
+									For j = 0 to 49
 										It\Attributes\Value[j] = RCE_IntFromStr(Mid$(Pa$, Offset, 2)) - 5000
 										Offset = Offset + 2
 									Next
@@ -1018,7 +1018,7 @@ Function LogIn()
 									A\Scale#         = RCE_FloatFromStr#(Mid$(Pa$, Offset + 13, 4))
 									A\DefaultFaction = RCE_IntFromStr(Mid$(Pa$, Offset + 17, 1))
 									Offset = Offset + 18
-									For i = 0 To 39
+									For i = 0 to 49
 										A\Attributes\Value[i] = RCE_IntFromStr(Mid$(Pa$, Offset, 2))
 										A\Attributes\Maximum[i] = RCE_IntFromStr(Mid$(Pa$, Offset + 2, 2))
 										A\Attributes\Xp[i] = RCE_IntFromStr(Mid$(Pa$, Offset + 4, 2))
@@ -1711,7 +1711,7 @@ Function CharSelect()
 								Me\HomeFaction = RCE_IntFromStr(Mid$(M\MessageData$, 15, 1))
 								Offset = 16
 								While Offset < Len(M\MessageData$)
-									If AttributesDone < 40
+									If AttributesDone < 50
 										Me\Attributes\Value[AttributesDone] = RCE_IntFromStr(Mid$(M\MessageData$, Offset, 2))
 										Me\Attributes\Maximum[AttributesDone] = RCE_IntFromStr(Mid$(M\MessageData$, Offset + 2, 2))
 										Me\Attributes\Xp[AttributesDone] = RCE_IntFromStr(Mid$(M\MessageData$, Offset + 4, 2))
@@ -1792,7 +1792,7 @@ Function CharSelect()
 						Delete M
 
 						; Complete!
-						If Quests >= RequiredQuests And Spells >= RequiredSpells And AttributesDone > 39 And ItemsDone = Slots_Inventory+1
+						If Quests >= RequiredQuests And Spells >= RequiredSpells And AttributesDone > 49 And ItemsDone = Slots_Inventory+1
 							Done = True : Exit
 						EndIf
 					ElseIf M\MessageType = RN_HostHasLeft Or M\MessageType = RN_Disconnected
@@ -1942,18 +1942,18 @@ Function CreateChar()
 	;Local PreviewA.ActorInstance = Null
 
 	; Clear point spends
-	For i = 0 To 39 : PointSpends(i) = 0 : Next
+	For i = 0 to 49 : PointSpends(i) = 0 : Next
 
 	; Count assignable attributes
 	TotalAttributes = 0
-	For i = 0 To 39
+	For i = 0 to 49
 		If AttributeNames$(i) <> "" And AttributeIsSkill(i) = False And AttributeHidden(i) = False
 			TotalAttributes = TotalAttributes + 1
 		EndIf
 	Next
 
 	TotalSkills = 0
-	For i = 0 To 39
+	For i = 0 to 49
 		If AttributeNames$(i) <> "" And AttributeIsSkill(i) = True And AttributeHidden(i) = False
 			TotalSkills = TotalSkills + 1
 		EndIf
@@ -2066,7 +2066,7 @@ Function CreateChar()
 	;Y2# = 0.284
 
 	Count = 0
-	For i = 0 To 39
+	For i = 0 to 49
 		If AttributeNames$(i) <> "" And AttributeIsSkill(i) = False And AttributeHidden(i) = False
 			
 			GY_CreateLabel(WStat, 0.02, Y#, AttributeNames$(i) + ":")
@@ -2094,7 +2094,7 @@ Function CreateChar()
 	;Y2# = 0.284
 
 	SkillCount = 0
-	For i = 0 To 39
+	For i = 0 to 49
 		If AttributeNames$(i) <> "" And AttributeIsSkill(i) = True And AttributeHidden(i) = False
 			
 			GY_CreateLabel(WSkill, 0.02, Y#, AttributeNames$(i) + ":")
@@ -2154,7 +2154,7 @@ Function CreateChar()
 		If KeyHit(1) Or GY_ButtonHit(BCancel)
 			SafeFreeActorInstance(Preview)
 			;GY_FreeGadget(CRace) 
-		For i = 0 To 39 : GY_FreeGadget(AttributeIncrease(i)) : GY_FreeGadget(AttributeDecrease(i)) : GY_FreeGadget(SkillIncrease(i)) : GY_FreeGadget(SkillDecrease(i)) : GY_FreeGadget(AttributeLabels(i)) : GY_FreeGadget(SkillLabels(i)) : Next
+		For i = 0 to 49 : GY_FreeGadget(AttributeIncrease(i)) : GY_FreeGadget(AttributeDecrease(i)) : GY_FreeGadget(SkillIncrease(i)) : GY_FreeGadget(SkillDecrease(i)) : GY_FreeGadget(AttributeLabels(i)) : GY_FreeGadget(SkillLabels(i)) : Next
 			GY_FreeGadget(WChar) : GY_FreeGadget(WPrev) : GY_FreeGadget(WStat) : GY_FreeGadget(WSkill)
 
 			GY_FreeGadget(LName) : GY_FreeGadget(TName) : GY_FreeGadget(BDone) : GY_FreeGadget(BCancel)
@@ -2204,7 +2204,7 @@ Function CreateChar()
 					Pa$ = Pa$ + RCE_StrFromInt$(Preview\FaceTex, 1) + RCE_StrFromInt$(Preview\Hair, 1)
 					Pa$ = Pa$ + RCE_StrFromInt$(Preview\Beard, 1) + RCE_StrFromInt$(Preview\BodyTex, 1)
 					If AttributeAssignment > 0 Or SkillAssignment > 0
-						For i = 0 To 39
+						For i = 0 to 49
 							Pa$ = Pa$ + RCE_StrFromInt$(PointSpends(i), 1)
 						Next
 					EndIf
@@ -2255,7 +2255,7 @@ Function CreateChar()
 						GY_FreeGadget(BLeft) : GY_FreeGadget(BRight)
 						GY_FreeGadget(ClassLab)
 						;GY_FreeGadget(CRace) 
-		For i = 0 To 39 : GY_FreeGadget(AttributeIncrease(i)) : GY_FreeGadget(AttributeDecrease(i))  : GY_FreeGadget(SkillIncrease(i)) : GY_FreeGadget(SkillDecrease(i)) : GY_FreeGadget(AttributeLabels(i)) : GY_FreeGadget(SkillLabels(i)) : Next
+		For i = 0 to 49 : GY_FreeGadget(AttributeIncrease(i)) : GY_FreeGadget(AttributeDecrease(i))  : GY_FreeGadget(SkillIncrease(i)) : GY_FreeGadget(SkillDecrease(i)) : GY_FreeGadget(AttributeLabels(i)) : GY_FreeGadget(SkillLabels(i)) : Next
 			
 						GY_FreeGadget(RemainingLabel)  : GY_FreeGadget(SkillRemainingLabel)
 						;Character Options
@@ -2273,7 +2273,7 @@ Function CreateChar()
 						GY_FreeGadget(BLeft) : GY_FreeGadget(BRight)
 							GY_FreeGadget(ClassLab)
 							;GY_FreeGadget(CRace) 
-		For i = 0 To 39 : GY_FreeGadget(AttributeIncrease(i)) : GY_FreeGadget(AttributeDecrease(i))  : GY_FreeGadget(SkillIncrease(i)) : GY_FreeGadget(SkillDecrease(i)) : GY_FreeGadget(AttributeLabels(i)) : GY_FreeGadget(SkillLabels(i)) : Next
+		For i = 0 to 49 : GY_FreeGadget(AttributeIncrease(i)) : GY_FreeGadget(AttributeDecrease(i))  : GY_FreeGadget(SkillIncrease(i)) : GY_FreeGadget(SkillDecrease(i)) : GY_FreeGadget(AttributeLabels(i)) : GY_FreeGadget(SkillLabels(i)) : Next
 		
 						GY_FreeGadget(RemainingLabel)  : GY_FreeGadget(SkillRemainingLabel)
 						;Character Options
@@ -2292,7 +2292,7 @@ Function CreateChar()
 
 		; Point spends
 		If AttributeAssignment > 0
-			For i = 0 To 39
+			For i = 0 to 49
 					If GY_ButtonHit(AttributeDecrease(i)) = True
 						Att = GY_GadgetData$(AttributeLabels(i))
 						If PointSpends(Att) > 0
@@ -2315,7 +2315,7 @@ Function CreateChar()
 
 		; Skill Point spends
 		If SkillAssignment > 0
-			For i = 0 To 39
+			For i = 0 to 49
 					If GY_ButtonHit(SkillDecrease(i)) = True
 						Att = GY_GadgetData$(SkillLabels(i))
 						If PointSpends(Att) > 0
@@ -2341,7 +2341,7 @@ Function CreateChar()
 			SafeFreeActorInstance(Preview)
 			PointsToSpend = AttributeAssignment
 			SkillPointsToSpend = SkillAssignment
-			For i = 0 To 39 : PointSpends(i) = 0 : Next
+			For i = 0 to 49 : PointSpends(i) = 0 : Next
 			ChosenRace$ = Upper$(GY_ComboBoxItem$(CRace))
 			For A.Actor = Each Actor
 				If Upper$(A\Race$) = ChosenRace$ Then Chosen.Actor = A : Exit
@@ -2383,7 +2383,7 @@ Function CreateChar()
 		; 			If Preview\NametagEN <> 0 Then HideEntity(Preview\NametagEN)
 		; 			PointsToSpend = AttributeAssignment
 		; 			SkillPointsToSpend = SkillAssignment
-		; 			For i = 0 To 39 : PointSpends(i) = 0 : Next
+		; 			For i = 0 to 49 : PointSpends(i) = 0 : Next
 		; 			SetUpPreview(Preview\Actor)
 		; 			GY_UpdateLabel(RemainingLabel, LanguageString$(LS_AttributePoints) + " " + PointsToSpend)
 		; 			GY_UpdateLabel(SkillRemainingLabel, "Skill Points: " + SkillPointsToSpend)
@@ -2417,7 +2417,7 @@ Function CreateChar()
 		; 			If Preview\NametagEN <> 0 Then HideEntity(Preview\NametagEN)
 		; 			PointsToSpend = AttributeAssignment
 		; 			SkillPointsToSpend = SkillAssignment
-		; 			For i = 0 To 39 : PointSpends(i) = 0 : Next
+		; 			For i = 0 to 49 : PointSpends(i) = 0 : Next
 		; 			SetUpPreview(Preview\Actor)
 		; 			GY_UpdateLabel(RemainingLabel, LanguageString$(LS_AttributePoints) + " " + PointsToSpend)
 		; 			GY_UpdateLabel(SkillRemainingLabel, "Skill Points: " + SkillPointsToSpend)
@@ -2636,7 +2636,7 @@ Function SetUpPreview(Preview.Actor)
 
 	; Attributes
 	Count = 0
-	For i = 0 To 39
+	For i = 0 to 49
 		If AttributeNames$(i) <> "" And AttributeIsSkill(i) = False And AttributeHidden(i) = False
 			GY_UpdateLabel(AttributeLabels(Count), Preview\Attributes\Value[i] + PointSpends(i))
 			Count = Count + 1
@@ -2644,7 +2644,7 @@ Function SetUpPreview(Preview.Actor)
 	Next
 
 	SkillCount = 0
-	For i = 0 To 39
+	For i = 0 to 49
 		If AttributeNames$(i) <> "" And AttributeIsSkill(i) = True And AttributeHidden(i) = False
 			GY_UpdateLabel(SkillLabels(SkillCount), Preview\Attributes\Value[i] + PointSpends(i))
 			SkillCount = SkillCount + 1

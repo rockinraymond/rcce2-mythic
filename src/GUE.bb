@@ -139,7 +139,8 @@ Result = LoadInterfaceSettings("Data\Game Data\Interface.dat")
 If Result = False Then RuntimeError("Could not open Data\Game Data\Interface.dat!")
 ; Main screen components
 Tex = LoadTexture("Data\GUE\Attribute Bar.bmp")
-For i = 0 To 39
+;For i = 0 to 39
+For i = 0 to 49
 	AttributeDisplays(i)\Component = CreateQuad()
 	EntityTexture(AttributeDisplays(i)\Component, Tex)
 Next
@@ -717,7 +718,7 @@ Global SProjSpeed = FUI_Spinner(G, 100, 290, 90, 20, 1, 100, 0, 1, DTYPE_INTEGER
 FUI_Label(G, 10, 322, "Governing Skill:")
 Global CProjectileSkill = FUI_ComboBox(G, 100, 320, 350, 20, 10)
 FUI_ComboBoxItem(CProjectileSkill, "None (no skill mod)")
-For i = 0 To 39
+For i = 0 to 49
 	If AttributeNames$(i) <> ""
 		Item = FUI_ComboBoxItem(CProjectileSkill, AttributeNames$(i)) : FUI_SendMessage(Item, M_SETDATA,  Handle(C))
 	EndIf
@@ -725,7 +726,7 @@ Next
 FUI_Label(G, 10, 352, "Governing Skill:")
 Global CProjectileAttribute = FUI_ComboBox(G, 100, 350, 350, 20, 10)
 FUI_ComboBoxItem(CProjectileAttribute, "None (no attribute mod)")
-For i = 0 To 39
+For i = 0 to 49
 	If AttributeNames$(i) <> ""
 		Item = FUI_ComboBoxItem(CProjectileAttribute, AttributeNames$(i)) : FUI_SendMessage(Item, M_SETDATA,  Handle(C))
 	EndIf
@@ -802,7 +803,7 @@ BAttributeSave = FUI_Button(TAttributes, 20, 20, 100, 20, "Save attributes")
 BSetFixedAttributes = FUI_Button(TAttributes, 150, 20, 120, 20, "Set fixed attributes")
 FUI_Label(TAttributes, 20, 70, "You may add up to 40 attributes below:")
 LAttribute = FUI_ListBox(TAttributes, 20, 100, 250, 310)
-For i = 0 To 39
+For i = 0 to 49
 	If AttributeNames$(i) <> ""
 		Item = FUI_ListBoxItem(LAttribute, AttributeNames$(i)) : FUI_SendMessage(Item, M_SETDATA, i)
 	EndIf
@@ -1040,7 +1041,7 @@ Global BActorPolyCollision = FUI_CheckBox(TActorsAppearance, 20, 282, "Use polyg
 ; Attributes / resistances
 ;FUI_Label(TActorsAttributes, 120, 22, "Attributes:", ALIGN_CENTER)
 ;Global LActorAttributes = FUI_ListBox(TActorsAttributes, 20, 50, 200, 450)
-;For i = 0 To 39
+;For i = 0 to 49
 ;	If AttributeNames$(i) <> ""
 ;		Item = FUI_ListBoxItem(LActorAttributes, AttributeNames$(i)) : FUI_SendMessage(Item, M_SETDATA, i)
 ;	EndIf
@@ -1063,7 +1064,7 @@ Global BActorPolyCollision = FUI_CheckBox(TActorsAppearance, 20, 282, "Use polyg
 
 FUI_Label(TActorsGeneral, 440, 22, "Attributes:")
 Global LActorAttributes = FUI_ListBox(TActorsGeneral, 440, 50, 150, 450)
-For i = 0 To 39
+For i = 0 to 49
 	If AttributeNames$(i) <> ""
 		Item = FUI_ListBoxItem(LActorAttributes, AttributeNames$(i)) : FUI_SendMessage(Item, M_SETDATA, i)
 	EndIf
@@ -1265,7 +1266,7 @@ Global BItemGubbin = FUI_CheckBox(TItemsAppearance, 150, 242, "Show this gubbin 
 ; Attributes
 ;FUI_Label(TItemsAttributes, 160, 22, "Attributes:", ALIGN_CENTER)
 ;Global LItemAttributes = FUI_ListBox(TItemsAttributes, 20, 50, 300, 450)
-;For i = 0 To 39
+;For i = 0 to 49
 ;	If AttributeNames$(i) <> ""
 ;		Item = FUI_ListBoxItem(LItemAttributes, AttributeNames$(i)) : FUI_SendMessage(Item, M_SETDATA, i)
 ;	EndIf
@@ -1275,7 +1276,7 @@ Global BItemGubbin = FUI_CheckBox(TItemsAppearance, 150, 242, "Show this gubbin 
 ;------------------------------------
 FUI_Label(TItemsAppearance, 660, 22, "Attributes:", ALIGN_CENTER)
 Global LItemAttributes = FUI_ListBox(TItemsAppearance, 520, 50, 300, 450)
-For i = 0 To 39
+For i = 0 to 49
 	If AttributeNames$(i) <> ""
 		Item = FUI_ListBoxItem(LItemAttributes, AttributeNames$(i)) : FUI_SendMessage(Item, M_SETDATA, i)
 	EndIf
@@ -1320,7 +1321,7 @@ FUI_ComboBoxItem(CItemExclusiveRace, "None (can be used by any race)")
 FUI_Label(TItemsGeneral, 510, 132, "Skill Requirement:")
 Global CItemExclusiveSkill = FUI_ComboBox(TItemsGeneral, 740, 130, 350, 20, 10)
 FUI_ComboBoxItem(CItemExclusiveSkill, "None (no skill requirements)")
-For i = 0 To 39
+For i = 0 to 49
 	If AttributeNames$(i) <> ""
 		Item = FUI_ComboBoxItem(CItemExclusiveSkill, AttributeNames$(i)) : FUI_SendMessage(Item, M_SETDATA, i)
 	EndIf
@@ -3333,7 +3334,7 @@ Cls
 						If AttributesChanged = True
 							FUI_SendMessage(LItemAttributes, M_RESET)
 							FUI_SendMessage(LActorAttributes, M_RESET)
-							For i = 0 To 39
+							For i = 0 to 49
 								If AttributeNames$(i) <> ""
 									Item = FUI_ListBoxItem(LItemAttributes, AttributeNames$(i)) : FUI_SendMessage(Item, M_SETDATA, i)
 									Item = FUI_ListBoxItem(LActorAttributes, AttributeNames$(i)) : FUI_SendMessage(Item, M_SETDATA, i)
@@ -3439,7 +3440,7 @@ Cls
 							HideEntity Radar\Component
 							HideEntity BuffsArea\Component
 							HideEntity Compass\Component
-							For i = 0 To 39
+							For i = 0 to 49
 								HideEntity(AttributeDisplays(i)\Component)
 							Next
 							
@@ -3463,7 +3464,7 @@ Cls
 					;		HideEntity Radar\Component
 					;;		HideEntity BuffsArea\Component
 					;		HideEntity Compass\Component
-					;		For i = 0 To 39
+					;		For i = 0 to 49
 					;			HideEntity(AttributeDisplays(i)\Component)
 					;		Next
 					;		
@@ -4192,7 +4193,7 @@ Cls
 				AttributesChanged = True
 			Case BAttributeAdd
 				Found = False
-				For i = 0 To 39
+				For i = 0 to 49
 					If AttributeNames$(i) = ""
 						AttributeNames$(i) = "New attribute"
 						Item = FUI_ListBoxItem(LAttribute, AttributeNames$(i))
@@ -5140,8 +5141,8 @@ Cls
 					For i = 0 To 15 : At\FSpeechIDs[i] = SelectedActor\FSpeechIDs[i] : Next
 					At\BloodTexID = SelectedActor\BloodTexID
 					At\Genders = SelectedActor\Genders
-					For i = 0 To 39 : At\Attributes\Value[i] = SelectedActor\Attributes\Value[i] : Next
-					For i = 0 To 39 : At\Attributes\Maximum[i] = SelectedActor\Attributes\Maximum[i] : Next
+					For i = 0 to 49 : At\Attributes\Value[i] = SelectedActor\Attributes\Value[i] : Next
+					For i = 0 to 49 : At\Attributes\Maximum[i] = SelectedActor\Attributes\Maximum[i] : Next
 					For i = 0 To 19 : At\Resistances[i] = SelectedActor\Resistances[i] : Next
 					At\MAnimationSet = SelectedActor\MAnimationSet
 					At\FAnimationSet = SelectedActor\FAnimationSet
@@ -5983,8 +5984,8 @@ Cls
 					It\MMeshID = SelectedItem\MMeshID
 					It\FMeshID = SelectedItem\FMeshID
 					For i = 0 To 5 : It\Gubbins[i] = SelectedItem\Gubbins[i] : Next
-					For i = 0 To 39 : It\Attributes\Value[i] = SelectedItem\Attributes\Value[i] : Next
-					For i = 0 To 39 : It\Attributes\Maximum[i] = SelectedItem\Attributes\Maximum[i] : Next
+					For i = 0 to 49 : It\Attributes\Value[i] = SelectedItem\Attributes\Value[i] : Next
+					For i = 0 to 49 : It\Attributes\Maximum[i] = SelectedItem\Attributes\Maximum[i] : Next
 					For i = 0 To 19 : It\Resistances[i] = SelectedItem\Resistances[i] : Next
 					It\TakesDamage = SelectedItem\TakesDamage
 					It\SlotType = SelectedItem\SlotType
@@ -7240,13 +7241,17 @@ Function UpdateInterfaceComponentsList() ;[255]
 		Item = FUI_ListBoxItem(LInterfaceComponents, "Radar map") : FUI_SendMessage(Item, M_SETDATA, Handle(Radar))
 		Item = FUI_ListBoxItem(LInterfaceComponents, "Compass") : FUI_SendMessage(Item, M_SETDATA, Handle(Compass))
 		Item = FUI_ListBoxItem(LInterfaceComponents, "Buff icons area") : FUI_SendMessage(Item, M_SETDATA, Handle(BuffsArea))
-		For i = 0 To 39
-			If AttributeNames$(i) <> ""
-				Item = FUI_ListBoxItem(LInterfaceComponents, AttributeNames$(i) + " bar") : FUI_SendMessage(Item, M_SETDATA, i)
-			Else
-				AttributeDisplays(i)\Width# = 0.0
-				AttributeDisplays(i)\Height# = 0.0
-			EndIf
+		;For i = 0 to 39
+		For i = 0 to 49
+
+			
+				If AttributeNames$(i) <> ""
+					Item = FUI_ListBoxItem(LInterfaceComponents, AttributeNames$(i) + " bar") : FUI_SendMessage(Item, M_SETDATA, i)
+				Else
+					AttributeDisplays(i)\Width# = 0.0
+					AttributeDisplays(i)\Height# = 0.0
+				EndIf
+			
 		Next
 
 		; Hide inventory components
@@ -7310,7 +7315,7 @@ Function UpdateInterfaceComponentsList() ;[255]
 		HideEntity(Radar\Component)
 		HideEntity(Compass\Component)
 		HideEntity(BuffsArea\Component)
-		For i = 0 To 39
+		For i = 0 to 49
 			HideEntity(AttributeDisplays(i)\Component)
 		Next
 		; Update display
@@ -7353,7 +7358,7 @@ Function UpdateInterfaceComponentsList() ;[255]
 ;		HideEntity(Radar\Component)
 ;		HideEntity(Compass\Component)
 ;		HideEntity(BuffsArea\Component)
-;		For i = 0 To 39
+;		For i = 0 to 49
 ;			HideEntity(AttributeDisplays(i)\Component)
 ;		Next
 ;		
@@ -7388,7 +7393,7 @@ Function UpdateInterfaceComponent(IC.InterfaceComponent, PositionOnly = False)
 			Case Handle(ChatEntry)
 				FUI_SendMessage(LInterfaceComponents, M_SETINDEX, 2)
 			Default
-				For i = 0 To 39
+				For i = 0 to 49
 					If IC = AttributeDisplays(i)
 						Idx = 5
 						For j = 0 To i
@@ -7645,14 +7650,14 @@ Function UpdateProjectileDisplay()
 		FUI_SendMessage(SProjSpeed, M_SETVALUE, SelectedProj\Speed)
 		FUI_SendMessage(CProjectileSkill, M_SETINDEX, 1)
 		If SelectedProj\Skill$ <> ""
-			For i = 0 To 39
+			For i = 0 to 49
 				FUI_SendMessage(CProjectileSkill, M_SETINDEX, i)
 				If Upper$(FUI_SendMessage(CProjectileSkill, M_GETCAPTION)) = Upper$(SelectedProj\Skill$) Then Exit
 			Next
 		EndIf
 		FUI_SendMessage(CProjectileAttribute, M_SETINDEX, 1)
 		If SelectedProj\Attribute$ <> ""
-			For i = 0 To 39
+			For i = 0 to 49
 				FUI_SendMessage(CProjectileAttribute, M_SETINDEX, i)
 				If Upper$(FUI_SendMessage(CProjectileAttribute, M_GETCAPTION)) = Upper$(SelectedProj\Attribute$) Then Exit
 			Next
@@ -7821,7 +7826,7 @@ Function UpdateItemDisplay()
 		EndIf
 		FUI_SendMessage(CItemExclusiveSkill, M_SETINDEX, 1)
 		If SelectedItem\ExclusiveSkill$ <> ""
-			For i = 0 To 39
+			For i = 0 to 49
 				FUI_SendMessage(CItemExclusiveSkill, M_SETINDEX, i)
 				If Upper$(FUI_SendMessage(CItemExclusiveSkill, M_GETCAPTION)) = Upper$(SelectedItem\ExclusiveSkill$) Then Exit
 			Next
@@ -10314,7 +10319,7 @@ Function FixedAttributeDialog()
 	Idx = 1
 	HealthIdx = 1 : EnergyIdx = 1 : BreathIdx = 1
 	ToughnessIdx = 1 : StrengthIdx = 1 : SpeedIdx = 1
-	For i = 0 To 39
+	For i = 0 to 49
 		If AttributeNames$(i) <> ""
 			Item = FUI_ComboBoxItem(CHealth, AttributeNames$(i)) : FUI_SendMessage(Item, M_SETDATA, i)
 			Item = FUI_ComboBoxItem(CEnergy, AttributeNames$(i)) : FUI_SendMessage(Item, M_SETDATA, i)
@@ -10864,7 +10869,7 @@ Function CheckActorHealth()
 			; Compare ActorIDs with SelectedID
 			If SAc\ID = SelectedActorID
 				; Loop through all attributes
-				For i = 0 To 39
+				For i = 0 to 49
 					; Hard coded 'Health' Stat - check if this stat is <= 0
 					If(AttributeNames$(i) = "Health" And SAc\Attributes\Value[i] <= 0)
 						FUI_CustomMessageBox("Health is set at 0, therefore it will not spawn!", "Warning", MB_OK)
