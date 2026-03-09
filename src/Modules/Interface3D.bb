@@ -1202,6 +1202,7 @@ Function UpdateInterface()
 					Next
 					If ItemFound < 1 Then Output("You do not possess this item!", 255, 50, 50)
 				EndIf
+
 			; Add item to this slot
 			ElseIf MouseSlotSource >= 0
 				; Update slot
@@ -1238,6 +1239,7 @@ Function UpdateInterface()
 				; Blank mouse slot
 				HideEntity(MouseSlotEN) : MouseSlotAmount = 0 : MouseSlotSource = -1
 			EndIf
+			UpdateActionBarIcons()
 		; Right clicked (remove item)
 		ElseIf GY_ButtonRightHit(BActionBar(i))
 			Slot = i
@@ -1370,10 +1372,12 @@ Function UpdateInterface()
 		If RequireMemorise
 			For i = 0 To 9
 				If Me\SpellCharge[i] > 0 Then Me\SpellCharge[i] = Me\SpellCharge[i] - 100
+				If Me\SpellCharge[i] <= 0 Then UpdateActionBarIcons()
 			Next
 		Else
 			For i = 0 To 999
 				If Me\SpellCharge[i] > 0 Then Me\SpellCharge[i] = Me\SpellCharge[i] - 100
+				If Me\SpellCharge[i] <= 0 Then UpdateActionBarIcons()
 			Next
 		EndIf
 		LastSpellRecharge = MilliSecs()
@@ -4747,15 +4751,23 @@ Function UpdateActionBarIcons()
    For i = 0 To 11
       ; Spell
       If ActionBarSlots(i + Offset) < 0 And ActionBarSlots(i + Offset) <> 0   
-         If RequireMemorise
+         CurrentSpellCharge = 0
+		 If RequireMemorise
             Num = ActionBarSlots(i + Offset) + 10
             Sp.Spell = SpellsList(Me\KnownSpells[Me\MemorisedSpells[Num]])
+			CurrentSpellCharge = Me\SpellCharge[Num]
          Else
             Num = ActionBarSlots(i + Offset) + 1000
 			Sp.Spell = SpellsList(Me\KnownSpells[Num])
+			CurrentSpellCharge = Me\SpellCharge[Num]
          EndIf
          GYG.GY_Gadget = Object.GY_Gadget(BActionBar(i))
-         EntityTexture(GYG\EN, GetTexture(Sp\ThumbnailTexID))
+         EntityTexture(GYG\EN, GetTexture(Sp\ThumbnailTexID)) 
+		If CurrentSpellCharge > 0 
+         	EntityAlpha(GYG\EN, 0.5)
+		Else
+			EntityAlpha(GYG\EN, 1.0)
+		EndIf
       ; Item
       ElseIf ActionBarSlots(i + Offset) < 65535 And ActionBarSlots(i + Offset) <> 0   
          It.Item = ItemList(ActionBarSlots(i + Offset))
