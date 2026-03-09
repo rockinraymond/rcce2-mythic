@@ -92,7 +92,7 @@ End Type
 ; Returns the correct length in bytes of an item instance in string form
 Function ItemInstanceStringLength()
 
-	Return 123
+	Return 143
 
 End Function
 
