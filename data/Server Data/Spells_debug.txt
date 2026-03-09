@@ -7,7 +7,7 @@ Spell Name: Magic Missile
 SpellType: 1
 
 Spell ID: 2
-Spell Name: New ability1
+Spell Name: Shield
 SpellType: 1
 
 Spell ID: 3

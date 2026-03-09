@@ -8,14 +8,27 @@ Function Main()
     Player = Actor()
     Target = ContextActor()
 
+    If Target = 0
+        Target = Player
+    EndIf
+
     SpellCost = 1
     ResourceName$ = "Mana"
-    SpellName$ = "Magic Missile"
-    ProjectileName$ = "Magic Missile"
+    SpellName$ = "Shield"
+    
+    EffectName$ = "Shield"
+    EffectAttribute$ = "Armor Bonus"
+    EffectValue = 5
+    EffectDuration = 300
+    EffectTexID = 73
+
     SkillName$ = "Arcane Spells"
+    GoverningAttribute$ = "Intelligence"
 
     PlayerName$ = Name(Player)
     TargetName$ = Name(Target)
+
+    SuccessChance = Attribute(Player,SkillName$) + Attribute(Player,GoverningAttribute$) + 25
 
 
     If CastingChecks(Player, Target) < 1
@@ -32,15 +45,15 @@ Function Main()
 
 
     ;Particles and casting animation
-    AnimateActor(Player, "Cast Magic", 0.015, 1)
-    Output(Player, "Casting " + SpellName$, 255, 0, 255) 
+    AnimateActor(Player, "Cast Magic", 0.005, 1)
+    Output(Player, "Casting " + SpellName$, 200, 0, 255) 
 	AddActorEffect(Player, "Casting", "None", 0, 2,0)
     
     ;create progress bar
-	bar = CreateProgressBar(Player,200,0,225,.4,.8,.2,.04,9,0,"Magic Missile")
+	bar = CreateProgressBar(Player,200,0,225,.4,.8,.2,.04,20,0,SpellName$)
 	Repeat
 	UpdateProgressBar(Player,bar,i)
-    DoEvents(100)
+    DoEvents(250)
     i =  i + 1
     If(Attribute(Player, "Health") < 0)
         Output(Player, "You cannot cast spells when you are dead",255, 255, 0)
@@ -51,14 +64,27 @@ Function Main()
 	DeleteProgressBar(Player,Bar)
     ZZADDSKILLXP(Player, SkillName$, SpellCost * 10)
     
-    TargetIsHit = FireProjectile(Player, Target, ProjectileName$)
+    SpellSuccess = Rand(1,100)
 
-    If TargetIsHit > 0
-        Output(Player, "Your " + SpellName$ + " hit " + TargetName$ + "!",150, 100, 255)
-        Output(Target, PlayerName$ + "'s " + SpellName$ + " hit you!", 255, 100, 150)
+    If SpellSuccess < SuccessChance
+        
+        If Target = Player
+            Output(Target,  "You successfully cast " + SpellName$ + " on yourself!", 100, 255, 150)
+        Else
+            Output(Player, "You successfully cast " + SpellName$ + " on " + TargetName$ + "!",100, 255, 150)
+            Output(Target, PlayerName$ + "successfully cast " + SpellName$ + " on you!", 100, 255, 150)
+        EndIf
+        
+        ;visuals and effect
+        CreateEmitter(Target, "HealthSpell", 10, 2000)
+	    AddActorEffect(Target, EffectName$, EffectAttribute$, EffectValue, EffectDuration, EffectTexID)
     Else
-        Output(Player, "Your " + SpellName$ + " has missed " + TargetName$ + "!",255, 255, 100)
-        Output(Target, PlayerName$ + "'s " + SpellName$ + " has missed you!", 255, 255, 100)
+         If Target = Player
+            Output(Target,  "Your " + SpellName$ + " spell has failed!", 255, 100, 100)
+        Else
+            Output(Player, "Your " + SpellName$ + " spell has missed " + TargetName$ + "!",255, 100, 100)
+            Output(Target, PlayerName$ + "'s " + SpellName$ + " has missed you!", 255, 100, 100)
+        EndIf
     EndIf
     Return
 
