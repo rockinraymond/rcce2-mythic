@@ -254,6 +254,9 @@ Function ActorAttack(A1.ActorInstance, A2.ActorInstance)
 	; Check faction ratings
 	If A1\FactionRatings[A2\HomeFaction] > 150 Then Return False
 
+	;Check for casting spell
+	If ActorHasEffect(A1, "Casting") = 1 Then Return False
+
 	;Range Check
 	If A1\Inventory\Items[SlotI_Weapon] <> Null 
 		PlayerWeaponType = A1\Inventory\Items[SlotI_Weapon]\Item\WeaponClass
@@ -549,8 +552,10 @@ Function UpdateActorInstances(Broadcast)
 			If AI\Rider = Null
 				If AI\Mount = Null
 					Speed# = 1.5 * (Float#(AI\Attributes\Value[SpeedStat]) / Float#(AI\Attributes\Maximum[SpeedStat]))
+					If Speed# < 0 Then Speed# = 0
 				Else
 					Speed# = 1.5 * (Float#(AI\Mount\Attributes\Value[SpeedStat]) / Float#(AI\Mount\Attributes\Maximum[SpeedStat]))
+					If Speed# < 0 Then Speed# = 0
 				EndIf
 				If AI\WalkingBackward = True Then Speed# = Speed# / 2.0
 				If AI\IsRunning = True

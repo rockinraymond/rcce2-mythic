@@ -23,6 +23,9 @@ Function Main()
 	ApplyAttributeBonus(Player, "Armor Bonus")
 	ApplyAttributeBonus(Player, "Stealth Mod")
 	ApplyAttributeBonus(Player, "Movement")
+	ApplyAttributeBonus(Player, "ATK Speed Bonus")
+	ApplyAttributeBonus(Player, "Carry Weight Mod")
+
 
 	ApplyAttributeBonus(Player, "Long Blades")
 	ApplyAttributeBonus(Player, "Short Blades")

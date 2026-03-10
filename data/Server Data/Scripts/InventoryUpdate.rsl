@@ -11,9 +11,11 @@ SetMovementSpeed(Player)
 End Function
 
 Function SetMovementSpeed(Player)
-	StandardMovement = 35
-	PlayerMovement = StandardMovement
+	;StandardMovement = 35
+	PlayerMovement = 0
 	PlayerMass = ZZACTORINVMASS(Player)
+    WeightMod = Attribute(Player,"Carry Weight Mod")
+    PlayerMass = PlayerMass - WeightMod
 
     PlayerArmor = ActorChest(Player)
 
@@ -53,6 +55,9 @@ Function SetMovementSpeed(Player)
 
     ;Output(Player, "current Speed: " + PlayerMovement, 255, 255, 0)
 
-	SETATTRIBUTE(Player, "Movement", PlayerMovement)
+	;SETATTRIBUTE(Player, "Movement", PlayerMovement)
+	WeightMod = Attribute(Player,"Carry Weight Mod")
+	AddActorEffect(Player, "Encumbrance", "Movement", PlayerMovement, 0, 0)
+
 
 End Function

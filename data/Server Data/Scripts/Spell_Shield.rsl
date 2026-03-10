@@ -28,6 +28,8 @@ Function Main()
     PlayerName$ = Name(Player)
     TargetName$ = Name(Target)
 
+    castingTime = 5
+
     SuccessChance = Attribute(Player,SkillName$) + Attribute(Player,GoverningAttribute$) + 25
 
 
@@ -47,20 +49,20 @@ Function Main()
     ;Particles and casting animation
     AnimateActor(Player, "Cast Magic", 0.005, 1)
     Output(Player, "Casting " + SpellName$, 200, 0, 255) 
-	AddActorEffect(Player, "Casting", "None", 0, 2,0)
+	AddActorEffect(Player, "Casting", "Movement", -100, castingTime,0)
     
     ;create progress bar
-	bar = CreateProgressBar(Player,200,0,225,.4,.8,.2,.04,20,0,SpellName$)
+	bar = CreateProgressBar(Player,200,0,225,.4,.8,.2,.04,castingTime * 10,0,SpellName$)
 	Repeat
 	UpdateProgressBar(Player,bar,i)
-    DoEvents(250)
+    DoEvents(100)
     i =  i + 1
     If(Attribute(Player, "Health") < 0)
         Output(Player, "You cannot cast spells when you are dead",255, 255, 0)
         DeleteProgressBar(Player,Bar)
         Return
     EndIf
-	Until i = 20
+	Until i = castingTime * 10
 	DeleteProgressBar(Player,Bar)
     ZZADDSKILLXP(Player, SkillName$, SpellCost * 10)
     

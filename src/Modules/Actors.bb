@@ -925,6 +925,18 @@ Function CleanActorEffects()
 
 End Function
 
+Function ActorHasEffect(AI.ActorInstance, EffectNameInput$)
+	If AI <> Null
+		EffectName$ = Upper$(EffectNameInput$)
+		For AE.ActorEffect = Each ActorEffect
+			If AE\Owner = AI
+				If Upper$(AE\Name$) = EffectName$ Then Result% = 1 : Exit
+			EndIf
+		Next
+	EndIf
+Return Result%
+End Function
+
 ; Creates a new ActorEffect
 ; AI is the ActorInstance to apply the effect to
 ; Effects is an Attributes set that holds the differences
@@ -1185,7 +1197,9 @@ End Function
 Function GetActorAttackSpeed(AI.ActorInstance)
 	AttackSpeed = 0
 	ActorAgility =  AI\Attributes\Value[FindAttribute("Agility")]
-	SpeedIncrement = 400 - ActorAgility
+	AttackSpeedBNS =  AI\Attributes\Value[FindAttribute("ATK Speed Bonus")]
+
+	SpeedIncrement = 400 - ((ActorAgility - 10) * 10) - (AttackSpeedBNS * 25)
 	If AI\Inventory\Items[SlotI_Weapon] <> Null 
 		ActorWepSpeed = AI\Inventory\Items[SlotI_Weapon]\Item\WeaponSpeed
 		AttackSpeed = ActorWepSpeed * SpeedIncrement

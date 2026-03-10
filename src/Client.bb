@@ -571,6 +571,7 @@ Function UpdateActorInstances()
 
 					; Calculate speed
 					Speed# = 1.5 * (Float#(AI\Attributes\Value[SpeedStat]) / Float#(AI\Attributes\Maximum[SpeedStat])) * Delta#  ; the delta makes the character move at the same speed when the fps rate drops
+					If Speed# < 0 Then Speed = 0
 					If AI\IsRunning = True
 						Speed# = Speed# * 2.0
 					ElseIf AI\WalkingBackward = True

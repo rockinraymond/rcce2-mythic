@@ -126,7 +126,7 @@ Dim ServerTradeIDs(31)
 
 ; Char stats window
 Global WCharStats, CharStatsVisible = False
-Global LReputation, LGold, LLevel, LXP, LHealth, LArmorPoints, LMana, LDamage, LAccuracy, LAggro, BNextAttribute, BPrevAttribute, FirstAttribute
+Global LReputation, LGold, LLevel, LXP, LHealth, LArmorPoints, LMana, LDamage, LAccuracy, LAggro, LAttackSpeed, BNextAttribute, BPrevAttribute, FirstAttribute
 Dim LAttributeNames(49)
 Dim LAttributeVals(49)
 Dim LSkillNames(49)

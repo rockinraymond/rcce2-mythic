@@ -17,6 +17,8 @@ Function Main()
     PlayerName$ = Name(Player)
     TargetName$ = Name(Target)
 
+    castingTime = 2
+
 
     If CastingChecks(Player, Target) < 1
         Return
@@ -34,10 +36,10 @@ Function Main()
     ;Particles and casting animation
     AnimateActor(Player, "Cast Magic", 0.015, 1)
     Output(Player, "Casting " + SpellName$, 255, 0, 255) 
-	AddActorEffect(Player, "Casting", "None", 0, 2,0)
+	AddActorEffect(Player, "Casting", "Movement", -100, castingTime,0)
     
     ;create progress bar
-	bar = CreateProgressBar(Player,200,0,225,.4,.8,.2,.04,9,0,"Magic Missile")
+	bar = CreateProgressBar(Player,200,0,225,.4,.8,.2,.04,castingTime * 10,0,"Magic Missile")
 	Repeat
 	UpdateProgressBar(Player,bar,i)
     DoEvents(100)
@@ -47,7 +49,7 @@ Function Main()
         DeleteProgressBar(Player,Bar)
         Return
     EndIf
-	Until i = 20
+	Until i = castingTime * 10
 	DeleteProgressBar(Player,Bar)
     ZZADDSKILLXP(Player, SkillName$, SpellCost * 10)
     

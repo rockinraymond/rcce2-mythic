@@ -1757,7 +1757,7 @@ Function UpdateInterface()
 	EndIf
 
 	If InventoryVisible = True
-		GY_UpdateLabel(LInventoryMass, "Carried Weight: " + InventoryMass(Me\Inventory))
+		GY_UpdateLabel(LInventoryMass,  "Carried Weight: " + (InventoryMass(Me\Inventory) - Me\Attributes\Value[FindAttribute("Carry Weight Mod")]))
 	EndIf
 
 
@@ -1792,6 +1792,8 @@ Function UpdateInterface()
 		GY_UpdateLabel(LDamage, "Max Damage: " + Str(GetActorMaxDamage(Me) + GetActorDamageAttributeBNS(Me)) + DamBnsStr$)
 		GY_UpdateLabel(LAccuracy, "Attack Rating: " + Str(GetActorAccuracy(Me)) + AtkBnsStr$)
 		GY_UpdateLabel(LAggro, "Conspicuousness: " + Str(Int(GetActorAggroRange(Me))))
+		GY_UpdateLabel(LAttackSpeed, "Attack Delay: " + Str(Int(GetActorAttackSpeed(Me))))
+
 
 	; Display attributes
 		CurrentAtt = 0
@@ -3154,7 +3156,7 @@ EndIf
 			If InventoryVisible = True
 				GY_GadgetAlpha(WInventory, 1.0, True);0.75
 				GY_UpdateLabel(LInventoryGold, Money$(Me\Gold))
-				GY_UpdateLabel(LInventoryMass, "Carried Weight: " + InventoryMass(Me\Inventory))
+				GY_UpdateLabel(LInventoryMass, "Carried Weight: " + (InventoryMass(Me\Inventory) - Me\Attributes\Value[FindAttribute("Carry Weight Mod")]))
 				GY_UpdateLabel(LInventoryLightLoad, "Light Load: " + GetActorLightLoad(Me))
 				GY_UpdateLabel(LInventoryHeavyLoad, "Heavy Load: " + GetActorHeavyLoad(Me))
 				; GY_LockGadget(BInventoryDrop)
@@ -4256,6 +4258,8 @@ Function CreateInterface()
 	LAccuracy = GY_CreateLabel(WCharStats, 0.03, 0.3, "Attack Rating: 000 + 00", 255, 255, 255)
 	LDamage = GY_CreateLabel(WCharStats, 0.03, 0.325, "Max Damage: 000 + 00", 255, 255, 255)
 	LAggro = GY_CreateLabel(WCharStats, 0.03, 0.35, "Conspicuousness: 000", 255, 255, 255)
+	LAttackSpeed = GY_CreateLabel(WCharStats, 0.03, 0.375, "Attack Delay: 00000", 255, 255, 255)
+
 	
 	;Attributes
 	GY_CreateLabel(WCharStats, 0.03, 0.42, LanguageString$(LS_Attributes), 255, 255, 255)
