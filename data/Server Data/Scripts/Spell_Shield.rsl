@@ -45,7 +45,7 @@ Function Main()
     EndIf
     SetAttribute(Player, ResourceName$, ResourceAmt - SpellCost)
 
-
+    ZZRUNABILITYCOOLDOWN(Player, SpellName$)
     ;Particles and casting animation
     AnimateActor(Player, "Cast Magic", 0.005, 1)
     Output(Player, "Casting " + SpellName$, 200, 0, 255) 

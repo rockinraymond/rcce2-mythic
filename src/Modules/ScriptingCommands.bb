@@ -1425,6 +1425,26 @@ Function BVM_ABILITYLEVEL%(Param1%, Param2$)
 Return Result%
 End Function
 
+Function BVM_ZZRUNABILITYCOOLDOWN(Param1%, Param2$)
+	Actor.ActorInstance = Object.ActorInstance(Param1%)
+	If Actor <> Null
+		SpellName$ = Upper$(Param2$)
+		For i = 0 To 999
+			If Actor\SpellLevels[i] > 0
+				If Upper$(SpellsList(Actor\KnownSpells[i])\Name$) = SpellName$ 
+					Sp.Spell = SpellsList(Actor\KnownSpells[i])
+					Actor\SpellCharge[i] = Sp\RechargeTime
+					If Actor\RNID > 0
+						Pa$ = Sp\Name$
+						RCE_Send(Host, Actor\RNID, P_KnownSpellUpdate, "C" + Pa$, True)
+						Return
+					EndIf
+				EndIf
+			EndIf
+		Next
+	EndIf
+End Function
+
 Function BVM_SETABILITYLEVEL(Param1%, Param2$, Param3%)
 	Actor.ActorInstance = Object.ActorInstance(Param1%)
 	If Actor <> Null

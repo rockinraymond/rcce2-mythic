@@ -1164,7 +1164,7 @@ Function UpdateInterface()
 						EndIf
 						If (Me\Attributes\Value[HealthStat] > 0)
 							RCE_Send(Connection, PeerToHost, P_SpellUpdate, "F" + Pa$, True)
-							Me\SpellCharge[Num] = RechargeTime
+							//Me\SpellCharge[Num] = RechargeTime
 						Else
 							Output("You cannot use abilites while dead!", 255, 50, 50)
 						EndIf
@@ -1287,7 +1287,7 @@ Function UpdateInterface()
 					EndIf
 					If (Me\Attributes\Value[HealthStat] > 0)
 						RCE_Send(Connection, PeerToHost, P_SpellUpdate, "F" + Pa$, True)
-						Me\SpellCharge[Num] = RechargeTime
+						//Me\SpellCharge[Num] = RechargeTime
 					Else
 						Output("You cannot use abilites while dead!", 255, 50, 50)
 					EndIf
@@ -1305,7 +1305,7 @@ Function UpdateInterface()
 						Output(LanguageString$(LS_AbilityNotRecharged), 255, 50, 50)	
 					;	Output ("RechargeTime = "+RechargeTime/1000, 255, 50, 50)
 					EndIf
-
+					UpdateActionBarIcons()
 			
 			;	; Not recharged
 			;	Else
@@ -1583,13 +1583,12 @@ Function UpdateInterface()
 						EndIf
 						If (Me\Attributes\Value[HealthStat] > 0)
 							RCE_Send(Connection, PeerToHost, P_SpellUpdate, "F" + Pa$, True)
-							Me\SpellCharge[Num] = SpellsList(Me\KnownSpells[Num])\RechargeTime
+							//Me\SpellCharge[Num] = SpellsList(Me\KnownSpells[Num])\RechargeTime
 						Else
 							Output("You cannot use abilites while dead!", 255, 50, 50)
 						EndIf
 					; Not recharged
 					Else
-						Output("Num: " + Num, 255, 50, 255)
 						Output(LanguageString$(LS_AbilityNotRecharged), 255, 50, 50)
 					EndIf
 				EndIf

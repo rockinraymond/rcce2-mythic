@@ -804,6 +804,17 @@ Function UpdateNetwork()
 						EndIf
 					Next
 					If SpellsVisible Then UpdateSpellbook()
+				; Spell CoolDownActivated
+				ElseIf Left$(M\MessageData$, 1) = "C"
+					Name$ = Upper$(Mid$(M\MessageData$, 2))
+					For i = 0 To 999
+						If Me\SpellLevels[i] > 0
+							If Upper$(SpellsList(Me\KnownSpells[i])\Name$) = Name$ 
+								Me\SpellCharge[i] = SpellsList(Me\KnownSpells[i])\RechargeTime
+								UpdateActionBarIcons()
+							EndIf
+						EndIf
+					Next
 				EndIf
 
 			; Name change

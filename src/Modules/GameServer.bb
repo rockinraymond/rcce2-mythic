@@ -254,8 +254,10 @@ Function ActorAttack(A1.ActorInstance, A2.ActorInstance)
 	; Check faction ratings
 	If A1\FactionRatings[A2\HomeFaction] > 150 Then Return False
 
-	;Check for casting spell
+	;Check for effects that prevent attacking (casting spell/stunned/etc.)
 	If ActorHasEffect(A1, "Casting") = 1 Then Return False
+	If ActorHasEffect(A1, "Stunned") = 1 Then Return False
+
 
 	;Range Check
 	If A1\Inventory\Items[SlotI_Weapon] <> Null 

@@ -942,7 +942,7 @@ Function UpdateNetwork()
 											Sp.Spell = SpellsList(AI\KnownSpells[Num])
 											If AI\SpellCharge[i] <= 0
 												ThreadScript(Sp\Script$, Sp\SMethod$, Handle(AI), Handle(Context), AI\SpellLevels[Num])
-												AI\SpellCharge[i] = Sp\RechargeTime
+												;AI\SpellCharge[i] = Sp\RechargeTime
 											Else
 												ml = Len(Chr$(253) + LanguageString$(LS_AbilityNotRecharged))
 												RCE_Send(Host, AI\RNID, P_ChatMessage, Chr$(253) + LanguageString$(LS_AbilityNotRecharged), True)
@@ -955,7 +955,7 @@ Function UpdateNetwork()
 									Sp.Spell = SpellsList(AI\KnownSpells[Num])
 									If AI\SpellCharge[Num] <= 0
 										ThreadScript(Sp\Script$, Sp\SMethod$, Handle(AI), Handle(Context), AI\SpellLevels[Num])
-										AI\SpellCharge[Num] = Sp\RechargeTime
+										;AI\SpellCharge[Num] = Sp\RechargeTime
 									Else
 										RCE_Send(Host, AI\RNID, P_ChatMessage, Chr$(253) + LanguageString$(LS_AbilityNotRecharged), True)
 									EndIf
