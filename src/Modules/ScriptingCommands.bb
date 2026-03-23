@@ -426,6 +426,44 @@ Function BVM_SPAWNITEM(Param1$, Param2%, Param3$, Param4#, Param5#, Param6#, Par
 	EndIf
 End Function
 
+;actor instance, slot, amt
+Function BVM_ZZDROPITEM(Param1%, Param2%, Param3%)
+	WriteLog(MainLog, "params passed: " + Str(Param1%) + " " + Str(Param2%) + " " + Str(Param3%))
+	AI.ActorInstance = Object.ActorInstance(Param1%)
+	ThreadScript("InventoryUpdate", "Main", Handle(AI), 0)
+	If AI <> Null
+		Slot = Param2%
+		Amount = Param3%
+		If Amount = 0 Then Amount = AI\Inventory\Amounts[Slot]
+		Result = InventoryDrop(AI, Slot, Amount, False)
+		If Result <> 0
+			SendEquippedUpdate(AI)
+			; Create item on floor
+			D.DroppedItem = New DroppedItem
+			D\Item = Object.ItemInstance(Result)
+			D\Amount = Amount
+			D\X# = AI\X#
+			D\Y# = AI\Y#
+			D\Z# = AI\Z#
+			D\ServerHandle = AI\ServerArea
+			If AI\RNID > 0
+				Pa$ = RCE_StrFromInt$(Slot, 1) + RCE_StrFromInt$(Amount, 2)
+				RCE_Send(Host, AI\RNID, P_InventoryUpdate, "T" + Pa$, True)
+			EndIf
+			; Tell other players in the area
+			Pa$ = "D" + RCE_StrFromInt$(Amount, 2) + RCE_StrFromFloat$(D\X#) + RCE_StrFromFloat$(D\Y#) + RCE_StrFromFloat$(D\Z#)
+			Pa$ = Pa$ + RCE_StrFromInt$(Handle(D), 4) + ItemInstanceToString$(D\Item)
+
+			AInstance.AreaInstance = Object.AreaInstance(AI\ServerArea)
+			A2.ActorInstance = AInstance\FirstInZone
+			While A2 <> Null
+				If A2\RNID > 0 Then RCE_Send(Host, A2\RNID, P_InventoryUpdate, Pa$, True)
+				A2 = A2\NextInZone
+			Wend
+		EndIf
+	EndIf
+End Function
+
 Function BVM_ZZLASTSPAWNEDITEM%(Param1$, Param2% = 0)
 	
 	Zone.Area = FindArea(Param1$)

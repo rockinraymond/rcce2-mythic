@@ -52,6 +52,7 @@ Function BVM_InitStringConst_BVM_MAIN_CMD_SET_DEF_$()
 	s = s + "Function KILLACTOR<BVM_KILLACTOR>(PARAM1%, PARAM2%=0)"+Chr(10)
 	s = s + "Function CHANGEACTOR<BVM_CHANGEACTOR>(PARAM1%, PARAM2%)"+Chr(10)
 	s = s + "Function SPAWNITEM<BVM_SPAWNITEM>(PARAM1$, PARAM2%, PARAM3$, PARAM4#, PARAM5#, PARAM6#, PARAM7%=0)"+Chr(10)
+	s = s + "Function ZZDROPITEM<BVM_ZZDROPITEM>(PARAM1%, PARAM2%, PARAM3%)"+Chr(10)
 	s = s + "Function SETACTORGENDER<BVM_SETACTORGENDER>(PARAM1%, PARAM2%)"+Chr(10)
 	s = s + "Function ACTORBEARD<BVM_ACTORBEARD>%(PARAM1%)"+Chr(10)
 	s = s + "Function SETACTORBEARD<BVM_SETACTORBEARD>(PARAM1%, PARAM2%)"+Chr(10)
@@ -1714,28 +1715,33 @@ Function BVM_Invoke%(withTimeOut% = 0)
 				iparam0% = BVM_PopInt()
 				BVM_ZZADDSKILLXP(iparam0%, sparam1$, iparam2%)
 			Case 581
+				iparam2% = BVM_PopInt()
+				iparam1% = BVM_PopInt()
 				iparam0% = BVM_PopInt()
-				BVM_PushInt(BVM_ZZITEMARMORCLASS(iparam0%))
+				BVM_ZZDROPITEM(iparam0%, iparam1%, iparam2%)
 			Case 582
 				iparam0% = BVM_PopInt()
-				BVM_PushInt(BVM_ZZITEMRARITY(iparam0%))
+				BVM_PushInt(BVM_ZZITEMARMORCLASS(iparam0%))
 			Case 583
 				iparam0% = BVM_PopInt()
+				BVM_PushInt(BVM_ZZITEMRARITY(iparam0%))
+			Case 584
+				iparam0% = BVM_PopInt()
 				BVM_PushInt(BVM_ZZITEMWEAPONCLASS(iparam0%))
-			case 584
+			case 585
 				iparam1% = BVM_PopInt()
 				sparam0$ = BVM_PopString()
 				BVM_PushInt(BVM_ZZLASTSPAWNEDITEM(sparam0$, iparam1%))
-			Case 585
+			Case 586
 				sparam1$ = BVM_PopString()
 				iparam0% = BVM_PopInt()
 				BVM_ZZRUNABILITYCOOLDOWN(iparam0%, sparam1$)
-			Case 586
+			Case 587
 				iparam2% = BVM_PopInt()
 				sparam1$ = BVM_PopString()
 				iparam0% = BVM_PopInt()
 				BVM_PushInt(BVM_ZZSETITEMATTRIBUTE(iparam0%, sparam1$, iparam2%))
-			Case 587
+			Case 589
 				iparam2% = BVM_PopInt()
 				sparam1$ = BVM_PopString()
 				iparam0% = BVM_PopInt()
