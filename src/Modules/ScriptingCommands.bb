@@ -428,7 +428,6 @@ End Function
 
 ;actor instance, slot, amt
 Function BVM_ZZDROPITEM(Param1%, Param2%, Param3%)
-	WriteLog(MainLog, "params passed: " + Str(Param1%) + " " + Str(Param2%) + " " + Str(Param3%))
 	AI.ActorInstance = Object.ActorInstance(Param1%)
 	ThreadScript("InventoryUpdate", "Main", Handle(AI), 0)
 	If AI <> Null
