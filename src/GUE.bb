@@ -1897,7 +1897,9 @@ updateSplashScreen("Creating abilities tab")
 ; Main
 BSpellNew    = FUI_Button(TSpells, 20, 20, 100, 20, "New ability")
 BSpellDelete = FUI_Button(TSpells, 150, 20, 100, 20, "Delete ability")
-BSpellSave   = FUI_Button(TSpells, 280, 20, 100, 20, "Save abilities")
+BSpellSave   = FUI_Button(TSpells, 410, 20, 100, 20, "Save abilities")
+BSpellCopy   = FUI_Button(TSpells, 280, 20, 100, 20, "Copy Ability")
+
 Global SelectedSpell.Spell
 ; Selection
 FUI_Label(TSpells, 20, 62, "Current ability:")
@@ -5870,6 +5872,28 @@ Cls
 						FUI_SendMessage(CSpellSelected, M_SETINDEX, 1)
 						FUI_SendMessage(CSpellSelected, M_DELETEINDEX, 1)
 					EndIf
+					SpellsSaved = False
+				EndIf
+			Case BSpellCopy
+				If SelectedSpell <> Null
+					Sp.Spell = CreateSpell()
+					Sp\Name$ = SelectedSpell\Name$ + " C"
+					Sp\Description$ = SelectedSpell\Description$
+
+					Sp\ExclusiveRace$ = SelectedSpell\ExclusiveRace$
+					Sp\ExclusiveClass$ = SelectedSpell\ExclusiveClass$
+					Sp\RechargeTime = SelectedSpell\RechargeTime
+					Sp\Script$ = SelectedSpell\Script$
+					Sp\SMethod$ = SelectedSpell\SMethod$
+					Sp\SpellType = SelectedSpell\SpellType
+					
+					Sp\ThumbnailTexID = SelectedSpell\ThumbnailTexID
+					
+					Spell = FUI_ComboBoxItem(CSpellSelected, Sp\Name$)
+					FUI_SendMessage(Spell, M_SETDATA, Sp\ID)
+					FUI_SendMessage(CSpellSelected, M_SETINDEX, TotalSpells + 1)
+					TotalSpells = TotalSpells + 1
+					UpdateSpellDisplay()
 					SpellsSaved = False
 				EndIf
 
