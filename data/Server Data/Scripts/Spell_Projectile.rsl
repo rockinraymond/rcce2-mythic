@@ -84,6 +84,11 @@ Function CastingChecks(Player,Target,SpellSchool$)
         Return 0
     EndIf
 
+    If (ActorDistance(Player, Target) > 100.0)
+        Output(Player, "You are too far away from target!",255, 255, 0)
+        Return 0
+    EndIf
+
     ;Check Equipment
     If SpellSchool$ = "Arcane Spells"
         If ArcaneEquipmentCheck(Player) < 1

@@ -79,7 +79,6 @@ Function CastingChecks(Player,Target,SpellSchool$)
     EndIf
 
     If (ActorDistance(Player, Target) > 10.0)
-        Output(Player, ActorDistance(Player, Target))
         Output(Player, "You are too far away from target!",255, 255, 0)
         Return 0
     EndIf
