@@ -1,39 +1,13 @@
 Using "RC_Core.rcm"
-;
-; Date/Time: 14:27:55 on 17/04/2012
-; By Terrier on GIULIANI-PC
-
 Function Main()
+End Function
 
-    Player = Actor()
-    Target = ContextActor()
-
-    If Target = 0
-        Target = Player
-    EndIf
-
-    SpellCost = 1
-    ResourceName$ = "Mana"
-    SpellName$ = "Shield"
-    
-    EffectName$ = "Shield"
-    EffectAttribute$ = "Armor Bonus"
-    EffectValue = 5
-    EffectDuration = 300
-    EffectTexID = 73
-
-    SkillName$ = "Arcane Spells"
-    GoverningAttribute$ = "Intelligence"
+Function ProjectileSpell(Player, Target, SpellCost, ResourceName$, SpellName$, ProjectileName$, SkillName$, castingTime)
 
     PlayerName$ = Name(Player)
     TargetName$ = Name(Target)
 
-    castingTime = 5
-
-    SuccessChance = Attribute(Player,SkillName$) + Attribute(Player,GoverningAttribute$) + 25
-
-
-    If CastingChecks(Player, Target) < 1
+    If CastingChecks(Player, Target, SkillName$) < 1
         Return
     EndIf   
 
@@ -47,12 +21,12 @@ Function Main()
 
     ZZRUNABILITYCOOLDOWN(Player, SpellName$)
     ;Particles and casting animation
-    AnimateActor(Player, "Cast Magic", 0.005, 1)
-    Output(Player, "Casting " + SpellName$, 200, 0, 255) 
+    AnimateActor(Player, "Cast Magic", 0.015, 1)
+    Output(Player, "Casting " + SpellName$, 255, 0, 255) 
 	AddActorEffect(Player, "Casting", "Movement", -100, castingTime,0)
     
     ;create progress bar
-	bar = CreateProgressBar(Player,200,0,225,.4,.8,.2,.04,castingTime * 10,0,SpellName$)
+	bar = CreateProgressBar(Player,200,0,225,.4,.8,.2,.04,castingTime * 10,0,"Magic Missile")
 	Repeat
 	UpdateProgressBar(Player,bar,i)
     DoEvents(100)
@@ -66,33 +40,20 @@ Function Main()
 	DeleteProgressBar(Player,Bar)
     ZZADDSKILLXP(Player, SkillName$, SpellCost * 10)
     
-    SpellSuccess = Rand(1,100)
+    TargetIsHit = FireProjectile(Player, Target, ProjectileName$)
 
-    If SpellSuccess < SuccessChance
-        
-        If Target = Player
-            Output(Target,  "You successfully cast " + SpellName$ + " on yourself!", 100, 255, 150)
-        Else
-            Output(Player, "You successfully cast " + SpellName$ + " on " + TargetName$ + "!",100, 255, 150)
-            Output(Target, PlayerName$ + "successfully cast " + SpellName$ + " on you!", 100, 255, 150)
-        EndIf
-        
-        ;visuals and effect
-        CreateEmitter(Target, "HealthSpell", 10, 2000)
-	    AddActorEffect(Target, EffectName$, EffectAttribute$, EffectValue, EffectDuration, EffectTexID)
+    If TargetIsHit > 0
+        Output(Player, "Your " + SpellName$ + " hit " + TargetName$ + "!",150, 100, 255)
+        Output(Target, PlayerName$ + "'s " + SpellName$ + " hit you!", 255, 100, 150)
     Else
-         If Target = Player
-            Output(Target,  "Your " + SpellName$ + " spell has failed!", 255, 100, 100)
-        Else
-            Output(Player, "Your " + SpellName$ + " spell has missed " + TargetName$ + "!",255, 100, 100)
-            Output(Target, PlayerName$ + "'s " + SpellName$ + " has missed you!", 255, 100, 100)
-        EndIf
+        Output(Player, "Your " + SpellName$ + " has missed " + TargetName$ + "!",255, 255, 100)
+        Output(Target, PlayerName$ + "'s " + SpellName$ + " has missed you!", 255, 255, 100)
     EndIf
     Return
 
 End Function
 
-Function CastingChecks(Player,Target)
+Function CastingChecks(Player,Target,SpellSchool$)
     ;is player dead?
     If(Attribute(Player, "Health") < 0)
         Output(Player, "You cannot cast spells when you are dead",255, 255, 0)
@@ -117,10 +78,18 @@ Function CastingChecks(Player,Target)
         Return 0
     EndIf
 
-    ;Check Equipment
-    If ArcaneEquipmentCheck(Player) < 1
-        Output(Player, "You cannot cast arcane spells with your current equipment",255, 50, 50)
+    ;Player Check
+    If ActorIsHuman(Target) > 0
+        Output(Player, "Cannot target player, PVP not enabled!",255, 50, 50)
         Return 0
+    EndIf
+
+    ;Check Equipment
+    If SpellSchool$ = "Arcane Spells"
+        If ArcaneEquipmentCheck(Player) < 1
+            Output(Player, "You cannot cast arcane spells with your current equipment",255, 50, 50)
+            Return 0
+        EndIf
     EndIf
 
     Return 1
@@ -248,4 +217,18 @@ Function ArcaneEquipmentCheck(Player)
 
 End Function
 
+Function Spell_MagicMissle()
+
+    Player = Actor()
+    Target = ContextActor()
+
+    SpellCost = 1
+    ResourceName$ = "Mana"
+    SpellName$ = "Magic Missile"
+    ProjectileName$ = "Magic Missile"
+    SkillName$ = "Arcane Spells"
+    castingTime = 2
+
+    ProjectileSpell(Player, Target, SpellCost, ResourceName$, SpellName$, ProjectileName$, SkillName$, castingTime)
+End Function
 

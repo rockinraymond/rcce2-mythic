@@ -1154,7 +1154,7 @@ Function GetActorDamageAttributeBNS(AI.ActorInstance)
 	DamageAttributeBNS = AttackStrength
 	If AI\Inventory\Items[SlotI_Weapon] <> Null
 		If (AI\Inventory\Items[SlotI_Weapon]\Item\WeaponClass = WC_Bow) Or (AI\Inventory\Items[SlotI_Weapon]\Item\WeaponClass = WC_Dagger) Or ((AI\Inventory\Items[SlotI_Weapon]\Item\WeaponClass = WC_Polearm) And (AttackDexterity > AttackStrength))
-			DamageAttribute = AttackDexterity
+			DamageAttributeBNS = AttackDexterity
 		EndIf
 	EndIf
 	

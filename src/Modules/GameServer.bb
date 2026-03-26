@@ -199,7 +199,7 @@ Function FireProjectile%(P.Projectile, A1.ActorInstance, A2.ActorInstance)
 		; Calculate damage
 		TargetIsHit = 1
 		DefenderResistance = (A2\Resistances[P\DamageType])
-		Damage = Rand(1, P\Damage) + (A1\Attributes\Value[FindAttribute(P\Attribute$)] - 10 ) - (DefenderResistance / 10)
+		Damage = Rand(1, P\Damage + (A1\Attributes\Value[FindAttribute(P\Attribute$)] - 10))  - (DefenderResistance / 5)
 		If Damage < 1 Then Damage = 1
 
 		; Apply damage

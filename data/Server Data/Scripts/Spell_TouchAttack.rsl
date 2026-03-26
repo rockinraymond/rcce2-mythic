@@ -1,28 +1,17 @@
 Using "RC_Core.rcm"
-;
-; Date/Time: 14:27:55 on 17/04/2012
-; By Terrier on GIULIANI-PC
-
 Function Main()
+End Function
 
-    Player = Actor()
-    Target = ContextActor()
-
-    SpellCost = 1
-    ResourceName$ = "Mana"
-    SpellName$ = "Magic Missile"
-    ProjectileName$ = "Magic Missile"
-    SkillName$ = "Arcane Spells"
+Function ModifyTouchSpell(Player, Target, SpellCost, ResourceName$, SpellName$, DamageType$, BaseDamage, SkillName$, GoverningAttribute$, EmitterTex = 10)
 
     PlayerName$ = Name(Player)
     TargetName$ = Name(Target)
 
-    castingTime = 2
+    SuccessChance = Attribute(Player,SkillName$) + Attribute(Player,GoverningAttribute$) + 25 - Resistance(Target, "Spells") - Attribute(Target, "Armor Bonus")
 
-
-    If CastingChecks(Player, Target) < 1
+    If CastingChecks(Player, Target, SkillName$) < 1
         Return
-    EndIf   
+    EndIf
 
     ;Check the mana
     ResourceAmt = Attribute(Player, ResourceName$)
@@ -34,42 +23,64 @@ Function Main()
 
     ZZRUNABILITYCOOLDOWN(Player, SpellName$)
     ;Particles and casting animation
-    AnimateActor(Player, "Cast Magic", 0.015, 1)
-    Output(Player, "Casting " + SpellName$, 255, 0, 255) 
-	AddActorEffect(Player, "Casting", "Movement", -100, castingTime,0)
+    AnimateActor(Player, "Cast Magic", 0.05, 1)
+    Output(Player, "Casting " + SpellName$, 200, 0, 255) 
+	;AddActorEffect(Player, "Casting", "Movement", -100, castingTime,0)
     
     ;create progress bar
-	bar = CreateProgressBar(Player,200,0,225,.4,.8,.2,.04,castingTime * 10,0,"Magic Missile")
-	Repeat
-	UpdateProgressBar(Player,bar,i)
-    DoEvents(100)
-    i =  i + 1
-    If(Attribute(Player, "Health") < 0)
-        Output(Player, "You cannot cast spells when you are dead",255, 255, 0)
-        DeleteProgressBar(Player,Bar)
-        Return
-    EndIf
-	Until i = castingTime * 10
-	DeleteProgressBar(Player,Bar)
-    ZZADDSKILLXP(Player, SkillName$, SpellCost * 10)
+	
+    ZZADDSKILLXP(Player, SkillName$, (SpellCost * 10))
     
-    TargetIsHit = FireProjectile(Player, Target, ProjectileName$)
+    SpellSuccess = Rand(1,100)
 
-    If TargetIsHit > 0
-        Output(Player, "Your " + SpellName$ + " hit " + TargetName$ + "!",150, 100, 255)
-        Output(Target, PlayerName$ + "'s " + SpellName$ + " hit you!", 255, 100, 150)
-    Else
-        Output(Player, "Your " + SpellName$ + " has missed " + TargetName$ + "!",255, 255, 100)
-        Output(Target, PlayerName$ + "'s " + SpellName$ + " has missed you!", 255, 255, 100)
+    ;Aggression
+    
+    If ActorTarget(Target) = 0
+        SetActorTarget(Target, Player)
+        SetActorAIState(Target, 3)
     EndIf
+
+    If SpellSuccess < SuccessChance
+        Output(Player, "You successfully cast " + SpellName$ + " on " + TargetName$ + "!",100, 255, 150)
+        Output(Target, PlayerName$ + " successfully cast " + SpellName$ + " on you!", 100, 255, 150)
+        
+        ;visuals and effect
+        CreateEmitter(Target, "HealthSpell", EmitterTex, 1000)
+
+        FinalDamage = Rand(1,BaseDamage + Attribute(Player,GoverningAttribute$)) - Resistance(Target, DamageType$)
+        NewHealth = Attribute(Target, "Health") - FinalDamage
+
+        Output(Player, "You hit " + TargetName$ + " for " + FinalDamage + " " + DamageType$ + " damage!",100, 255, 150)
+        Output(Target, PlayerName$ + " hits you for " + FinalDamage + " " + DamageType$ + " damage!", 100, 255, 150)
+
+        If NewHealth < 0
+            KillActor(Target,Player)
+        EndIf
+        SetAttribute(Target, "Health", NewHealth)
+	    ZZADDSKILLXP(Player, SkillName$, TargetValue)
+    Else
+         If Target = Player
+            Output(Target,  "Your " + SpellName$ + " spell has failed!", 255, 100, 100)
+        Else
+            Output(Player, "Your " + SpellName$ + " spell has missed " + TargetName$ + "!",255, 100, 100)
+            Output(Target, PlayerName$ + "'s " + SpellName$ + " has missed you!", 255, 100, 100)
+        EndIf
+    EndIf
+    
     Return
 
 End Function
 
-Function CastingChecks(Player,Target)
+Function CastingChecks(Player,Target,SpellSchool$)
     ;is player dead?
     If(Attribute(Player, "Health") < 0)
-        Output(Player, "You cannot cast spells when you are dead",255, 255, 0)
+        Output(Player, "You cannot cast spells when you are dead!",255, 255, 0)
+        Return 0
+    EndIf
+
+    If (ActorDistance(Player, Target) > 10.0)
+        Output(Player, ActorDistance(Player, Target))
+        Output(Player, "You are too far away from target!",255, 255, 0)
         Return 0
     EndIf
 
@@ -85,6 +96,13 @@ Function CastingChecks(Player,Target)
 	    Return 0
     EndIf
 
+    ;Player Check
+    If ActorIsHuman(Target) > 0
+        Output(Player, "Cannot target player, PVP not enabled!",255, 50, 50)
+        Return 0
+    EndIf
+
+
     ;Check if the target is correct?
     If(Target = 0)
         Output(Player, "No Valid Target Selected",255, 50, 50)
@@ -92,9 +110,11 @@ Function CastingChecks(Player,Target)
     EndIf
 
     ;Check Equipment
-    If ArcaneEquipmentCheck(Player) < 1
-        Output(Player, "You cannot cast arcane spells with your current equipment",255, 50, 50)
-        Return 0
+    If SpellSchool$ = "Arcane Spells"
+        If ArcaneEquipmentCheck(Player) < 1
+            Output(Player, "You cannot cast arcane spells with your current equipment",255, 50, 50)
+            Return 0
+        EndIf
     EndIf
 
     Return 1
@@ -103,6 +123,7 @@ End Function
 
 Function ArcaneEquipmentCheck(Player)
     Result = 1
+    PlayerRace$ = Race(Player)
 
     ;Actor Equipment
     PlayerWeapon = ActorWeapon(Player)
@@ -113,9 +134,6 @@ Function ArcaneEquipmentCheck(Player)
     PlayerHands = ActorHands(Player)
     PlayerFeet = ActorFeet(Player)
     PlayerBelt = ActorBelt(Player)
-
-    PlayerRace$ = Race(Player)
-
 
     If PlayerShield > 0
         Result = 0
@@ -223,3 +241,59 @@ Function ArcaneEquipmentCheck(Player)
 End Function
 
 
+Function Spell_BurningHands()
+    Player = Actor()
+    Target = ContextActor()
+   
+    SpellCost = Parameter(1)
+    ResourceName$ = "Mana"
+    SpellName$ = "Burning Hands"
+    
+    DamageType$ = "Fire"
+    BaseDamage = 6
+
+    EmitterTex = 15
+    
+    SkillName$ = "Arcane Spells"
+    GoverningAttribute$ = "Intelligence"
+
+    ModifyTouchSpell(Player, Target, SpellCost, ResourceName$, SpellName$, DamageType$, BaseDamage, SkillName$, GoverningAttribute$, EmitterTex)
+End Function
+
+Function Spell_FrostBite()
+    Player = Actor()
+    Target = ContextActor()
+   
+    SpellCost = Parameter(1)
+    ResourceName$ = "Mana"
+    SpellName$ = "Frozen Grasp"
+    
+    DamageType$ = "Frost"
+    BaseDamage = 6
+
+    EmitterTex = 69
+    
+    SkillName$ = "Arcane Spells"
+    GoverningAttribute$ = "Intelligence"
+
+    ModifyTouchSpell(Player, Target, SpellCost, ResourceName$, SpellName$, DamageType$, BaseDamage, SkillName$, GoverningAttribute$, EmitterTex)
+End Function
+
+Function Spell_ShockingTouch()
+    Player = Actor()
+    Target = ContextActor()
+   
+    SpellCost = Parameter(1)
+    ResourceName$ = "Mana"
+    SpellName$ = "Shocking Touch"
+    
+    DamageType$ = "Lightning"
+    BaseDamage = 6
+
+    EmitterTex = 10
+    
+    SkillName$ = "Arcane Spells"
+    GoverningAttribute$ = "Intelligence"
+
+    ModifyTouchSpell(Player, Target, SpellCost, ResourceName$, SpellName$, DamageType$, BaseDamage, SkillName$, GoverningAttribute$, EmitterTex)
+End Function

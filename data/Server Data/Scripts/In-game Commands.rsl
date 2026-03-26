@@ -160,19 +160,17 @@ SetAttribute(actor(), "Stealth", 75)
 
 End function
 
-function TalentTest()
+function SpellTest()
 	AddAbility(Actor(), "Magic Missile", 1)
-	AddAbility(Actor(), "FireBall", 1)
+	AddAbility(Actor(), "Resist Bludgeon", 1)
 	AddAbility(Actor(), "Shield", 1)
-	AddAbility(Actor(), "New ability2", 2)
-	AddAbility(Actor(), "New ability3", 3)
-	AddAbility(Actor(), "New ability4", 4)
-	AddAbility(Actor(), "New ability5", 5)
-	AddAbility(Actor(), "New ability6", 6)
-	AddAbility(Actor(), "New ability7", 7)
-	AddAbility(Actor(), "New ability8", 8)
-	AddAbility(Actor(), "New ability9", 9)
-	AddAbility(Actor(), "New ability10", 10)
+	AddAbility(Actor(), "Burning Hands", 1)
+	AddAbility(Actor(), "Shocking Touch", 1)
+	AddAbility(Actor(), "Burning Hands", 1)
+	AddAbility(Actor(), "Frozen Grasp", 1)
+	AddAbility(Actor(), "Resist Slashing", 1)
+	AddAbility(Actor(), "Weakness To Magic", 1)
+	AddAbility(Actor(), "Focus", 1)
 End Function
 
 function unarmedTest()
@@ -197,4 +195,8 @@ End Function
 function setNonCombat()
 	Target = CONTEXTACTOR()
 	ACTORAGGRESSIVENESS(Target, 1, 3)
+End Function
+
+function resetCasting()
+	DeleteActorEffect(Actor(), "Casting")
 End Function

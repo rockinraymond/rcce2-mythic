@@ -1,0 +1,371 @@
+Using "RC_Core.rcm"
+Function Main()
+End Function
+
+Function ModifyAttributeSpell(Player, Target, SpellCost, ResourceName$, SpellName$, EffectName$, EffectAttribute$, EffectValue, EffectDuration, EffectTexID, SkillName$, GoverningAttribute$, castingTime, isResist = 0)
+
+    PlayerName$ = Name(Player)
+    TargetName$ = Name(Target)
+
+    SuccessChance = Attribute(Player,SkillName$) + Attribute(Player,GoverningAttribute$) + 25
+
+    If CastingChecks(Player, Target, SkillName$) < 1
+        Return
+    EndIf
+
+    ;Player vs Player Check
+    If EffectValue < 0
+        If ActorIsHuman(Target) > 0
+            Output(Player, "Cannot target player, PVP not enabled!",255, 50, 50)
+            Return
+        EndIf
+    EndIf
+
+    ;Check the mana
+    ResourceAmt = Attribute(Player, ResourceName$)
+    If(ResourceAmt < SpellCost)
+        Output(Player, "Not enough " + ResourceName$, 255, 0, 0)
+        Return
+    EndIf
+    SetAttribute(Player, ResourceName$, ResourceAmt - SpellCost)
+
+    ZZRUNABILITYCOOLDOWN(Player, SpellName$)
+    ;Particles and casting animation
+    AnimateActor(Player, "Cast Magic", 0.005, 1)
+    Output(Player, "Casting " + SpellName$, 200, 0, 255) 
+	AddActorEffect(Player, "Casting", "Movement", -100, castingTime,0)
+    
+    ;create progress bar
+	bar = CreateProgressBar(Player,200,0,225,.4,.8,.2,.04,castingTime * 10,0,SpellName$)
+	Repeat
+	UpdateProgressBar(Player,bar,i)
+    DoEvents(100)
+    i =  i + 1
+    If(Attribute(Player, "Health") < 0)
+        Output(Player, "You cannot cast spells when you are dead",255, 255, 0)
+        DeleteProgressBar(Player,Bar)
+        Return
+    EndIf
+	Until i = castingTime * 10
+	DeleteProgressBar(Player,Bar)
+
+    ;Checking for Aggression
+    If EffectValue < 0
+        If ActorTarget(Target) = 0
+            SetActorTarget(Target, Player)
+            SetActorAIState(Target, 3)
+        EndIf
+    EndIf
+
+    ZZADDSKILLXP(Player, SkillName$, SpellCost * 10)
+    
+    SpellSuccess = Rand(1,100)
+
+    If SpellSuccess < SuccessChance
+        
+        If Target = Player
+            Output(Target,  "You successfully cast " + SpellName$ + " on yourself!", 100, 255, 150)
+        Else
+            Output(Player, "You successfully cast " + SpellName$ + " on " + TargetName$ + "!",100, 255, 150)
+            Output(Target, PlayerName$ + " successfully cast " + SpellName$ + " on you!", 100, 255, 150)
+        EndIf
+        
+        ;visuals and effect
+        CreateEmitter(Target, "HealthSpell", 10, 2000)
+	    AddActorEffect(Target, EffectName$, EffectAttribute$, EffectValue, EffectDuration, EffectTexID, isResist)
+    Else
+         If Target = Player
+            Output(Target,  "Your " + SpellName$ + " spell has failed!", 255, 100, 100)
+        Else
+            Output(Player, "Your " + SpellName$ + " spell has missed " + TargetName$ + "!",255, 100, 100)
+            Output(Target, PlayerName$ + "'s " + SpellName$ + " has missed you!", 255, 100, 100)
+        EndIf
+    EndIf
+
+    Return
+
+End Function
+
+Function CastingChecks(Player,Target,SpellSchool$)
+    ;is player dead?
+    If(Attribute(Player, "Health") < 0)
+        Output(Player, "You cannot cast spells when you are dead",255, 255, 0)
+        Return 0
+    EndIf
+
+    ;Casting Check
+    If ActorHasEffect(Player, "Casting")
+        OutPut(Player, "You are already casting a spell!", 255, 0, 255)
+    Return 0
+    EndIf
+
+    ;NPC Check
+    If (Actoraggressiveness(Target) = 3)
+	    Output(Player, "No Valid Target Selected", 255, 50, 50)
+	    Return 0
+    EndIf
+
+    ;Check if the target is correct?
+    If(Target = 0)
+        Output(Player, "No Valid Target Selected",255, 50, 50)
+        Return 0
+    EndIf
+
+    ;Check Equipment
+    If SpellSchool$ = "Arcane Spells"
+        If ArcaneEquipmentCheck(Player) < 1
+            Output(Player, "You cannot cast arcane spells with your current equipment",255, 50, 50)
+            Return 0
+        EndIf
+    EndIf
+
+    Return 1
+
+End Function
+
+Function ArcaneEquipmentCheck(Player)
+    Result = 1
+    PlayerRace$ = Race(Player)
+
+    ;Actor Equipment
+    PlayerWeapon = ActorWeapon(Player)
+    PlayerShield = ActorShield(Player)
+    PlayerChest = ActorChest(Player)
+    PlayerHat = ActorHat(Player)
+    PlayerLegs = ActorLegs(Player)
+    PlayerHands = ActorHands(Player)
+    PlayerFeet = ActorFeet(Player)
+    PlayerBelt = ActorBelt(Player)
+
+    If PlayerShield > 0
+        Result = 0
+    EndIf
+
+    Select PlayerRace$
+        Case "Elf"
+            If ZZITEMARMORCLASS(PlayerChest) = 3
+                Result = 0
+            EndIf
+            If ZZITEMARMORCLASS(PlayerHat) = 3
+                Result = 0
+            EndIf
+            If ZZITEMARMORCLASS(PlayerLegs) = 3
+                Result = 0
+            EndIf
+            If ZZITEMARMORCLASS(PlayerHands) = 3
+                Result = 0
+            EndIf
+            If ZZITEMARMORCLASS(PlayerFeet) = 3
+                Result = 0
+            EndIf
+            If ZZITEMARMORCLASS(PlayerBelt) = 3
+                Result = 0
+            EndIf
+            If ItemWeaponType(PlayerWeapon) = 3 
+                Result = 0
+            EndIf
+
+        Case "Gnome"
+            If (ZZITEMARMORCLASS(PlayerChest) = 3) OR (ZZITEMARMORCLASS(PlayerChest) = 2)
+                Result = 0
+            EndIf
+            If (ZZITEMARMORCLASS(PlayerHat) = 3) OR (ZZITEMARMORCLASS(PlayerHat) = 2)
+                Result = 0
+            EndIf
+            If (ZZITEMARMORCLASS(PlayerLegs) = 3) OR (ZZITEMARMORCLASS(PlayerLegs) = 2)
+                Result = 0
+            EndIf
+            If (ZZITEMARMORCLASS(PlayerHands) = 3) OR (ZZITEMARMORCLASS(PlayerHands) = 2)
+                Result = 0
+            EndIf
+            If (ZZITEMARMORCLASS(PlayerFeet) = 3) OR (ZZITEMARMORCLASS(PlayerFeet) = 2)
+                Result = 0
+            EndIf
+            If (ZZITEMARMORCLASS(PlayerBelt) = 3) OR (ZZITEMARMORCLASS(PlayerBelt) = 2)
+                Result = 0
+            EndIf
+            If (ItemWeaponType(PlayerWeapon) = 3) OR (ItemWeaponType(PlayerWeapon) = 2)
+                Result = 0
+            EndIf
+
+        Case "Half Elf"
+           If (ZZITEMARMORCLASS(PlayerChest) = 3) OR (ZZITEMARMORCLASS(PlayerChest) = 2)
+                Result = 0
+            EndIf
+            If (ZZITEMARMORCLASS(PlayerHat) = 3) OR (ZZITEMARMORCLASS(PlayerHat) = 2)
+                Result = 0
+            EndIf
+            If (ZZITEMARMORCLASS(PlayerLegs) = 3) OR (ZZITEMARMORCLASS(PlayerLegs) = 2)
+                Result = 0
+            EndIf
+            If (ZZITEMARMORCLASS(PlayerHands) = 3) OR (ZZITEMARMORCLASS(PlayerHands) = 2)
+                Result = 0
+            EndIf
+            If (ZZITEMARMORCLASS(PlayerFeet) = 3) OR (ZZITEMARMORCLASS(PlayerFeet) = 2)
+                Result = 0
+            EndIf
+            If (ZZITEMARMORCLASS(PlayerBelt) = 3) OR (ZZITEMARMORCLASS(PlayerBelt) = 2)
+                Result = 0
+            EndIf
+            If ItemWeaponType(PlayerWeapon) = 3 
+                Result = 0
+            EndIf
+
+        Default
+            If (ZZITEMARMORCLASS(PlayerChest) = 3) OR (ZZITEMARMORCLASS(PlayerChest) = 2) OR (ZZITEMARMORCLASS(PlayerChest) = 1)
+                Result = 0
+            EndIf
+            If (ZZITEMARMORCLASS(PlayerChest) = 3) OR (ZZITEMARMORCLASS(PlayerChest) = 2) OR (ZZITEMARMORCLASS(PlayerChest) = 1)
+                Result = 0
+            EndIf
+            If (ZZITEMARMORCLASS(PlayerChest) = 3) OR (ZZITEMARMORCLASS(PlayerChest) = 2) OR (ZZITEMARMORCLASS(PlayerChest) = 1)
+                Result = 0
+            EndIf
+            If (ZZITEMARMORCLASS(PlayerChest) = 3) OR (ZZITEMARMORCLASS(PlayerChest) = 2) OR (ZZITEMARMORCLASS(PlayerChest) = 1)
+                Result = 0
+            EndIf
+            If (ZZITEMARMORCLASS(PlayerChest) = 3) OR (ZZITEMARMORCLASS(PlayerChest) = 2) OR (ZZITEMARMORCLASS(PlayerChest) = 1)
+                Result = 0
+            EndIf
+            If (ZZITEMARMORCLASS(PlayerChest) = 3) OR (ZZITEMARMORCLASS(PlayerChest) = 2) OR (ZZITEMARMORCLASS(PlayerChest) = 1)
+                Result = 0
+            EndIf
+            If ItemWeaponType(PlayerWeapon) = 3 
+                Result = 0
+            EndIf
+            If (ZZITEMWEAPONCLASS(PlayerWeapon) > 0) AND (ZZITEMWEAPONCLASS(PlayerWeapon) < 7)
+                Result = 0
+            EndIf
+    End Select
+
+    Return Result
+
+End Function
+
+
+Function Spell_Shield()
+    Player = Actor()
+    Target = ContextActor()
+    If Target = 0
+        Target = Player
+    EndIf
+    SpellCost = Parameter(1)
+    ResourceName$ = "Mana"
+    SpellName$ = "Shield"
+    castingTime = 5
+    EffectName$ = "Shield"
+    EffectAttribute$ = "Armor Bonus"
+    EffectValue = 5
+    EffectDuration = 600
+    EffectTexID = Parameter(2)
+    SkillName$ = "Arcane Spells"
+    GoverningAttribute$ = "Intelligence"
+
+    ModifyAttributeSpell(Player, Target, SpellCost, ResourceName$, SpellName$, EffectName$, EffectAttribute$, EffectValue, EffectDuration, EffectTexID, SkillName$, GoverningAttribute$, castingTime)
+End Function
+
+Function Spell_Focus()
+    Player = Actor()
+    Target = ContextActor()
+    If Target = 0
+        Target = Player
+    EndIf
+    SpellCost = Parameter(1)
+    ResourceName$ = "Mana"
+    SpellName$ = "Focus"
+    castingTime = 5
+    EffectName$ = "Focus"
+    EffectAttribute$ = "Attack Bonus"
+    EffectValue = 5
+    EffectDuration = 600
+    EffectTexID = Parameter(2)
+    SkillName$ = "Arcane Spells"
+    GoverningAttribute$ = "Intelligence"
+
+    ModifyAttributeSpell(Player, Target, SpellCost, ResourceName$, SpellName$, EffectName$, EffectAttribute$, EffectValue, EffectDuration, EffectTexID, SkillName$, GoverningAttribute$, castingTime)
+End Function
+
+Function Spell_FeatherWeight()
+    Player = Actor()
+    Target = ContextActor()
+    If Target = 0
+        Target = Player
+    EndIf
+    SpellCost = Parameter(1)
+    ResourceName$ = "Mana"
+    SpellName$ = "Feather Weight"
+    castingTime = 5
+    EffectName$ = "Feather Weight"
+    EffectAttribute$ = "Carry Weight Mod"
+    EffectValue = 30
+    EffectDuration = 1800
+    EffectTexID = Parameter(2)
+    SkillName$ = "Arcane Spells"
+    GoverningAttribute$ = "Intelligence"
+
+    ModifyAttributeSpell(Player, Target, SpellCost, ResourceName$, SpellName$, EffectName$, EffectAttribute$, EffectValue, EffectDuration, EffectTexID, SkillName$, GoverningAttribute$, castingTime)
+End Function
+
+Function Spell_ResistSlash()
+    Player = Actor()
+    Target = ContextActor()
+    If Target = 0
+        Target = Player
+    EndIf
+    SpellCost = Parameter(1)
+    ResourceName$ = "Mana"
+    SpellName$ = "Resist Slashing"
+    castingTime = 5
+    EffectName$ = SpellName$
+    EffectAttribute$ = "Edged"
+    EffectValue = 10
+    EffectDuration = 600
+    EffectTexID = Parameter(2)
+    SkillName$ = "Arcane Spells"
+    GoverningAttribute$ = "Intelligence"
+
+    ModifyAttributeSpell(Player, Target, SpellCost, ResourceName$, SpellName$, EffectName$, EffectAttribute$, EffectValue, EffectDuration, EffectTexID, SkillName$, GoverningAttribute$, castingTime, 1)
+End Function
+
+Function Spell_ResistBlunt()
+    Player = Actor()
+    Target = ContextActor()
+    If Target = 0
+        Target = Player
+    EndIf
+    SpellCost = Parameter(1)
+    ResourceName$ = "Mana"
+    SpellName$ = "Resist Bludgeon"
+    castingTime = 5
+    EffectName$ = SpellName$
+    EffectAttribute$ = "Blunt"
+    EffectValue = 10
+    EffectDuration = 600
+    EffectTexID = Parameter(2)
+    SkillName$ = "Arcane Spells"
+    GoverningAttribute$ = "Intelligence"
+
+    ModifyAttributeSpell(Player, Target, SpellCost, ResourceName$, SpellName$, EffectName$, EffectAttribute$, EffectValue, EffectDuration, EffectTexID, SkillName$, GoverningAttribute$, castingTime, 1)
+End Function
+
+Function Spell_WeaknessMagic()
+    Player = Actor()
+    Target = ContextActor()
+    If Target = 0
+        Target = Player
+    EndIf
+    SpellCost = Parameter(1)
+    ResourceName$ = "Mana"
+    SpellName$ = "Weakness to Magic"
+    castingTime = 5
+    EffectName$ = SpellName$
+    EffectAttribute$ = "Magical"
+    EffectValue = -10
+    EffectDuration = 300
+    EffectTexID = Parameter(2)
+    SkillName$ = "Arcane Spells"
+    GoverningAttribute$ = "Intelligence"
+
+    ModifyAttributeSpell(Player, Target, SpellCost, ResourceName$, SpellName$, EffectName$, EffectAttribute$, EffectValue, EffectDuration, EffectTexID, SkillName$, GoverningAttribute$, castingTime, 1)
+End Function
+
