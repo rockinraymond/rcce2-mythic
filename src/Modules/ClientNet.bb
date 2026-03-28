@@ -1010,6 +1010,13 @@ Function UpdateNetwork()
 					If Left$(M\MessageData$, 1) = "H"
 						AnimateActorAttack(Me)
 						PlayActorSound(Me, Rand(Speech_Attack1, Speech_Attack2))
+						AttackSound = 62
+						If Me\Inventory\Items[SlotI_Weapon] <> Null 
+							If Me\Inventory\Items[SlotI_Weapon]\Item\WeaponClass = WC_Bow
+								AttackSound = 53
+							EndIf
+						EndIf
+						EmitSound(GetSound(AttackSound), Me\EN)
 						Damage = RCE_IntFromStr(Mid$(M\MessageData$, 4, 2)) - 1
 						DType$ = DamageTypes$(RCE_IntFromStr(Mid$(M\MessageData$, 6, 1)))
 						; And hit them
@@ -1018,6 +1025,7 @@ Function UpdateNetwork()
 							A\Attributes\Value[HealthStat] = A\Attributes\Value[HealthStat] - Damage
 							PlayAnimation(A, 3, 0.035, Rand(Anim_FirstHit, Anim_LastHit))
 							PlayActorSound(A, Rand(Speech_Hit1, Speech_Hit2))
+							PlayActorWeaponSound(Me, A)
 							If A\Actor\BloodTexID > 0
 								B.BloodSpurt = New BloodSpurt
 								B\Timer = MilliSecs()
@@ -1038,13 +1046,21 @@ Function UpdateNetwork()
 						PointEntity A\CollisionEN, Me\CollisionEN
 						RotateEntity A\CollisionEN, 0.0, EntityYaw#(A\CollisionEN) + 180.0, 0.0
 						; And hit me
+						PlayActorSound(A, Rand(Speech_Attack1, Speech_Attack2))
+						AttackSound = 62
+						If A\Inventory\Items[SlotI_Weapon] <> Null 
+							If A\Inventory\Items[SlotI_Weapon]\Item\WeaponClass = WC_Bow
+								AttackSound = 53
+							EndIf
+						EndIf
+						EmitSound(GetSound(AttackSound), A\EN)
 						If Damage > 0
 							CombatDamageOutput(A, -Damage, DType$)
 							Me\Attributes\Value[HealthStat] = Me\Attributes\Value[HealthStat] - Damage
 							AnimateActorAttack(A)
 							PlayAnimation(Me, 3, 0.035, Rand(Anim_FirstHit, Anim_LastHit))
-							PlayActorSound(A, Rand(Speech_Attack1, Speech_Attack2))
 							PlayActorSound(Me, Rand(Speech_Hit1, Speech_Hit2))
+							PlayActorWeaponSound(A, Me)
 							If Me\Actor\BloodTexID > 0
 								B.BloodSpurt = New BloodSpurt
 								B\Timer = MilliSecs()

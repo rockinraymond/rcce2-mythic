@@ -269,3 +269,37 @@ Function UpdateFloatingNumbers()
 	Next
 
 End Function
+
+Function PlayActorWeaponSound(Attacker.ActorInstance,Target.ActorInstance)
+
+		WeaponType = 0
+		If Attacker\Inventory\Items[SlotI_Weapon] <> Null
+			WeaponType = Attacker\Inventory\Items[SlotI_Weapon]\Item\WeaponClass
+		EndIf
+
+		Result = 58
+		Select WeaponType
+			Case WC_Sword
+				Result = Rand(56,57)
+			Case WC_Dagger
+				Result = Rand(56,57)
+			Case WC_Blunt
+				Result = Rand(60,61)
+			Case WC_Axe
+				Result = Rand(56,57)
+			Case WC_Bow
+				Result = 55
+			Case WC_Polearm
+				Result = Rand(56,57)
+			Case WC_Staff
+				Result = Rand(60,61)
+			Case WC_Wand 
+				Result = 9
+			Default
+				Result = Rand(58,59)
+		End Select
+		
+		EN = FindChild(Target\EN, "Head")
+		If EN = 0 Then EN = Target\EN
+		EmitSound(GetSound(Result), EN)
+End Function
