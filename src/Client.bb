@@ -233,7 +233,7 @@ Repeat
 	
 	
 ;&&&&&&&&&&&&&&&&& Reflective water	terrier
-	RenderWater(Cam)
+	;RenderWater(Cam)
 
 	
 	Select ShadowC
