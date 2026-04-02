@@ -301,5 +301,7 @@ Function PlayActorWeaponSound(Attacker.ActorInstance,Target.ActorInstance)
 		
 		EN = FindChild(Target\EN, "Head")
 		If EN = 0 Then EN = Target\EN
-		EmitSound(GetSound(Result), EN)
+		If Target <> Null
+			EmitSound(GetSound(Result), EN)
+		EndIf
 End Function

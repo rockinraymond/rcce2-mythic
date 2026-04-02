@@ -726,7 +726,9 @@ Function PlayActorSound(A.ActorInstance, Speech)
 		If Result < 65535
 			EN = FindChild(A\EN, "Head")
 			If EN = 0 Then EN = A\EN
-			EmitSound(GetSound(Result), EN)
+			If A <> Null
+				EmitSound(GetSound(Result), EN)
+			EndIf
 		EndIf
 
 End Function
