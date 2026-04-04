@@ -177,6 +177,10 @@ function unarmedTest()
 	ZZADDSKILLXP(Actor(), "Unarmed", 30000)
 End Function
 
+Function Posi()
+	Output(Actor(), ActorX(Actor()) + " " +  ActorY(Actor()) +" " + ActorZ(Actor()))
+End Function
+
 function setPassive()
 	Target = CONTEXTACTOR()
 	ACTORAGGRESSIVENESS(Target, 1, 0)

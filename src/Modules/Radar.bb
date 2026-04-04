@@ -49,18 +49,18 @@ Function Load_Radar(AreaName$, X#, Y#, Width#, Height#, Interior, BorderTex$ = "
 	South_Piv = CreatePivot()
 	East_Piv = CreatePivot()
 	West_Piv = CreatePivot()
-	TranslateEntity North_Piv, 1, 5000, 1
-	TranslateEntity South_Piv, 1, 5000, 1
-	TranslateEntity East_Piv, 1, 5000, 1
-	TranslateEntity West_Piv, 1, 5000, 1
+	TranslateEntity North_Piv, 1, 10000, 1
+	TranslateEntity South_Piv, 1, 10000, 1
+	TranslateEntity East_Piv, 1, 10000, 1
+	TranslateEntity West_Piv, 1, 10000, 1
 	SetPickModes()
 	; Raise camera until the entire map is in view
 	While AllClear = False
 		UpdateWorld()
-		NP = LinePick(EntityX(North_Piv, 1), EntityY(North_Piv, 1), EntityZ(North_Piv, 1), 0, -15000, 0)
-		SP = LinePick(EntityX(South_Piv, 1), EntityY(South_Piv, 1), EntityZ(South_Piv, 1), 0, -15000, 0)
-		EP = LinePick(EntityX(East_Piv, 1), EntityY(East_Piv, 1), EntityZ(East_Piv, 1), 0, -15000, 0)
-		WP = LinePick(EntityX(West_Piv, 1), EntityY(West_Piv, 1), EntityZ(West_Piv, 1), 0, -15000, 0)
+		NP = LinePick(EntityX(North_Piv, 1), EntityY(North_Piv, 1), EntityZ(North_Piv, 1), 0, -30000, 0)
+		SP = LinePick(EntityX(South_Piv, 1), EntityY(South_Piv, 1), EntityZ(South_Piv, 1), 0, -30000, 0)
+		EP = LinePick(EntityX(East_Piv, 1), EntityY(East_Piv, 1), EntityZ(East_Piv, 1), 0, -30000, 0)
+		WP = LinePick(EntityX(West_Piv, 1), EntityY(West_Piv, 1), EntityZ(West_Piv, 1), 0, -30000, 0)
 		If NP = 0 And SP = 0 And EP = 0 And WP = 0 Then AllClear = True
 		TranslateEntity Radar_Camera, 0, 10, 0
 		TranslateEntity North_Piv, 0, 0, 10

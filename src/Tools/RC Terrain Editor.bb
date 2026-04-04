@@ -1952,15 +1952,15 @@ End Function
 ;- ChooseNewMap
 Function ChooseNewMap()
 	TWidth = 250
-	THeight = 125 ;230
+	THeight = 230
  	GUI_CONTROLSWINDOW = FUI_Window( 0, 0, TWidth, THeight, "New Map", 0, 1, 1 )
 		GUI_CONTROLSWINDOW_LABEL1 = FUI_Label( GUI_CONTROLSWINDOW, 10, 10, "What type of terrain would you like to create?" )
    	    GUI_CONTROLSWINDOW_LABEL2 = FUI_Label( GUI_CONTROLSWINDOW, 10, 70, "")
 		GUI_CONTROLSWINDOW_BUTTON_SMALL = FUI_Button( GUI_CONTROLSWINDOW, 10, 35, 230, 20, "Small High Detail Terrain (32x32)" )	
 		GUI_CONTROLSWINDOW_BUTTON_NORMAL = FUI_Button( GUI_CONTROLSWINDOW, 10, 70, 230, 20, "Normal High Detail Terrain (64x64)" )		
-;		GUI_CONTROLSWINDOW_BUTTON_5TEXTURE = FUI_Button( GUI_CONTROLSWINDOW, 10, 105, 230, 20, "5 Texture, Larger Terrain (84x84)" )
-;		GUI_CONTROLSWINDOW_BUTTON_4TEXTURE = FUI_Button( GUI_CONTROLSWINDOW, 10, 140, 230, 20, "4 Texture, Larger Terrain (94x94)" )
-;		GUI_CONTROLSWINDOW_BUTTON_3TEXTURE = FUI_Button( GUI_CONTROLSWINDOW, 10, 175, 230, 20, "3 Texture, Larger Terrain (108x108)" )
+		GUI_CONTROLSWINDOW_BUTTON_5TEXTURE = FUI_Button( GUI_CONTROLSWINDOW, 10, 105, 230, 20, "5 Texture, Larger Terrain (84x84)" )
+		GUI_CONTROLSWINDOW_BUTTON_4TEXTURE = FUI_Button( GUI_CONTROLSWINDOW, 10, 140, 230, 20, "4 Texture, Larger Terrain (94x94)" )
+		GUI_CONTROLSWINDOW_BUTTON_3TEXTURE = FUI_Button( GUI_CONTROLSWINDOW, 10, 175, 230, 20, "3 Texture, Larger Terrain (108x108)" )
 	FUI_ModalWindow( GUI_CONTROLSWINDOW )
 	FUI_CenterWindow( GUI_CONTROLSWINDOW )
 	TClose = False
@@ -1993,7 +1993,7 @@ Function ChooseNewMap()
 		 			tClose = True
 					FUI_DeleteGadget( GUI_CONTROLSWINDOW )
                     Return  4
-					
+
 		 	End Select
 		 	Delete e
 		 Next
