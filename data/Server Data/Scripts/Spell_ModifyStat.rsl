@@ -7,6 +7,11 @@ Function ModifyAttributeSpell(Player, Target, SpellCost, ResourceName$, SpellNam
     PlayerName$ = Name(Player)
     TargetName$ = Name(Target)
 
+    CastingSound = 1
+
+    CastingEmitterTex = 356
+    CastingEmitter$ = "arcaneCasting"
+
     SuccessChance = Attribute(Player,SkillName$) + Attribute(Player,GoverningAttribute$) + 25
 
     If CastingChecks(Player, Target, SkillName$) < 1
@@ -34,6 +39,8 @@ Function ModifyAttributeSpell(Player, Target, SpellCost, ResourceName$, SpellNam
     AnimateActor(Player, "Cast Magic", 0.005, 1)
     Output(Player, "Casting " + SpellName$, 200, 0, 255) 
 	AddActorEffect(Player, "Casting", "Movement", -100, castingTime,0)
+    PlaySound(Player, CastingSound, 0)
+    CreateEmitter(Player, CastingEmitter$, CastingEmitterTex, 5000)
     
     ;create progress bar
 	bar = CreateProgressBar(Player,200,0,225,.4,.8,.2,.04,castingTime * 10,0,SpellName$)

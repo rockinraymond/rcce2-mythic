@@ -7,6 +7,11 @@ Function ProjectileSpell(Player, Target, SpellCost, ResourceName$, SpellName$, P
     PlayerName$ = Name(Player)
     TargetName$ = Name(Target)
 
+    CastingSound = 1
+
+    CastingEmitterTex = 356
+    CastingEmitter$ = "arcaneCasting"
+
     If CastingChecks(Player, Target, SkillName$) < 1
         Return
     EndIf   
@@ -24,9 +29,12 @@ Function ProjectileSpell(Player, Target, SpellCost, ResourceName$, SpellName$, P
     AnimateActor(Player, "Cast Magic", 0.015, 1)
     Output(Player, "Casting " + SpellName$, 255, 0, 255) 
 	AddActorEffect(Player, "Casting", "Movement", -100, castingTime,0)
+    PlaySound(Player, CastingSound, 0)
+    CreateEmitter(Player, CastingEmitter$, CastingEmitterTex, 2000)
+
     
     ;create progress bar
-	bar = CreateProgressBar(Player,200,0,225,.4,.8,.2,.04,castingTime * 10,0,"Magic Missile")
+	bar = CreateProgressBar(Player,200,0,225,.4,.8,.2,.04,castingTime * 10,0,SpellName$)
 	Repeat
 	UpdateProgressBar(Player,bar,i)
     DoEvents(100)

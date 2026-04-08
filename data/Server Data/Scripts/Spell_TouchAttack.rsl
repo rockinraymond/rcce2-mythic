@@ -2,10 +2,25 @@ Using "RC_Core.rcm"
 Function Main()
 End Function
 
-Function ModifyTouchSpell(Player, Target, SpellCost, ResourceName$, SpellName$, DamageType$, BaseDamage, SkillName$, GoverningAttribute$, EmitterTex = 10)
+Function ModifyTouchSpell(Player, Target, SpellCost, ResourceName$, SpellName$, DamageType$, BaseDamage, SkillName$, GoverningAttribute$, HitSound )
+
+
+    
 
     PlayerName$ = Name(Player)
     TargetName$ = Name(Target)
+
+    EmitterTex = 337
+    EmitterName$ = "Default"
+    ;Emitter Name Selection
+    Select DamageType$
+    Case "Fire"
+        EmitterName$ = "flameBurst"
+    Case "Frost"
+        EmitterName$ = "frostBurst"
+    Case "Lightning"
+        EmitterName$ = "shockBurst"
+    End Select
 
     SuccessChance = Attribute(Player,SkillName$) + Attribute(Player,GoverningAttribute$) + 25 - Resistance(Target, "Spells") - Attribute(Target, "Armor Bonus")
 
@@ -45,13 +60,16 @@ Function ModifyTouchSpell(Player, Target, SpellCost, ResourceName$, SpellName$, 
         Output(Target, PlayerName$ + " successfully cast " + SpellName$ + " on you!", 100, 255, 150)
         
         ;visuals and effect
-        CreateEmitter(Target, "HealthSpell", EmitterTex, 1000)
+        CreateEmitter(Target, EmitterName$, EmitterTex, 1000)
 
         FinalDamage = Rand(1,BaseDamage + Attribute(Player,GoverningAttribute$)) - Resistance(Target, DamageType$)
         NewHealth = Attribute(Target, "Health") - FinalDamage
 
         Output(Player, "You hit " + TargetName$ + " for " + FinalDamage + " " + DamageType$ + " damage!",100, 255, 150)
         Output(Target, PlayerName$ + " hits you for " + FinalDamage + " " + DamageType$ + " damage!", 100, 255, 150)
+
+        PlaySound(Player, HitSound, 0)
+        PlaySound(Target, HitSound, 0)
 
         If NewHealth < 0
             KillActor(Target,Player)
@@ -250,13 +268,13 @@ Function Spell_BurningHands()
     
     DamageType$ = "Fire"
     BaseDamage = 6
-
-    EmitterTex = 15
     
     SkillName$ = "Arcane Spells"
     GoverningAttribute$ = "Intelligence"
 
-    ModifyTouchSpell(Player, Target, SpellCost, ResourceName$, SpellName$, DamageType$, BaseDamage, SkillName$, GoverningAttribute$, EmitterTex)
+    HitSound = 28
+
+    ModifyTouchSpell(Player, Target, SpellCost, ResourceName$, SpellName$, DamageType$, BaseDamage, SkillName$, GoverningAttribute$, HitSound)
 End Function
 
 Function Spell_FrostBite()
@@ -269,13 +287,13 @@ Function Spell_FrostBite()
     
     DamageType$ = "Frost"
     BaseDamage = 6
-
-    EmitterTex = 69
     
     SkillName$ = "Arcane Spells"
     GoverningAttribute$ = "Intelligence"
 
-    ModifyTouchSpell(Player, Target, SpellCost, ResourceName$, SpellName$, DamageType$, BaseDamage, SkillName$, GoverningAttribute$, EmitterTex)
+    HitSound = 13
+
+    ModifyTouchSpell(Player, Target, SpellCost, ResourceName$, SpellName$, DamageType$, BaseDamage, SkillName$, GoverningAttribute$, HitSound)
 End Function
 
 Function Spell_ShockingTouch()
@@ -288,11 +306,11 @@ Function Spell_ShockingTouch()
     
     DamageType$ = "Lightning"
     BaseDamage = 6
-
-    EmitterTex = 10
     
     SkillName$ = "Arcane Spells"
     GoverningAttribute$ = "Intelligence"
 
-    ModifyTouchSpell(Player, Target, SpellCost, ResourceName$, SpellName$, DamageType$, BaseDamage, SkillName$, GoverningAttribute$, EmitterTex)
+    HitSound = 27
+
+    ModifyTouchSpell(Player, Target, SpellCost, ResourceName$, SpellName$, DamageType$, BaseDamage, SkillName$, GoverningAttribute$, HitSound)
 End Function
