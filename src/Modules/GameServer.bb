@@ -318,14 +318,15 @@ Function ActorAttack(A1.ActorInstance, A2.ActorInstance)
 		;Attacker stats
 		DexterityAttribute = FindAttribute("Dexterity")
 		DamageBonusAtt = FindAttribute("Damage Bonus")
-		DamageBonus = A1\Attributes\Value[DamageBonusAtt]
+		
 		AttackBonusAtt = FindAttribute("Attack Bonus")
 		AttackBonus = A1\Attributes\Value[AttackBonusAtt]
 
 		AttackerCritChance = (A1\Attributes\Value[DexterityAttribute] * 2) / 5
-		AttackerAccuracy = GetActorAccuracy(A1)
+		AttackerAccuracy = GetActorAccuracy(A1) + AttackBonus
 		AttackerDamageAttBNS = GetActorDamageAttributeBNS(A1)
-		AttackerMaxDamage = GetActorMaxDamage(A1) + AttackerDamageAttBNS
+		DamageBonus = A1\Attributes\Value[DamageBonusAtt] + + AttackerDamageAttBNS
+		AttackerMaxDamage = GetActorMaxDamage(A1)
 		DamageType = GetActorDamageType(A1)
 		
 		;Defender stats
@@ -334,26 +335,40 @@ Function ActorAttack(A1.ActorInstance, A2.ActorInstance)
 		ToughnessAttribute = FindAttribute("Toughness");
 		BlockSkill = FindAttribute("Block");
 
-		DefendToughness =  A2\Attributes\Value[ToughnessAttribute] - 10
+		DefendToughness =  A2\Attributes\Value[ToughnessAttribute]
 
 		BlockResistance = 0
-		If A2\Inventory\Items[SlotI_Shield] <> Null Then BlockResistance = A2\Inventory\Items[SlotI_Shield]\Item\Resistances[DamageType]
-		DefendBlock = A2\Attributes\Value[BlockSkill] + DefendToughness + BlockResistance - AttackerDamageAttBNS
+		If A2\Inventory\Items[SlotI_Shield] <> Null Then BlockResistance = A2\Inventory\Items[SlotI_Shield]\Item\Resistances[DamageType] +  A2\Inventory\Items[SlotI_Shield]\Item\ArmourLevel
+		DefendBlock = GetSkillModifier(A2\Attributes\Value[BlockSkill]) + GetAttributeModifier(DefendToughness) + BlockResistance + 1
 
 		ArmorVal = GetArmourLevel(A2) + ArmorBonus
 		DefenderResistance = (A2\Resistances[DamageType])
 
-		TargetHitRoll = AttackerAccuracy - ArmorVal - DefenderResistance
+		TargetHitRoll = ArmorVal + DefenderResistance
 		
-		;Roll D100s for hit and block
-		HitRoll = Rand(1,100) + AttackBonus
-		
-		If A2\Inventory\Items[SlotI_Shield] = Null Then BlockRoll = 100 
-		If (HitRoll < TargetHitRoll)
-			BlockRoll = Rand(1,100)
-			If (BlockRoll > DefendBlock)
+		;Roll D20s for hit and block
+		HitRoll = Rand(1,20) + AttackerAccuracy
+		If (HitRoll > TargetHitRoll)
+			BlockRoll = Rand(1,20)
+			If (BlockRoll < DefendBlock) And A2\Inventory\Items[SlotI_Shield] <> Null
+				;Blocked!
+				AttackBlocked = True
+				If A1\RNID > 0 
+					BlockStr$ = A2\Name$ + " blocked your attack!"
+					RCE_Send(Host, A1\RNID, P_ChatMessage, Chr$(250) + Chr$(255) + Chr$(225) + Chr$(100) + BlockStr$, True)
+				EndIf
+				If A2\RNID > 0 
+					BlockStr$ = "You Blocked " + A1\Name$ + "'s attack!"
+					RCE_Send(Host, A2\RNID, P_ChatMessage, Chr$(250) + Chr$(255) + Chr$(225) + Chr$(100) + BlockStr$, True)
+					;give out block skill xp
+					BlockXP = 35
+					BlockXpParams$ = "Block" + "," + Str(BlockXp)
+					ThreadScript("LevelUp", "giveSkillXp", Handle(A2), 0, BlockXpParams$)
+				EndIf
+				Damage = -1
+			Else
 				DamageEquipment = True
-				Damage = Rand(1,AttackerMaxDamage)  + DamageBonus - (DefenderResistance / 10)
+				Damage = Rand(1,AttackerMaxDamage) + DamageBonus - DefenderResistance
 				; Critical damage
 				If HitRoll < AttackerCritChance
 					Damage = AttackerMaxDamage + 1 + DamageBonus
@@ -361,10 +376,6 @@ Function ActorAttack(A1.ActorInstance, A2.ActorInstance)
 				EndIf
 				; Minimum of 1
 				If Damage < 1 Then Damage = 1
-			;Blocked!
-			Else
-			AttackBlocked = True
-			Damage = -1
 			EndIf
 		; Miss!
 		Else
@@ -389,10 +400,20 @@ Function ActorAttack(A1.ActorInstance, A2.ActorInstance)
 			WepXP = Damage * 6
 			WepXpParams$ = WeaponSkillString$ + "," + Str(WepXP)
 			ThreadScript("LevelUp", "giveSkillXp", Handle(A1), 0, WepXpParams$)
+		EndIf
 
+		If A2\RNID > 0
 			;give out armor skill xp
 			ArmorSkillString$ = GetActorArmorSkillString$(A2)
 			ArmorXP = Damage * 9
+			ArmXpParams$ = ArmorSkillString$ + "," + Str(ArmorXp)
+			ThreadScript("LevelUp", "giveSkillXp", Handle(A2), 0, ArmXpParams$)
+		EndIf
+	Else
+		If A2\RNID > 0
+			;give out armor skill xp
+			ArmorSkillString$ = GetActorArmorSkillString$(A2)
+			ArmorXP = 4
 			ArmXpParams$ = ArmorSkillString$ + "," + Str(ArmorXp)
 			ThreadScript("LevelUp", "giveSkillXp", Handle(A2), 0, ArmXpParams$)
 		EndIf

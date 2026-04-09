@@ -1781,17 +1781,17 @@ Function UpdateInterface()
 		If Me\Attributes\Value[FindAttribute("Armor Bonus")] > 0 Then ArmorBnsStr$ = (" + " + Str(Me\Attributes\Value[FindAttribute("Armor Bonus")]))
 		If Me\Attributes\Value[FindAttribute("Armor Bonus")] < 0 Then ArmorBnsStr$ = (" - " + Str(Abs(Me\Attributes\Value[FindAttribute("Armor Bonus")])))
 		
-		If Me\Attributes\Value[FindAttribute("Damage Bonus")] > 0 Then DamBnsStr$ = (" + " + Str(Me\Attributes\Value[FindAttribute("Damage Bonus")]))
-		If Me\Attributes\Value[FindAttribute("Damage Bonus")] < 0 Then DamBnsStr$ = (" - " + Str(Abs(Me\Attributes\Value[FindAttribute("Damage Bonus")])))
+		If (Me\Attributes\Value[FindAttribute("Damage Bonus")] + GetActorDamageAttributeBNS(Me)) > 0 Then DamBnsStr$ = (" + " + Str(Me\Attributes\Value[FindAttribute("Damage Bonus")] + GetActorDamageAttributeBNS(Me)))
+		If (Me\Attributes\Value[FindAttribute("Damage Bonus")] + + GetActorDamageAttributeBNS(Me)) < 0 Then DamBnsStr$ = (" - " + Str(Abs(Me\Attributes\Value[FindAttribute("Damage Bonus")] + GetActorDamageAttributeBNS(Me))))
 		
 		If Me\Attributes\Value[FindAttribute("Attack Bonus")] > 0 Then AtkBnsStr$ = (" + " + Str(Me\Attributes\Value[FindAttribute("Attack Bonus")]))
 		If Me\Attributes\Value[FindAttribute("Attack Bonus")] < 0 Then AtkBnsStr$ = (" - " + Str(Abs(Me\Attributes\Value[FindAttribute("Attack Bonus")])))
 
-		GY_UpdateLabel(LArmorPoints, "Defense Rating: " + Str(GetArmourLevel(Me)) + ArmorBnsStr$)
-		GY_UpdateLabel(LDamage, "Max Damage: " + Str(GetActorMaxDamage(Me) + GetActorDamageAttributeBNS(Me)) + DamBnsStr$)
-		GY_UpdateLabel(LAccuracy, "Attack Rating: " + Str(GetActorAccuracy(Me)) + AtkBnsStr$)
+		GY_UpdateLabel(LArmorPoints, "Armor Class: " + Str(GetArmourLevel(Me)) + ArmorBnsStr$)
+		GY_UpdateLabel(LDamage, "Damage Roll: d" + Str(GetActorMaxDamage(Me) ) + DamBnsStr$)
+		GY_UpdateLabel(LAccuracy, "Attack Bonus: " + Str(GetActorAccuracy(Me)) + AtkBnsStr$)
 		GY_UpdateLabel(LAggro, "Conspicuousness: " + Str(Int(GetActorAggroRange(Me))))
-		GY_UpdateLabel(LAttackSpeed, "Attack Delay: " + Str(Int(GetActorAttackSpeed(Me))))
+		GY_UpdateLabel(LAttackSpeed, "Attack Speed: " + Str(Int(GetActorAttackSpeed(Me))))
 
 
 	; Display attributes

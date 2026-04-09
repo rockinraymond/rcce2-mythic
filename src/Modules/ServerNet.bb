@@ -2116,16 +2116,17 @@ Function UpdateNetwork()
 											Offset = Offset + 1
 										Next
 										;Health and Mana Setup
-										C\Attributes\Maximum[FindAttribute("Health")] = 10 + (6 + (C\Attributes\Value[FindAttribute("Constitution")] - 10))
-										C\Attributes\Value[FindAttribute("Health")] = C\Attributes\Maximum[FindAttribute("Health")]
+										; C\Attributes\Maximum[FindAttribute("Health")] = 10 + (6 + (C\Attributes\Value[FindAttribute("Constitution")] - 10))
+										; C\Attributes\Value[FindAttribute("Health")] = C\Attributes\Maximum[FindAttribute("Health")]
 
-										C\Attributes\Maximum[FindAttribute("Mana")] = (4 + (C\Attributes\Value[FindAttribute("Intelligence")] - 10))
-										If C\Attributes\Maximum[FindAttribute("Mana")] < 1 Then C\Attributes\Maximum[FindAttribute("Mana")] = 1
-										C\Attributes\Value[FindAttribute("Mana")] = C\Attributes\Maximum[FindAttribute("Mana")]
+										; C\Attributes\Maximum[FindAttribute("Mana")] = (4 + (C\Attributes\Value[FindAttribute("Intelligence")] - 10))
+										; If C\Attributes\Maximum[FindAttribute("Mana")] < 1 Then C\Attributes\Maximum[FindAttribute("Mana")] = 1
+										; C\Attributes\Value[FindAttribute("Mana")] = C\Attributes\Maximum[FindAttribute("Mana")]
 
-										C\Attributes\Maximum[FindAttribute("Spirit")] = (3 + (C\Attributes\Value[FindAttribute("Wisodom")] - 10))
-										If C\Attributes\Maximum[FindAttribute("Spirit")] < 1 Then C\Attributes\Maximum[FindAttribute("Spirit")] = 1
-										C\Attributes\Value[FindAttribute("Spirit")] = C\Attributes\Maximum[FindAttribute("Spirit")]
+										; C\Attributes\Maximum[FindAttribute("Spirit")] = (3 + (C\Attributes\Value[FindAttribute("Wisodom")] - 10))
+										; If C\Attributes\Maximum[FindAttribute("Spirit")] < 1 Then C\Attributes\Maximum[FindAttribute("Spirit")] = 1
+										; C\Attributes\Value[FindAttribute("Spirit")] = C\Attributes\Maximum[FindAttribute("Spirit")]
+										ThreadScript("NewCharacter", "Main", Handle(C), 0)
 
 										; Check for cheating
 										If TotalAmount > AttributeAssignment + SkillAssignment

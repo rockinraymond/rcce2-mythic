@@ -48,21 +48,21 @@ Function Main()
 			SetActorLevel(Player, Lvl)
 			Output(Player, "Congratulations, you have advanced to level " + Lvl + "!",255,255,0)
 			
-			HpPerLvl = 6 + (Attribute(Player, "Constitution", 1) - 10)
+			HpPerLvl = 6 + AbilityBonus(Attribute(Player, "Constitution", 1))
 			If HpPerLvl < 1 Then HpPerLvl = 1
-			NewHp = 10 + (Lvl * HpPerLvl)  
+			NewHp = 4 + (Lvl * HpPerLvl)  
 			SETMaXATTRIBUTE(Player, "Health", NewHp)
 			SETATTRIBUTE(Player, "Health", Attribute(Player, "Health") + HpPerLvl)
 			Output(Player, "Your total Health has increased by " + HpPerLvl + "!",255,255,0)
 
-			ManaPerLvl = 4 + (Attribute(Player, "Intelligence", 1) - 10)
+			ManaPerLvl = 4 + AbilityBonus(Attribute(Player, "Intelligence", 1))
 			If ManaPerLvl < 1 Then ManaPerLvl = 1
 			NewMana = (Lvl * ManaPerLvl)  
 			SETMaXATTRIBUTE(Player, "Mana", NewMana)
 			SETATTRIBUTE(Player, "Mana", Attribute(Player, "Mana") + ManaPerLvl)
 			Output(Player, "Your total Mana has increased by " + ManaPerLvl + "!",255,255,0)
 
-			SpiritPerLvl = 3 + (Attribute(Player, "Wisdom", 1) - 10)
+			SpiritPerLvl = 3 + AbilityBonus(Attribute(Player, "Wisdom", 1))
 			If SpiritPerLvl < 1 Then SpiritPerLvl = 1
 			NewSpirit = (Lvl * SpiritPerLvl)  
 			SETMaXATTRIBUTE(Player, "Spirit", NewSpirit)
@@ -75,21 +75,21 @@ Function Main()
 			SetActorLevel(Player, Lvl)
 			Output(Player, "You have lost a level and are now level " + Lvl + "!",155,0,255)
 
-			HpPerLvl = 6 + (Attribute(Player, "Constitution", 1) - 10)
+			HpPerLvl = 6 + AbilityBonus(Attribute(Player, "Constitution", 1))
 			If HpPerLvl < 1 Then HpPerLvl = 1
-			NewHp = 10 + (Lvl * HpPerLvl)  
+			NewHp = 4 + (Lvl * HpPerLvl)  
 			SETMaXATTRIBUTE(Player, "Health", NewHp)
 			If Attribute(Player , "Health") > MaXATTRIBUTE(Player, "Health") Then SETATTRIBUTE(Player, "Health", MaXATTRIBUTE(Player, "Health"))
 			Output(Player, "Your total Health has decreased by " + HpPerLvl + "!",155,0,255)
 
-			ManaPerLvl = 4 + (Attribute(Player, "Intelligence", 1) - 10)
+			ManaPerLvl = 4 + AbilityBonus(Attribute(Player, "Intelligence", 1))
 			If ManaPerLvl < 1 Then ManaPerLvl = 1
 			NewMana = (Lvl * ManaPerLvl)  
 			SETMaXATTRIBUTE(Player, "Mana", NewMana)
 			If Attribute(Player , "Mana") > MaXATTRIBUTE(Player, "Mana") Then SETATTRIBUTE(Player, "Mana", MaXATTRIBUTE(Player, "Mana"))
 			Output(Player, "Your total Mana has decreased by " + ManaPerLvl + "!",155,0,255)
 
-			SpiritPerLvl = 3 + (Attribute(Player, "Wisdom", 1) - 10)
+			SpiritPerLvl = 3 + AbilityBonus(Attribute(Player, "Wisdom", 1))
 			If SpiritPerLvl < 1 Then SpiritPerLvl = 1
 			NewSpirit = (Lvl * SpiritPerLvl)  
 			SETMaXATTRIBUTE(Player, "Spirit", NewSpirit)
@@ -110,4 +110,49 @@ Function giveSkillXp()
 	Player = Actor()
 	ZZADDSKILLXP(Player, SkillName$, Amount#)
 
+End Function
+
+Function AbilityBonus(SkillLevel%)
+    Select SkillLevel
+    case 3
+    return -3
+    case 4
+    return -2
+    case 5
+    return -2
+    case 6
+    return -1
+    case 7 
+    return -1
+    case 8
+    return -1
+    case 13 
+    return 1
+    case 14
+    return 1
+    case 15
+    return 1
+    case 16
+    return 2
+    case 17
+    return 2
+    case 18
+    return 3
+    Case 19
+    Return 3
+    Case 20
+    Return 4
+    Case 21
+    Return 4
+    Case 22
+    Return 4
+    Case 23
+    Return 4
+    Case 24
+    Return 4
+    Case 25
+    Return 5
+    default 
+    return 0
+    End Select
 End Function

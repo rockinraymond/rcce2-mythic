@@ -1,0 +1,73 @@
+Using "RC_Core.rcm"
+
+Function Main()
+
+    Player = Actor()
+
+    PlayerCon = Attribute(Player, "Constituion")
+    PlayerInt = Attribute(Player, "Intelligence")
+    PlayerWis = Attribute(Player, "Wisdom")
+
+    StartingHealth = 10 + AbilityBonus(PlayerCon)
+    StartingMana = 4 + AbilityBonus(PlayerInt)
+    StartingSpirit = 3 + AbilityBonus(PlayerWis)
+
+    SETMaXATTRIBUTE(Player, "Health", StartingHealth)
+    SETATTRIBUTE(Player, "Health", StartingHealth)
+
+    SETMaXATTRIBUTE(Player, "Mana", StartingMana)
+    SETATTRIBUTE(Player, "Mana", StartingMana)
+
+    SETMaXATTRIBUTE(Player, "Spirit", StartingSpirit)
+    SETATTRIBUTE(Player, "Spirit", StartingSpirit)
+
+
+
+
+
+End Function
+
+Function AbilityBonus(SkillLevel%)
+    Select SkillLevel
+    case 3
+    return -3
+    case 4
+    return -2
+    case 5
+    return -2
+    case 6
+    return -1
+    case 7 
+    return -1
+    case 8
+    return -1
+    case 13 
+    return 1
+    case 14
+    return 1
+    case 15
+    return 1
+    case 16
+    return 2
+    case 17
+    return 2
+    case 18
+    return 3
+    Case 19
+    Return 3
+    Case 20
+    Return 4
+    Case 21
+    Return 4
+    Case 22
+    Return 4
+    Case 23
+    Return 4
+    Case 24
+    Return 4
+    Case 25
+    Return 5
+    default 
+    return 0
+    End Select
+End Function

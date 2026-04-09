@@ -564,7 +564,12 @@ Repeat
 							AI\CurrentWaypoint = UpdateArea\SpawnWaypoint[i]
 							AI\Script$ = UpdateArea\SpawnActorScript$[i]
 							AI\DeathScript$ = UpdateArea\SpawnDeathScript$[i]
-							If Len(UpdateArea\SpawnScript$[i]) > 0 Then ThreadScript(UpdateArea\SpawnScript$[i], "Main", Handle(AI), 0)
+							If Len(UpdateArea\SpawnScript$[i]) > 0
+								ThreadScript(UpdateArea\SpawnScript$[i], "Main", Handle(AI), 0)
+							Else
+								ThreadScript("Spawn_Default", "Main", Handle(AI), 0)
+							EndIf
+
 						EndIf
 					EndIf
 				Else

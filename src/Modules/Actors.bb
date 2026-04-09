@@ -1148,8 +1148,8 @@ End Function
 Function GetActorDamageAttributeBNS(AI.ActorInstance)
 	StrengthAttribute = FindAttribute("Strength");
 	DexterityAttribute = FindAttribute("Dexterity");
-	AttackStrength =  AI\Attributes\Value[StrengthAttribute] - 10
-	AttackDexterity =  AI\Attributes\Value[DexterityAttribute] - 10
+	AttackStrength =  GetAttributeModifier(AI\Attributes\Value[StrengthAttribute])
+	AttackDexterity =  GetAttributeModifier(AI\Attributes\Value[DexterityAttribute])
 	
 	DamageAttributeBNS = AttackStrength
 	If AI\Inventory\Items[SlotI_Weapon] <> Null
@@ -1182,13 +1182,14 @@ End Function
 Function GetActorAccuracy(AI.ActorInstance)
 	ActorAccuracy = 1
 	AgilityAttribute = FindAttribute("Agility");
-	AttackAgility =  AI\Attributes\Value[AgilityAttribute] - 10
+	AttackAgilityMod =  GetAttributeModifier(AI\Attributes\Value[AgilityAttribute])
 	ActorWeaponSkill = GetActorWeaponSkill(AI)
-
+	WeaponSkillMod = GetSkillModifier(ActorWeaponSkill)
+	
 	If AI\Inventory\Items[SlotI_Weapon] <> Null 
-		ActorAccuracy = (AI\Inventory\Items[SlotI_Weapon]\Item\WeaponAccuracy) + ActorWeaponSkill + AttackAgility
+		ActorAccuracy = (AI\Inventory\Items[SlotI_Weapon]\Item\WeaponAccuracy) + WeaponSkillMod + AttackAgilityMod
 	Else
-		ActorAccuracy = (ActorWeaponSkill / 7) + ActorWeaponSkill + AttackAgility
+		ActorAccuracy = (ActorWeaponSkill / 7) + WeaponSkillMod + AttackAgilityMod
 	EndIf
 
 	Return ActorAccuracy
@@ -1305,4 +1306,101 @@ Function GetPlayerRaceInfo$(PlayerRace$)
 	End Select
 
 	Return RaceDescription$
+End Function
+
+Function GetAttributeModifier(AttributeValue)
+
+	TargetAttributeVal = AttributeValue
+	
+	If TargetAttributeVal < 0 Then TargetAttributeVal = 0
+	
+	Select TargetAttributeVal
+		Case 0
+			Return -5
+		Case 1
+			Return -4
+		Case 2
+			Return -3
+		Case 3
+			Return -3
+		Case 4
+			Return -2
+		Case 5
+			Return -2
+		Case 6
+			Return -1
+		Case 7
+			Return -1
+		Case 8
+			Return -1
+		Case 13
+			Return 1
+		Case 14
+			Return 1
+		Case 15
+			Return 1
+		Case 16
+			Return 2
+		Case 17
+			Return 2
+		Case 18
+			Return 3
+		Case 19
+			Return 3
+		Case 20
+			Return 4
+		Case 21
+			Return 4
+		Case 22
+			Return 4
+		Case 23
+			Return 4
+		Case 24
+			Return 4
+		Case 25
+			Return 5
+		Default
+			Return 0
+	End Select
+End Function
+
+Function GetSkillModifier(SkillValue)
+	
+	TargetSkillVal = SkillValue
+
+	If TargetSkillVal < 0 Then TargetSkillVal = 0
+	
+	If TargetSkillVal = 100
+		Return 10
+	ElseIf TargetSkillVal > 97
+		Return 9
+	ElseIf TargetSkillVal > 90
+		Return 8
+	ElseIf TargetSkillVal > 83
+		Return 7
+	ElseIf TargetSkillVal > 76
+		Return 6
+	Else If TargetSkillVal > 69
+		Return 5
+	ElseIf TargetSkillVal > 62
+		Return 4
+	ElseIf TargetSkillVal > 55
+		Return 3
+	ElseIf TargetSkillVal > 48
+		Return 2
+	ElseIf TargetSkillVal > 41
+		Return 1
+	ElseIf TargetSkillVal > 34
+		Return 0
+	ElseIf TargetSkillVal > 27
+		Return -1
+	ElseIf TargetSkillVal > 20
+		Return -2
+	ElseIf TargetSkillVal > 15
+		Return -3
+	ElseIf TargetSkillVal > 10
+		Return -4
+	Else
+		Return -5
+	EndIf
 End Function

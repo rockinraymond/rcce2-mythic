@@ -2,6 +2,16 @@ Using "RC_Core.rcm"
 ; Define entry function 'Main'
 
 Function Main()
+    Mob = Actor()
+    MobLevel = ActorLevel(Mob)
+
+    MobHP = 0
+    For x = 1 to MobLevel Step 1
+        MobHP = MobHP + Rand(1,8)
+    Next
+
+    SETMaXATTRIBUTE(Mob, "Health", MobHP)
+    SETATTRIBUTE(Mob, "Health", MobHP)
 
 
 

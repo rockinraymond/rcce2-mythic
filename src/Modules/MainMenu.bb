@@ -2303,7 +2303,7 @@ Function CreateChar()
 						EndIf
 					ElseIf GY_ButtonHit(AttributeIncrease(i)) = True
 						Att = GY_GadgetData$(AttributeLabels(i))
-						If PointsToSpend > 0 And (Preview\Attributes\Value[Att] + PointSpends(Att)) < (Preview\Attributes\Value[Att] + 13)
+						If PointsToSpend > 0 And (Preview\Attributes\Value[Att] + PointSpends(Att)) < (Preview\Attributes\Value[Att] + 11)
 							PointsToSpend = PointsToSpend - 1
 							PointSpends(Att) = PointSpends(Att) + 1
 							GY_UpdateLabel(AttributeLabels(i), Preview\Attributes\Value[Att] + PointSpends(Att))
