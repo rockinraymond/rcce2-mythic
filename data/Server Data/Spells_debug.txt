@@ -38,3 +38,11 @@ Spell ID: 9
 Spell Name: Weakness To Magic
 SpellType: 1
 
+Spell ID: 10
+Spell Name: Cure Minor Wounds
+SpellType: 4
+
+Spell ID: 11
+Spell Name: Protect From Evil
+SpellType: 4
+

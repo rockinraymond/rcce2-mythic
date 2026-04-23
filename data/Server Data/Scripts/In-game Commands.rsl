@@ -62,6 +62,8 @@ Function Heal()
 		Max = MaxAttribute(Player, "Health")
 		SetAttribute(Player, "Health", Max)
 		SetAttribute(Player, "Mana", MaxAttribute(Player,"Mana"))
+		SetAttribute(Player, "Spirit", MaxAttribute(Player,"Spirit"))
+
 	EndIf
 
 	; Done
@@ -171,6 +173,9 @@ function SpellTest()
 	AddAbility(Actor(), "Resist Slashing", 1)
 	AddAbility(Actor(), "Weakness To Magic", 1)
 	AddAbility(Actor(), "Focus", 1)
+	AddAbility(Actor(), "Cure Minor Wounds", 1)
+	AddAbility(Actor(), "Protect From Evil", 1)
+
 End Function
 
 function unarmedTest()

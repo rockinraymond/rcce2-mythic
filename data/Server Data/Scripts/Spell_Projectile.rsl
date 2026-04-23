@@ -98,9 +98,9 @@ Function CastingChecks(Player,Target,SpellSchool$)
     EndIf
 
     ;Check Equipment
-    If SpellSchool$ = "Arcane Spells"
+    If SpellSchool$ = "Arcane Casting"
         If ArcaneEquipmentCheck(Player) < 1
-            Output(Player, "You cannot cast arcane spells with your current equipment",255, 50, 50)
+            Output(Player, "You cannot cast Arcane spells with your current equipment",255, 50, 50)
             Return 0
         EndIf
     EndIf
@@ -239,7 +239,7 @@ Function Spell_MagicMissle()
     ResourceName$ = "Mana"
     SpellName$ = "Magic Missile"
     ProjectileName$ = "Magic Missile"
-    SkillName$ = "Arcane Spells"
+    SkillName$ = "Arcane Casting"
     castingTime = 2
 
     ProjectileSpell(Player, Target, SpellCost, ResourceName$, SpellName$, ProjectileName$, SkillName$, castingTime)

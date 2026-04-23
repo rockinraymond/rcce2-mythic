@@ -1,0 +1,212 @@
+Using "RC_Core.rcm"
+Function Main()
+End Function
+
+Function TouchHealSpell(Player, Target, SpellCost, ResourceName$, SpellName$, BaseHeal, SkillName$, GoverningAttribute$, HealSound)
+
+
+    
+
+    PlayerName$ = Name(Player)
+    TargetName$ = Name(Target)
+
+    EmitterTex = 373
+    EmitterName$ = "healBurst"
+
+    SuccessChance = Attribute(Player,SkillName$) + Attribute(Player,GoverningAttribute$) + 25
+
+    If CastingChecks(Player, Target, SkillName$) < 1
+        Return
+    EndIf
+
+    ;Check the mana
+    ResourceAmt = Attribute(Player, ResourceName$)
+    If(ResourceAmt < SpellCost)
+        Output(Player, "Not enough " + ResourceName$, 255, 0, 0)
+        Return
+    EndIf
+    SetAttribute(Player, ResourceName$, ResourceAmt - SpellCost)
+
+    ZZRUNABILITYCOOLDOWN(Player, SpellName$)
+    ;Particles and casting animation
+    AnimateActor(Player, "Cast Magic", 0.05, 1)
+    Output(Player, "Casting " + SpellName$, 200, 0, 255) 
+	;AddActorEffect(Player, "Casting", "Movement", -100, castingTime,0)
+    
+    ;create progress bar
+	
+    ZZADDSKILLXP(Player, SkillName$, (SpellCost * 10))
+    
+    SpellSuccess = Rand(1,100)
+
+    If SpellSuccess < SuccessChance
+
+        If Target = Player
+            Output(Target,  "You successfully cast " + SpellName$ + " on yourself!", 100, 255, 150)
+        Else
+            Output(Player, "You successfully cast " + SpellName$ + " on " + TargetName$ + "!",100, 255, 150)
+            Output(Target, PlayerName$ + " successfully cast " + SpellName$ + " on you!", 100, 255, 150)
+        EndIf
+
+        ;visuals and effect
+        CreateEmitter(Target, EmitterName$, EmitterTex, 1000)
+
+        
+        NewHealth = Attribute(Target, "Health") + BaseHeal
+
+        If Target = Player
+            Output(Player, "You heal your own health by " + BaseHeal +"!")
+        Else
+            Output(Player, "You healed " + TargetName$ + "'s health for " + BaseHeal + "!",150, 255, 150)
+            Output(Target, PlayerName$ + " heals you your health by " + BaseHeal + " damage!", 150, 255, 150)
+        EndIf
+
+        PlaySound(Player, HealSound, 0)
+        PlaySound(Target, HealSound, 0)
+
+        If NewHealth < 0
+            KillActor(Target,Player)
+        EndIf
+        SetAttribute(Target, "Health", NewHealth)
+	    ZZADDSKILLXP(Player, SkillName$, TargetValue)
+    Else
+         If Target = Player
+            Output(Target,  "Your " + SpellName$ + " spell has failed!", 255, 100, 100)
+        Else
+            Output(Player, "Your " + SpellName$ + " spell has missed " + TargetName$ + "!",255, 100, 100)
+            Output(Target, PlayerName$ + "'s " + SpellName$ + " has missed you!", 255, 100, 100)
+        EndIf
+    EndIf
+    
+    Return
+
+End Function
+
+Function CastingChecks(Player,Target,SpellSchool$)
+    ;is player dead?
+    If(Attribute(Player, "Health") < 0)
+        Output(Player, "You cannot cast spells when you are dead!",255, 255, 0)
+        Return 0
+    EndIf
+
+    If (ActorDistance(Player, Target) > 10.0)
+        Output(Player, "You are too far away from target!",255, 255, 0)
+        Return 0
+    EndIf
+
+    ;Casting Check
+    If ActorHasEffect(Player, "Casting")
+        OutPut(Player, "You are already casting a spell!", 255, 0, 255)
+    Return 0
+    EndIf
+
+    ;NPC Check
+    If (Actoraggressiveness(Target) = 3)
+	    Output(Player, "No Valid Target Selected", 255, 50, 50)
+	    Return 0
+    EndIf
+
+
+    ;Check if the target is correct?
+    If(Target = 0)
+        Output(Player, "No Valid Target Selected",255, 50, 50)
+        Return 0
+    EndIf
+
+    ;Check Equipment
+    If SpellSchool$ = "Divine Casting"
+        If ClericEquipmentCheck(Player) < 1
+            Output(Player, "You cannot cast Divine spells with your current weapon",255, 50, 50)
+            Return 0
+        EndIf
+    EndIf
+
+    Return 1
+
+End Function
+
+Function ClericEquipmentCheck(Player)
+    Result = 1
+
+    ;Actor Equipment
+    PlayerWeapon = ActorWeapon(Player)
+    
+        If (ZZITEMWEAPONCLASS(PlayerWeapon) = 1) OR (ZZITEMWEAPONCLASS(PlayerWeapon) = 2) OR (ZZITEMWEAPONCLASS(PlayerWeapon) = 4) OR (ZZITEMWEAPONCLASS(PlayerWeapon) = 5) OR (ZZITEMWEAPONCLASS(PlayerWeapon) = 6) OR (ZZITEMWEAPONCLASS(PlayerWeapon) = 8)
+            Result = 0
+        EndIf
+    
+
+    Return Result
+
+End Function
+
+
+Function Spell_CureWounds()
+    Player = Actor()
+    Target = ContextActor()
+
+    If Target = 0
+        Target = Player
+    EndIf
+   
+    SpellCost = Parameter(1)
+    ResourceName$ = "Spirit"
+    SpellName$ = "Cure Wounds"
+    
+    
+    
+    SkillName$ = "Divine Casting"
+    GoverningAttribute$ = "Wisdom"
+
+    BaseHeal = Rand(1,4) + AbilityBonus(Attribute(Player,GoverningAttribute$))
+
+    HealSound = 17
+
+    TouchHealSpell(Player, Target, SpellCost, ResourceName$, SpellName$, BaseHeal, SkillName$, GoverningAttribute$, HealSound)
+End Function
+
+Function AbilityBonus(SkillLevel%)
+    Select SkillLevel
+    case 3
+    return -3
+    case 4
+    return -2
+    case 5
+    return -2
+    case 6
+    return -1
+    case 7 
+    return -1
+    case 8
+    return -1
+    case 13 
+    return 1
+    case 14
+    return 1
+    case 15
+    return 1
+    case 16
+    return 2
+    case 17
+    return 2
+    case 18
+    return 3
+    Case 19
+    Return 3
+    Case 20
+    Return 4
+    Case 21
+    Return 4
+    Case 22
+    Return 4
+    Case 23
+    Return 4
+    Case 24
+    Return 4
+    Case 25
+    Return 5
+    default 
+    return 0
+    End Select
+End Function
+
