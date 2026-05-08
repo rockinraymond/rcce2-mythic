@@ -45,7 +45,7 @@ If you are familiar with the Blitz programming language you can help make improv
 
 ##### Tests
 
-You could also help writing tests in blitz as well. All tests should live under the [src\Tests](src\Tests) folder and you can run all tests by running the `test.bat` script. Tests are run before every git commit locally and must pass for your commit to succeed.
+You could also help writing tests in blitz as well. All tests should live under the [src/Tests](src/Tests) folder and you can run all tests by running the `test.bat` script. Tests are run before every git commit locally and must pass for your commit to succeed.
 
 #### C++
 
