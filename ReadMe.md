@@ -20,7 +20,7 @@ RCCE picks up where the original RealmCrafter left off — modernized, cross-pla
 [![Discussions](https://img.shields.io/github/discussions/RydeTec/rcce2)](https://github.com/RydeTec/rcce2/discussions)
 
 [![Platform: Windows](https://img.shields.io/badge/Windows-x64-0078D4?logo=windows&logoColor=white)](https://github.com/RydeTec/rcce2/releases)
-[![Platform: macOS](https://img.shields.io/badge/macOS-Apple%20Silicon-000000?logo=apple&logoColor=white)](release/MACOS_NOTES.txt)
+[![Platform: macOS](https://img.shields.io/badge/macOS-Apple%20Silicon%20(alpha)-orange?logo=apple&logoColor=white)](release/MACOS_NOTES.txt)
 [![Engine: BlitzForge](https://img.shields.io/badge/Engine-BlitzForge-ff6a00)](compiler/BlitzForge)
 
 </div>
@@ -45,7 +45,7 @@ RealmCrafter was one of the earliest tools that let solo developers and small te
 | | Original RealmCrafter | RCCE |
 |---|---|---|
 | Status | Abandoned | **Actively maintained** |
-| Platforms | Windows only | **Windows + macOS (Apple Silicon)** |
+| Platforms | Windows only | **Windows (stable) + macOS Apple Silicon (alpha)** |
 | Compiler | Closed-source Blitz3D | **[BlitzForge](compiler/BlitzForge) — open-source fork with ARM64 codegen** |
 | Tooling | Frozen | Modern VS Code extension, native IDEs, CI |
 | License model | Proprietary | Community / open development |
@@ -73,7 +73,7 @@ RealmCrafter was one of the earliest tools that let solo developers and small te
 3. Launch **Project Manager** (`Project Manager.exe` on Windows, `Project Manager` on macOS).
 4. Open the bundled sample project, hit **Run Server**, then **Run Client**.
 
-> **macOS users:** RCCE ships native Apple Silicon binaries. See [`release/MACOS_NOTES.txt`](release/MACOS_NOTES.txt) for compatibility notes on the Win32-emulating layer used for legacy DLL-style modules.
+> **macOS users — alpha.** RCCE produces native Apple Silicon binaries via [BlitzForge's macOS port](compiler/BlitzForge#macos-apple-silicon--alpha), which is currently **alpha**: the runtime path is incomplete, many language and standard-library features are not yet wired up, and breakage is expected. Use the macOS build for development and feedback, not for shipping a game. See [`release/MACOS_NOTES.txt`](release/MACOS_NOTES.txt) for current compatibility notes.
 
 ### Build from source
 
@@ -133,9 +133,10 @@ rcce2/
 
 ## Roadmap highlights
 
-- ✅ macOS arm64 native runtime (Mach-O, no Wine/Rosetta)
-- ✅ ARM64 code generation in BlitzForge
 - ✅ Cross-platform build scripts (`compile.sh`, `publish.sh`, `bootstrap_macos.sh`)
+- ✅ ARM64 code generation in BlitzForge
+- 🚧 macOS arm64 native runtime (Mach-O, no Wine/Rosetta) — **alpha**, not production-ready
+- 🔄 Filling in the macOS runtime to reach feature parity with the Windows runtime
 - 🔄 Continued modernization of the rendering and audio backends
 - 🔄 Documentation overhaul
 - 🔮 Linux runtime (community interest tracked in [Discussions](https://github.com/RydeTec/rcce2/discussions))
