@@ -23,6 +23,18 @@ Type ActionBarData
 End Type
 Global Accounts.AccountsWindow
 
+Function FindAccountByListID.Account(ListID)
+
+	If ListID < 0 Then Return Null
+
+	For A.Account = Each Account
+		If A\ListID = ListID Then Return A
+	Next
+
+	Return Null
+
+End Function
+
 ; Alters the logged in status of an account
 Function SetLoginStatus(A.Account, Status)
 
