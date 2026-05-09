@@ -35,39 +35,26 @@ Function FindAccountByListID.Account(ListID)
 
 End Function
 
+; Builds the display string used in the Accounts list box.
+; LoggedOn matches Account\LoggedOn semantics: -1 means logged out, anything
+; greater than or equal to 0 indicates an active character index.
+Function FormatAccountListEntry$(IsDM, IsBanned, LoggedOn, User$, Email$)
+
+	Local Prefix$ = ""
+	If LoggedOn > -1 Then Prefix$ = "* "
+	If IsBanned Then Prefix$ = Prefix$ + "[BAN]"
+	If IsDM Then Prefix$ = Prefix$ + "[GM]"
+	If Len(Prefix$) > 0 And Right$(Prefix$, 1) <> " " Then Prefix$ = Prefix$ + " "
+
+	Return Prefix$ + User$ + "  (" + Email$ + ")"
+
+End Function
+
 ; Alters the logged in status of an account
 Function SetLoginStatus(A.Account, Status)
 
 	A\LoggedOn = Status
-	If Status > -1
-		If A\IsDM = False
-			If A\IsBanned = False
-				ModifyGadgetItem Accounts\List, A\ListID, "* " + A\User$ + "  (" + A\Email$ + ")"
-			Else
-				ModifyGadgetItem Accounts\List, A\ListID, "* [BAN] " + A\User$ + "  (" + A\Email$ + ")"
-			EndIf
-		Else
-			If A\IsBanned = False
-				ModifyGadgetItem Accounts\List, A\ListID, "* [GM] " + A\User$ + "  (" + A\Email$ + ")"
-			Else
-				ModifyGadgetItem Accounts\List, A\ListID, "* [BAN][GM] " + A\User$ + "  (" + A\Email$ + ")"
-			EndIf
-		EndIf
-	Else
-		If A\IsDM = False
-			If A\IsBanned = False
-				ModifyGadgetItem Accounts\List, A\ListID, A\User$ + "  (" + A\Email$ + ")"
-			Else
-				ModifyGadgetItem Accounts\List, A\ListID, "[BAN] " + A\User$ + "  (" + A\Email$ + ")"
-			EndIf
-		Else
-			If A\IsBanned = False
-				ModifyGadgetItem Accounts\List, A\ListID, "[GM] " + A\User$ + "  (" + A\Email$ + ")"
-			Else
-				ModifyGadgetItem Accounts\List, A\ListID, "[BAN][GM] " + A\User$ + "  (" + A\Email$ + ")"
-			EndIf
-		EndIf
-	EndIf
+	ModifyGadgetItem Accounts\List, A\ListID, FormatAccountListEntry$(A\IsDM, A\IsBanned, A\LoggedOn, A\User$, A\Email$)
 
 End Function
 
@@ -198,22 +185,9 @@ Function LoadAccounts()
 			A\IsBanned = ReadByte(F)
 			A\Ignore$ = ReadString$(F)
 			A\LoggedOn = -1
-			If A\IsDM = False
-				If A\IsBanned = False
-					AddListBoxItem Accounts\List, A\User$ + "  (" + A\Email$ + ")"
-				Else
-					AddListBoxItem Accounts\List, "[BAN] " + A\User$ + "  (" + A\Email$ + ")"
-					Accounts\TotalBanned = Accounts\TotalBanned + 1
-				EndIf
-			Else
-				If A\IsBanned = False
-					AddListBoxItem Accounts\List, "[GM] " + A\User$ + "  (" + A\Email$ + ")"
-				Else
-					AddListBoxItem Accounts\List, "[BAN][GM] " + A\User$ + "  (" + A\Email$ + ")"
-					Accounts\TotalBanned = Accounts\TotalBanned + 1
-				EndIf
-				Accounts\TotalDMs = Accounts\TotalDMs + 1
-			EndIf
+			AddListBoxItem Accounts\List, FormatAccountListEntry$(A\IsDM, A\IsBanned, A\LoggedOn, A\User$, A\Email$)
+			If A\IsBanned Then Accounts\TotalBanned = Accounts\TotalBanned + 1
+			If A\IsDM Then Accounts\TotalDMs = Accounts\TotalDMs + 1
 			A\ListID = CountGadgetItems(Accounts\List) - 1
 			Chars = ReadByte(F)
 			For i = 1 To Chars
