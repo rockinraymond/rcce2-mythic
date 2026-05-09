@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="docs/assets/rcce-logo.png" alt="RealmCrafter: Community Edition" width="160" onerror="this.style.display='none'"/>
+<img src="docs/assets/rcce-logo.png" alt="RealmCrafter: Community Edition" width="240"/>
 
 # RealmCrafter: Community Edition
 
