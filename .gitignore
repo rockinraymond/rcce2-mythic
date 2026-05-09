@@ -40,6 +40,21 @@ bin/GUE.exe
 
 bin/Server.exe
 
+# macOS / Linux engine outputs (compile.sh)
+bin/Client
+bin/GUE
+bin/Server
+bin/tools/Gubbin Tool
+bin/tools/RC Architect
+bin/tools/RC Caves Editor
+bin/tools/RC Rock Editor
+bin/tools/RC Terrain Editor
+bin/tools/RC Tree Editor
+
+# Match the no-extension Project Manager binary that compile.sh emits at the
+# repo root on macOS / Linux.
+/Project Manager
+
 data/Logs/
 
 data/RCTE/RCTE_SAVED/
