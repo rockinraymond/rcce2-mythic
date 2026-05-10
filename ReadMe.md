@@ -20,7 +20,7 @@ RCCE picks up where the original RealmCrafter left off — modernized, cross-pla
 [![Discussions](https://img.shields.io/github/discussions/RydeTec/rcce2)](https://github.com/RydeTec/rcce2/discussions)
 
 [![Platform: Windows](https://img.shields.io/badge/Windows-x64-0078D4?logo=windows&logoColor=white)](https://github.com/RydeTec/rcce2/releases)
-[![Platform: macOS](https://img.shields.io/badge/macOS-Apple%20Silicon%20(alpha)-orange?logo=apple&logoColor=white)](release/MACOS_NOTES.txt)
+[![Platform: macOS](https://img.shields.io/badge/macOS-Apple%20Silicon%20(alpha)-orange?logo=apple&logoColor=white)](docs/macos-apple-silicon.md)
 [![Engine: BlitzForge](https://img.shields.io/badge/Engine-BlitzForge-ff6a00)](compiler/BlitzForge)
 
 </div>
@@ -73,7 +73,7 @@ RealmCrafter was one of the earliest tools that let solo developers and small te
 3. Launch **Project Manager** (`Project Manager.exe` on Windows, `Project Manager` on macOS).
 4. Open the bundled sample project, hit **Run Server**, then **Run Client**.
 
-> **macOS users — alpha.** RCCE produces native Apple Silicon binaries via [BlitzForge's macOS port](compiler/BlitzForge#macos-apple-silicon--alpha), which is currently **alpha**: the runtime path is incomplete, many language and standard-library features are not yet wired up, and breakage is expected. Use the macOS build for development and feedback, not for shipping a game. See [`release/MACOS_NOTES.txt`](release/MACOS_NOTES.txt) for current compatibility notes.
+> **macOS users — alpha.** RCCE produces native Apple Silicon binaries via [BlitzForge's macOS port](compiler/BlitzForge#macos-apple-silicon--alpha), which is currently **alpha**: the runtime path is incomplete, many language and standard-library features are not yet wired up, and breakage is expected. Use the macOS build for development and feedback, not for shipping a game. See [macOS Apple Silicon notes](docs/macos-apple-silicon.md) for the current source-build flow and compatibility caveats.
 
 ### Build from source
 
@@ -100,7 +100,9 @@ publish.bat            :: produce a redistributable release
 
 ```bash
 ./scripts/bootstrap_macos.sh    # one-time toolchain setup
+./compile.sh -b                 # build BlitzForge (blitzcc + runtime/linker)
 ./compile.sh                    # build engine + tools
+./test.sh                       # compile the Blitz test suite
 ./publish.sh                    # produce a redistributable release
 ```
 
@@ -124,6 +126,7 @@ rcce2/
 ## Documentation
 
 - **[Getting Started](docs/start.md)** — your first project
+- **[macOS Apple Silicon Notes](docs/macos-apple-silicon.md)** — source-build steps, release notes, and alpha caveats
 - **[Module Reference](docs/reference.md)** — engine APIs
 - **[Format Reference](docs/formats.md)** — file formats and conventions
 - **[RealmCrafter Wiki](https://realmcrafter.fandom.com/)** — legacy gameplay and editor docs

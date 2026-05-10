@@ -5,4 +5,5 @@ This is the index page for the RealmCrafter: Community Edition source code docum
   
 
 *   [Getting Started](start.md)
+*   [macOS Apple Silicon Notes](macos-apple-silicon.md)
 *   [Module Reference](reference.md)
