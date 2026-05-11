@@ -941,7 +941,7 @@ Function UpdateNetwork()
 										If AI\MemorisedSpells[i] = Num
 											Sp.Spell = SpellsList(AI\KnownSpells[Num])
 											If AI\SpellCharge[i] <= 0
-												Params$ = AI\SpellLevels[Num] + "," + Sp\ThumbnailTexID
+												Params$ = AI\SpellLevels[Num] + "," + Sp\ThumbnailTexID + "," + Sp\SpellRank
 												ThreadScript(Sp\Script$, Sp\SMethod$, Handle(AI), Handle(Context), Params$)
 												;AI\SpellCharge[i] = Sp\RechargeTime
 											Else
@@ -955,7 +955,7 @@ Function UpdateNetwork()
 								Else
 									Sp.Spell = SpellsList(AI\KnownSpells[Num])
 									If AI\SpellCharge[Num] <= 0
-										Params$ = AI\SpellLevels[Num] + "," + Sp\ThumbnailTexID
+										Params$ = AI\SpellLevels[Num] + "," + Sp\ThumbnailTexID + "," + Sp\SpellRank
 										ThreadScript(Sp\Script$, Sp\SMethod$, Handle(AI), Handle(Context), Params$)
 										;AI\SpellCharge[Num] = Sp\RechargeTime
 									Else

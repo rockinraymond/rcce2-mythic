@@ -12,6 +12,10 @@ Function ProjectileSpell(Player, Target, SpellCost, ResourceName$, SpellName$, P
     CastingEmitterTex = 356
     CastingEmitter$ = "arcaneCasting"
 
+    If SkillName$ = "Divine Casting"
+        CastingEmitter$ = "divineCasting"
+    EndIf
+
     If CastingChecks(Player, Target, SkillName$) < 1
         Return
     EndIf   
@@ -105,7 +109,29 @@ Function CastingChecks(Player,Target,SpellSchool$)
         EndIf
     EndIf
 
+     If SpellSchool$ = "Divine Casting"
+        If ClericEquipmentCheck(Player) < 1
+            Output(Player, "You cannot cast Divine spells with your current weapon",255, 50, 50)
+            Return 0
+        EndIf
+    EndIf
+
     Return 1
+
+End Function
+
+Function ClericEquipmentCheck(Player)
+    Result = 1
+
+    ;Actor Equipment
+    PlayerWeapon = ActorWeapon(Player)
+    
+        If (ZZITEMWEAPONCLASS(PlayerWeapon) = 1) OR (ZZITEMWEAPONCLASS(PlayerWeapon) = 2) OR (ZZITEMWEAPONCLASS(PlayerWeapon) = 4) OR (ZZITEMWEAPONCLASS(PlayerWeapon) = 5) OR (ZZITEMWEAPONCLASS(PlayerWeapon) = 6) OR (ZZITEMWEAPONCLASS(PlayerWeapon) = 8)
+            Result = 0
+        EndIf
+    
+
+    Return Result
 
 End Function
 

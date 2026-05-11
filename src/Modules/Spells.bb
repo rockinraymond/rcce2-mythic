@@ -17,6 +17,7 @@ Type Spell
 	Field RechargeTime                    ; Time taken to recharge after casting in milliseconds
 	Field Script$, SMethod$                ; Script to run when cast
 	Field SpellType
+	Field SpellRank
 End Type
 
 ; A spell which is waiting for memorisation (server side)
@@ -38,6 +39,7 @@ Function CreateSpell.Spell()
 			S\Name$ = "New ability"
 			S\RechargeTime = 2000
 			S\SpellType = 1
+			S\SpellRank = 1
 			Return S
 			Exit
 		EndIf
@@ -65,6 +67,7 @@ Function LoadSpells(Filename$)
 			S\Script$ = ReadString$(F)
 			S\SMethod$ = ReadString$(F)
 			S\SpellType = ReadShort(F)
+			S\SpellRank = ReadShort(F)
 			Number = Number + 1
 		Wend
 
@@ -90,6 +93,7 @@ Function SaveSpells(Filename$)
 			WriteString F, S\Script$
 			WriteString F, S\SMethod$
 			WriteShort F, S\SpellType
+			WriteShort F, S\SpellRank
 		Next
 
 	CloseFile(F)

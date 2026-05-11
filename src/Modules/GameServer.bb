@@ -192,14 +192,16 @@ Function FireProjectile%(P.Projectile, A1.ActorInstance, A2.ActorInstance)
 		A3 = A3\NextInZone
 	Wend
 
+	ProjAttBns = GetAttributeModifier(A1\Attributes\Value[FindAttribute(P\Attribute$)])
+	ProjSkillBns = GetSkillModifier(A1\Attributes\Value[FindAttribute(P\Skill$)])
 	; Does the projectile hit the target?
-	ToHit = Rand(100)
-	HitChance = P\HitChance + A1\Attributes\Value[FindAttribute(P\Skill$)] - A2\Resistances[P\SaveType] - A2\Attributes\Value[FindAttribute("Armor Bonus")]
+	ToHit = Rand(1,20)
+	HitChance = P\HitChance + ProjSkillBns - A2\Resistances[P\SaveType] - A2\Attributes\Value[FindAttribute("Armor Bonus")]
 	If ToHit <= P\HitChance
 		; Calculate damage
 		TargetIsHit = 1
 		DefenderResistance = (A2\Resistances[P\DamageType])
-		Damage = Rand(1, P\Damage + (A1\Attributes\Value[FindAttribute(P\Attribute$)] - 10))  - (DefenderResistance / 5)
+		Damage = Rand(1, P\Damage) - DefenderResistance
 		If Damage < 1 Then Damage = 1
 
 		; Apply damage
@@ -746,7 +748,7 @@ Function UpdateActorInstances(Broadcast)
 				; Attack mode
 				ElseIf AI\AIMode = AI_Chase
 					; Look for targets now and then
-					If Rand(1, 10) = 1 Then AILookForTargets(AI)
+					; If Rand(1, 10) = 1 Then AILookForTargets(AI)
 					; Target dead
 					If AI\AITarget <> Null
 						If AI\AITarget\Attributes\Value[HealthStat] <= 0 Then AI\AITarget = Null

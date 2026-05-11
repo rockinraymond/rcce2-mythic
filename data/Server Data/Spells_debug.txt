@@ -1,48 +1,48 @@
 Spell ID: 0
-Spell Name: Magic Missile
+Spell Name: Magic Missile I
 SpellType: 1
 
 Spell ID: 1
-Spell Name: Shield
+Spell Name: Shield I
 SpellType: 1
 
 Spell ID: 2
-Spell Name: Focus
+Spell Name: Focus I
 SpellType: 1
 
 Spell ID: 3
-Spell Name: Resist Bludgeon
+Spell Name: Resist Bludgeon I
 SpellType: 1
 
 Spell ID: 4
-Spell Name: Resist Slashing
+Spell Name: Resist Slashing I
 SpellType: 1
 
 Spell ID: 5
-Spell Name: Burning Hands
+Spell Name: Burning Hands I
 SpellType: 1
 
 Spell ID: 6
-Spell Name: Frozen Grasp
+Spell Name: Frozen Grasp I
 SpellType: 1
 
 Spell ID: 7
-Spell Name: Shocking Touch
+Spell Name: Shocking Touch I
 SpellType: 1
 
 Spell ID: 8
-Spell Name: Feather Weight
+Spell Name: Feather Weight I
 SpellType: 1
 
 Spell ID: 9
-Spell Name: Weakness To Magic
+Spell Name: Weakness To Magic I
 SpellType: 1
 
 Spell ID: 10
-Spell Name: Cure Minor Wounds
+Spell Name: Cure Wounds I
 SpellType: 4
 
 Spell ID: 11
-Spell Name: Protect From Evil
+Spell Name: Protect From Evil I
 SpellType: 4
 
