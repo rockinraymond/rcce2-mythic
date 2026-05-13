@@ -113,7 +113,7 @@ Global PreviewPitch#, PreviewYaw#, PreviewDistance# = 30.0
 SetActor()
 UpdatePreviewCam()
 Global TempPosX#, TempPosY#, TempPosZ#, TempScale#
-Global gubbinID,meshID
+Global gubbinID
 
 ; Delta timing
 Dim DeltaBuffer(5)
@@ -154,8 +154,7 @@ Repeat
 								MeshNames$(Result) = Name$ + Chr$(0)
 								SetMeshOffset(Result, LoadedMeshX#(SelectedMeshID), LoadedMeshY#(SelectedMeshID), LoadedMeshZ#(SelectedMeshID))
 								SetMeshScale(Result, LoadedMeshScales#(SelectedMeshID))
-								SaveRotation()
-								SetGubbinMesh(Result)
+								SaveRotation(Result)
 							EndIf
 						EndIf
 					EndIf
@@ -225,7 +224,6 @@ Repeat
 						If Right$(Upper$(Name$), 3) <> "B3D"
 							FUI_CustomMessageBox("Rotation changes cannot be saved for this mesh format!", "Warning", MB_OK)
 						EndIf
-						meshID = ID
 					EndIf
 				EndIf
 
@@ -782,7 +780,7 @@ Function SaveAll()
 	If PreviewMesh <> 0
 		SetMeshOffset(SelectedMeshID, TempPosX#, TempPosY#, TempPosZ#)
 		SetMeshScale(SelectedMeshID, TempScale#)
-		//SaveRotation()
+		SaveRotation(SelectedMeshID)
 		AppTitle("Realm Crafter Gubbin Tool")
 		ChangesSaved = True
 	EndIf
@@ -790,14 +788,14 @@ Function SaveAll()
 End Function
 
 ; Updates the B3D file of the current mesh with its rotation
-Function SaveRotation()
+Function SaveRotation(TargetMeshID)
 
 	Local TName$ = ""
 	Local Name$ = ""
 	Local isEncrypted = False
 	
 	If PreviewMesh <> 0
-		Name$ = EditorMeshName$(SelectedMeshID)
+		Name$ = EditorMeshName$(TargetMeshID)
 		If Right$(Upper$(Name$), 3) = "B3D" Then
 			If Right$(Upper$(Name$), 5) = ".EB3D" Then
 				TName$ = Name$
@@ -892,7 +890,7 @@ Function SaveRotation()
 	
 ; REMOVE FOR DECRYPT SIREDBLOOD SAYS MUHAHAHA #######################
 	
-	Name$ = EditorMeshName$(SelectedMeshID)
+	Name$ = EditorMeshName$(TargetMeshID)
 	
 	If TName$ <> "" And isEncrypted Then
 		EncryptMesh("Data\Meshes\" + Name$)
@@ -901,7 +899,7 @@ Function SaveRotation()
 
 ;#####################################################################
 
-	SetGubbinMesh(meshID)
+	SetGubbinMesh(TargetMeshID)
 
 End Function
 
