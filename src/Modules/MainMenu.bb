@@ -609,14 +609,15 @@ Function LogIn()
 
 ;Music
 	; Misc options window
-	WMisc = GY_CreateWindow("Sound options", 0.25, 0.4, 0.5, 0.1, True, True, False, LoadTexture("Data\Textures\GUI\window.bmp"))
+	WMisc = GY_CreateWindow("Other options", 0.25, 0.4, 0.5, 0.2, True, True, False, LoadTexture("Data\Textures\GUI\window.bmp"))
 	GY_CreateLabel(WMisc, 0.18, 0.02, "Client must be restarted for any changes to take effect.", 255, 0, 0)
-	SVolume = GY_CreateSlider(WMisc, 0.05, 0.26, 0.9, 0.3, LanguageString$(LS_SndVolume), Int(DefaultVolume# * 100.0), 0, 100, False, 255, 255, 255)
+	SVolume = GY_CreateSlider(WMisc, 0.05, 0.26, 0.9, 0.15, LanguageString$(LS_SndVolume), Int(DefaultVolume# * 100.0), 0, 100, False, 255, 255, 255)
 	CurrentVolume = Int(DefaultVolume# * 100.0)
-	BUpdateMusic = GY_CreateCheckBox(WMisc, 0.05, 0.7, LanguageString$(LS_SkipMusic))
+	BUpdateMusic = GY_CreateCheckBox(WMisc, 0.05, 0.65, LanguageString$(LS_SkipMusic))
 	GY_UpdateCheckBox(BUpdateMusic, 1 - UpdateMusic)
-	BMiscDone = GY_CreateCustomButton(WMisc, 0.72, 0.62, 0.23, 0.33, LoadButtonU("MenuDone"), LoadButtonD("MenuDone"), LoadButtonH("MenuDone"))
-
+	GY_CreateLabel(WMisc, 0.05, 0.8, "Server Hostname/IP:", 255, 255, 255)
+	TNewHostName = GY_CreateTextField(WMisc, 0.3, 0.8, 0.4, 0, 20, ServerHost$)
+	BMiscDone = GY_CreateCustomButton(WMisc, 0.72, 0.62, 0.23, 0.16, LoadButtonU("MenuDone"), LoadButtonD("MenuDone"), LoadButtonH("MenuDone"))
 	; Control options window
 	WControls = GY_CreateWindow(LanguageString$(LS_ControlOptions), 0.2, 0.15, 0.6, 0.25, True, True, False, LoadTexture("Data\Textures\GUI\window.bmp"))
 	LForwardKey     = GY_CreateLabel(WControls, 0.05, 0.04,    LanguageString$(LS_CForward) + " " + ControlName$(Key_Forward) + String$(" ", 30))
@@ -1410,6 +1411,13 @@ Function LogIn()
 					WriteLine F, GameName$
 					WriteLine F, UpdateGame$
 					WriteLine F, UpdateMusic
+				CloseFile F
+			EndIf
+			If GY_TextFieldText(TNewHostName) <> ServerHost$
+				F = WriteFile("Data\Game Data\Hosts.dat")
+					WriteLine F, GY_TextFieldText(TNewHostName)
+					WriteLine F, UpdateHost$
+					WriteLine F, AccountsEnabled
 				CloseFile F
 			EndIf
 		EndIf
