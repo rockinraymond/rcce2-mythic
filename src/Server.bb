@@ -24,6 +24,7 @@ Include "Modules\briskvm.bb"
 Include "Modules\Actors.bb"               ; Actors module
 Include "Modules\Inventories.bb"          ; Inventory module
 Include "Modules\ServerAreas.bb"          ; Areas module
+Include "Modules\SpawnTracking.bb"        ; Spawn bookkeeping helpers
 Include "Modules\Scripting.bb"            ; Script language module
 Include "Modules\Logging.bb"              ; Logging module
 Include "Modules\AccountsServer.bb"       ; Accounts server module
@@ -509,6 +510,10 @@ Repeat
 					HideGadget Updates\LockLabel
 					SetGadgetText Updates\LockButton, "Lock Updates Server"
 					SetPanelImage(Updates\ImageBox, CurrentDir() + "Data\Server Data\GreenLight.bmp")
+
+					; Rebuild spawn occupancy from the actors that actually survived the
+					; lock cycle so stale counts cannot block future respawns.
+					SyncAreaSpawnCounts()
 
 					; Reload files list
 					Delete Each UpdateFile
