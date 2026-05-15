@@ -37,6 +37,8 @@
 
 ;Strict
 
+Include "Modules\Helpers\FUIResizeMetrics.bb"
+
 ;#Region ---------- Types ----------------------
 Type CHOOSEFONT
 	
@@ -1315,6 +1317,7 @@ Function FUI_ResizeApp( W, H )
 	app\OldH = app\H
 	app\W = W
 	app\H = H
+	FUI_UpdateProjection()
 	
 	;Normal window border
 	If (FUI_API_GetWindowLong( app\hWnd,-16 ) And $40000) = $40000
@@ -1331,6 +1334,24 @@ Function FUI_ResizeApp( W, H )
 	FreeBank bnkRECT
 	bnkRECT = Null
 	
+End Function
+
+; Rebuild the GUI projection after any window size change so pointer picking
+; and layout scaling stay aligned with the resized client area.
+Function FUI_UpdateProjection()
+	If app = Null Or app\Cam = Null Or app\Pivot = Null
+		Return
+	EndIf
+	If app\W <= 0 Or app\H <= 0
+		Return
+	EndIf
+
+	app\Aspect = FUI_WindowAspect#(app\W, app\H)
+	app\Scale = FUI_WindowScale#(app\W)
+
+	CameraViewport app\Cam, 0, 0, app\W, app\H
+	PositionEntity app\Pivot,-1.0, app\Aspect, 1.0
+	ScaleEntity app\Pivot, app\Scale,-app\Scale,-app\Scale
 End Function
 
 Function FUI_CenterApp(  )
@@ -16640,8 +16661,6 @@ Function FUI_Initialise( W, H, D, M, Resizable=False, Border=True, Caption$="", 
 	MoveEntity	(app\Cam, 0, 0, -500)
 	
 	app\Pivot		= CreatePivot( app\Cam )
-	app\Aspect		= Float( H ) / W
-	app\Scale		= 2.0 / W
 	
 	app\currentFont	= New Font
 	;Fixed camera bug in zone editor cysis145
@@ -16651,8 +16670,7 @@ Function FUI_Initialise( W, H, D, M, Resizable=False, Border=True, Caption$="", 
 	ClearTextureFilters
 	AmbientLight 255, 255, 255
 	
-	PositionEntity app\Pivot,-1.0, app\Aspect, 1.0
-	ScaleEntity app\Pivot, app\Scale,-app\Scale,-app\Scale
+	FUI_UpdateProjection()
 	
 	app\A = 255
 	app\A2 = 255
@@ -16766,8 +16784,11 @@ Function FUI_Update( Idle = False )
 			winCH = PeekInt( bnkRECT, 12 ) - PeekInt( bnkRECT, 4 )
 	
 			If winCW <> app\W Or winCH <> app\H
+				app\OldW = app\W
+				app\OldH = app\H
 				app\W = winCW
 				app\H = winCH
+				FUI_UpdateProjection()
 			EndIf
 			
 			FreeBank bnkRECT
