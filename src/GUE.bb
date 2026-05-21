@@ -10,6 +10,7 @@ ChangeDir RootDir$
 
 Include "Modules\RCEnet.bb"
 Include "Modules\Media.bb"
+Include "Modules\MediaImport.bb"
 Include "Modules\MediaDialogs.bb"
 Include "Modules\Projectiles.bb"
 Include "Modules\Language.bb"
@@ -6288,29 +6289,18 @@ Cls
 						If (Flags And 1) <> False Then IsAnim = True Else IsAnim = False
 						IsEncrypted = False
 
-						; Remove trailing slash
-						If Right$(App\CurrentFile$, 1) = "\"
-							App\CurrentFile$ = Left$(App\CurrentFile$, Len(App\CurrentFile$) - 1)
-						EndIf
+						App\CurrentFile$ = MediaImportTrimTrailingSlash$(App\CurrentFile$)
+						Filename$ = MediaImportRelativePath$(App\CurrentFile$, "Data\Meshes\", CurrentDir$(), MediaFolder$)
 
 						; Copy file/folder if required
-						If Instr(App\CurrentFile$, "Data\Meshes\") = 0 ;TODO: If RootDir is changed this may break
-							Filename$ = App\CurrentFile$
-							If MediaFolder$ <> "" Then Filename$ = MediaFolder$ + "\" + Filename$
-							For i = Len(App\CurrentFile$) To 1 Step -1
-								If Mid$(App\CurrentFile$, i, 1) = "\" Or Mid$(App\CurrentFile$, i, 1) = "/"
-									Filename$ = Mid$(App\CurrentFile$, i + 1)
-									If MediaFolder$ <> "" Then Filename$ = MediaFolder$ + "\" + Filename$
-									Exit
-								EndIf
-							Next
-							If FileType(App\CurrentFile$) = 1
-								CopyFile(CurrentDir$() + App\CurrentFile$, CurrentDir$() + "Data\Meshes\" + Filename$)
-							ElseIf FileType(App\CurrentFile$) = 2
-								CopyTree(CurrentDir$() + App\CurrentFile$, CurrentDir$() + "Data\Meshes\" + Filename$)
+						If MediaImportShouldCopy(App\CurrentFile$, "Data\Meshes\", CurrentDir$())
+							Local sourcePath$ = MediaImportSourcePath$(App\CurrentFile$, CurrentDir$())
+							Local destinationPath$ = MediaImportSourcePath$("Data\Meshes\" + Filename$, CurrentDir$())
+							If FileType(sourcePath$) = 1
+								CopyFile(sourcePath$, destinationPath$)
+							ElseIf FileType(sourcePath$) = 2
+								CopyTree(sourcePath$, destinationPath$)
 							EndIf
-						Else
-							Filename$ = Right$(App\CurrentFile$, Len(App\CurrentFile$) - Len("Data\Meshes\")) ;TODO: If RootDir is changed this may break
 						EndIf
 
 						; Single file
@@ -6333,29 +6323,18 @@ Cls
 						; Get extra options
 						Flags = TextureDialog()
 
-						; Remove trailing slash
-						If Right$(App\CurrentFile$, 1) = "\"
-							App\CurrentFile$ = Left$(App\CurrentFile$, Len(App\CurrentFile$) - 1)
-						EndIf
+						App\CurrentFile$ = MediaImportTrimTrailingSlash$(App\CurrentFile$)
+						Filename$ = MediaImportRelativePath$(App\CurrentFile$, "Data\Textures\", CurrentDir$(), MediaFolder$)
 
 						; Copy file/folder if required
-						If Instr(App\CurrentFile$, "Data\Textures\") = 0 ;TODO: If RootDir is changed this may break
-							Filename$ = App\CurrentFile$
-							If MediaFolder$ <> "" Then Filename$ = MediaFolder$ + "\" + Filename$
-							For i = Len(App\CurrentFile$) To 1 Step -1
-								If Mid$(App\CurrentFile$, i, 1) = "\" Or Mid$(App\CurrentFile$, i, 1) = "/"
-									Filename$ = Mid$(App\CurrentFile$, i + 1)
-									If MediaFolder$ <> "" Then Filename$ = MediaFolder$ + "\" + Filename$
-									Exit
-								EndIf
-							Next
-							If FileType(App\CurrentFile$) = 1
-								CopyFile(CurrentDir$() + App\CurrentFile$, CurrentDir$() + "Data\Textures\" + Filename$)
-							ElseIf FileType(App\CurrentFile$) = 2
-								CopyTree(CurrentDir$() + App\CurrentFile$, CurrentDir$() + "Data\Textures\" + Filename$)
+						If MediaImportShouldCopy(App\CurrentFile$, "Data\Textures\", CurrentDir$())
+							Local sourcePath$ = MediaImportSourcePath$(App\CurrentFile$, CurrentDir$())
+							Local destinationPath$ = MediaImportSourcePath$("Data\Textures\" + Filename$, CurrentDir$())
+							If FileType(sourcePath$) = 1
+								CopyFile(sourcePath$, destinationPath$)
+							ElseIf FileType(sourcePath$) = 2
+								CopyTree(sourcePath$, destinationPath$)
 							EndIf
-						Else
-							Filename$ = Right$(App\CurrentFile$, Len(App\CurrentFile$) - Len("Data\Textures\")) ;TODO: If RootDir is changed this may break
 						EndIf
 
 						; Single file
@@ -6379,29 +6358,18 @@ Cls
 						; Get extra options
 						Is3D = SoundDialog()
 
-						; Remove trailing slash
-						If Right$(App\CurrentFile$, 1) = "\"
-							App\CurrentFile$ = Left$(App\CurrentFile$, Len(App\CurrentFile$) - 1)
-						EndIf
+						App\CurrentFile$ = MediaImportTrimTrailingSlash$(App\CurrentFile$)
+						Filename$ = MediaImportRelativePath$(App\CurrentFile$, "Data\Sounds\", CurrentDir$(), MediaFolder$)
 
 						; Copy file/folder if required
-						If Instr(App\CurrentFile$, "Data\Sounds\") = 0 ;TODO: If RootDir is changed this may break
-							Filename$ = App\CurrentFile$
-							If MediaFolder$ <> "" Then Filename$ = MediaFolder$ + "\" + Filename$
-							For i = Len(App\CurrentFile$) To 1 Step -1
-								If Mid$(App\CurrentFile$, i, 1) = "\" Or Mid$(App\CurrentFile$, i, 1) = "/"
-									Filename$ = Mid$(App\CurrentFile$, i + 1)
-									If MediaFolder$ <> "" Then Filename$ = MediaFolder$ + "\" + Filename$
-									Exit
-								EndIf
-							Next
-							If FileType(App\CurrentFile$) = 1
-								CopyFile(CurrentDir$() + App\CurrentFile$, CurrentDir$() + "Data\Sounds\" + Filename$)
-							ElseIf FileType(App\CurrentFile$) = 2
-								CopyTree(CurrentDir$() + App\CurrentFile$, CurrentDir$() + "Data\Sounds\" + Filename$)
+						If MediaImportShouldCopy(App\CurrentFile$, "Data\Sounds\", CurrentDir$())
+							Local sourcePath$ = MediaImportSourcePath$(App\CurrentFile$, CurrentDir$())
+							Local destinationPath$ = MediaImportSourcePath$("Data\Sounds\" + Filename$, CurrentDir$())
+							If FileType(sourcePath$) = 1
+								CopyFile(sourcePath$, destinationPath$)
+							ElseIf FileType(sourcePath$) = 2
+								CopyTree(sourcePath$, destinationPath$)
 							EndIf
-						Else
-							Filename$ = Right$(App\CurrentFile$, Len(App\CurrentFile$) - Len("Data\Sounds\")) ;TODO: If RootDir is changed this may break
 						EndIf
 
 						; Single file
@@ -6424,29 +6392,18 @@ Cls
 					Result = FUI_CustomOpenDialog("Choose file to add...", "Data\Music\", FileTypes$, False, True)
 					If Result = True
 
-						; Remove trailing slash
-						If Right$(App\CurrentFile$, 1) = "\"
-							App\CurrentFile$ = Left$(App\CurrentFile$, Len(App\CurrentFile$) - 1)
-						EndIf
+						App\CurrentFile$ = MediaImportTrimTrailingSlash$(App\CurrentFile$)
+						Filename$ = MediaImportRelativePath$(App\CurrentFile$, "Data\Music\", CurrentDir$(), MediaFolder$)
 
 						; Copy file/folder if required
-						If Instr(App\CurrentFile$, "Data\Music\") = 0 ;TODO: If RootDir is changed this may break
-							Filename$ = App\CurrentFile$
-							If MediaFolder$ <> "" Then Filename$ = MediaFolder$ + "\" + Filename$
-							For i = Len(App\CurrentFile$) To 1 Step -1
-								If Mid$(App\CurrentFile$, i, 1) = "\" Or Mid$(App\CurrentFile$, i, 1) = "/"
-									Filename$ = Mid$(App\CurrentFile$, i + 1)
-									If MediaFolder$ <> "" Then Filename$ = MediaFolder$ + "\" + Filename$
-									Exit
-								EndIf
-							Next
-							If FileType(App\CurrentFile$) = 1
-								CopyFile(CurrentDir$() + App\CurrentFile$, CurrentDir$() + "Data\Music\" + Filename$)
-							ElseIf FileType(App\CurrentFile$) = 2
-								CopyTree(CurrentDir$() + App\CurrentFile$, CurrentDir$() + "Data\Music\" + Filename$)
+						If MediaImportShouldCopy(App\CurrentFile$, "Data\Music\", CurrentDir$())
+							Local sourcePath$ = MediaImportSourcePath$(App\CurrentFile$, CurrentDir$())
+							Local destinationPath$ = MediaImportSourcePath$("Data\Music\" + Filename$, CurrentDir$())
+							If FileType(sourcePath$) = 1
+								CopyFile(sourcePath$, destinationPath$)
+							ElseIf FileType(sourcePath$) = 2
+								CopyTree(sourcePath$, destinationPath$)
 							EndIf
-						Else
-							Filename$ = Right$(App\CurrentFile$, Len(App\CurrentFile$) - Len("Data\Music\")) ;TODO: If RootDir is changed this may break
 						EndIf
 
 						; Single file
