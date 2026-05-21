@@ -14,6 +14,7 @@ Include "Modules\Graphics\UI\Components\TextComponent.bb"
 Include "Modules\Graphics\UI\Components\MenuItemComponent.bb"
 Include "Modules\Graphics\RCCEGraphics.bb"
 Include "Modules\Framework\Project\Project.bb"
+Include "Modules\Project Manager\RecentProjects.bb"
 
 Type ProjectManager.RCCEApp
 	Field window%
@@ -121,7 +122,7 @@ Type ProjectManager.RCCEApp
 		Local count = ListSize(self\recentProjectList) - 1
 		for i = 0 to count
 			Local prj.Project = ListAt(self\recentProjectList, i)
-			if (prj\rootDir = dir)
+			if (NormalizeProjectRoot$(prj\rootDir) = NormalizeProjectRoot$(dir))
 				return prj
 			end if
 		next
@@ -148,26 +149,17 @@ Type ProjectManager.RCCEApp
 			return
 		end if
 
-		if (NOT self\prj = null)
-			if(NOT self\recentProjectList = Null)
-				self\recentProjectList = CreateList()
-			end if
-
-			if (ListSize(self\recentProjectList) > 0)
-				ListReplace(self\recentProjectList, 0, self\prj)
-			else
-				ListAdd(self\recentProjectList, self\prj)
-			end if
+		if self\recentProjectList = Null
+			self\recentProjectList = CreateList()
 		end if
+
+		if (NOT self\prj = Null) Then RecentProjectsPromote(self\recentProjectList, self\prj)
 
 		Project::load(prj)
 		self\prj = prj
 		
-		if(NOT self\recentProjectList = Null)
-			if (ListFind(self\recentProjectList, self\prj) <> -1)
-				ListRemove(self\recentProjectList, ListFind(self\recentProjectList, self\prj))
-			end if
-		end if
+		RecentProjectsRemoveByRootDir(self\recentProjectList, self\prj\rootDir)
+		RecentProjectsTrim(self\recentProjectList, 9)
 
 		ProjectManager::saveRecentProjects(self)
 
