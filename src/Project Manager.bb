@@ -182,9 +182,9 @@ Type ProjectManager.RCCEApp
 
 		for i = 0 to 9
 			Local dir$ = File::readLine(self\recentProjectFile)
-			if (dir = "") Then Exit
+			if (dir$ = "") Then Exit
 			Local prj.Project = new Project(dir$)
-			if (NOT Project::verify(prj)) 
+			if (NOT Project::verify(prj))
 				delete prj
 			else
 				ListAdd(self\recentProjectList, prj)
