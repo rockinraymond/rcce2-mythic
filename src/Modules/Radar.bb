@@ -88,6 +88,11 @@ Function Load_Radar(AreaName$, X#, Y#, Width#, Height#, Interior, BorderTex$ = "
  	ResizeImage TempImage, Radar_TexSize, Radar_TexSize
 	Radar_Tex1 = CreateTexture(Radar_TexSize, Radar_TexSize, 1)
 	CopyRect 0, 0, Radar_TexSize, Radar_TexSize, 0, 0, ImageBuffer(TempImage), TextureBuffer(Radar_Tex1)
+	; Free the screen-sized scratch image — Load_Radar runs on every zone
+	; change, and TempImage was previously leaked each time (~8 MB at
+	; 1920x1080x32bpp; 20 zones = 160 MB of orphaned image data in a
+	; Blitz3D 2 GB address space).
+	FreeImage TempImage
 
 	; Restore scenery FX
 	For Sc.Scenery = Each Scenery
@@ -302,8 +307,18 @@ Function UpdateRadar(ent,areashow=50)
 If radar_lastx#=EntityX(ent,1) And radar_lasty#=EntityZ(ent,1) Then Return
 radar_lastx#=EntityX(ent,1):radar_lasty#=EntityZ(ent,1)
 
-	plrx# = (Radar_TexSize / (Radar_WorldSize / -EntityX#(ent, 1)))
-	plry# = (Radar_TexSize / (Radar_WorldSize / EntityZ#(ent, 1)))
+	; Guard divides by zero: at exact world origin EntityX/Z is 0 and the
+	; inverted division produces Inf, which propagates into PositionEntity
+	; below and corrupts the player marker. The math was also doubly-
+	; inverted (`tex / (world / -x)` = `-x * tex / world`); inline that
+	; form so we don't blow up on origin spawns.
+	If Radar_WorldSize = 0
+		plrx# = 0.0
+		plry# = 0.0
+	Else
+		plrx# = (-EntityX#(ent, 1) * Radar_TexSize) / Radar_WorldSize
+		plry# = (EntityZ#(ent, 1) * Radar_TexSize) / Radar_WorldSize
+	EndIf
 
 fromfx=plrx#+(Radar_TexSize/2)-areashow
 tofx=plrx#+(Radar_TexSize/2)+areashow

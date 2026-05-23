@@ -728,6 +728,11 @@ End Function
 ; Gets the handle for a given mesh (this will load it if it isn't present)
 Function GetMesh(ID, Duplicate = False)
 
+	; Mirror GetSound's ID guard. LoadedMeshes is Dim'd 0..65534; a caller
+	; passing -1 (the inconsistent sentinel some Actors3D paths use instead
+	; of 65535) or any out-of-range ID would write through a wild pointer.
+	If ID < 0 Or ID > 65534 Then Return 0
+
 	; Load from file if this is the first time the mesh has been loaded
 	If LoadedMeshes(ID) = 0
 
@@ -803,6 +808,8 @@ End Function
 
 ; Gets the handle for a given texture (this will load it if it isn't present)
 Function GetTexture(ID, Copy = False)
+
+	If ID < 0 Or ID > 65534 Then Return 0
 
 	If LoadedTextures(ID) = 0
 
