@@ -621,9 +621,15 @@ Function UpdateNetwork()
 					If AI\IsTrading = 4 And AI\TradingActor <> Null
 						Slot = RCE_IntFromStr(Left$(M\MessageData$, 1))
 						Amount = RCE_IntFromStr(Mid$(M\MessageData$, 2, 2))
-						Pa$ = M\MessageData$
-						If Amount > 0 Then Pa$ = Pa$ + ItemInstanceToString$(AI\Inventory\Items[Slot + SlotI_Backpack])
-						RCE_Send(Host, AI\TradingActor\RNID, P_UpdateTrading, Pa$, True)
+						; Slot is a backpack-relative offset (0..31). Reject anything that
+						; would push the array index past the inventory bounds; without this,
+						; a crafted Slot reads (and the ItemInstanceToString$ helper writes)
+						; from adjacent ActorInstance fields.
+						If Slot >= 0 And Slot + SlotI_Backpack <= Slots_Inventory
+							Pa$ = M\MessageData$
+							If Amount > 0 Then Pa$ = Pa$ + ItemInstanceToString$(AI\Inventory\Items[Slot + SlotI_Backpack])
+							RCE_Send(Host, AI\TradingActor\RNID, P_UpdateTrading, Pa$, True)
+						EndIf
 					EndIf
 				EndIf
 			; Trading complete
@@ -648,7 +654,11 @@ Function UpdateNetwork()
 								SlotID = RCE_IntFromStr(Mid$(M\MessageData$, Offset, 1))
 								Amount = RCE_IntFromStr(Mid$(M\MessageData$, Offset + 1, 2))
 								Offset = Offset + 3
-								If SlotID > 0
+								; Upper-bound SlotID against the inventory size — original check
+								; only rejected SlotID <= 0, so a crafted shop-sell packet with
+								; SlotID in the byte range past Slots_Inventory wrote into
+								; whatever ActorInstance fields follow the inventory array.
+								If SlotID > 0 And SlotID <= Slots_Inventory
 									If Amount > AI\Inventory\Amounts[SlotID] Then Amount = AI\Inventory\Amounts[SlotID]
 									If AI\Inventory\Items[SlotID] <> Null And Amount > 0
 										; Alter cost {##}
@@ -1012,7 +1022,10 @@ Function UpdateNetwork()
 				If AI <> Null
 					Slot = RCE_IntFromStr(Mid$(M\MessageData$, 1, 1))
 					Amount = RCE_IntFromStr(Mid$(M\MessageData$, 2, 2))
-					If Slot >= 0 And Slot < 50 And Amount > 0
+					; Tighten upper bound to the actual inventory size. Previous limit was
+					; an unrelated literal (50) larger than Slots_Inventory (45), so the
+					; intervening slots 46..49 read past the Items array.
+					If Slot >= 0 And Slot <= Slots_Inventory And Amount > 0
 						If AI\Inventory\Items[Slot] <> Null And AI\Inventory\Amounts[Slot] >= Amount
 							If AI\Inventory\Items[Slot]\Item\ItemType = I_Potion Or AI\Inventory\Items[Slot]\Item\ItemType = I_Ingredient
 								If Upper$(AI\Actor\Class$) = Upper$(AI\Inventory\Items[Slot]\Item\ExclusiveClass$) Or Len(AI\Inventory\Items[Slot]\Item\ExclusiveClass$) = 0
@@ -1201,7 +1214,10 @@ Function UpdateNetwork()
 							AI.ActorInstance = FindActorInstanceFromRNID(M\FromID)
 							If AI <> Null
 								SlotI = RCE_IntFromStr(Mid$(M\MessageData$, 6, 1))
-								If AI\Inventory\Items[SlotI] = Null Or (ItemInstancesIdentical(D\Item, AI\Inventory\Items[SlotI]) And D\Item\Item\Stackable = True And SlotI >= SlotI_Backpack)
+								; SlotI comes straight off the wire — must be bounded before
+								; it's used as an index into the Items / Amounts arrays.
+								If SlotI < 0 Or SlotI > Slots_Inventory Then SlotI = -1
+								If SlotI >= 0 And (AI\Inventory\Items[SlotI] = Null Or (ItemInstancesIdentical(D\Item, AI\Inventory\Items[SlotI]) And D\Item\Item\Stackable = True And SlotI >= SlotI_Backpack))
 									If SlotsMatch(D\Item\Item, SlotI) And ActorHasSlot(AI\Actor, SlotI, D\Item\Item)
 										; Put into player's inventory
 										If AI\Inventory\Items[SlotI] <> Null
@@ -1269,7 +1285,10 @@ Function UpdateNetwork()
 							If II\Assignment > 0
 								If Mid$(M\MessageData$, 2, 1) = "Y"
 									SlotI = RCE_IntFromStr(Right$(M\MessageData$, 1))
-									If AI\Inventory\Items[SlotI] = Null Or (ItemInstancesIdentical(II, AI\Inventory\Items[SlotI]) And II\Item\Stackable = True And SlotI >= SlotI_Backpack)
+									; Bound SlotI before any inventory array access (same as the "P"
+									; pickup path above).
+									If SlotI < 0 Or SlotI > Slots_Inventory Then SlotI = -1
+									If SlotI >= 0 And (AI\Inventory\Items[SlotI] = Null Or (ItemInstancesIdentical(II, AI\Inventory\Items[SlotI]) And II\Item\Stackable = True And SlotI >= SlotI_Backpack))
 										If SlotsMatch(II\Item, SlotI) And ActorHasSlot(AI\Actor, SlotI, II\Item)
 											If AI\Inventory\Items[SlotI] <> Null
 												Delete AI\Inventory\Items[SlotI]
