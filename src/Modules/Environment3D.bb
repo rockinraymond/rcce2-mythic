@@ -246,25 +246,14 @@ Function UpdateEnvironment3D()
 	Next
 
 ;Add Animated water to options menu Cysis145
-		F = ReadFile("Data\Options.dat")
-		If F = 0 Then RuntimeError("Could not open Data\Options.dat!")
-		Width = ReadShort(F)
-		Height = ReadShort(F)
-		Depth = ReadByte(F)
-		AA = ReadByte(F)
-		DefaultVolume# = ReadFloat#(F)
-		GrassEnabled = ReadByte(F)
-		AnisotropyLevel = ReadByte(F)
-		FullScreen = ReadByte(F)
-		VSync = ReadByte(F)
-		Bloom = ReadByte(F)
-		Rays = ReadByte(F)
-		AWater = ReadByte(F)
-		ShadowC = ReadByte(F)
-		ShadowQ = ReadByte(F)
-		ShadowR = ReadByte(F)
-		CloseFile(F)
-		
+		; Options are loaded once at startup by LoadGame() in ClientLoaders.bb
+		; and populate the same globals (AWater, ShadowC, etc.) read below. A
+		; previous version of this block re-opened Data\Options.dat every
+		; frame just to refresh AWater — a needless file open/read/close on
+		; the hot render path. Same fix as Track F applied to Client.bb.
+		; Settings dialogs that mutate these globals are responsible for
+		; re-running LoadGame() (or equivalent) on apply.
+
 	Select AWater
 	Case 0
 	; Water
@@ -318,7 +307,12 @@ Next
 	; Lightning
 	If CurrentWeather = W_Storm
 		If LightningToDo = 0
-			If Rand(1, Int(500.0 / Delta#)) = 1 Then LightningToDo = Rand(1, 3)
+			; Guard Delta=0 (first frame after pause / window-restore makes
+			; Int(500/0) panic). When Delta isn't usable, just skip this
+			; frame's lightning roll.
+			If Delta# > 0.0
+				If Rand(1, Int(500.0 / Delta#)) = 1 Then LightningToDo = Rand(1, 3)
+			EndIf
 		ElseIf Rand(1, 50) = 1
 			LightningToDo = LightningToDo - 1
 			ScreenFlash(255, 255, 255, 65535, Rand(200, 1000), 0.9)
@@ -566,8 +560,16 @@ Function UpdateLensFlare()
 							vX# = ProjectedX#() - ScreenX#
 							vY# = ProjectedY#() - ScreenY#
 							Length# = Sqr#((vX# * vX#) + (vY# * vY#))
-							vX# = vX# / Length#
-							vY# = vY# / Length#
+							; Guard against the sun projecting exactly onto the
+							; screen centre: Length=0 made vX/vY NaN, which then
+							; poisoned every flare entity's PositionEntity below.
+							If Length# > 0.0
+								vX# = vX# / Length#
+								vY# = vY# / Length#
+							Else
+								vX# = 0.0
+								vY# = 0.0
+							EndIf
 							Scale# = 1.0
 							cR = S\LightR - (TotalFlares * 10)
 							cG = S\LightG

@@ -115,6 +115,13 @@ Function LoadAnimSets(Filename$)
 		While Not Eof(F)
 			A.AnimSet = New AnimSet
 			A\ID = ReadShort(F)
+			; AnimList is Dim'd 0..999. ReadShort is signed, so a malformed
+			; AnimSets.dat (or a mod with ID >= 1000) would write past the
+			; array via Blitz's unchecked Dim write. Reject + stop loading.
+			If A\ID < 0 Or A\ID > 999
+				Delete A
+				Exit
+			EndIf
 			AnimList(A\ID) = A
 			A\Name$ = ReadString$(F)
 			For i = 0 To 149
