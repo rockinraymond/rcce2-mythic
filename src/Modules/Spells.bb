@@ -48,6 +48,13 @@ Function LoadSpells(Filename$)
 		While Not Eof(F)
 			S.Spell = New Spell
 			S\ID = ReadShort(F)
+			; Same defensive bound as LoadItems: ReadShort is signed, the list is
+			; dimensioned 0..65534, and a malformed Spells.dat with a negative ID
+			; corrupts memory via Dim out-of-range write.
+			If S\ID < 0 Or S\ID > 65534
+				Delete S
+				Exit
+			EndIf
 			SpellsList(S\ID) = S
 			S\Name$ = ReadString$(F)
 			S\Description$ = ReadString$(F)

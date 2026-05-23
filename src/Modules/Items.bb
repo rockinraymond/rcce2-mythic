@@ -250,6 +250,15 @@ Function LoadItems(Filename$)
 			I.Item = New Item
 			I\Attributes = New Attributes
 			I\ID = ReadShort(F)
+			; ReadShort is signed 16-bit, so a malformed or truncated Items.dat can
+			; surface a negative ID. ItemList is dimensioned 0..65534, and Blitz Dim
+			; with a negative index writes outside the array → arbitrary memory
+			; corruption on every server boot from a crafted save. Skip and stop
+			; loading; the partial state we already built is consistent.
+			If I\ID < 0 Or I\ID > 65534
+				Delete I\Attributes : Delete I
+				Exit
+			EndIf
 			ItemList(I\ID) = I
 			I\Name$            = ReadString$(F)
 			I\ExclusiveRace$   = ReadString$(F)
