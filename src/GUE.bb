@@ -6328,8 +6328,8 @@ Cls
 
 						; Copy file/folder if required
 						If MediaImportShouldCopy(App\CurrentFile$, "Data\Textures\", CurrentDir$())
-							Local sourcePath$ = MediaImportSourcePath$(App\CurrentFile$, CurrentDir$())
-							Local destinationPath$ = MediaImportSourcePath$("Data\Textures\" + Filename$, CurrentDir$())
+							sourcePath$ = MediaImportSourcePath$(App\CurrentFile$, CurrentDir$())
+							destinationPath$ = MediaImportSourcePath$("Data\Textures\" + Filename$, CurrentDir$())
 							If FileType(sourcePath$) = 1
 								CopyFile(sourcePath$, destinationPath$)
 							ElseIf FileType(sourcePath$) = 2
@@ -6363,8 +6363,8 @@ Cls
 
 						; Copy file/folder if required
 						If MediaImportShouldCopy(App\CurrentFile$, "Data\Sounds\", CurrentDir$())
-							Local sourcePath$ = MediaImportSourcePath$(App\CurrentFile$, CurrentDir$())
-							Local destinationPath$ = MediaImportSourcePath$("Data\Sounds\" + Filename$, CurrentDir$())
+							sourcePath$ = MediaImportSourcePath$(App\CurrentFile$, CurrentDir$())
+							destinationPath$ = MediaImportSourcePath$("Data\Sounds\" + Filename$, CurrentDir$())
 							If FileType(sourcePath$) = 1
 								CopyFile(sourcePath$, destinationPath$)
 							ElseIf FileType(sourcePath$) = 2
@@ -6397,8 +6397,8 @@ Cls
 
 						; Copy file/folder if required
 						If MediaImportShouldCopy(App\CurrentFile$, "Data\Music\", CurrentDir$())
-							Local sourcePath$ = MediaImportSourcePath$(App\CurrentFile$, CurrentDir$())
-							Local destinationPath$ = MediaImportSourcePath$("Data\Music\" + Filename$, CurrentDir$())
+							sourcePath$ = MediaImportSourcePath$(App\CurrentFile$, CurrentDir$())
+							destinationPath$ = MediaImportSourcePath$("Data\Music\" + Filename$, CurrentDir$())
 							If FileType(sourcePath$) = 1
 								CopyFile(sourcePath$, destinationPath$)
 							ElseIf FileType(sourcePath$) = 2
