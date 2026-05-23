@@ -1620,7 +1620,10 @@ Function UpdateNetwork()
 				Next
 		        ; If account was not found or was already logged on, return failure
 		        If Exists = False Then RCE_Send(Host, M\FromID, P_StartGame, "N", True)
-				If (M\FromID = 2) Stop
+				; (removed) `If (M\FromID = 2) Stop` — a leftover debug trap that
+				; halted the entire server process the first time the peer whose
+				; RakNet connection ID is 2 sent P_StartGame. Trivial remote DoS
+				; for the second connecting client.
 
 			; Fetch update files list request
 			Case P_FetchUpdateFiles ; :)
