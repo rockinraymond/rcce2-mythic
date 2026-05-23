@@ -3,6 +3,7 @@ EnableGC
 
 Type ActorInstance
 	Field Account
+	Field RNID
 End Type
 
 Type QuestLog
