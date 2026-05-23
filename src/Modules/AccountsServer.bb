@@ -35,6 +35,25 @@ Function FindAccountByListID.Account(ListID)
 
 End Function
 
+; Returns True iff some live character on this account has its RNID matching
+; the requester's connection — i.e. the requester is the currently-logged-in
+; session for this account.
+;
+; Used to gate destructive account ops (ChangePassword, DeleteCharacter) so
+; a replayed packet with the (broken-MD5) hash can't take over an account
+; or destroy its characters unless the attacker is *also* currently holding
+; the session.
+Function RequesterOwnsAccountSession%(A.Account, FromID)
+	If A = Null Then Return False
+	If FromID < 1 Then Return False
+	For i = 0 To 9
+		If A\Character[i] <> Null
+			If A\Character[i]\RNID = FromID Then Return True
+		EndIf
+	Next
+	Return False
+End Function
+
 ; Builds the display string used in the Accounts list box.
 ; LoggedOn matches Account\LoggedOn semantics: -1 means logged out, anything
 ; greater than or equal to 0 indicates an active character index.

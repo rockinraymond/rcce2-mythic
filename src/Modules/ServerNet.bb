@@ -1896,8 +1896,12 @@ Function UpdateNetwork()
 					If Upper$(A\User$) = Upper$(Username$)
 						Offset = 2 + UsernameLen
 						PwdLen = RCE_IntFromStr(Mid$(M\MessageData$, Offset, 1))
-						; If password is correct, change it to the new one
-						If A\Pass$ = Mid$(M\MessageData$, Offset + 1, PwdLen)
+						; If password is correct AND the requester is the currently-
+						; logged-in session for this account, change it. Without
+						; the session check, a captured/replayed P_ChangePassword
+						; lets any party with the (broken-MD5) hash steal the
+						; account permanently.
+						If A\Pass$ = Mid$(M\MessageData$, Offset + 1, PwdLen) And RequesterOwnsAccountSession(A, M\FromID)
 							Offset = 2 + PwdLen
 							PwdLen = RCE_IntFromStr(Mid$(M\MessageData$, Offset, 1))
 							A\Pass$ = Mid$(M\MessageData$, Offset + 1, PwdLen)
@@ -2155,8 +2159,12 @@ Function UpdateNetwork()
 					If Upper$(A\User$) = Upper$(Username$)
 						Offset = 2 + UsernameLen
 						PwdLen = RCE_IntFromStr(Mid$(M\MessageData$, Offset, 1))
-						; If password is correct
-						If A\Pass$ = Mid$(M\MessageData$, Offset + 1, PwdLen)
+						; If password is correct AND the requester is the
+						; currently-logged-in session for this account.
+						; A replayed P_DeleteCharacter would otherwise let
+						; anyone with the hash permanently destroy character
+						; slots on the account.
+						If A\Pass$ = Mid$(M\MessageData$, Offset + 1, PwdLen) And RequesterOwnsAccountSession(A, M\FromID)
 							Offset = Offset + 1 + PwdLen
 							Number = Asc(Mid$(M\MessageData$, Offset, 1))
 							If Number > -1 And Number < 10
