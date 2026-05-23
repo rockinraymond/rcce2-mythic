@@ -107,3 +107,24 @@ Function RCE_FloatFromStr#(Dat$)
   Next
   Return PeekFloat#(RCE_ConvertBank, 0)
 End Function
+
+; Clamp a world coordinate to a sane range. NaN compares false against any
+; bound so it always falls through to the explicit 0 reset; Inf/large
+; magnitudes get pulled to the limit. Used before persisting / broadcasting
+; player-supplied position floats so a single crafted packet can't poison
+; dropped-item / scenery / actor positions with NaN that subsequently
+; corrupts every receiver's spatial code.
+Const WorldCoordMax# = 100000.0
+Function ClampWorldCoord#(v#)
+  If v# > -WorldCoordMax# And v# < WorldCoordMax# Then Return v#
+  Return 0.0
+End Function
+
+; Sane bounds for non-position floats coming off the wire (e.g. UI dims).
+; Same NaN-via-comparison trick; range is intentionally permissive so the
+; only thing rejected is NaN/Inf/extreme magnitudes.
+Const FloatSanityMax# = 1000000000.0
+Function ClampSaneFloat#(v#)
+  If v# > -FloatSanityMax# And v# < FloatSanityMax# Then Return v#
+  Return 0.0
+End Function

@@ -1269,13 +1269,19 @@ Function UpdateNetwork()
 							Result = InventoryDrop(AI, Slot, Amount, False)
 							If Result <> 0
 								SendEquippedUpdate(AI)
-								; Create item on floor
+								; Create item on floor. Sanitise position floats
+								; before they're persisted into a DroppedItem and
+								; broadcast. AI\X#/Y#/Z# can carry a NaN/Inf from
+								; an unvalidated upstream packet (P_StandardUpdate
+								; only clamps Y; X and Z accept anything within
+								; magnitude limits but not NaN). A NaN dropped-item
+								; position poisons spatial code on every receiver.
 								D.DroppedItem = New DroppedItem
 								D\Item = Object.ItemInstance(Result)
 								D\Amount = Amount
-								D\X# = AI\X#
-								D\Y# = AI\Y#
-								D\Z# = AI\Z#
+								D\X# = ClampWorldCoord#(AI\X#)
+								D\Y# = ClampWorldCoord#(AI\Y#)
+								D\Z# = ClampWorldCoord#(AI\Z#)
 								D\ServerHandle = AI\ServerArea
 								; Tell other players in the area
 								Pa$ = "D" + RCE_StrFromInt$(Amount, 2) + RCE_StrFromFloat$(D\X#) + RCE_StrFromFloat$(D\Y#) + RCE_StrFromFloat$(D\Z#)
@@ -1372,18 +1378,17 @@ Function UpdateNetwork()
 					If AI\IgnoreUpdate = 0
 					; Player cannot move himself if he is a mount
 					If AI\Rider = Null
-						AI\DestX#    = RCE_FloatFromStr#(Mid$(M\MessageData$, 1, 4))
-						AI\DestZ#    = RCE_FloatFromStr#(Mid$(M\MessageData$, 5, 4))
-						; Client-supplied Y had no validation at all while X/Z carry an
-						; (commented but designed) anti-cheat. Reject obviously-bogus Y
-						; values (extreme magnitudes — covers NaN/Inf and the "set Y to
-						; +1e30 to phase through geometry" trick). The accepted-Y feedback
-						; loop in subsequent updates means a steady client is preserved;
-						; only blatantly out-of-world values get dropped.
-						NewY# = RCE_FloatFromStr#(Mid$(M\MessageData$, 9, 4))
-						If NewY# > -100000.0 And NewY# < 100000.0 Then AI\Y# = NewY#
-						NewX#        = RCE_FloatFromStr#(Mid$(M\MessageData$, 13, 4))
-						NewZ#        = RCE_FloatFromStr#(Mid$(M\MessageData$, 17, 4))
+						; All four position floats are clamped through
+						; ClampWorldCoord which rejects NaN/Inf and out-of-world
+						; magnitudes by falling back to 0. Track A's original
+						; Y-only filter is now uniform across X/Y/Z, and DestX/Z
+						; (which were previously raw) also sanitised.
+						AI\DestX#    = ClampWorldCoord#(RCE_FloatFromStr#(Mid$(M\MessageData$, 1, 4)))
+						AI\DestZ#    = ClampWorldCoord#(RCE_FloatFromStr#(Mid$(M\MessageData$, 5, 4)))
+						NewY#        = ClampWorldCoord#(RCE_FloatFromStr#(Mid$(M\MessageData$, 9, 4)))
+						AI\Y#        = NewY#
+						NewX#        = ClampWorldCoord#(RCE_FloatFromStr#(Mid$(M\MessageData$, 13, 4)))
+						NewZ#        = ClampWorldCoord#(RCE_FloatFromStr#(Mid$(M\MessageData$, 17, 4)))
 						AI\IsRunning = RCE_IntFromStr(Mid$(M\MessageData$, 21, 1))
 						AI\WalkingBackward = RCE_IntFromStr(Mid$(M\MessageData$, 22, 1))
 
@@ -1477,7 +1482,20 @@ Function UpdateNetwork()
 					; Delete him
 					A.Account = Object.Account(AI\Account)
 					If A <> Null Then SetLoginStatus(A, -1)
-					; Pause any persistent scripts and stop others
+					; Pause any persistent scripts and stop others.
+					;
+					; The original non-persistent branch called FreeActorScripts(AI)
+					; on every iteration. That function sweeps *every* ScriptInstance
+					; for AI — including the persistent SI we just paused above and
+					; whose handle is now sitting in a fresh PausedScript. The sweep
+					; flipped SI\Ended = True; the next UpdateScripts pass Deleted
+					; the SI; later resumes touched PausedScript\S\WaitResult\$ on a
+					; dangling pointer. Reliable use-after-free on any logout that
+					; happened while a quest script was in WaitSpeak / WaitKill.
+					;
+					; Fix: each iteration cleans only its own SI plus the
+					; PausedScript records that referenced exactly it, via an
+					; After-cursor walk (the body Deletes PS).
 					For SI.ScriptInstance = Each ScriptInstance
 						If SI\AI = Handle(AI) Or SI\AIContext = Handle(AI)
 							; Persistent
@@ -1491,7 +1509,13 @@ Function UpdateNetwork()
 								EndIf
 							; Not persistent
 							Else
-								FreeActorScripts(AI)
+								Local LPS.PausedScript = First PausedScript
+								Local LPSNext.PausedScript = Null
+								While LPS <> Null
+									LPSNext = After LPS
+									If LPS\Reason <> 1 And LPS\S = SI Then Delete LPS
+									LPS = LPSNext
+								Wend
 								FreeScriptInstance(SI)
 							EndIf
 						EndIf
@@ -2060,9 +2084,27 @@ Function UpdateNetwork()
 						If A\Pass$ = Mid$(M\MessageData$, Offset + 1, PwdLen)
 							Offset = Offset + 1 + PwdLen
 
-							; Check character name is valid
+							; Check character name is valid. Bound length and reject
+							; control bytes / non-printable characters before the
+							; name is persisted into Accounts.dat and broadcast
+							; into chat/nametag widgets. Without the cap a single
+							; CreateCharacter packet could write a multi-hundred-
+							; character name with embedded newlines into account
+							; data; clients that render nametags / list-box rows
+							; with raw bytes would then display garbage.
 							NameValid = True
 							Name$ = Upper$(Mid$(M\MessageData$, Offset + 47))
+							If Len(Name$) < 1 Or Len(Name$) > 32 Then NameValid = False
+							If NameValid
+								For nameI = 1 To Len(Name$)
+									Local nameCh = Asc(Mid$(Name$, nameI, 1))
+									; Allow printable ASCII (space..~) only.
+									If nameCh < 32 Or nameCh > 126
+										NameValid = False
+										Exit
+									EndIf
+								Next
+							EndIf
 							F = ReadFile("Data\Server Data\Names Filter.txt")
 							If F = 0 Then RuntimeError("Could not open Names Filter.txt!")
 								While Eof(F) = False

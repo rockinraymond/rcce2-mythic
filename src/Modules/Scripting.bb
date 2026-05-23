@@ -124,11 +124,29 @@ Function RunScript(SS.ScriptSource, Func$, AI.ActorInstance, AIContext.ActorInst
 		EndIf
 End Function
 
+; Soft cap on simultaneously-pending script work. The threader (Order())
+; can scale across this without missing scheduling deadlines, but if a
+; runaway script keeps ThreadScript-ing itself we want to refuse rather
+; than allocate ScriptInstance forever. Tune up if legitimate workloads
+; ever bump the ceiling.
+Const ScriptPendingMax = 2048
+
 Function ThreadScript(Name$, Func$, Actor%, CActor%, Param$ = "", Privileged% = 0)
 	; This function only adds the scripts to the ScriptInstance type and maps the module
 	Local Found = False
 	AI.ActorInstance = Object.ActorInstance(Actor)
 	AIContext.ActorInstance = Object.ActorInstance(CActor)
+
+	; Refuse the enqueue if we're already deep in pending work. Otherwise a
+	; script that ThreadScripts itself every tick (or a tight loop calling
+	; BVM_THREADEXECUTE) drives ScriptInstance allocation without bound and
+	; exhausts memory before any throttle kicks in.
+	Local pending% = CountScriptInstances() + CountThreadScripts()
+	If pending >= ScriptPendingMax
+		WriteLog(MainLog, "ThreadScript refused (pending=" + pending + " >= " + ScriptPendingMax + "): " + Name$ + " / " + Func$)
+		Return
+	EndIf
+
 	For SS.ScriptSource = Each ScriptSource
 		If Upper(SS\Name$) = Upper(Name$)
 			Found = 1
@@ -147,6 +165,18 @@ Function ThreadScript(Name$, Func$, Actor%, CActor%, Param$ = "", Privileged% = 
 	Else
 		 WriteLog(Mainlog, "Script " + Name$ + " does not exist.")
 	EndIf
+End Function
+
+Function CountScriptInstances%()
+	Local n% = 0
+	For SI.ScriptInstance = Each ScriptInstance : n = n + 1 : Next
+	Return n
+End Function
+
+Function CountThreadScripts%()
+	Local n% = 0
+	For TS.ThreadScript = Each ThreadScript : n = n + 1 : Next
+	Return n
 End Function
 
 ; Updates running scripts
@@ -231,7 +261,15 @@ Function UpdateScripts()
 					Local invokeRet% = BVM_Invoke(True) ; IMPORTANT: pass True To enable timeout
 					Select invokeRet
 						Case 0
-							RuntimeError("The script function aborted due to an error: " + BVM_GetLastErrorMsg())
+							; Script aborted with a VM error. Previously called
+							; RuntimeError() which halts the entire server
+							; process — a single buggy script then took the
+							; whole game down. Log the error, clean up the
+							; offending script's VM context, and continue.
+							WriteLog(MainLog, "Script '" + S\Name + "' aborted: " + BVM_GetLastErrorMsg())
+							BVM_ScriptLog("Script '" + S\Name + "' aborted: " + BVM_GetLastErrorMsg())
+							BVM_DeleteContext(S\hContext)
+							Delete S
 						Case 1
 							;Cleanup scripts which have finished executing
 							BVM_PopInt()
