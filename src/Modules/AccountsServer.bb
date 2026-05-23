@@ -35,6 +35,83 @@ Function FindAccountByListID.Account(ListID)
 
 End Function
 
+; Per-source login-attempt throttle. Each entry tracks one peer's recent
+; failure count and the millisecond timestamp of the first counted failure.
+; When failures cross the threshold within the window, further P_VerifyAccount
+; attempts from that peer are refused (with a "N" reply so the response
+; doesn't betray why) until the window expires. A successful login resets
+; the counter for that peer.
+Const LoginAttemptMaxFailures = 5
+Const LoginAttemptWindowMs    = 60000 ; 60 seconds
+
+Type LoginAttempt
+	Field FromID%
+	Field Failures%
+	Field WindowStart%
+End Type
+
+Function LoginAttemptFind.LoginAttempt(FromID)
+	For LA.LoginAttempt = Each LoginAttempt
+		If LA\FromID = FromID Then Return LA
+	Next
+	Return Null
+End Function
+
+; Returns True if a fresh P_VerifyAccount from FromID should be processed.
+; False if the source has tripped the failure threshold within the window.
+Function LoginAttemptOk%(FromID)
+	LA.LoginAttempt = LoginAttemptFind(FromID)
+	If LA = Null Then Return True
+	; Window expired — let the next failure record reset it.
+	If MilliSecs() - LA\WindowStart >= LoginAttemptWindowMs Then Return True
+	If LA\Failures < LoginAttemptMaxFailures Then Return True
+	Return False
+End Function
+
+; Record the outcome of a login attempt. Success resets the source's count;
+; failure increments it (creating a fresh entry / opening a new window if
+; the previous one expired).
+Function LoginAttemptRecord(FromID, Success)
+	LA.LoginAttempt = LoginAttemptFind(FromID)
+	If Success
+		If LA <> Null Then Delete LA
+		Return
+	EndIf
+	If LA = Null
+		LA = New LoginAttempt
+		LA\FromID = FromID
+		LA\WindowStart = MilliSecs()
+		LA\Failures = 1
+		Return
+	EndIf
+	; Reset window if the previous one closed.
+	If MilliSecs() - LA\WindowStart >= LoginAttemptWindowMs
+		LA\WindowStart = MilliSecs()
+		LA\Failures = 1
+		Return
+	EndIf
+	LA\Failures = LA\Failures + 1
+End Function
+
+; Returns True iff some live character on this account has its RNID matching
+; the requester's connection — i.e. the requester is the currently-logged-in
+; session for this account.
+;
+; Used to gate destructive account ops (ChangePassword, DeleteCharacter) so
+; a replayed packet with the (broken-MD5) hash can't take over an account
+; or destroy its characters unless the attacker is *also* currently holding
+; the session.
+Function RequesterOwnsAccountSession%(A.Account, FromID)
+	If A = Null Then Return False
+	If FromID < 1 Then Return False
+	For i = 0 To 9
+		If A\Character[i] <> Null
+			If A\Character[i]\RNID = FromID Then Return True
+		EndIf
+	Next
+	Return False
+End Function
+
 ; Builds the display string used in the Accounts list box.
 ; LoggedOn matches Account\LoggedOn semantics: -1 means logged out, anything
 ; greater than or equal to 0 indicates an active character index.

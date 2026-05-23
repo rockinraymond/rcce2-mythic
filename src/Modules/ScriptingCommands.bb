@@ -53,6 +53,7 @@ Function BVM_THREADEXECUTE(Name$, Func$, AI%=0, AIContext%=0, Param$ = "")
 End Function
 
 Function BVM_SAVESTATE()
+	If Not BVM_RequirePrivileged() Then Return
 	WriteLog(MainLog, "SaveState running...")
 	SaveAccounts()
 	WriteLog(MainLog, "Saved accounts...")
@@ -112,7 +113,24 @@ Function BVM_PLAYERISBANNED%(Param%)
 Return Result%
 End Function
 
+; Returns True iff the currently-executing script was spawned via a code
+; path that has already verified the caller is a GM. Used to gate
+; admin-only BVM commands (Ban/Kick/Warp/GiveItem/SetGold/SetActorLevel).
+;
+; Without this gate, any NPC's Examine / Trade / RightClick / ItemUse
+; script ran with the clicker's actor handle and could invoke BanPlayer
+; on the clicker. The only GM check in the entire scripting surface was
+; the chat `/script` command itself.
+Function BVM_RequirePrivileged%()
+	SI.ScriptInstance = Object.ScriptInstance(hSI)
+	If SI = Null Then Return False
+	If SI\Privileged <> 0 Then Return True
+	BVM_ScriptLog("Privileged BVM call refused from non-privileged script: " + SI\Name)
+	Return False
+End Function
+
 Function BVM_BANPLAYER(Param%)
+	If Not BVM_RequirePrivileged() Then Return
 	Actor.ActorInstance = Object.ActorInstance(Param)
 	If Actor <> Null
 		A.Account = Object.Account(Actor\Account)
@@ -121,6 +139,7 @@ Function BVM_BANPLAYER(Param%)
 End Function
 
 Function BVM_KICKPLAYER(Param%)
+	If Not BVM_RequirePrivileged() Then Return
 	Actor.ActorInstance = Object.ActorInstance(Param%)
 	If Actor <> Null
 			DataAux$ = RCE_StrFromInt(Actor\RNID)
@@ -159,14 +178,20 @@ Function BVM_ACTORINTRIGGER%(Param1%, Param2%)
 	Actor.ActorInstance = Object.ActorInstance(Param1%)
 	If Actor <> Null
 		TriggerID = Param2%
-		AInstance.AreaInstance = Object.AreaInstance(Actor\ServerArea)
-		If Len(AInstance\Area\TriggerScript$[TriggerID]) > 0
-			Size# = AInstance\Area\TriggerSize#[TriggerID] * AInstance\Area\TriggerSize#[TriggerID]
-			DistX# = Abs(Actor\X# - AInstance\Area\TriggerX#[TriggerID])
-			DistY# = Abs(Actor\Y# - AInstance\Area\TriggerY#[TriggerID])
-			DistZ# = Abs(Actor\Z# - AInstance\Area\TriggerZ#[TriggerID])
-			Dist# = (DistX# * DistX#) + (DistY# * DistY#) + (DistZ# * DistZ#)
-			If Dist# < Size# Then Result% = 1
+		; TriggerScript$/TriggerSize#/etc. are Dim'd 0..149 on AreaInstance.
+		; Reject any out-of-range index from the script before indexing.
+		If TriggerID >= 0 And TriggerID <= 149
+			AInstance.AreaInstance = Object.AreaInstance(Actor\ServerArea)
+			If AInstance <> Null
+				If Len(AInstance\Area\TriggerScript$[TriggerID]) > 0
+					Size# = AInstance\Area\TriggerSize#[TriggerID] * AInstance\Area\TriggerSize#[TriggerID]
+					DistX# = Abs(Actor\X# - AInstance\Area\TriggerX#[TriggerID])
+					DistY# = Abs(Actor\Y# - AInstance\Area\TriggerY#[TriggerID])
+					DistZ# = Abs(Actor\Z# - AInstance\Area\TriggerZ#[TriggerID])
+					Dist# = (DistX# * DistX#) + (DistY# * DistY#) + (DistZ# * DistZ#)
+					If Dist# < Size# Then Result% = 1
+				EndIf
+			EndIf
 		EndIf
 	EndIf
 Return Result%
@@ -362,6 +387,7 @@ Function BVM_KILLACTOR(Param1%, Param2%=0)
 End Function
 
 Function BVM_CHANGEACTOR(Param1%, Param2%)
+	If Not BVM_RequirePrivileged() Then Return
 	Local Success% = False
 	ID% = Param2
 	
@@ -1555,6 +1581,7 @@ Return Result%
 End Function
 
 Function BVM_WARP(Param1%, Param2$, Param3$, Param4%=0)
+	If Not BVM_RequirePrivileged() Then Return
 	Actor.ActorInstance = Object.ActorInstance(Param1%)
 	If Actor <> Null
 		Name$ = Upper$(Param2$)
@@ -1622,6 +1649,7 @@ Return Result%
 End Function
 
 Function BVM_SETACTORLEVEL(Param1%, Param2%)
+	If Not BVM_RequirePrivileged() Then Return
 	Actor.ActorInstance = Object.ActorInstance(Param1%)
 	If Actor <> Null
 		Actor\XP = 0
@@ -2063,6 +2091,7 @@ End Function
 
 
 Function BVM_SETGOLD(Param1%, Param2%)
+	If Not BVM_RequirePrivileged() Then Return
 	Actor.ActorInstance = Object.ActorInstance(Param1%)
 	If Actor <> Null
 		Amount = Param2%
@@ -2229,6 +2258,7 @@ Return Result$
 End Function
 
 Function BVM_GIVEITEM(Param1%, Param2$, Param3%=1)
+	If Not BVM_RequirePrivileged() Then Return
 	Actor.ActorInstance = Object.ActorInstance(Param1%)
 	If Actor <> Null
 		ItemName$ = Upper$(Param2$)
@@ -2477,13 +2507,20 @@ Function BVM_SETWAITKILL(Param1%, Param2%, Param3%)
 	SI.ScriptInstance = Object.ScriptInstance(hSI%)
 	If Actor <> Null
 		KillActor = Param2%
-		If ActorList(KillActor) <> Null
-			PS.PausedScript = New PausedScript
-			PS\S = SI
-			PS\Reason = 2
-			PS\ReasonActor = Actor
-			PS\ReasonKillActor = ActorList(KillActor)
-			PS\ReasonAmount = Param3%
+		; ActorList is Dim'd 0..65535. A script supplying a negative or
+		; out-of-range KillActor (BVM Param2 is signed-int from the bytecode)
+		; would index outside the Dim — Blitz3D doesn't bounds-check Dim
+		; accesses and writes through the resulting wild pointer, so this
+		; corrupts adjacent globals and crashes the server unpredictably.
+		If KillActor >= 0 And KillActor <= 65535
+			If ActorList(KillActor) <> Null
+				PS.PausedScript = New PausedScript
+				PS\S = SI
+				PS\Reason = 2
+				PS\ReasonActor = Actor
+				PS\ReasonKillActor = ActorList(KillActor)
+				PS\ReasonAmount = Param3%
+			EndIf
 		EndIf
 	EndIf
 End Function

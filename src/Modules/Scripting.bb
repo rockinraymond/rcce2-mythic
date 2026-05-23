@@ -50,6 +50,14 @@ Type ThreadScript
 	Field AI.ActorInstance
 	Field AIContext.ActorInstance
 	Field Param$
+	; Privileged scripts are allowed to invoke admin-only BVM commands
+	; (BanPlayer, KickPlayer, GiveItem, Warp, SetGold, SetActorLevel, etc).
+	; Default 0; the chat `/script` command and any explicit ThreadScript
+	; call from a code path that has already verified GM status set this
+	; to 1. NPC scripts triggered by player interaction (Examine, Trade,
+	; RightClick, ItemUse) MUST stay non-privileged so they can't be used
+	; to ban/kick the clicker.
+	Field Privileged%
 End Type
 
 Type ScriptInstance
@@ -61,18 +69,38 @@ Type ScriptInstance
 	Field Param$
 
 	Field Persistent%
-	
+
 	Field Waiting%
 	Field WaitStart%, WaitTime%
 	Field WaitHour%, WaitMinute%
 	Field WaitResult$
-	
+
 	Field Ended%
 	Field Thread%
+
+	; Propagated from the ThreadScript that spawned this instance.
+	; See BVM_RequirePrivileged().
+	Field Privileged%
 End Type
 
+; Returns True if the given ScriptInstance is currently waiting on behalf of
+; the actor whose runtime ID is the supplied wire FromID. Used by the
+; P_Dialog / P_ProgressBar / P_ScriptInput handlers to confirm that the
+; reply came from the player the script is actually addressed to.
+;
+; Without this check, ScriptInstance handles (4-byte int) were brute-
+; forceable: any connected peer could pick another player's live script and
+; answer its dialog/progress/input prompt, hijacking quest flow, loot
+; assignments, or NPC choices the other player was making.
+Function ScriptHandleBelongsTo(S.ScriptInstance, FromID)
+	If S = Null Then Return False
+	Local Sender.ActorInstance = FindActorInstanceFromRNID(FromID)
+	If Sender = Null Then Return False
+	Return S\AI = Handle(Sender)
+End Function
+
 ; Maps a script and places it on the execution stack
-Function RunScript(SS.ScriptSource, Func$, AI.ActorInstance, AIContext.ActorInstance, Param$ = "")
+Function RunScript(SS.ScriptSource, Func$, AI.ActorInstance, AIContext.ActorInstance, Param$ = "", Privileged% = 0)
 	; This function maps the module to the execution context in preperation to being run
 		If BVM_FindFunction(SS\hModule, Func$) <> -1
 			S.ScriptInstance = New ScriptInstance
@@ -82,6 +110,7 @@ Function RunScript(SS.ScriptSource, Func$, AI.ActorInstance, AIContext.ActorInst
 			S\AIContext = Handle(AIContext.ActorInstance)
 			S\Param = Param
 			S\Thread = -1 ;Every script gets one pass through the VM before being threaded
+			S\Privileged = Privileged%
 			BVM_MapModule(S\hContext, SS\hModule)
 			Local hEntryPoint% = BVM_FindEntryPoint(S\hContext, SS\hModule, Func$)
 			BVM_SelectContext(S\hContext)
@@ -95,7 +124,7 @@ Function RunScript(SS.ScriptSource, Func$, AI.ActorInstance, AIContext.ActorInst
 		EndIf
 End Function
 
-Function ThreadScript(Name$, Func$, Actor%, CActor%, Param$ = "")
+Function ThreadScript(Name$, Func$, Actor%, CActor%, Param$ = "", Privileged% = 0)
 	; This function only adds the scripts to the ScriptInstance type and maps the module
 	Local Found = False
 	AI.ActorInstance = Object.ActorInstance(Actor)
@@ -114,6 +143,7 @@ Function ThreadScript(Name$, Func$, Actor%, CActor%, Param$ = "")
 		TS\AI.ActorInstance = AI.ActorInstance
 		TS\AIContext.ActorInstance = AIContext.ActorInstance
 		TS\Param$ = Param$
+		TS\Privileged = Privileged%
 	Else
 		 WriteLog(Mainlog, "Script " + Name$ + " does not exist.")
 	EndIf
@@ -124,7 +154,7 @@ Function UpdateScripts()
 	If Pass = 0 Then Pass = Order()
 	; Handle threaded scripts
 	For TS.ThreadScript = Each ThreadScript
-		RunScript(TS\SS.ScriptSource, TS\Func$, TS\AI.ActorInstance, TS\AIContext.ActorInstance, TS\Param$)
+		RunScript(TS\SS.ScriptSource, TS\Func$, TS\AI.ActorInstance, TS\AIContext.ActorInstance, TS\Param$, TS\Privileged)
 		Delete TS
 	Next
 

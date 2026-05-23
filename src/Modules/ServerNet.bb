@@ -273,7 +273,11 @@ Function UpdateNetwork()
 								If A\IsDM = True
 									Name$ = Trim$(Split$(Params$, 1, ","))
 									Func$ = Trim$(Split$(Params$, 2, ","))
-									ThreadScript(Name$, Func$, Handle(AI), 0)
+									; Privileged=1: this code path has verified
+									; the invoker is a GM, so the spawned script
+									; is allowed to call Ban/Kick/Warp/etc. via
+									; BVM_RequirePrivileged().
+									ThreadScript(Name$, Func$, Handle(AI), 0, "", 1)
 								EndIf
 							Case LanguageString$(LS_SCMe)
 								Pa$ = Chr$(252) + "* " + AI\Name$ + " " + Params$
@@ -983,9 +987,9 @@ Function UpdateNetwork()
 			Case P_ProgressBar
 				If Left$(M\MessageData$, 1) = "C"
 					S.ScriptInstance = Object.ScriptInstance(RCE_IntFromStr(Mid$(M\MessageData$, 2, 4)))
-					If S <> Null
+					If S <> Null And ScriptHandleBelongsTo(S, M\FromID)
 						S\WaitResult$ = Str$(RCE_IntFromStr(Mid$(M\MessageData$, 6)))
-					Else
+					ElseIf S = Null
 						RCE_Send(Host, M\FromID, P_ProgressBar, "D" + Mid$(M\MessageData$, 6), True)
 					EndIf
 				EndIf
@@ -996,25 +1000,25 @@ Function UpdateNetwork()
 					; New dialog created
 					Case "N"
 						S.ScriptInstance = Object.ScriptInstance(RCE_IntFromStr(Mid$(M\MessageData$, 2, 4)))
-						If S <> Null
+						If S <> Null And ScriptHandleBelongsTo(S, M\FromID)
 							S\WaitResult$ = Str$(RCE_IntFromStr(Mid$(M\MessageData$, 6)))
-						Else
+						ElseIf S = Null
 							RCE_Send(Host, M\FromID, P_Dialog, "C" + Mid$(M\MessageData$, 6), True)
 						EndIf
 					; Dialog text received
 					Case "T"
 						S.ScriptInstance = Object.ScriptInstance(RCE_IntFromStr(Mid$(M\MessageData$, 2, 4)))
-						If S <> Null Then S\WaitResult$ = "0"
+						If S <> Null And ScriptHandleBelongsTo(S, M\FromID) Then S\WaitResult$ = "0"
 					; Dialog option picked
 					Case "O"
 						S.ScriptInstance = Object.ScriptInstance(RCE_IntFromStr(Mid$(M\MessageData$, 2, 4)))
-						If S <> Null Then S\WaitResult$ = RCE_IntFromStr(Mid$(M\MessageData$, 6, 1))
+						If S <> Null And ScriptHandleBelongsTo(S, M\FromID) Then S\WaitResult$ = RCE_IntFromStr(Mid$(M\MessageData$, 6, 1))
 				End Select
 
 			; Text input reply
 			Case P_ScriptInput
 				S.ScriptInstance = Object.ScriptInstance(RCE_IntFromStr(Mid$(M\MessageData$, 1, 4)))
-				If S <> Null Then S\WaitResult$ = Mid$(M\MessageData$, 5)
+				If S <> Null And ScriptHandleBelongsTo(S, M\FromID) Then S\WaitResult$ = Mid$(M\MessageData$, 5)
 
 			; A player ate an item
 			Case P_EatItem
@@ -1578,7 +1582,7 @@ Function UpdateNetwork()
 							Offset = Offset + 1 + PwdLen
 							Number = Asc(Mid$(M\MessageData$, Offset, 1))
 
-							If Number > -1 And Number < 10
+							If Number > -1 And Number < 10 And A\Character[Number] <> Null
 								; Set his status to in game and put him in his area
 								SetLoginStatus(A, Number)
 								A\Character[Number]\RNID = M\FromID
@@ -1620,7 +1624,10 @@ Function UpdateNetwork()
 				Next
 		        ; If account was not found or was already logged on, return failure
 		        If Exists = False Then RCE_Send(Host, M\FromID, P_StartGame, "N", True)
-				If (M\FromID = 2) Stop
+				; (removed) `If (M\FromID = 2) Stop` — a leftover debug trap that
+				; halted the entire server process the first time the peer whose
+				; RakNet connection ID is 2 sent P_StartGame. Trivial remote DoS
+				; for the second connecting client.
 
 			; Fetch update files list request
 			Case P_FetchUpdateFiles ; :)
@@ -1840,18 +1847,31 @@ Function UpdateNetwork()
 				; Non-MySQL version
 				Else*/
 
+					; Rate-limit failed verifications. Without this the lack of any
+					; throttle made dictionary / credential-stuffing attacks free,
+					; and the distinct "N/P/B/L" replies advertised whether each
+					; username existed (and whether it was banned or already on).
+					; LoginAttemptOk() returns False once the configured threshold
+					; for this source has been crossed; we send the same "N" reply
+					; as for an unknown account so the response itself doesn't
+					; betray why the attempt failed under attack.
+					If Not LoginAttemptOk(M\FromID)
+						RCE_Send(Host, M\FromID, P_VerifyAccount, "N", True)
+					Else
 					; Find account
 					Exists = False
 					For A.Account = Each Account
 						If Upper$(A\User$) = Upper$(Username$)
 							; Account is already logged in
 							If A\LoggedOn <> -1
+								LoginAttemptRecord(M\FromID, False)
 								RCE_Send(Host, M\FromID, P_VerifyAccount, "L", True)
 							Else
 								Offset = 2 + UsernameLen
 								PwdLen = RCE_IntFromStr(Mid$(M\MessageData$, Offset, 1))
 								; If password is correct, send back character list
 								If A\Pass$ = Mid$(M\MessageData$, Offset + 1, PwdLen) And A\IsBanned = False
+									LoginAttemptRecord(M\FromID, True)
 									Pa$ = "Y"
 									For i = 0 To 9
 										If A\Character[i] <> Null
@@ -1864,6 +1884,7 @@ Function UpdateNetwork()
 									RCE_Send(Host, M\FromID, P_VerifyAccount, Pa$, True)
 								; Otherwise return password failure
 								Else
+									LoginAttemptRecord(M\FromID, False)
 									If A\IsBanned = False
 										RCE_Send(Host, M\FromID, P_VerifyAccount, "P", True)
 									Else
@@ -1876,7 +1897,11 @@ Function UpdateNetwork()
 						EndIf
 					Next
 					; If account was not found, return failure
-					If Exists = False Then RCE_Send(Host, M\FromID, P_VerifyAccount, "N", True)
+					If Exists = False
+						LoginAttemptRecord(M\FromID, False)
+						RCE_Send(Host, M\FromID, P_VerifyAccount, "N", True)
+					EndIf
+					EndIf
 				//EndIf
 
 			; Change account password request
@@ -1889,8 +1914,12 @@ Function UpdateNetwork()
 					If Upper$(A\User$) = Upper$(Username$)
 						Offset = 2 + UsernameLen
 						PwdLen = RCE_IntFromStr(Mid$(M\MessageData$, Offset, 1))
-						; If password is correct, change it to the new one
-						If A\Pass$ = Mid$(M\MessageData$, Offset + 1, PwdLen)
+						; If password is correct AND the requester is the currently-
+						; logged-in session for this account, change it. Without
+						; the session check, a captured/replayed P_ChangePassword
+						; lets any party with the (broken-MD5) hash steal the
+						; account permanently.
+						If A\Pass$ = Mid$(M\MessageData$, Offset + 1, PwdLen) And RequesterOwnsAccountSession(A, M\FromID)
 							Offset = 2 + PwdLen
 							PwdLen = RCE_IntFromStr(Mid$(M\MessageData$, Offset, 1))
 							A\Pass$ = Mid$(M\MessageData$, Offset + 1, PwdLen)
@@ -2148,8 +2177,12 @@ Function UpdateNetwork()
 					If Upper$(A\User$) = Upper$(Username$)
 						Offset = 2 + UsernameLen
 						PwdLen = RCE_IntFromStr(Mid$(M\MessageData$, Offset, 1))
-						; If password is correct
-						If A\Pass$ = Mid$(M\MessageData$, Offset + 1, PwdLen)
+						; If password is correct AND the requester is the
+						; currently-logged-in session for this account.
+						; A replayed P_DeleteCharacter would otherwise let
+						; anyone with the hash permanently destroy character
+						; slots on the account.
+						If A\Pass$ = Mid$(M\MessageData$, Offset + 1, PwdLen) And RequesterOwnsAccountSession(A, M\FromID)
 							Offset = Offset + 1 + PwdLen
 							Number = Asc(Mid$(M\MessageData$, Offset, 1))
 							If Number > -1 And Number < 10
