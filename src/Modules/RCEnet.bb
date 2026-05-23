@@ -29,27 +29,49 @@ End Function
 
 Function RCE_CreateMessages()
 	If (RCE_MoveToFirstMessage() <> 0)
-	
+
 		Repeat
-			M.RCE_Message = New RCE_Message
-			M\Connection = RCE_GetMessageConnection()
-			M\FromID = M\Connection
-			M\MessageType = RCE_GetMessageType()
-			
-			Length% = RCE_MessageLength()
-			If (Length > 0)
-				MessageData= CreateBank(Length)
-				RCE_GetMessageData(MessageData)
-				; Copy the data	
-				For i = 0 To Length - 1
-					M\MessageData$ = M\MessageData$ + Chr$(PeekByte(MessageData, i))
-				Next
-				FreeBank(MessageData)
+			Local incomingType% = RCE_GetMessageType()
+			Local incomingConn% = RCE_GetMessageConnection()
+
+			; Reject "local-only" sentinel types if they arrive over the network.
+			; RCE_PlayerTimedOut / PlayerHasLeft / PlayerKicked are supposed to be
+			; synthesized by the network library when it detects a disconnect on
+			; *this* host; the message handlers act on them as authoritative and
+			; (in the kicked case) take the target RNID straight out of the
+			; payload. Without this guard any connected peer can spoof a
+			; PlayerKicked message and disconnect any other player — see
+			; ServerNet.bb P_PlayerKicked handler.
+			If incomingType% >= RCE_PlayerTimedOut And incomingType% <= RCE_PlayerKicked And incomingConn% <> 0
+				; Drain the payload so the underlying queue advances, but do
+				; NOT create an RCE_Message for the handlers to act on.
+				Length% = RCE_MessageLength()
+				If Length > 0
+					MessageData = CreateBank(Length)
+					RCE_GetMessageData(MessageData)
+					FreeBank(MessageData)
+				EndIf
+			Else
+				M.RCE_Message = New RCE_Message
+				M\Connection = incomingConn%
+				M\FromID = M\Connection
+				M\MessageType = incomingType%
+
+				Length% = RCE_MessageLength()
+				If (Length > 0)
+					MessageData= CreateBank(Length)
+					RCE_GetMessageData(MessageData)
+					; Copy the data
+					For i = 0 To Length - 1
+						M\MessageData$ = M\MessageData$ + Chr$(PeekByte(MessageData, i))
+					Next
+					FreeBank(MessageData)
+				EndIf
 			EndIf
-			
-		Until RCE_AreMoreMessage() = 0 	
-	EndIf	
-End Function 
+
+		Until RCE_AreMoreMessage() = 0
+	EndIf
+End Function
 
 ; Conversions
 Function RCE_IntFromStr(Dat$)
