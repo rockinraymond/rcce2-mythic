@@ -983,9 +983,9 @@ Function UpdateNetwork()
 			Case P_ProgressBar
 				If Left$(M\MessageData$, 1) = "C"
 					S.ScriptInstance = Object.ScriptInstance(RCE_IntFromStr(Mid$(M\MessageData$, 2, 4)))
-					If S <> Null
+					If S <> Null And ScriptHandleBelongsTo(S, M\FromID)
 						S\WaitResult$ = Str$(RCE_IntFromStr(Mid$(M\MessageData$, 6)))
-					Else
+					ElseIf S = Null
 						RCE_Send(Host, M\FromID, P_ProgressBar, "D" + Mid$(M\MessageData$, 6), True)
 					EndIf
 				EndIf
@@ -996,25 +996,25 @@ Function UpdateNetwork()
 					; New dialog created
 					Case "N"
 						S.ScriptInstance = Object.ScriptInstance(RCE_IntFromStr(Mid$(M\MessageData$, 2, 4)))
-						If S <> Null
+						If S <> Null And ScriptHandleBelongsTo(S, M\FromID)
 							S\WaitResult$ = Str$(RCE_IntFromStr(Mid$(M\MessageData$, 6)))
-						Else
+						ElseIf S = Null
 							RCE_Send(Host, M\FromID, P_Dialog, "C" + Mid$(M\MessageData$, 6), True)
 						EndIf
 					; Dialog text received
 					Case "T"
 						S.ScriptInstance = Object.ScriptInstance(RCE_IntFromStr(Mid$(M\MessageData$, 2, 4)))
-						If S <> Null Then S\WaitResult$ = "0"
+						If S <> Null And ScriptHandleBelongsTo(S, M\FromID) Then S\WaitResult$ = "0"
 					; Dialog option picked
 					Case "O"
 						S.ScriptInstance = Object.ScriptInstance(RCE_IntFromStr(Mid$(M\MessageData$, 2, 4)))
-						If S <> Null Then S\WaitResult$ = RCE_IntFromStr(Mid$(M\MessageData$, 6, 1))
+						If S <> Null And ScriptHandleBelongsTo(S, M\FromID) Then S\WaitResult$ = RCE_IntFromStr(Mid$(M\MessageData$, 6, 1))
 				End Select
 
 			; Text input reply
 			Case P_ScriptInput
 				S.ScriptInstance = Object.ScriptInstance(RCE_IntFromStr(Mid$(M\MessageData$, 1, 4)))
-				If S <> Null Then S\WaitResult$ = Mid$(M\MessageData$, 5)
+				If S <> Null And ScriptHandleBelongsTo(S, M\FromID) Then S\WaitResult$ = Mid$(M\MessageData$, 5)
 
 			; A player ate an item
 			Case P_EatItem

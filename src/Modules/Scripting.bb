@@ -71,6 +71,22 @@ Type ScriptInstance
 	Field Thread%
 End Type
 
+; Returns True if the given ScriptInstance is currently waiting on behalf of
+; the actor whose runtime ID is the supplied wire FromID. Used by the
+; P_Dialog / P_ProgressBar / P_ScriptInput handlers to confirm that the
+; reply came from the player the script is actually addressed to.
+;
+; Without this check, ScriptInstance handles (4-byte int) were brute-
+; forceable: any connected peer could pick another player's live script and
+; answer its dialog/progress/input prompt, hijacking quest flow, loot
+; assignments, or NPC choices the other player was making.
+Function ScriptHandleBelongsTo(S.ScriptInstance, FromID)
+	If S = Null Then Return False
+	Local Sender.ActorInstance = FindActorInstanceFromRNID(FromID)
+	If Sender = Null Then Return False
+	Return S\AI = Handle(Sender)
+End Function
+
 ; Maps a script and places it on the execution stack
 Function RunScript(SS.ScriptSource, Func$, AI.ActorInstance, AIContext.ActorInstance, Param$ = "")
 	; This function maps the module to the execution context in preperation to being run
