@@ -1578,7 +1578,7 @@ Function UpdateNetwork()
 							Offset = Offset + 1 + PwdLen
 							Number = Asc(Mid$(M\MessageData$, Offset, 1))
 
-							If Number > -1 And Number < 10
+							If Number > -1 And Number < 10 And A\Character[Number] <> Null
 								; Set his status to in game and put him in his area
 								SetLoginStatus(A, Number)
 								A\Character[Number]\RNID = M\FromID
