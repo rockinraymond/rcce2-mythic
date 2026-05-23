@@ -273,7 +273,11 @@ Function UpdateNetwork()
 								If A\IsDM = True
 									Name$ = Trim$(Split$(Params$, 1, ","))
 									Func$ = Trim$(Split$(Params$, 2, ","))
-									ThreadScript(Name$, Func$, Handle(AI), 0)
+									; Privileged=1: this code path has verified
+									; the invoker is a GM, so the spawned script
+									; is allowed to call Ban/Kick/Warp/etc. via
+									; BVM_RequirePrivileged().
+									ThreadScript(Name$, Func$, Handle(AI), 0, "", 1)
 								EndIf
 							Case LanguageString$(LS_SCMe)
 								Pa$ = Chr$(252) + "* " + AI\Name$ + " " + Params$
