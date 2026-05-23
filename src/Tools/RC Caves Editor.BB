@@ -2157,13 +2157,18 @@ For e.Event = Each event
                Return  
                EndIf
        If Right$(rd$,4)<> ".b3d" Then rd$=rd$+".b3d"
-       If FileType(CurrentDir()+"Data\RCCAVES\"+rd$)=1 Then 
+       If FileType(CurrentDir()+"Data\RCCAVES\"+rd$)=1 Then
             FCheck=Fui_Confirm("Overwrite File?","Yes","No")
-            If Fcheck=1 Then  SAVEWORK(rd$) 
+            If Fcheck=1 Then  SAVEWORK(rd$)
     	    ChangeDir thispath$
         Else
-		  SAVEWORK(rd$) 
-       EndIf         
+		  SAVEWORK(rd$)
+		  ; Mirror the file-existed branch above so the new-file path also
+		  ; ends back at the app working directory. SAVEWORK can chdir into
+		  ; Data\RCCAVES; without this restore the next file op uses that as
+		  ; the relative root and silently mis-resolves.
+		  ChangeDir thispath$
+       EndIf
        EndIf
 ;-----------------
        Case GUI_MENUFILE_OPEN
