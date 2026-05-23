@@ -1847,18 +1847,31 @@ Function UpdateNetwork()
 				; Non-MySQL version
 				Else*/
 
+					; Rate-limit failed verifications. Without this the lack of any
+					; throttle made dictionary / credential-stuffing attacks free,
+					; and the distinct "N/P/B/L" replies advertised whether each
+					; username existed (and whether it was banned or already on).
+					; LoginAttemptOk() returns False once the configured threshold
+					; for this source has been crossed; we send the same "N" reply
+					; as for an unknown account so the response itself doesn't
+					; betray why the attempt failed under attack.
+					If Not LoginAttemptOk(M\FromID)
+						RCE_Send(Host, M\FromID, P_VerifyAccount, "N", True)
+					Else
 					; Find account
 					Exists = False
 					For A.Account = Each Account
 						If Upper$(A\User$) = Upper$(Username$)
 							; Account is already logged in
 							If A\LoggedOn <> -1
+								LoginAttemptRecord(M\FromID, False)
 								RCE_Send(Host, M\FromID, P_VerifyAccount, "L", True)
 							Else
 								Offset = 2 + UsernameLen
 								PwdLen = RCE_IntFromStr(Mid$(M\MessageData$, Offset, 1))
 								; If password is correct, send back character list
 								If A\Pass$ = Mid$(M\MessageData$, Offset + 1, PwdLen) And A\IsBanned = False
+									LoginAttemptRecord(M\FromID, True)
 									Pa$ = "Y"
 									For i = 0 To 9
 										If A\Character[i] <> Null
@@ -1871,6 +1884,7 @@ Function UpdateNetwork()
 									RCE_Send(Host, M\FromID, P_VerifyAccount, Pa$, True)
 								; Otherwise return password failure
 								Else
+									LoginAttemptRecord(M\FromID, False)
 									If A\IsBanned = False
 										RCE_Send(Host, M\FromID, P_VerifyAccount, "P", True)
 									Else
@@ -1883,7 +1897,11 @@ Function UpdateNetwork()
 						EndIf
 					Next
 					; If account was not found, return failure
-					If Exists = False Then RCE_Send(Host, M\FromID, P_VerifyAccount, "N", True)
+					If Exists = False
+						LoginAttemptRecord(M\FromID, False)
+						RCE_Send(Host, M\FromID, P_VerifyAccount, "N", True)
+					EndIf
+					EndIf
 				//EndIf
 
 			; Change account password request
