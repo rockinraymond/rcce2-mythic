@@ -56,7 +56,7 @@ End Function
 Function MediaImportShouldCopy%(path$, mediaRoot$, currentDir$)
 	path$ = MediaImportTrimTrailingSlash$(path$)
 	Local relativeRoot$ = MediaImportEnsureTrailingSlash$(mediaRoot$)
-	Local absoluteRoot$ = MediaImportSourcePath$(relativeRoot$, currentDir$)
+	Local absoluteRoot$ = MediaImportEnsureTrailingSlash$(MediaImportSourcePath$(relativeRoot$, currentDir$))
 	If MediaImportHasPrefix(path$, relativeRoot$) Then Return False
 	If MediaImportHasPrefix(path$, absoluteRoot$) Then Return False
 	Return True
@@ -65,7 +65,7 @@ End Function
 Function MediaImportRelativePath$(path$, mediaRoot$, currentDir$, mediaFolder$ = "")
 	path$ = MediaImportTrimTrailingSlash$(path$)
 	Local relativeRoot$ = MediaImportEnsureTrailingSlash$(mediaRoot$)
-	Local absoluteRoot$ = MediaImportSourcePath$(relativeRoot$, currentDir$)
+	Local absoluteRoot$ = MediaImportEnsureTrailingSlash$(MediaImportSourcePath$(relativeRoot$, currentDir$))
 
 	If MediaImportHasPrefix(path$, relativeRoot$)
 		Return Mid$(path$, Len(relativeRoot$) + 1)
