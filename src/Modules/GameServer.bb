@@ -71,13 +71,20 @@ Function GiveXP(A.ActorInstance, XP, IgnoreParty = 0)
 					If Party\Player[i]\ServerArea = A\ServerArea Then Members = Members + 1
 				EndIf
 			Next
-			PartyXP = XP / Members
-			For i = 0 To 7
-				If Party\Player[i] <> Null And Party\Player[i] <> A
-					If Party\Player[i]\ServerArea = A\ServerArea Then GiveXP(Party\Player[i], PartyXP, True)
-				EndIf
-			Next
-			XP = PartyXP + (XP Mod Party\Members)
+			; Skip the share path entirely if no in-area members were
+			; counted. Previously `XP / Members` and `XP Mod Party\Members`
+			; could fire with Members or Party\Members = 0 (everyone in the
+			; party in different zones, or a desynced party state), crashing
+			; the server on every kill that yielded XP.
+			If Members > 0 And Party\Members > 0
+				PartyXP = XP / Members
+				For i = 0 To 7
+					If Party\Player[i] <> Null And Party\Player[i] <> A
+						If Party\Player[i]\ServerArea = A\ServerArea Then GiveXP(Party\Player[i], PartyXP, True)
+					EndIf
+				Next
+				XP = PartyXP + (XP Mod Party\Members)
+			EndIf
 		EndIf
 	EndIf
 
@@ -93,6 +100,31 @@ Function GiveXP(A.ActorInstance, XP, IgnoreParty = 0)
 End Function
 
 ; Kills off an actor instance
+; Deferred-kill queue. KillActor can FreeActorInstance(A), and when KillActor
+; is invoked from inside `For AI.ActorInstance = Each ActorInstance` (e.g.
+; water-damage death in UpdateActorInstances), freeing the current iterator
+; leaves Blitz's For-Each next-pointer pointing into freed memory. The
+; iteration sites use DeferKillActor instead, then call ProcessPendingKills
+; after the loop completes.
+Type PendingKill
+	Field Actor.ActorInstance
+	Field Killer.ActorInstance
+End Type
+
+Function DeferKillActor(A.ActorInstance, Killer.ActorInstance)
+	If A = Null Then Return
+	PK.PendingKill = New PendingKill
+	PK\Actor = A
+	PK\Killer = Killer
+End Function
+
+Function ProcessPendingKills()
+	For PK.PendingKill = Each PendingKill
+		If PK\Actor <> Null Then KillActor(PK\Actor, PK\Killer)
+	Next
+	Delete Each PendingKill
+End Function
+
 Function KillActor(A.ActorInstance, Killer.ActorInstance)
 
 	; Tell players in the same area if it was an AI actor dying
@@ -664,7 +696,11 @@ Function UpdateActorInstances(Broadcast)
 							UpdateAttribute(AI, HealthStat, AI\Attributes\Value[HealthStat] - 1)
 							If AI\Attributes\Value[HealthStat] <= 0
 								AI\Attributes\Value[HealthStat] = 0
-								KillActor(AI, Null)
+								; AI is the current For-Each iterator — defer the
+								; actual KillActor (which FreeActorInstance's an AI)
+								; until after the loop. See DeferKillActor /
+								; ProcessPendingKills.
+								DeferKillActor(AI, Null)
 							EndIf
 						EndIf
 						If AI\RNID > 0
@@ -679,7 +715,8 @@ Function UpdateActorInstances(Broadcast)
 						UpdateAttribute(AI, HealthStat, AI\Attributes\Value[HealthStat] - Damage)
 						If AI\Attributes\Value[HealthStat] <= 0
 							AI\Attributes\Value[HealthStat] = 0
-							KillActor(AI, Null)
+							; Same iterator-during-iteration hazard — defer.
+							DeferKillActor(AI, Null)
 						EndIf
 					EndIf
 				EndIf
@@ -872,6 +909,12 @@ Function UpdateActorInstances(Broadcast)
 		EndIf
 	Next
 
+	; Process any kills deferred from the loop above (water-damage NPC
+	; deaths). Doing it here means the For-Each next-pointers stayed valid
+	; throughout the iteration; the actual FreeActorInstance(A) happens
+	; now, while no iteration is active.
+	ProcessPendingKills()
+
 ;****************************************************************
 ;****************************************************************
 ;****************************************************************
@@ -928,7 +971,15 @@ Function UpdateActorInstances(Broadcast)
 								XDist# = Abs(A2\X# - A2\DestX#)
 								ZDist# = Abs(A2\Z# - A2\DestZ#)
 								DoneDist# = (XDist# * XDist#) + (ZDist# * ZDist#)
-								YPos# = A2\Y# + ((AInstance\Area\WaypointY#[A2\CurrentWaypoint] - A2\Y#) * (DoneDist# / TotalDist#))
+								; Avoid divide-by-zero when the waypoint coincides with the
+								; previous origin (single-waypoint patrol or a config error
+								; that left OldX/Z == DestX/Z). Fall back to the actor's
+								; current Y rather than crashing the periodic broadcast.
+								If TotalDist# > 0.0
+									YPos# = A2\Y# + ((AInstance\Area\WaypointY#[A2\CurrentWaypoint] - A2\Y#) * (DoneDist# / TotalDist#))
+								Else
+									YPos# = A2\Y#
+								EndIf
 							Else
 								YPos# = A2\Y#
 							EndIf
@@ -948,10 +999,16 @@ End Function
 ; Changes the area of an actor instance
 Function SetArea(A.ActorInstance, Ar.Area, Instance, Waypoint = -1, Portal = 0, X# = 0, Y# = 0, Z# = 0)
 
-	; Check instance exists
-	If Ar\Instances[Instance] = Null
+	; Check instance exists. The bounds check has to come BEFORE the
+	; Instances[] access — without it, a GM typing `/warp Area, 9999`
+	; indexed past the 100-slot Instances array (declared 0..99) and
+	; crashed the server before any Null check could run.
+	If Instance < 0 Or Instance > 99
+		WriteLog(MainLog, "Error: Cannot put actor into instance #" + Str$(Instance) + " of " + Ar\Name$ + " — instance index out of range")
 		Instance = 0
+	ElseIf Ar\Instances[Instance] = Null
 		WriteLog(MainLog, "Error: Cannot put actor into instance #" + Str$(Instance) + " of " + Ar\Name$ + " as the instance does not exist")
+		Instance = 0
 	EndIf
 	
 	;set flag to ignore standard updates until client has notified us that it has completed the move
