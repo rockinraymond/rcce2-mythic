@@ -151,8 +151,13 @@ Function KillActor(A.ActorInstance, Killer.ActorInstance)
 		GiveXP(Killer, XP)
 	EndIf
 
-	; Continue any paused scripts waiting for this event
-	For PS.PausedScript = Each PausedScript
+	; Continue any paused scripts waiting for this event. After-cursor walk:
+	; the body Deletes PS, which would corrupt a For-Each cursor on the
+	; next iteration step if two WaitKill scripts resume in the same kill.
+	Local PS.PausedScript = First PausedScript
+	Local PSNext.PausedScript = Null
+	While PS <> Null
+		PSNext = After PS
 		If PS\Reason = 2
 			If PS\ReasonActor = Killer And PS\ReasonKillActor = A\Actor
 				PS\ReasonCount = PS\ReasonCount + 1
@@ -162,7 +167,8 @@ Function KillActor(A.ActorInstance, Killer.ActorInstance)
 				EndIf
 			EndIf
 		EndIf
-	Next
+		PS = PSNext
+	Wend
 
 	; Human death
 	If A\RNID > 0

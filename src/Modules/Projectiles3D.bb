@@ -59,10 +59,17 @@ Function CreateProjectile(Source.ActorInstance, Target.ActorInstance, MeshID, Ho
 
 End Function
 
-; Updates all projectile instances
+; Updates all projectile instances. After-cursor walk: the destroy branch
+; calls FreeProjectileInstance(P) which Deletes P; a For-Each cursor would
+; then read the freed projectile's next pointer on the following step and
+; either skip the next projectile or crash. Two projectiles arriving at
+; their targets in the same frame is the typical reproducer.
 Function UpdateProjectiles()
 
-	For P.ProjectileInstance = Each ProjectileInstance
+	Local P.ProjectileInstance = First ProjectileInstance
+	Local PNext.ProjectileInstance = Null
+	While P <> Null
+		PNext = After P
 		; Move
 		If P\Target <> Null
 			P\TargetX# = EntityX#(P\Target\CollisionEN)
@@ -77,7 +84,8 @@ Function UpdateProjectiles()
 		If EntityDistance#(P\EN, GPP) < 2.0
 			FreeProjectileInstance(P)
 		EndIf
-	Next
+		P = PNext
+	Wend
 
 End Function
 

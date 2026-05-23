@@ -152,14 +152,29 @@ End Function
 ; Updates running scripts
 Function UpdateScripts()
 	If Pass = 0 Then Pass = Order()
-	; Handle threaded scripts
-	For TS.ThreadScript = Each ThreadScript
+
+	; Each For-Each loop below is rewritten as a manual `After`-cursor walk
+	; because the bodies may Delete the iterator instance — the legacy
+	; `For X = Each Y ... Delete X` form re-reads the freed instance's next
+	; pointer on the following iteration step, intermittently skipping or
+	; crashing on bursts of simultaneous events. The fix matches the
+	; pattern Track E introduced for the water-damage KillActor sweep.
+
+	; Handle threaded scripts.
+	Local TS.ThreadScript = First ThreadScript
+	Local TSNext.ThreadScript = Null
+	While TS <> Null
+		TSNext = After TS
 		RunScript(TS\SS.ScriptSource, TS\Func$, TS\AI.ActorInstance, TS\AIContext.ActorInstance, TS\Param$, TS\Privileged)
 		Delete TS
-	Next
+		TS = TSNext
+	Wend
 
-	; Update paused scripts if necessary
-	For PS.PausedScript = Each PausedScript
+	; Update paused scripts if necessary.
+	Local PS.PausedScript = First PausedScript
+	Local PSNext.PausedScript = Null
+	While PS <> Null
+		PSNext = After PS
 		; Check whether waited for items are available
 		If PS\Reason = 3
 			If PS\ReasonActor <> Null
@@ -178,32 +193,37 @@ Function UpdateScripts()
 				Delete PS
 			EndIf
 		EndIf
-	Next
+		PS = PSNext
+	Wend
+
 	Scripts = 0
-	For S.ScriptInstance = Each ScriptInstance
-			;Clean up of prematurely exited scripts
-			If S\Ended = False
-				; Update waiting scripts
-				If S\Waiting = 1
-					If Len(S\WaitResult$) > 0
+	Local S.ScriptInstance = First ScriptInstance
+	Local SNext.ScriptInstance = Null
+	While S <> Null
+		SNext = After S
+		;Clean up of prematurely exited scripts
+		If S\Ended = False
+			; Update waiting scripts
+			If S\Waiting = 1
+				If Len(S\WaitResult$) > 0
+					S\Waiting = 0
+				EndIf
+			ElseIf S\Waiting = 2
+				If MilliSecs() - S\WaitStart >= S\WaitTime
+					S\Waiting = 0
+				EndIf
+			; Waiting for a certain game time
+			ElseIf S\Waiting = 3
+				If TimeH >= S\WaitHour
+					If TimeM >= S\WaitMinute
 						S\Waiting = 0
-					EndIf
-				ElseIf S\Waiting = 2
-					If MilliSecs() - S\WaitStart >= S\WaitTime
-						S\Waiting = 0
-					EndIf
-				; Waiting for a certain game time
-				ElseIf S\Waiting = 3
-					If TimeH >= S\WaitHour
-						If TimeM >= S\WaitMinute
-							S\Waiting = 0
-							S\WaitResult$ = "1"
-						EndIf
+						S\WaitResult$ = "1"
 					EndIf
 				EndIf
+			EndIf
 			;Threading Code
-				Scripts = Scripts + 1
-				If S\Thread = Pass Or S\Thread = -1
+			Scripts = Scripts + 1
+			If S\Thread = Pass Or S\Thread = -1
 				If S\Waiting = 0
 					hSI = Handle(S)
 					BVM_SelectContext(S\hContext)
@@ -221,15 +241,16 @@ Function UpdateScripts()
 							; The execution timed out.
 							; We just do nothing (keep running the loop)
 					End Select
-					 BVM_CheckError()
+					BVM_CheckError()
 					;BVM_EndDebug(S\hContext)
 				EndIf
-				EndIf
-			Else
-					BVM_DeleteContext(S\hContext)
-					Delete S
 			EndIf
-	Next
+		Else
+			BVM_DeleteContext(S\hContext)
+			Delete S
+		EndIf
+		S = SNext
+	Wend
 	If Pass <> 0 Then Pass = Pass - 1 Else Pass = Threads
 
 End Function
@@ -311,11 +332,17 @@ End Function
 Function FreeActorScripts(A.ActorInstance)
 		For S.ScriptInstance = Each ScriptInstance
 			If S\AI = Handle(A) Or S\AIContext = Handle(A)
-				For PS.PausedScript = Each PausedScript
+				; After-cursor walk: the body Deletes PS, which would corrupt
+				; a For-Each cursor on the next iteration step. Walk explicitly.
+				Local PS.PausedScript = First PausedScript
+				Local PSNext.PausedScript = Null
+				While PS <> Null
+					PSNext = After PS
 					If PS\Reason <> 1
 						If PS\S = S Then Delete PS
 					EndIf
-				Next
+					PS = PSNext
+				Wend
 				FreeScriptInstance(S)
 			EndIf
 		Next
