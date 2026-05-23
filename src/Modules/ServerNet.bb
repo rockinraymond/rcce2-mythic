@@ -1363,7 +1363,14 @@ Function UpdateNetwork()
 					If AI\Rider = Null
 						AI\DestX#    = RCE_FloatFromStr#(Mid$(M\MessageData$, 1, 4))
 						AI\DestZ#    = RCE_FloatFromStr#(Mid$(M\MessageData$, 5, 4))
-						AI\Y#        = RCE_FloatFromStr#(Mid$(M\MessageData$, 9, 4))
+						; Client-supplied Y had no validation at all while X/Z carry an
+						; (commented but designed) anti-cheat. Reject obviously-bogus Y
+						; values (extreme magnitudes — covers NaN/Inf and the "set Y to
+						; +1e30 to phase through geometry" trick). The accepted-Y feedback
+						; loop in subsequent updates means a steady client is preserved;
+						; only blatantly out-of-world values get dropped.
+						NewY# = RCE_FloatFromStr#(Mid$(M\MessageData$, 9, 4))
+						If NewY# > -100000.0 And NewY# < 100000.0 Then AI\Y# = NewY#
 						NewX#        = RCE_FloatFromStr#(Mid$(M\MessageData$, 13, 4))
 						NewZ#        = RCE_FloatFromStr#(Mid$(M\MessageData$, 17, 4))
 						AI\IsRunning = RCE_IntFromStr(Mid$(M\MessageData$, 21, 1))
