@@ -621,9 +621,15 @@ Function UpdateNetwork()
 					If AI\IsTrading = 4 And AI\TradingActor <> Null
 						Slot = RCE_IntFromStr(Left$(M\MessageData$, 1))
 						Amount = RCE_IntFromStr(Mid$(M\MessageData$, 2, 2))
-						Pa$ = M\MessageData$
-						If Amount > 0 Then Pa$ = Pa$ + ItemInstanceToString$(AI\Inventory\Items[Slot + SlotI_Backpack])
-						RCE_Send(Host, AI\TradingActor\RNID, P_UpdateTrading, Pa$, True)
+						; Slot is a backpack-relative offset (0..31). Reject anything that
+						; would push the array index past the inventory bounds; without this,
+						; a crafted Slot reads (and the ItemInstanceToString$ helper writes)
+						; from adjacent ActorInstance fields.
+						If Slot >= 0 And Slot + SlotI_Backpack <= Slots_Inventory
+							Pa$ = M\MessageData$
+							If Amount > 0 Then Pa$ = Pa$ + ItemInstanceToString$(AI\Inventory\Items[Slot + SlotI_Backpack])
+							RCE_Send(Host, AI\TradingActor\RNID, P_UpdateTrading, Pa$, True)
+						EndIf
 					EndIf
 				EndIf
 			; Trading complete
@@ -648,7 +654,11 @@ Function UpdateNetwork()
 								SlotID = RCE_IntFromStr(Mid$(M\MessageData$, Offset, 1))
 								Amount = RCE_IntFromStr(Mid$(M\MessageData$, Offset + 1, 2))
 								Offset = Offset + 3
-								If SlotID > 0
+								; Upper-bound SlotID against the inventory size — original check
+								; only rejected SlotID <= 0, so a crafted shop-sell packet with
+								; SlotID in the byte range past Slots_Inventory wrote into
+								; whatever ActorInstance fields follow the inventory array.
+								If SlotID > 0 And SlotID <= Slots_Inventory
 									If Amount > AI\Inventory\Amounts[SlotID] Then Amount = AI\Inventory\Amounts[SlotID]
 									If AI\Inventory\Items[SlotID] <> Null And Amount > 0
 										; Alter cost {##}
@@ -756,12 +766,23 @@ Function UpdateNetwork()
 							ElseIf AI\TradingActor\IsTrading = 5
 								A2.ActorInstance = AI\TradingActor
 
-								; Compare what players expect with what they are getting, to prevent cheating (COMMENTED OUT, Was causing all player to player trades to fail)
+								; Server-authoritative cost check: both clients must report the same gold
+								; flow magnitude in their accept packet. The historical per-item validation
+								; block (still commented below) produced false negatives in practice; the
+								; per-slot swap loop further down already clamps Amount to the actual
+								; source-side inventory so item dupe via Amount inflation is blocked there.
+								; This cost check closes the gold-side scam where one party lied about the
+								; agreed amount.
 								Valid = True
 								A1Cost = RCE_IntFromStr(Left$(AI\TradeResult$, 4)) * -1
 								A2Cost = RCE_IntFromStr(Left$(A2\TradeResult$, 4))
+								If A1Cost <> A2Cost Then Valid = False
+								If A2Cost > 0 And A2Cost > A2\Gold Then Valid = False
+								If A2Cost < 0 And ( - A2Cost ) > AI\Gold Then Valid = False
 
-								; If A1Cost <> A2Cost Then Valid = False
+								; Historical per-item validation (kept commented for future repair —
+								; produced false negatives because the slot/amount packet offsets it
+								; assumed don't match what the live client sends).
 								; For i = 0 To 31
 								; 	A1SoldAmount = RCE_IntFromStr(Mid$(AI\TradeResult$, 101 + (i * 2), 2))
 								; 	If A1SoldAmount > 0
@@ -1001,7 +1022,10 @@ Function UpdateNetwork()
 				If AI <> Null
 					Slot = RCE_IntFromStr(Mid$(M\MessageData$, 1, 1))
 					Amount = RCE_IntFromStr(Mid$(M\MessageData$, 2, 2))
-					If Slot >= 0 And Slot < 50 And Amount > 0
+					; Tighten upper bound to the actual inventory size. Previous limit was
+					; an unrelated literal (50) larger than Slots_Inventory (45), so the
+					; intervening slots 46..49 read past the Items array.
+					If Slot >= 0 And Slot <= Slots_Inventory And Amount > 0
 						If AI\Inventory\Items[Slot] <> Null And AI\Inventory\Amounts[Slot] >= Amount
 							If AI\Inventory\Items[Slot]\Item\ItemType = I_Potion Or AI\Inventory\Items[Slot]\Item\ItemType = I_Ingredient
 								If Upper$(AI\Actor\Class$) = Upper$(AI\Inventory\Items[Slot]\Item\ExclusiveClass$) Or Len(AI\Inventory\Items[Slot]\Item\ExclusiveClass$) = 0
@@ -1136,19 +1160,21 @@ Function UpdateNetwork()
 				AI.ActorInstance = FindActorInstanceFromRNID(M\FromID)
 				If AI <> Null And Len(M\MessageData$) = 2
 					A2.ActorInstance = RuntimeIDList(RCE_IntFromStr(M\MessageData$))
-					If A2\Script$ <> ""
-						Running = False
-						
-						For Si.ScriptInstance = Each ScriptInstance
-							If Si\Name = A2\Script
-								If Si\AI = Handle(AI) And Si\AIContext = Handle(A2) Then Running = True : Exit
+					If A2 <> Null
+						If A2\Script$ <> ""
+							Running = False
+
+							For Si.ScriptInstance = Each ScriptInstance
+								If Si\Name = A2\Script
+									If Si\AI = Handle(AI) And Si\AIContext = Handle(A2) Then Running = True : Exit
+								EndIf
+							Next
+							If Running = False
+								ThreadScript(A2\Script$, "Examine", Handle(AI), Handle(A2))
 							EndIf
-						Next
-						If Running = False
-							ThreadScript(A2\Script$, "Examine", Handle(AI), Handle(A2))
+						Else
+							ThreadScript("Default", "Examine", Handle(AI), Handle(A2))
 						EndIf
-					Else
-						ThreadScript("Default", "Examine", Handle(AI), Handle(A2))
 					EndIf
 				EndIf
 
@@ -1156,7 +1182,9 @@ Function UpdateNetwork()
 				AI.ActorInstance = FindActorInstanceFromRNID(M\FromID)
 				If AI <> Null And Len(M\MessageData$) = 2
 					A2.ActorInstance = RuntimeIDList(RCE_IntFromStr(M\MessageData$))
+					If A2 <> Null
 						ThreadScript("Default", "Trade", Handle(AI), Handle(A2))
+					EndIf
 				EndIf
 
 			; A player has attacked something
@@ -1186,7 +1214,10 @@ Function UpdateNetwork()
 							AI.ActorInstance = FindActorInstanceFromRNID(M\FromID)
 							If AI <> Null
 								SlotI = RCE_IntFromStr(Mid$(M\MessageData$, 6, 1))
-								If AI\Inventory\Items[SlotI] = Null Or (ItemInstancesIdentical(D\Item, AI\Inventory\Items[SlotI]) And D\Item\Item\Stackable = True And SlotI >= SlotI_Backpack)
+								; SlotI comes straight off the wire — must be bounded before
+								; it's used as an index into the Items / Amounts arrays.
+								If SlotI < 0 Or SlotI > Slots_Inventory Then SlotI = -1
+								If SlotI >= 0 And (AI\Inventory\Items[SlotI] = Null Or (ItemInstancesIdentical(D\Item, AI\Inventory\Items[SlotI]) And D\Item\Item\Stackable = True And SlotI >= SlotI_Backpack))
 									If SlotsMatch(D\Item\Item, SlotI) And ActorHasSlot(AI\Actor, SlotI, D\Item\Item)
 										; Put into player's inventory
 										If AI\Inventory\Items[SlotI] <> Null
@@ -1254,7 +1285,10 @@ Function UpdateNetwork()
 							If II\Assignment > 0
 								If Mid$(M\MessageData$, 2, 1) = "Y"
 									SlotI = RCE_IntFromStr(Right$(M\MessageData$, 1))
-									If AI\Inventory\Items[SlotI] = Null Or (ItemInstancesIdentical(II, AI\Inventory\Items[SlotI]) And II\Item\Stackable = True And SlotI >= SlotI_Backpack)
+									; Bound SlotI before any inventory array access (same as the "P"
+									; pickup path above).
+									If SlotI < 0 Or SlotI > Slots_Inventory Then SlotI = -1
+									If SlotI >= 0 And (AI\Inventory\Items[SlotI] = Null Or (ItemInstancesIdentical(II, AI\Inventory\Items[SlotI]) And II\Item\Stackable = True And SlotI >= SlotI_Backpack))
 										If SlotsMatch(II\Item, SlotI) And ActorHasSlot(AI\Actor, SlotI, II\Item)
 											If AI\Inventory\Items[SlotI] <> Null
 												Delete AI\Inventory\Items[SlotI]
@@ -1329,7 +1363,14 @@ Function UpdateNetwork()
 					If AI\Rider = Null
 						AI\DestX#    = RCE_FloatFromStr#(Mid$(M\MessageData$, 1, 4))
 						AI\DestZ#    = RCE_FloatFromStr#(Mid$(M\MessageData$, 5, 4))
-						AI\Y#        = RCE_FloatFromStr#(Mid$(M\MessageData$, 9, 4))
+						; Client-supplied Y had no validation at all while X/Z carry an
+						; (commented but designed) anti-cheat. Reject obviously-bogus Y
+						; values (extreme magnitudes — covers NaN/Inf and the "set Y to
+						; +1e30 to phase through geometry" trick). The accepted-Y feedback
+						; loop in subsequent updates means a steady client is preserved;
+						; only blatantly out-of-world values get dropped.
+						NewY# = RCE_FloatFromStr#(Mid$(M\MessageData$, 9, 4))
+						If NewY# > -100000.0 And NewY# < 100000.0 Then AI\Y# = NewY#
 						NewX#        = RCE_FloatFromStr#(Mid$(M\MessageData$, 13, 4))
 						NewZ#        = RCE_FloatFromStr#(Mid$(M\MessageData$, 17, 4))
 						AI\IsRunning = RCE_IntFromStr(Mid$(M\MessageData$, 21, 1))

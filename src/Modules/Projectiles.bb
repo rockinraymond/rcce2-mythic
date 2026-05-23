@@ -37,6 +37,13 @@ Function LoadProjectiles(Filename$)
 		While Not Eof(F)
 			P.Projectile = New Projectile
 			P\ID = ReadShort(F)
+			; ProjectileList is dimensioned 0..5000. ReadShort is signed and a
+			; malformed Projectiles.dat can surface IDs outside this range; reject
+			; rather than corrupt memory via Dim out-of-range write.
+			If P\ID < 0 Or P\ID > 5000
+				Delete P
+				Exit
+			EndIf
 			ProjectileList(P\ID) = P
 			P\Name$ = ReadString$(F)
 			P\MeshID = ReadShort(F)

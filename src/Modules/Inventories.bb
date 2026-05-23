@@ -144,6 +144,12 @@ Function InventorySwap(A.ActorInstance, SlotA, SlotB, Amount = 0, TellServer = T
 		A\Inventory\Amounts[SlotB] = AmountA
 	; Move a certain amount only
 	Else
+		; Reject moves that try to relocate more than the source actually holds.
+		; The earlier code accepted client-supplied Amount unconditionally and
+		; then went into the SlotA-<1 branch below, which moved the original
+		; ItemInstance into SlotB while leaving Amounts[SlotB] = Amount — a free
+		; item dupe with no upper cap.
+		If Amount < 1 Or Amount > A\Inventory\Amounts[SlotA] Then Return False
 		A\Inventory\Amounts[SlotB] = Amount
 		A\Inventory\Amounts[SlotA] = A\Inventory\Amounts[SlotA] - Amount
 		If A\Inventory\Amounts[SlotA] < 1
