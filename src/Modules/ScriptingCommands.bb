@@ -159,14 +159,20 @@ Function BVM_ACTORINTRIGGER%(Param1%, Param2%)
 	Actor.ActorInstance = Object.ActorInstance(Param1%)
 	If Actor <> Null
 		TriggerID = Param2%
-		AInstance.AreaInstance = Object.AreaInstance(Actor\ServerArea)
-		If Len(AInstance\Area\TriggerScript$[TriggerID]) > 0
-			Size# = AInstance\Area\TriggerSize#[TriggerID] * AInstance\Area\TriggerSize#[TriggerID]
-			DistX# = Abs(Actor\X# - AInstance\Area\TriggerX#[TriggerID])
-			DistY# = Abs(Actor\Y# - AInstance\Area\TriggerY#[TriggerID])
-			DistZ# = Abs(Actor\Z# - AInstance\Area\TriggerZ#[TriggerID])
-			Dist# = (DistX# * DistX#) + (DistY# * DistY#) + (DistZ# * DistZ#)
-			If Dist# < Size# Then Result% = 1
+		; TriggerScript$/TriggerSize#/etc. are Dim'd 0..149 on AreaInstance.
+		; Reject any out-of-range index from the script before indexing.
+		If TriggerID >= 0 And TriggerID <= 149
+			AInstance.AreaInstance = Object.AreaInstance(Actor\ServerArea)
+			If AInstance <> Null
+				If Len(AInstance\Area\TriggerScript$[TriggerID]) > 0
+					Size# = AInstance\Area\TriggerSize#[TriggerID] * AInstance\Area\TriggerSize#[TriggerID]
+					DistX# = Abs(Actor\X# - AInstance\Area\TriggerX#[TriggerID])
+					DistY# = Abs(Actor\Y# - AInstance\Area\TriggerY#[TriggerID])
+					DistZ# = Abs(Actor\Z# - AInstance\Area\TriggerZ#[TriggerID])
+					Dist# = (DistX# * DistX#) + (DistY# * DistY#) + (DistZ# * DistZ#)
+					If Dist# < Size# Then Result% = 1
+				EndIf
+			EndIf
 		EndIf
 	EndIf
 Return Result%
@@ -2477,13 +2483,20 @@ Function BVM_SETWAITKILL(Param1%, Param2%, Param3%)
 	SI.ScriptInstance = Object.ScriptInstance(hSI%)
 	If Actor <> Null
 		KillActor = Param2%
-		If ActorList(KillActor) <> Null
-			PS.PausedScript = New PausedScript
-			PS\S = SI
-			PS\Reason = 2
-			PS\ReasonActor = Actor
-			PS\ReasonKillActor = ActorList(KillActor)
-			PS\ReasonAmount = Param3%
+		; ActorList is Dim'd 0..65535. A script supplying a negative or
+		; out-of-range KillActor (BVM Param2 is signed-int from the bytecode)
+		; would index outside the Dim — Blitz3D doesn't bounds-check Dim
+		; accesses and writes through the resulting wild pointer, so this
+		; corrupts adjacent globals and crashes the server unpredictably.
+		If KillActor >= 0 And KillActor <= 65535
+			If ActorList(KillActor) <> Null
+				PS.PausedScript = New PausedScript
+				PS\S = SI
+				PS\Reason = 2
+				PS\ReasonActor = Actor
+				PS\ReasonKillActor = ActorList(KillActor)
+				PS\ReasonAmount = Param3%
+			EndIf
 		EndIf
 	EndIf
 End Function
