@@ -1147,15 +1147,22 @@ Function UpdateNetwork()
 									ThreadScript("Mount", "Mount", Handle(AI), Handle(A2))
 								EndIf
 							EndIf
-							; Continue any paused scripts waiting for this conversation
-							For PS.PausedScript = Each PausedScript
+							; Continue any paused scripts waiting for this conversation.
+							; After-cursor walk: the body Deletes PS, which would
+							; corrupt a For-Each cursor when two WaitSpeak scripts
+							; resume on the same right-click.
+							Local PS.PausedScript = First PausedScript
+							Local PSNext.PausedScript = Null
+							While PS <> Null
+								PSNext = After PS
 								If PS\Reason = 4
 									If PS\ReasonActor = AI And PS\ReasonContextActor = A2
 										PS\S\WaitResult$ = "1"
 										Delete PS
 									EndIf
 								EndIf
-							Next
+								PS = PSNext
+							Wend
 						EndIf
 					EndIf
 				EndIf

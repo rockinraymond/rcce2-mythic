@@ -77,8 +77,14 @@ End Type
 ; Updates all emitters
 Function RP_Update(Delta# = 1.0)
 
-	; Update emitters
-	For E.RP_Emitter = Each RP_Emitter
+	; Update emitters. After-cursor walk: the KillMode branch invokes
+	; RP_FreeEmitter, which Deletes E mid-iteration; if two emitters
+	; finish their kill phase in the same frame, a For-Each cursor walks
+	; the freed Type instance's next pointer.
+	Local E.RP_Emitter = First RP_Emitter
+	Local ENext.RP_Emitter = Null
+	While E <> Null
+		ENext = After E
 		; Move mesh to new handle position - leaving them at 0, 0, 0 works but may work against Blitz's entity culling
 		PositionEntity E\MeshEN, EntityX#(E\EmitterEN, True), EntityY#(E\EmitterEN, True), EntityZ#(E\EmitterEN, True)
 
@@ -104,7 +110,8 @@ Function RP_Update(Delta# = 1.0)
 		Else
 			If E\ActiveParticles = 0 Then HideEntity E\MeshEN
 		EndIf
-	Next
+		E = ENext
+	Wend
 
 	; Update particles
 	For P.RP_Particle = Each RP_Particle
@@ -1378,11 +1385,18 @@ Function RP_FreeEmitter(ID, FreeConfig = False, FreeTex = False)
 
 End Function
 
-; Frees every emitter, particle and configuration
+; Frees every emitter, particle and configuration. After-cursor walk —
+; RP_FreeEmitter Deletes E. The original For-Each pattern read the freed
+; instance's next pointer for the following step (typical trigger: zone
+; change with multiple active emitters).
 Function RP_Clear(Configs = True, Textures = True)
 
-	For E.RP_Emitter = Each RP_Emitter
+	Local E.RP_Emitter = First RP_Emitter
+	Local ENext.RP_Emitter = Null
+	While E <> Null
+		ENext = After E
 		RP_FreeEmitter(E\EmitterEN, Configs, Textures)
-	Next
+		E = ENext
+	Wend
 
 End Function
