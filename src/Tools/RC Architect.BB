@@ -1039,8 +1039,14 @@ Case GUI_MENUFILE_SAVE
      tFile = FUI_SaveDialog( "Save architect map", "Data\ARCHITECT\Saves\", "ACT Map (*.act)|*.act")
  	 If tFile = True Then
      savemap$=APP\CURRENTFILE
-       If savemap$<>"" Then 
-	   If Instr( Lower$(savemap$), "act", 1 ) > 1 Then
+       If savemap$<>"" Then
+       ; Only treat the filename as already having an extension when ".act"
+       ; is at the end. The previous Instr-based check matched the substring
+       ; "act" anywhere in the path, so e.g. "practice", "factory", or any
+       ; folder named "act" caused savework() to receive a name without the
+       ; expected ".act" suffix and the resulting file was unreadable to
+       ; the loader.
+	   If Right$( Lower$(savemap$), 4 ) = ".act" Then
                         DebugLog "saving : "+savemap$
 						savework (savemap$)
 						Else

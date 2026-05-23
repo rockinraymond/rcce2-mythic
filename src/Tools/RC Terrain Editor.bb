@@ -2578,7 +2578,7 @@ vrty# = (VertexY(S,aaa) + VertexY(S,aaa1) + VertexY(S,aaa2) + VertexY(S,aaa3)) *
 If H1 > H2 Or MinSlope > MaxSlope Then Goto skip_continue
 
 ;Slopeval#=dp#;Abs(VertexNZ(S,AAA)*1.1)
-If slopeval#=<0 Then slopeval=0.1
+If slopeval#=<0 Then slopeval#=0.1
  If vrty#=>h1# And vrty#=<h2# Then 
  If minslope#<=slopeval# And maxslope#>=slopeval# Then
   bringup 1,0,ax,az

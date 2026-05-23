@@ -18,7 +18,7 @@ Function RecentProjectsFindByRootDir%(recentProjects.BBList, rootDir$)
 
     For i = 0 To count
         Local prj.Project = ListAt(recentProjects, i)
-        If NormalizeProjectRoot$(prj\rootDir) = normalizedRoot Then Return i
+        If NormalizeProjectRoot$(prj\rootDir) = normalizedRoot$ Then Return i
     Next
 
     Return -1

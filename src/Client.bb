@@ -211,27 +211,14 @@ Repeat
 
 	; Render game
 	CameraProjMode(GY_Cam, 0)
-		
-	;Adding FastExt settings to options menu Cysis145
-	F = ReadFile("Data\Options.dat")
-		Width = ReadShort(F)
-		Height = ReadShort(F)
-		Depth = ReadByte(F)
-		AA = ReadByte(F)
-		DefaultVolume# = ReadFloat#(F)
-		GrassEnabled = ReadByte(F)
-		AnisotropyLevel = ReadByte(F)
-		FullScreen = ReadByte(F)
-		VSync = ReadByte(F)
-		Bloom = ReadByte(F)
-		Rays = ReadByte(F)
-		AWater = ReadByte(F)
-		ShadowC = ReadByte(F)
-		ShadowQ = ReadByte(F)
-		ShadowR = ReadByte(F)		
-	CloseFile(F)
-	
-	
+
+	; Options are loaded once at startup by LoadGame() in ClientLoaders.bb.
+	; A previous version of this block re-read Data\Options.dat every frame
+	; just to refresh ShadowC/ShadowQ/ShadowR/etc. — a needless file
+	; open/read/close on the hot render path. Any in-game settings dialog
+	; that mutates these globals is responsible for re-running LoadGame()
+	; (or equivalent) when the user applies changes.
+
 ;&&&&&&&&&&&&&&&&& Reflective water	terrier
 	RenderWater(Cam)
 
