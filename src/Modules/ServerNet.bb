@@ -2316,6 +2316,7 @@ Function UpdateNetwork()
 									For i = 0 To 99
 										If Upper$(Ar\PortalName$[i]) = Upper$(C\Actor\StartPortal$)
 											C\LastPortal = i
+											C\LastPortalArea = Handle(Ar)
 											C\X# = Ar\PortalX#[i]
 											C\Y# = Ar\PortalY#[i]
 											C\Z# = Ar\PortalZ#[i]

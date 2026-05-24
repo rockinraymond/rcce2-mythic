@@ -581,7 +581,13 @@ Repeat
 										DistZ# = Abs(AI\Z# - UpdateArea\PortalZ#[i])
 										Dist# = (DistX# * DistX#) + (DistY# * DistY#) + (DistZ# * DistZ#)
 										; Inside portal area
-										If Dist# < Size# And (AI\LastPortal <> i Or (MilliSecs() - AI\LastPortalTime > PortalLockTime))
+										; Lock keys on the (Area, index) pair: a stale
+										; LastPortal index left over from a different
+										; area must not block a same-index portal in the
+										; current one, and the time floor still bars
+										; immediate re-entry of the exact portal the
+										; actor was just placed on.
+										If Dist# < Size# And (AI\LastPortal <> i Or AI\LastPortalArea <> Handle(UpdateArea) Or (MilliSecs() - AI\LastPortalTime > PortalLockTime))
 											InPortal = False
 											Name$ = Upper$(UpdateArea\PortalLinkArea$[i])
 											For Ar.Area = Each Area

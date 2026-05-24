@@ -1098,6 +1098,7 @@ Function SetArea(A.ActorInstance, Ar.Area, Instance, Waypoint = -1, Portal = 0, 
 			A\Y# = Ar\PortalY#[Portal]
 			A\Z# = Ar\PortalZ#[Portal]
 			A\LastPortal = Portal
+			A\LastPortalArea = Handle(Ar)
 			A\LastPortalTime = MilliSecs()
 		; Direct position
 		Else
@@ -1112,7 +1113,14 @@ Function SetArea(A.ActorInstance, Ar.Area, Instance, Waypoint = -1, Portal = 0, 
 		A\Y# = Ar\WaypointY#[Waypoint]
 		A\Z# = Ar\WaypointZ#[Waypoint]
 		A\CurrentWaypoint = Waypoint
-		A\LastPortal = 0
+		; Waypoint-based placement is not a portal entry: -1 disables the
+		; lock so a legitimate portal in the destination area triggers
+		; normally. The previous LastPortal=0 stamp had no lock-time
+		; refresh, so it never actually applied; pair the sentinel with a
+		; cleared LastPortalArea now that the lock checks the (Ar, i)
+		; pair.
+		A\LastPortal = -1
+		A\LastPortalArea = 0
 	EndIf
 
 	; Reset target
