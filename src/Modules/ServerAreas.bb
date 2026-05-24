@@ -272,11 +272,20 @@ Function ServerLoadArea.Area(Name$)
 
 End Function
 
-; Saves the server data for an area
+; Saves the server data for an area.
+;
+; Atomic rewrite: writes to <area>.dat.tmp first; on success demotes
+; the existing area file to <area>.dat.bak and promotes the temp. A
+; crash mid-write previously left the area file truncated -- areas
+; hold NPC spawn data, scripts, waypoints, weather configuration,
+; trigger volumes; a 0-byte save was a meaningful data loss every
+; time the server crashed during a save flush.
 Function ServerSaveArea(A.Area)
 
 	; Save map data
-	F = WriteFile("Data\Server Data\Areas\" + A\Name$ + ".dat")
+	Local FinalPath$ = "Data\Server Data\Areas\" + A\Name$ + ".dat"
+	Local TempPath$ = SafeWriteOpen(FinalPath$)
+	F = WriteFile(TempPath$)
 	If F = 0 Then Return False
 
 		For i = 0 To 4 : WriteByte F, A\WeatherChance[i] : Next
@@ -343,7 +352,7 @@ Function ServerSaveArea(A.Area)
 			EndIf
 		Next
 
-	CloseFile(F)
+	If Not SafeWriteCommit(TempPath$, FinalPath$, F) Then Return False
 
 	;ServerSaveAreaOwnerships(A) {##}
 

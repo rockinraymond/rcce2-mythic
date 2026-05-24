@@ -249,25 +249,33 @@ Function LoadSuns()
 
 End Function
 
-; Saves sun settings
+; Saves sun settings atomically. Crash mid-write previously left
+; Suns.dat truncated -- LoadSuns would then read a wrong sun count
+; and either skip suns or read garbage for the trailing entries.
 Function SaveSuns()
 
-	F = WriteFile("Data\Game Data\Suns.dat")
+	Local FinalPath$ = "Data\Game Data\Suns.dat"
+	Local TempPath$ = SafeWriteOpen(FinalPath$)
+	F = WriteFile(TempPath$)
+	If F = 0
+		WriteLog(MainLog, "SaveSuns: cannot open " + TempPath$ + " for write")
+		Return False
+	EndIf
 
 		Count = 0
 		For S.Sun = Each Sun : Count = Count + 1 : Next
 		WriteInt(F, Count)
 		For S.Sun = Each Sun
-		
+
 		;WriteShort(F, S\TexID)
-		
+
 			For i = 0 To 7
 				WriteShort(F, S\TexID[i])
 			Next
-			
+
 			WriteByte(F, S\ShowPhases)
 			WriteByte(F, S\Phase_Length)
-		
+
 			WriteFloat(F, S\Size#)
 			WriteByte(F, S\LightR)
 			WriteByte(F, S\LightG)
@@ -282,7 +290,7 @@ Function SaveSuns()
 			WriteByte(F, S\ShowFlares)
 		Next
 
-	CloseFile(F)
+	Return SafeWriteCommit(TempPath$, FinalPath$, F)
 
 End Function
 
