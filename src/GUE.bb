@@ -3406,21 +3406,26 @@ Cls
 
 			; Other tab events ------------------------------------------------------------------------------------------------------
 
-			; Hosts
+			; Hosts. Wrap the full Hosts.dat rewrite in SafeWrite so a
+			; crash mid-write leaves the previous version intact.
 			Case TServerHost
-				F = WriteFile("Data\Game Data\Hosts.dat")
-				If F = 0 Then RuntimeError("Could not open Data\Game Data\Hosts.dat!")
+				Local HostsFinal$ = "Data\Game Data\Hosts.dat"
+				Local HostsTemp$ = SafeWriteOpen(HostsFinal$)
+				F = WriteFile(HostsTemp$)
+				If F = 0 Then RuntimeError("Could not open " + HostsTemp$ + " for write")
 					WriteLine F, FUI_SendMessage(TServerHost, M_GETCAPTION)
 					WriteLine F, FUI_SendMessage(TUpdatesHost, M_GETCAPTION)
 					WriteLine F, FUI_SendMessage(BNewAccounts, M_GETCHECKED)
-				CloseFile(F)
+				SafeWriteCommit(HostsTemp$, HostsFinal$, F)
 			Case TUpdatesHost
-				F = WriteFile("Data\Game Data\Hosts.dat")
-				If F = 0 Then RuntimeError("Could not open Data\Game Data\Hosts.dat!")
+				HostsFinal$ = "Data\Game Data\Hosts.dat"
+				HostsTemp$ = SafeWriteOpen(HostsFinal$)
+				F = WriteFile(HostsTemp$)
+				If F = 0 Then RuntimeError("Could not open " + HostsTemp$ + " for write")
 					WriteLine F, FUI_SendMessage(TServerHost, M_GETCAPTION)
 					WriteLine F, FUI_SendMessage(TUpdatesHost, M_GETCAPTION)
 					WriteLine F, FUI_SendMessage(BNewAccounts, M_GETCHECKED)
-				CloseFile(F)
+				SafeWriteCommit(HostsTemp$, HostsFinal$, F)
 			Case TServerPort
 				ServerPort = E\EventData
 				F = OpenFile("Data\Server Data\Misc.dat")
@@ -3436,15 +3441,14 @@ Cls
 
 			; Allow new account creation from client
 			Case BNewAccounts
-				F = WriteFile("Data\Game Data\Hosts.dat")
-				; Match the F=0 guard that the surrounding TServerHost /
-				; TUpdatesHost cases use. Without it, WriteLine on a 0
-				; handle null-derefs and crashes the editor.
-				If F = 0 Then RuntimeError("Could not open Data\Game Data\Hosts.dat!")
+				HostsFinal$ = "Data\Game Data\Hosts.dat"
+				HostsTemp$ = SafeWriteOpen(HostsFinal$)
+				F = WriteFile(HostsTemp$)
+				If F = 0 Then RuntimeError("Could not open " + HostsTemp$ + " for write")
 					WriteLine F, FUI_SendMessage(TServerHost, M_GETCAPTION)
 					WriteLine F, FUI_SendMessage(TUpdatesHost, M_GETCAPTION)
 					WriteLine F, FUI_SendMessage(BNewAccounts, M_GETCHECKED)
-				CloseFile(F)
+				SafeWriteCommit(HostsTemp$, HostsFinal$, F)
 				F = OpenFile("Data\Server Data\Misc.dat")
 				If F = 0 Then RuntimeError("Could not open Data\Server Data\Misc.dat!")
 					SeekFile F, 15
@@ -3579,7 +3583,10 @@ Cls
 
 			; Money options
 			Case TMoney1Name, TMoney2Name, TMoney3Name, TMoney4Name, SMoney2x, SMoney3x, SMoney4x
-				F = WriteFile("Data\Game Data\Money.dat")
+				Local MoneyFinal$ = "Data\Game Data\Money.dat"
+				Local MoneyTemp$ = SafeWriteOpen(MoneyFinal$)
+				F = WriteFile(MoneyTemp$)
+				If F = 0 Then RuntimeError("Could not open " + MoneyTemp$ + " for write")
 					WriteString F, FUI_SendMessage(TMoney1Name, M_GETTEXT)
 					WriteString F, FUI_SendMessage(TMoney2Name, M_GETTEXT)
 					WriteShort F, FUI_SendMessage(SMoney2x, M_GETVALUE)
@@ -3587,19 +3594,22 @@ Cls
 					WriteShort F, FUI_SendMessage(SMoney3x, M_GETVALUE)
 					WriteString F, FUI_SendMessage(TMoney4Name, M_GETTEXT)
 					WriteShort F, FUI_SendMessage(SMoney4x, M_GETVALUE)
-				CloseFile(F)
+				SafeWriteCommit(MoneyTemp$, MoneyFinal$, F)
 
 			; Gubbin remapping
 			Case TGubbin1, TGubbin2, TGubbin3, TGubbin4, TGubbin5, TGubbin6
 				GubbinNamesChanged = True
-				F = WriteFile("Data\Game Data\Gubbins.dat")
+				Local GubbinsFinal$ = "Data\Game Data\Gubbins.dat"
+				Local GubbinsTemp$ = SafeWriteOpen(GubbinsFinal$)
+				F = WriteFile(GubbinsTemp$)
+				If F = 0 Then RuntimeError("Could not open " + GubbinsTemp$ + " for write")
 					WriteString(F, FUI_SendMessage(TGubbin1, M_GETTEXT))
 					WriteString(F, FUI_SendMessage(TGubbin2, M_GETTEXT))
 					WriteString(F, FUI_SendMessage(TGubbin3, M_GETTEXT))
 					WriteString(F, FUI_SendMessage(TGubbin4, M_GETTEXT))
 					WriteString(F, FUI_SendMessage(TGubbin5, M_GETTEXT))
 					WriteString(F, FUI_SendMessage(TGubbin6, M_GETTEXT))
-				CloseFile(F)
+				SafeWriteCommit(GubbinsTemp$, GubbinsFinal$, F)
 				LoadGubbinNames()
 
 			; Seasons tab events ----------------------------------------------------------------------------------------------------
@@ -6516,11 +6526,14 @@ Cls
 
 			; Save damage types
 			Case BDamageTypesSave
-				F = WriteFile("Data\Server Data\Damage.dat")
+				Local DamageFinal$ = "Data\Server Data\Damage.dat"
+				Local DamageTemp$ = SafeWriteOpen(DamageFinal$)
+				F = WriteFile(DamageTemp$)
+				If F = 0 Then RuntimeError("Could not open " + DamageTemp$ + " for write")
 					For i = 0 To 19
 						WriteString F, DamageTypes$(i)
 					Next
-				CloseFile(F)
+				SafeWriteCommit(DamageTemp$, DamageFinal$, F)
 				DamageTypesSaved = True
 
 			Default
@@ -9756,11 +9769,14 @@ Function SaveDialog()
 							Next
 							ParticlesSaved = True
 						Case "Damage types"
-							F = WriteFile("Data\Server Data\Damage.dat")
+							DamageFinal$ = "Data\Server Data\Damage.dat"
+							DamageTemp$ = SafeWriteOpen(DamageFinal$)
+							F = WriteFile(DamageTemp$)
+							If F = 0 Then RuntimeError("Could not open " + DamageTemp$ + " for write")
 								For i = 0 To 19
 									WriteString F, DamageTypes$(i)
 								Next
-							CloseFile(F)
+							SafeWriteCommit(DamageTemp$, DamageFinal$, F)
 							DamageTypesSaved = True
 						Case "Days & seasons"
 							SaveEnvironment(True)
@@ -9803,11 +9819,14 @@ Function SaveDialog()
 						Next
 					EndIf
 					If DamageTypesSaved = False
-						F = WriteFile("Data\Server Data\Damage.dat")
+						DamageFinal$ = "Data\Server Data\Damage.dat"
+						DamageTemp$ = SafeWriteOpen(DamageFinal$)
+						F = WriteFile(DamageTemp$)
+						If F = 0 Then RuntimeError("Could not open " + DamageTemp$ + " for write")
 							For i = 0 To 19
 								WriteString F, DamageTypes$(i)
 							Next
-						CloseFile(F)
+						SafeWriteCommit(DamageTemp$, DamageFinal$, F)
 					EndIf
 					If EnvironmentSaved = False
 						SaveEnvironment(True)
@@ -10019,21 +10038,27 @@ Function FixedAttributeDialog()
 					Done = True
 				; Save
 				Case BSave
-					F = WriteFile("Data\Server Data\Fixed Attributes.dat")
+					Local FixedSrvFinal$ = "Data\Server Data\Fixed Attributes.dat"
+					Local FixedSrvTemp$ = SafeWriteOpen(FixedSrvFinal$)
+					F = WriteFile(FixedSrvTemp$)
+					If F = 0 Then RuntimeError("Could not open " + FixedSrvTemp$ + " for write")
 						WriteShort(F, HealthStat)
 						WriteShort(F, EnergyStat)
 						WriteShort(F, BreathStat)
 						WriteShort(F, ToughnessStat)
 						WriteShort(F, StrengthStat)
 						WriteShort(F, SpeedStat)
-					CloseFile(F)
-					F = WriteFile("Data\Game Data\Fixed Attributes.dat")
+					SafeWriteCommit(FixedSrvTemp$, FixedSrvFinal$, F)
+					Local FixedGameFinal$ = "Data\Game Data\Fixed Attributes.dat"
+					Local FixedGameTemp$ = SafeWriteOpen(FixedGameFinal$)
+					F = WriteFile(FixedGameTemp$)
+					If F = 0 Then RuntimeError("Could not open " + FixedGameTemp$ + " for write")
 						WriteShort(F, HealthStat)
 						WriteShort(F, EnergyStat)
 						WriteShort(F, BreathStat)
 						WriteShort(F, StrengthStat)
 						WriteShort(F, SpeedStat)
-					CloseFile(F)
+					SafeWriteCommit(FixedGameTemp$, FixedGameFinal$, F)
 					Done = True
 				; Change selected attributes
 				Case CHealth
@@ -10606,11 +10631,14 @@ Function menuSaveAll()
 				ParticlesSaved = True
 				
 				; Save combat
-				F = WriteFile("Data\Server Data\Damage.dat")
+				DamageFinal$ = "Data\Server Data\Damage.dat"
+				DamageTemp$ = SafeWriteOpen(DamageFinal$)
+				F = WriteFile(DamageTemp$)
+				If F = 0 Then RuntimeError("Could not open " + DamageTemp$ + " for write")
 					For i = 0 To 19
 						WriteString F, DamageTypes$(i)
 					Next
-				CloseFile(F)
+				SafeWriteCommit(DamageTemp$, DamageFinal$, F)
 				DamageTypesSaved = True
 				
 				; Save projectiles
