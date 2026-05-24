@@ -483,9 +483,12 @@ Function AddMusicToDatabase(Filename$)
 	SeekFile F, (65535 * 4)
 	While Eof(F) = False
 		Name$ = ReadString$(F)
-		; If this music is already in the file, return error
+		; If this music is already in the file, return error. Previously
+		; the dup branch closed the file but then fell through to the
+		; insert path below -- so every duplicate was added a second time.
 		If Upper$(Name$) = Upper$(Filename$)
 			If LockedMusic = 0 Then CloseFile(F)
+			Return -1
 		EndIf
 	Wend
 
@@ -762,6 +765,13 @@ Function GetMesh(ID, Duplicate = False)
 		Name$ = ReadString$(F)
 
 		If LockedMeshes = 0 Then CloseFile(F)
+
+		; Reject path-traversal in Meshes.dat-stored names. The update
+		; channel can rewrite Meshes.dat, so a hostile update payload could
+		; plant `..\..\<x>` and force a LoadMesh on an arbitrary file.
+		; LoadMesh would mostly return 0 on miss, but the attempt itself is
+		; the wrong shape -- bail before we touch the filesystem.
+		If Instr(Name$, "..") > 0 Then Return 0
 
 		; Load the mesh
 		If IsAnim = True
