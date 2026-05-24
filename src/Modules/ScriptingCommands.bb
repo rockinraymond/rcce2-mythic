@@ -49,7 +49,15 @@ Return Result%
 End Function
 
 Function BVM_THREADEXECUTE(Name$, Func$, AI%=0, AIContext%=0, Param$ = "")
-	ThreadScript(Name$, Func$, AI, AIContext, Param$)
+	; Propagate the caller's Privileged flag to the spawned script.
+	; Previously hard-coded to 0, which (a) silently neutered GM
+	; scripts that used ThreadExecute to call privileged helpers
+	; and (b) left an obvious refactor trap where someone would
+	; eventually add a `Privileged` arg and get the propagation wrong.
+	Local CurrentSI.ScriptInstance = Object.ScriptInstance(hSI)
+	Local CallerPriv% = 0
+	If CurrentSI <> Null Then CallerPriv = CurrentSI\Privileged
+	ThreadScript(Name$, Func$, AI, AIContext, Param$, CallerPriv)
 End Function
 
 Function BVM_SAVESTATE()
@@ -126,6 +134,23 @@ Function BVM_RequirePrivileged%()
 	If SI = Null Then Return False
 	If SI\Privileged <> 0 Then Return True
 	BVM_ScriptLog("Privileged BVM call refused from non-privileged script: " + SI\Name)
+	Return False
+End Function
+
+; Allow the call if the script is privileged OR the target is the
+; script's own actor / context. Use this for state-mutating BVM
+; commands that take an actor handle but are safe when the target
+; is the script's own actor (e.g. an NPC's own movement, an actor's
+; own attribute change). Without this distinction, the privilege
+; gate either lets non-privileged NPC scripts mutate arbitrary
+; actors (current behaviour for several commands) or breaks every
+; NPC's ability to move itself.
+Function BVM_RequireSelfOrPrivileged%(Param1%)
+	SI.ScriptInstance = Object.ScriptInstance(hSI)
+	If SI = Null Then Return False
+	If SI\Privileged <> 0 Then Return True
+	If Param1% <> 0 And (Param1% = SI\AI Or Param1% = SI\AIContext) Then Return True
+	BVM_ScriptLog("BVM call refused: target is neither script's actor nor context (" + SI\Name + ")")
 	Return False
 End Function
 
@@ -378,6 +403,10 @@ Return Result%
 End Function
 
 Function BVM_KILLACTOR(Param1%, Param2%=0)
+	; Without this gate any NPC Examine / Trade / RightClick script
+	; could instantly kill any actor whose handle it could scan via
+	; BVM_NEXTACTOR.
+	If Not BVM_RequirePrivileged() Then Return
 	Actor.ActorInstance = Object.ActorInstance(Param1%)
 	If Actor <> Null
 		Actor\Attributes\Value[HealthStat] = 0
@@ -554,6 +583,7 @@ Function BVM_SETACTORTARGET(Param1%, Param2%=0)
 End Function
 
 Function BVM_SETACTORDESTINATION(Param1%, Param2#, Param3#)
+	If Not BVM_RequireSelfOrPrivileged(Param1%) Then Return
 	Actor.ActorInstance = Object.ActorInstance(Param1%)
 	If Actor <> Null
 		Actor\DestX# = Param2#
@@ -610,6 +640,7 @@ Return Result$
 End Function
 
 Function BVM_ROTATEACTOR(Param1%, Param2#)
+	If Not BVM_RequireSelfOrPrivileged(Param1%) Then Return
 	Actor.ActorInstance = Object.ActorInstance(Param1%)
 	If Actor <> Null
 		Actor\Yaw# = Param2#
@@ -624,6 +655,7 @@ Function BVM_ROTATEACTOR(Param1%, Param2#)
 End Function
 
 Function BVM_MOVEACTOR(Param1%, Param2#, Param3#, Param4#, Param5%=0, Param6%=0)
+	If Not BVM_RequireSelfOrPrivileged(Param1%) Then Return
 	Actor.ActorInstance = Object.ActorInstance(Param1%)
 	If Actor <> Null
 		Actor\X# = Param2#
@@ -1107,6 +1139,10 @@ Function BVM_SETACTORGROUP(Param1%, Param2%)
 End Function
 
 Function BVM_FIREPROJECTILE(Param1%, Param2%, Param3$)
+	; Source actor must be the script's own actor (NPCs can fire from
+	; themselves) or the script must be privileged. Otherwise any NPC
+	; script could fire any projectile from any actor at any target.
+	If Not BVM_RequireSelfOrPrivileged(Param1%) Then Return
 	PID = FindProjectile(Param3$)
 	If PID > -1
 		A1.ActorInstance = Object.ActorInstance(Param1%)
@@ -1538,26 +1574,65 @@ Function BVM_FULLTRIM$(Param1$)
 Return Result$
 End Function
 
+; --- Script file-system access -----------------------------------------
+;
+; Every Script-file BVM_* command below prefixes the operand with the
+; configured RCScriptFiles$ directory, but does NOT reject ".."
+; segments -- so a non-privileged NPC script could trivially navigate
+; out of the script-files sandbox to delete arbitrary files, overwrite
+; the running executable, or read system configs.
+;
+; BVM_ScriptPathIsSafe$ rejects names containing ".." or absolute
+; path indicators ("\foo", "C:" etc.); all script FS calls now route
+; through it. The privilege gate is layered on top: most callers
+; should be GM-only anyway, but the path check is the floor.
+Function BVM_ScriptPathIsSafe%(Name$)
+	If Name$ = "" Then Return False
+	If Instr(Name$, "..") > 0 Then Return False
+	If Left$(Name$, 1) = "\" Or Left$(Name$, 1) = "/" Then Return False
+	; Drive letter "C:..." or any colon at position 2.
+	If Len(Name$) >= 2 And Mid$(Name$, 2, 1) = ":" Then Return False
+	; Reject control bytes / non-printable.
+	Local i, c
+	For i = 1 To Len(Name$)
+		c = Asc(Mid$(Name$, i, 1))
+		If c < 32 Or c = 127 Then Return False
+	Next
+	Return True
+End Function
+
 Function BVM_DELETEFILE(Param1$)
+	If Not BVM_RequirePrivileged() Then Return
+	If Not BVM_ScriptPathIsSafe(Param1$) Then Return
 	DeleteFile(RCScriptFiles$ + Param1$)
 End Function
 
 Function BVM_READFILE%(Param1$)
+	; Read is the only non-mutating FS op so we leave the privilege
+	; gate off, but the path-traversal check still applies -- a
+	; non-priv script shouldn't get to slurp arbitrary host files.
+	If Not BVM_ScriptPathIsSafe(Param1$) Then Return 0
 	Result% = ReadFile(RCScriptFiles$ + Param1$)
 Return Result%
 End Function
 
 Function BVM_WRITEFILE%(Param1$)
+	If Not BVM_RequirePrivileged() Then Return 0
+	If Not BVM_ScriptPathIsSafe(Param1$) Then Return 0
 	Result% = WriteFile(RCScriptFiles$ + Param1$)
 Return Result%
 End Function
 
 Function BVM_OPENFILE%(Param1$)
+	If Not BVM_RequirePrivileged() Then Return 0
+	If Not BVM_ScriptPathIsSafe(Param1$) Then Return 0
 	Result% = OpenFile(RCScriptFiles$ + Param1$)
 Return Result%
 End Function
 
 Function BVM_APPENDFILE%(Param1$)
+	If Not BVM_RequirePrivileged() Then Return 0
+	If Not BVM_ScriptPathIsSafe(Param1$) Then Return 0
 	Filename$ = RCScriptFiles$ + Param1$
 	F = OpenFile(Filename$)
 	SeekFile(F, FileSize(Filename$))
@@ -1566,6 +1641,8 @@ Return Result%
 End Function
 
 Function BVM_CREATEDIR%(Param1$)
+	If Not BVM_RequirePrivileged() Then Return 0
+	If Not BVM_ScriptPathIsSafe(Param1$) Then Return 0
 	CreateDir(RCScriptFiles$ + Param1$)
 Return Result%
 End Function
@@ -1697,6 +1774,14 @@ Function BVM_SCRIPTLOG(Param1$="")
 End Function
 
 Function BVM_RUNTIMEERROR(Param1$="")
+	; A non-privileged script could otherwise shut down the entire
+	; server with one line ("RuntimeError(...)") by calling this
+	; command -- a trivial DoS from any NPC script. Non-priv callers
+	; log + return; only GM-grade scripts can force a fatal exit.
+	If Not BVM_RequirePrivileged()
+		WriteLog(MainLog, "Script log: BVM_RUNTIMEERROR (non-priv): " + Param1$)
+		Return
+	EndIf
 	Shutdown()
 	RuntimeError(Param1$)
 End Function
@@ -2397,6 +2482,11 @@ Function BVM_OUTPUT(Param1%, Param2$, Param3%=0, Param4%=255, Param5%=255)
 End Function
 
 Function BVM_MYSQLQUERY$(Param1$)
+	; Lets a script issue arbitrary SQL against the rcce2 database
+	; using the server's connection -- including SELECT on
+	; rc_accounts (password hashes), DROP TABLE, UPDATE arbitrary
+	; rows. Privileged-only, no exceptions.
+	If Not BVM_RequirePrivileged() Then Return ""
 	If MySQL = True Then Result$ = SQLQuery(hSQL, Param1$)
 Return Result$
 End Function
@@ -2644,6 +2734,11 @@ Function BVM_MOD#(Param1#, Param2#)
 End Function
 
 Function BVM_REFRESHSCRIPTS()
+	; Invoking from inside a script frees the running module's
+	; bytecode underneath it (use-after-free) AND lets any non-priv
+	; script reload the entire script tree as a griefing / DoS
+	; primitive. Privileged callers only.
+	If Not BVM_RequirePrivileged() Then Return
 	WriteLog(MainLog, "Refreshing scripts...")
 	WriteLog(MainLog, "Halting running scripts...")
 	For SI.ScriptInstance = Each ScriptInstance
