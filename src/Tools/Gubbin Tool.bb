@@ -908,9 +908,14 @@ Function DecryptMesh(Name$)
 	If Len(Name$) > 5
 		If Lower$(Right$(Name$, 5)) = ".eb3d"
 			Size = FileSize(Name$)
+			If Size <= 0 Then Return
 			B = CreateBank(Size)
 
 			In = ReadFile(Name$)
+			If In = 0 Then
+				FreeBank(B)
+				Return
+			EndIf
 			ReadBytes(B, In, 0, Size)
 			CloseFile(In)
 
@@ -918,6 +923,10 @@ Function DecryptMesh(Name$)
 			Name$ = Name$ + ".b3d"
 
 			Out = WriteFile(Name$)
+			If Out = 0 Then
+				FreeBank(B)
+				Return
+			EndIf
 
 			DebugLog( "Out is: " + Out )
 			DecryptBank = CreateBank(64)

@@ -2146,7 +2146,7 @@ For e.Event = Each event
        oldpath$=CurrentDir()
        rd$=""
 
-  	   tFile = FUI_SaveDialog( "Load saved geometry", "Data\RCCAVES\", "Blitz basic format (*.b3d)|*.b3d")
+  	   tFile = FUI_SaveDialog( "Save Cave", "Data\RCCAVES\", "Blitz basic format (*.b3d)|*.b3d")
        If tfile=True Then rd$ = app\currentfile
        rd$=strip_path$(rd$) 
        ChangeDir oldpath$ 
@@ -2656,7 +2656,8 @@ ChangeDir thispath$
 THISFOLD$=strip_path$(SF$)
 ;mysave=cave_copymesh(cube,1)
 savemultimesh (cube,"Data\RCCAVES\"+thisfold$,"Data\RCCAVES\",7)
-FreeEntity mysave
+; (mysave was set by a now-removed cave_copymesh path; the FreeEntity that
+; used to live here read an undefined local and was a no-op anyway.)
 lightf$=Left$(thisfold$,Len(thisfold$)-3)
 lightf$=lightf$+"LGT"
 ChangeDir thispath$
@@ -2703,8 +2704,16 @@ YN=fui_confirm("Load Cave ?","Yes","No")
 If yn=0 Then Return
 
 If FileType ("Data\RCCAVES\"+thisfold$)<>1 Then Return
+; Load the replacement BEFORE freeing the current cube. If LoadMesh fails
+; (e.g. file present but corrupt) we keep the prior geometry instead of
+; leaving the editor with a null cube that every later op dereferences.
+newcube=LoadMesh("Data\RCCAVES\"+thisfold$)
+If newcube=0 Then
+	FUI_Notify("Failed to load cave geometry.")
+	Return
+EndIf
 FreeEntity cube
-cube=LoadMesh("Data\RCCAVES\"+thisfold$)
+cube=newcube
 UpdateNormals (cube)
 
 ;cube_old=CopyMesh(cube)
