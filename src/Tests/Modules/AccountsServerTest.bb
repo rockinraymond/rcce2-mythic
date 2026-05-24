@@ -84,6 +84,10 @@ End Function
 Function SafeWriteAbort(TempPath$, F)
 End Function
 
+Function ReadBoundedString$(F, MaxLen)
+	Return ""
+End Function
+
 Include "Modules\AccountsServer.bb"
 
 Test testFindAccountByListIDReturnsMatchingAccount()
