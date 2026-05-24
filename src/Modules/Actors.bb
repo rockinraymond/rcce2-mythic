@@ -84,7 +84,15 @@ Type ActorInstance
 	Field WalkingBackward
 	Field Area$, ServerArea, Account
 	Field Name$, Tag$
-	Field LastPortal, LastTrigger, LastPortalTime
+	; LastPortal is a portal index 0..99 within an Area's portal list, so
+	; it only makes sense paired with the area it was set in. LastPortalArea
+	; stores Handle(Ar) of that area; the portal-lock check in Server.bb
+	; compares both (Ar, i) and the time window. Without the area component,
+	; an actor who entered Area B via waypoint/script while holding a stale
+	; LastPortal=5 from Area A would be falsely locked out of Area B's
+	; portal #5 (different physical portal), and conversely the AI spawn
+	; path's deliberate LastPortal=0 stamp would bleed across areas.
+	Field LastPortal, LastTrigger, LastPortalTime, LastPortalArea
 	Field TeamID ; Used to allow scripting to put people together in teams
 	Field PartyID, AcceptPending ; Holds the handle of a Party object (or 0 if the actor is not in a party)
 	Field Gender ; 0 for male, 1 for female
@@ -447,6 +455,7 @@ Function CreateActorInstance.ActorInstance(Actor.Actor)
 	A\SourceSP = -1
 	A\LastTrigger = -1
 	A\LastPortal = -1
+	A\LastPortalArea = 0
 	A\IgnoreUpdate = 0
 	Return A
 
