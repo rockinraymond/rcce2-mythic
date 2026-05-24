@@ -198,8 +198,22 @@ Function UpdateFiles()
 					NameLen = RCE_IntFromStr(Mid$(Pa$, Offset + 4, 1))
 					U\Name$ = Mid$(Pa$, Offset + 5, NameLen)
 					Offset = Offset + 5 + NameLen
-					; It's the last packet with the total required files number in it
-					If Len(Pa$) = Offset + 1
+					; Path-containment: refuse any name that would let the server
+					; write outside the game directory. Without this the client
+					; would happily CopyFile("Temp2.dat", "..\Windows\...") or
+					; replace the running executable on a server's say-so. The
+					; checksum further down is also forgeable (32-bit additive
+					; sum), so name validation is the only structural defence.
+					If Not UpdateFileNameIsSafe(U\Name$)
+						WriteLog(MainLog, "Refusing unsafe update filename from server: " + U\Name$)
+						U\Name$ = ""
+					EndIf
+					; Last-packet length-equality check used to read 2 bytes when
+					; only 1 byte remained (Len(Pa$) = Offset + 1 means exactly
+					; one byte left); a crafted final packet with that exact
+					; length corrupted RequiredFiles and froze the update loop.
+					; Require at least 2 bytes for the count.
+					If Len(Pa$) >= Offset + 1
 						RequiredFiles = RCE_IntFromStr(Mid$(Pa$, Offset, 2))
 						Offset = Offset + 2
 					EndIf
@@ -226,6 +240,9 @@ Function UpdateFiles()
 	ThisFile = 0
 	GY_UpdateLabel(TStatus, LanguageString$(LS_CheckingFiles))
 	For U.UpdateFile = Each UpdateFile
+		; Skip entries the announcement path already rejected as unsafe.
+		If U\Name$ = "" Then NeedFile = False : Goto skipUpdateApply
+
 		NeedFile = False
 		; I don't have it at all
 		If FileType(U\Name$) = 0
@@ -254,11 +271,26 @@ Function UpdateFiles()
 			bz2(1, 0, "Temp.dat", "Temp2.dat")
 			DeleteFile("Temp.dat")
 
+			; Verify the downloaded payload matches the announced checksum.
+			; The checksum itself is a 32-bit additive sum (forgeable by anyone
+			; who can swap the HTTP body); a proper signature check needs a
+			; pinned key + SHA-256. Until that lands, at least refuse to apply
+			; a bz2 that decompressed to something other than what the server
+			; said it would. See docs/UPDATE-CHANNEL-HARDENING.md.
+			If CountChecksum("Temp2.dat") <> U\Checksum
+				DeleteFile("Temp2.dat")
+				WriteLog(MainLog, "Update for " + U\Name$ + " failed post-download checksum; refusing to apply.")
+				Goto skipUpdateApply
+			EndIf
+
 			; Ensure that the folder tree for the file actually exists
 			For i = 2 To Len(U\Name$)
 				If Mid$(U\Name$, i, 1) = "\"
 					Folder$ = Left$(U\Name$, i - 1)
-					If FileType(Folder$) <> 2 Then CreateDir(Folder$)
+					; Belt-and-braces: never create a directory whose path
+					; contains a `..` segment, regardless of how the file
+					; name reached this point.
+					If Instr(Folder$, "..") = 0 And FileType(Folder$) <> 2 Then CreateDir(Folder$)
 				EndIf
 			Next
 ;---------------------------------------------
@@ -280,6 +312,7 @@ Function UpdateFiles()
 
 			GY_UpdateProgressBar(GDLBar, 0)
 		EndIf
+		.skipUpdateApply
 
 		Delete(U)
 		ThisFile = ThisFile + 1
@@ -3651,6 +3684,34 @@ Function CountChecksum(File$)
 	CloseFile F
 	Return Result
 
+End Function
+
+; Path-containment check for server-supplied update filenames.
+;
+; Refuses any name that could write outside the game directory:
+;   - empty string
+;   - contains `..` (parent-directory traversal in any form)
+;   - starts with `\` or `/` (absolute path on Windows)
+;   - second character is `:` (drive-letter absolute, e.g. `C:\...`)
+;   - contains a NUL byte or other non-printable control characters
+;
+; Without this guard the P_FetchUpdateFiles handler would write to
+; whatever path the server provided, including the running game .exe
+; (which is then ExecFile'd) and arbitrary system paths via `..`.
+Function UpdateFileNameIsSafe%(Name$)
+	If Len(Name$) = 0 Then Return False
+	If Len(Name$) > 240 Then Return False
+	If Left$(Name$, 1) = "\" Then Return False
+	If Left$(Name$, 1) = "/" Then Return False
+	If Len(Name$) >= 2
+		If Mid$(Name$, 2, 1) = ":" Then Return False
+	EndIf
+	If Instr(Name$, "..") > 0 Then Return False
+	For i = 1 To Len(Name$)
+		Local c = Asc(Mid$(Name$, i, 1))
+		If c < 32 Or c = 127 Then Return False
+	Next
+	Return True
 End Function
 
 ; Loads an up texture for a menu button
