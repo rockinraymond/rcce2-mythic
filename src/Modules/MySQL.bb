@@ -1,3 +1,52 @@
+; --- MySQL string escape helper -------------------------------------------
+;
+; Every SQL query in this module is built by concatenating values into the
+; query string. Any string field that reaches a query unsanitised lets a
+; player or in-game script close the open single-quote, append arbitrary
+; SQL, and rewrite the database. Reach is broad:
+;
+;   * username / password / email at P_CreateAccount + P_VerifyAccount
+;   * character name at P_CreateCharacter
+;   * actor Area / Tag / Script / DeathScript stored in rc_actorinstance
+;   * ScriptGlobals settable by player scripts via BVM_SETGLOBAL
+;   * Quest entry name + status settable via BVM_ADDQUESTENTRY
+;   * Actionbar slot text settable via BVM_SETACTIONBARSLOT
+;
+; This helper backslash-escapes the characters MySQL treats specially
+; inside a single-quoted string literal. Backslash must be done first so
+; subsequent inserted backslashes don't get double-escaped. NUL, newline,
+; carriage return, and Ctrl-Z are escaped to their literal two-character
+; forms to defend against parsers that strip whitespace before quoting.
+;
+; Numeric fields (Int, Float) are not run through this helper -- Blitz's
+; native value-to-string conversion only emits digits / sign / decimal
+; point and cannot escape the surrounding quotes.
+Function My_Escape$(s$)
+	Local out$ = ""
+	Local i, c
+	For i = 1 To Len(s$)
+		c = Asc(Mid$(s$, i, 1))
+		If c = 0
+			out$ = out$ + "\0"
+		ElseIf c = 10
+			out$ = out$ + "\n"
+		ElseIf c = 13
+			out$ = out$ + "\r"
+		ElseIf c = 26
+			out$ = out$ + "\Z"
+		ElseIf c = 34
+			out$ = out$ + "\" + Chr$(34)
+		ElseIf c = 39
+			out$ = out$ + "\" + Chr$(39)
+		ElseIf c = 92
+			out$ = out$ + "\\"
+		Else
+			out$ = out$ + Chr$(c)
+		EndIf
+	Next
+	Return out$
+End Function
+
 ; Blitz Thread class remake
 Type BBThread
 	Field Hand%		; Handle
@@ -67,7 +116,7 @@ End Function
 Function My_AddAccount(User$, Pass$, Email$)
 	
 	; Add New Account (Revision: Specifiy fieldnames - Tracers Suggstion)
-	Result = SQLQuery(hSQL,"INSERT INTO `rc_accounts` (`username`,`password`,`email`,`isdm`,`isbanned`) VALUES ('"+User$+"','"+Pass$+"','"+Email$+"','0','0')")
+	Result = SQLQuery(hSQL,"INSERT INTO `rc_accounts` (`username`,`password`,`email`,`isdm`,`isbanned`) VALUES ('"+My_Escape$(User$)+"','"+My_Escape$(Pass$)+"','"+My_Escape$(Email$)+"','0','0')")
 	
 	; If the query failed, let people know
 	If Not Result Then
@@ -84,7 +133,7 @@ End Function
 Function My_AccountExists(User$)
 	
 	; Find the account
-	Result = SQLQuery(hSQL,"SELECT `account_id` FROM `rc_accounts` WHERE `username` LIKE '"+User$+"'")
+	Result = SQLQuery(hSQL,"SELECT `account_id` FROM `rc_accounts` WHERE `username` LIKE '"+My_Escape$(User$)+"'")
 	
 	; Grab the row, and free the query
 	Row = SQLFetchRow(Result)
@@ -104,7 +153,7 @@ End Function
 Function My_SaveAccount(A.Account, SaveInstance)
 	
 	; Update the account - Removed - when working, this query causes unneccessary overhead and potentially conflicts with data added to the server via other means (DM/Banned flags)
-	;result = SQLQuery(hSQL, "UPDATE `rc_accounts` SET `username` = '"+A\User$+"', `password` = '"+A\Pass$+"', `email` = '"+A\Email$+"', `isdm` = '"+A\IsDM+"', `isbanned` = '"+A\IsBanned+"', `ignore` = '"+A\Ignore$+"' WHERE `account_id` = '"+A\My_ID+"'")
+	;result = SQLQuery(hSQL, "UPDATE `rc_accounts` SET `username` = '"+My_Escape$(A\User$)+"', `password` = '"+My_Escape$(A\Pass$)+"', `email` = '"+My_Escape$(A\Email$)+"', `isdm` = '"+A\IsDM+"', `isbanned` = '"+A\IsBanned+"', `ignore` = '"+My_Escape$(A\Ignore$)+"' WHERE `account_id` = '"+A\My_ID+"'")
 	;If Not result Then writelog(mainlog, "Save Account for " + Chr(34) + A\User$ + Chr(34) + " failed!",True,True)
 	
 	; Sometimes we aren't required to save the entire account
@@ -132,7 +181,7 @@ Function My_LoadAccount.Account(User$, Pass$, Force)
 	
 	If hSQL = 0 Then writelog(MainLog, "SQL Stream was terminated! Accounts can not be looked up.")
 	; Find the account
-	Result = SQLQuery(hSQL, "SELECT * FROM `rc_accounts` WHERE `username` = '"+User$+"'")
+	Result = SQLQuery(hSQL, "SELECT * FROM `rc_accounts` WHERE `username` = '"+My_Escape$(User$)+"'")
 	
 	; The query itself shouldn't fail, this is just debugging code
 	If Not Result Then WriteLog(MainLog,"Error Executing Query (Loading Account "+Chr(34)+User+Chr(34)+")",True,True)
@@ -330,7 +379,7 @@ End Function
 ; Check if an actor exists
 Function My_ActorExists(ActorName$)
 	; Find the account
-	Result = SQLQuery(hSQL,"SELECT * FROM `rc_actorinstance` WHERE `name` LIKE '"+ActorName$+"'")
+	Result = SQLQuery(hSQL,"SELECT * FROM `rc_actorinstance` WHERE `name` LIKE '"+My_Escape$(ActorName$)+"'")
 	
 	; Grab the row, and free the query
 	Local Count% = SQLRowCount(Result)
@@ -357,7 +406,7 @@ Function My_SaveActorInstance(A.ActorInstance, Q.QuestLog, C.ActionbarData, IsSl
 	End If
 	
 	; Update their instance, long query :)
-	FreeSQLQuery(SQLQuery(hSQL, "UPDATE `rc_actorinstance` SET `actorid` = '"+A\Actor\ID+"', `area` = '"+A\Area$+"',`name` = '"+A\Name$+"',`tag` = '"+A\Tag$+"',`teamid` = '"+A\TeamID%+"',`x` = '"+A\X#+"',`y` = '"+A\Y#+"',`z` = '"+A\Z#+"',`gender` = '"+A\Gender+"',`xp` = '"+A\XP+"',`level` = '"+A\Level+"',`face` = '"+A\FaceTex+"',`hair` = '"+A\Hair+"',`beard` = '"+A\Beard+"',`body` = '"+A\BodyTex+"',`script` = '"+A\Script$+"',`dscript` = '"+A\DeathScript$+"',`rep` = '"+A\Reputation+"',`gold` = '"+A\Gold+"',`slaves` = '"+A\NumberOfSlaves+"',`homefaction` = '"+A\HomeFaction+"', `isslave` = '"+IsSlave+"', `slot` = '"+Parent+"', `xpbarlev` = '"+A\XPBarLevel+"' WHERE `id` = '"+A\My_ID+"'"))
+	FreeSQLQuery(SQLQuery(hSQL, "UPDATE `rc_actorinstance` SET `actorid` = '"+A\Actor\ID+"', `area` = '"+My_Escape$(A\Area$)+"',`name` = '"+My_Escape$(A\Name$)+"',`tag` = '"+My_Escape$(A\Tag$)+"',`teamid` = '"+A\TeamID%+"',`x` = '"+A\X#+"',`y` = '"+A\Y#+"',`z` = '"+A\Z#+"',`gender` = '"+A\Gender+"',`xp` = '"+A\XP+"',`level` = '"+A\Level+"',`face` = '"+A\FaceTex+"',`hair` = '"+A\Hair+"',`beard` = '"+A\Beard+"',`body` = '"+A\BodyTex+"',`script` = '"+My_Escape$(A\Script$)+"',`dscript` = '"+My_Escape$(A\DeathScript$)+"',`rep` = '"+A\Reputation+"',`gold` = '"+A\Gold+"',`slaves` = '"+A\NumberOfSlaves+"',`homefaction` = '"+A\HomeFaction+"', `isslave` = '"+IsSlave+"', `slot` = '"+Parent+"', `xpbarlev` = '"+A\XPBarLevel+"' WHERE `id` = '"+A\My_ID+"'"))
 	
 	; Update their attributes
 	For i = 0 To 39
@@ -405,7 +454,7 @@ Function My_SaveActorInstance(A.ActorInstance, Q.QuestLog, C.ActionbarData, IsSl
 	; Update Script Globals and Memorised Spells
 	; Using two querys in one loop saves time
 	For i = 0 To 9
-		FreeSQLQuery(SQLQuery(hSQL, "UPDATE `rc_scripts` SET `glob` = '"+A\ScriptGlobals$[i]+"' WHERE `id` = '"+(A\Script_ID + i)+"'"))
+		FreeSQLQuery(SQLQuery(hSQL, "UPDATE `rc_scripts` SET `glob` = '"+My_Escape$(A\ScriptGlobals$[i])+"' WHERE `id` = '"+(A\Script_ID + i)+"'"))
 		FreeSQLQuery(SQLQuery(hSQL, "UPDATE `rc_memspells` SET `mem` = '"+A\MemorisedSpells[i]+"' WHERE `id` = '"+(A\Memorised_ID + i)+"'"))
 	Next
 	
@@ -413,7 +462,7 @@ Function My_SaveActorInstance(A.ActorInstance, Q.QuestLog, C.ActionbarData, IsSl
 	; Q can be null if the actorinstance is a slave
 	If Q <> Null Then
 		For i = 0 To 499
-			FreeSQLQuery(SQLQuery(hSQL, "UPDATE `rc_questlog` SET `qname` = '"+Q\EntryName$[i]+"', `qstat` = '"+Q\EntryStatus$[i]+"' WHERE `id` = '"+(Q\My_ID + i)+"'"))
+			FreeSQLQuery(SQLQuery(hSQL, "UPDATE `rc_questlog` SET `qname` = '"+My_Escape$(Q\EntryName$[i])+"', `qstat` = '"+My_Escape$(Q\EntryStatus$[i])+"' WHERE `id` = '"+(Q\My_ID + i)+"'"))
 		Next
 	End If
 	
@@ -426,9 +475,11 @@ Function My_SaveActorInstance(A.ActorInstance, Q.QuestLog, C.ActionbarData, IsSl
 			w% = RCE_IntFromStr(Right(C\Slots$[i],2))
 			
 			If aaa$ = "I" Then
+				; aaa$ is locally constrained to "I" here so no escape needed,
+				; but bbb$ / w% come from C\Slots$ which player scripts can set.
 				FreeSQLQuery(SQLQuery(hSQL, "UPDATE `rc_actionbar` SET `slot` = '" + aaa$ + "', `dat` = '" + w% + "' WHERE `id` = '"+(C\My_ID + i)+"'"))
 			Else If aaa$ = "S" Then
-				FreeSQLQuery(SQLQuery(hSQL, "UPDATE `rc_actionbar` SET `slot` = '" + aaa$ + "', `dat` = '" + bbb$ + "' WHERE `id` = '"+(C\My_ID + i)+"'"))
+				FreeSQLQuery(SQLQuery(hSQL, "UPDATE `rc_actionbar` SET `slot` = '" + aaa$ + "', `dat` = '" + My_Escape$(bbb$) + "' WHERE `id` = '"+(C\My_ID + i)+"'"))
 			Else If aaa$ = "" Then
 				FreeSQLQuery(SQLQuery(hSQL, "UPDATE `rc_actionbar` SET `slot` = '', `dat` = '-1' WHERE `id` = '"+(C\My_ID + i)+"'"))
 			End If
@@ -526,7 +577,7 @@ Function My_NewActorInstance(A.ActorInstance, Q.Questlog, c.ActionbarData, IsSla
 	End If
 	
 	
-	Result = SQLQuery(hSQL, "SELECT `id` FROM `rc_actorinstance` WHERE `account_id` = '" + AccountID + "' AND `name` = '" + A\Name$ + "'")
+	Result = SQLQuery(hSQL, "SELECT `id` FROM `rc_actorinstance` WHERE `account_id` = '" + AccountID + "' AND `name` = '" + My_Escape$(A\Name$) + "'")
 		
 	; Fetch the character data and leave if there isn't anything left
 	Row = SQLFetchRow(Result)
