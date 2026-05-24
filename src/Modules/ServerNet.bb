@@ -937,7 +937,20 @@ Function UpdateNetwork()
 					If Num >= 0 And Num < 36 And A <> Null
 						If A\LoggedOn > -1
 							If Left$(M\MessageData$, 1) = "S"
-								A\ActionBar[A\LoggedOn]\Slots$[Num] = "S" + Mid$(M\MessageData$, 3)
+								; Cap the spell name to keep the stored slot
+								; string within the 256-byte bound that the
+								; save loader (ReadBoundedString$ in
+								; AccountsServer.bb) imposes on Slots$. Without
+								; this, a client can stuff arbitrary bytes
+								; (up to the packet limit) into one of 36
+								; slots, bloating the per-character save and,
+								; more importantly, the broadcast packet that
+								; re-encodes the action bar with a 2-byte
+								; length prefix per slot. 255 leaves room for
+								; the "S" prefix byte.
+								Local SpellName$ = Mid$(M\MessageData$, 3)
+								If Len(SpellName$) > 255 Then SpellName$ = Left$(SpellName$, 255)
+								A\ActionBar[A\LoggedOn]\Slots$[Num] = "S" + SpellName$
 							ElseIf Left$(M\MessageData$, 1) = "I"
 								A\ActionBar[A\LoggedOn]\Slots$[Num] = "I" + Mid$(M\MessageData$, 3, 2)
 							ElseIf Left$(M\MessageData$, 1) = "N"
