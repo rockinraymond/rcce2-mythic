@@ -594,7 +594,10 @@ Function My_LoadActorInstance.ActorInstance(ActID, Q.Questlog, C.ActionBarData, 
 	A\Gold				= ReadSQLField(Row, "gold")
 	A\NumberOfslaves	= ReadSQLField(Row, "slaves")
 	A\HomeFaction		= ReadSQLField(Row, "homefaction")
-	A\XPBarLevel		= ReadSQLField(Row, "xbbarlev")
+	; Column is `xpbarlev` on the SaveActor side (above); the read here
+	; used to look up `xbbarlev`, which silently returned 0 on every load
+	; and made the XP bar reset to empty on relog.
+	A\XPBarLevel		= ReadSQLField(Row, "xpbarlev")
 	A\Account_ID		= AccountID
 
 	; Query attributes
