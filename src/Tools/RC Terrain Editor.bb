@@ -1513,7 +1513,15 @@ If sfilename3$<>""
 FN$=sFileName3$+".rct"
 ChangeDir thispath$+savepath$
 
-sfile=WriteFile (SF$)
+; Write to the .rct-suffixed FN$ we just computed, not the raw dialog
+; result SF$. Otherwise saving "foo" produces a file literally named
+; "foo" with no extension while the debug log claims the .rct path.
+sfile=WriteFile (FN$)
+If sfile = 0 Then
+	DebugLog "savework: WriteFile failed for " + FN$
+	ChangeDir thispath$
+	Return
+EndIf
 DebugLog "FINAL RCT SAVE !!!!!!!!!!!!!!!!!!!!! "+FN$
 DebugLog "Number of layers: " + numlayers + " and number of segments: " + lsegments
  WriteInt sfile, numlayers
@@ -5437,11 +5445,26 @@ If FileType(fname$)<>1 Then Return -1
 
 ;wite to file
 ; Newf=WriteFile(newn$)
+; Write to a .tmp first so a WriteFile failure can't leave us with
+; nothing on disk — the previous DeleteFile-then-WriteFile order would
+; have wiped the source if the target path was no longer writable.
+TmpPath$ = fname$ + ".tmp"
+If FileType(TmpPath$) = 1 Then DeleteFile(TmpPath$)
+Fsave=WriteFile(TmpPath$)
+If Fsave = 0 Then
+	FreeBank thisbank
+	Return -1
+EndIf
+WriteBytes thisbank,fsave,0,offset
+CloseFile fsave
+If FileSize(TmpPath$) <> offset Then
+	DeleteFile(TmpPath$)
+	FreeBank thisbank
+	Return -1
+EndIf
 DeleteFile (fname$)
- Fsave=WriteFile(fname$)
- b=PeekByte(thisbank,i)
- WriteBytes thisbank,fsave,0,offset
- CloseFile fsave
+CopyFile TmpPath$, fname$
+DeleteFile(TmpPath$)
 
 ; WriteBytes thisbank,newf,0,ts
 ; CloseFile newf
