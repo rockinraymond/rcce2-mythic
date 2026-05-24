@@ -4,6 +4,11 @@ Global TradeMsg1$, TradeMsg2$, TradeMsg3$
 Global newEntityX#,newEntityY#,newEntityZ#
 Global oldEntityX#,oldEntityY#,oldEntityZ#
 
+; Track the currently-playing P_Music handles so the next P_Music can
+; release them. Used to leak one sound and one channel per zone change.
+Global CurrentMusicSound = 0
+Global CurrentMusicChannel = 0
+
 ; Connects to the server
 Function Connect()
 
@@ -635,13 +640,22 @@ Function UpdateNetwork()
 					If Channel <> 0 Then ChannelVolume(Channel, DefaultVolume#)
 				EndIf
 
-			; Music
+			; Music. Each P_Music packet loads and starts looping a sound;
+			; the previous code never stopped the prior channel or freed
+			; the prior sound handle, so every zone-transition leaked one
+			; sound and one channel for the life of the session.
 			Case P_Music
 				Name$ = GetMusicName$(RCE_IntFromStr(Mid$(M\MessageData$, 1, 2)))
-				Loaded = LoadSound("Data\Music\" + Name$, False)
-				LoopSound Loaded
-				Channel = PlaySound(Loaded)
-				If Channel <> 0 Then ChannelVolume(Channel, DefaultVolume#)
+				If CurrentMusicChannel <> 0 Then StopChannel CurrentMusicChannel
+				If CurrentMusicSound <> 0 Then FreeSound CurrentMusicSound
+				CurrentMusicChannel = 0
+				CurrentMusicSound = 0
+				CurrentMusicSound = LoadSound("Data\Music\" + Name$, False)
+				If CurrentMusicSound <> 0
+					LoopSound CurrentMusicSound
+					CurrentMusicChannel = PlaySound(CurrentMusicSound)
+					If CurrentMusicChannel <> 0 Then ChannelVolume(CurrentMusicChannel, DefaultVolume#)
+				EndIf
 
 			; Particles effect
 			Case P_CreateEmitter
@@ -1457,7 +1471,14 @@ Function UpdateNetwork()
 				Yaw# = RCE_FloatFromStr#(Mid$(M\MessageData$, 13, 4))
 				PvPEnabled = RCE_IntFromStr(Mid$(M\MessageData$, 17, 1))
 				Grav = RCE_IntFromStr(Mid$(M\MessageData$, 18, 2))
-				Gravity# = 0.05 * Float#((Grav - 200) / 100)
+				; The original `Float#((Grav - 200) / 100)` did integer
+				; division before promotion, so Grav = 250 rounded to 0
+				; (instead of 0.5) and Grav = 0 produced -0.1 (negative
+				; gravity, players launched skyward). Convert to float
+				; before division and clamp to a sane physical range.
+				Gravity# = 0.05 * (Float#(Grav - 200) / 100.0)
+				If Gravity# < -2.0 Then Gravity# = -2.0
+				If Gravity# > 2.0 Then Gravity# = 2.0
 				CurrentAreaID = RCE_IntFromStr(Mid$(M\MessageData$, 20, 4))
 				NameLen = RCE_IntFromStr(Mid$(M\MessageData$, 25, 1))
 				AreaName$ = Mid$(M\MessageData$, 26, NameLen)
