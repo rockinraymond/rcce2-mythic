@@ -76,6 +76,10 @@ Type ActorInstance
 	Field X#, Y#, Z#
 	Field OldX#, OldZ#
 	Field DestX#, DestZ#
+	; Timestamp (MilliSecs) of the last P_StandardUpdate the server
+	; accepted from this actor. Used to bound per-packet movement
+	; deltas against actor Speed so the client can't teleport-hack.
+	Field LastPosUpdateMs%
 	Field Yaw#
 	Field WalkingBackward
 	Field Area$, ServerArea, Account

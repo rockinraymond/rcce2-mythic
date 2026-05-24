@@ -1409,14 +1409,48 @@ Function UpdateNetwork()
 						; Players cannot run backwards, this will prevent cheaters from doing so
 						If AI\WalkingBackward = True Then AI\IsRunning = False
 
-						; Adjust to new x/z if they are less far than expected (i.e. client has undergone collision)
-						; Cannot just replace values because client could then lie about the values for an easy speed cheat!
-						;DistX# = Abs(NewX# - AI\OldX#)
-						;If DistX# < Abs(AI\X# - AI\OldX#) Then AI\X# = NewX#
-						;DistZ# = Abs(NewZ# - AI\OldZ#)
-						;If DistZ# < Abs(AI\Z# - AI\OldZ#) Then AI\Z# = NewZ#
-						AI\X# = NewX#
-						AI\Z# = NewZ#
+						; Speed-hack clamp: bound the per-packet position delta
+						; against actor's Speed attribute scaled by elapsed time
+						; since the previous accepted update. Without this the
+						; client can teleport arbitrarily within ClampWorldCoord
+						; bounds between updates, defeating PvP positioning
+						; checks and movement-based triggers. Tolerance factor
+						; covers lag spikes, collision shove-back, and the
+						; 1.5x base unit-per-tick coefficient that GameServer
+						; uses for server-driven movement.
+						Local NowMs% = MilliSecs()
+						Local ElapsedMs% = NowMs - AI\LastPosUpdateMs
+						If AI\LastPosUpdateMs = 0 Or ElapsedMs < 0 Or ElapsedMs > 5000
+							; First update for this actor, or clock skew, or
+							; a lag spike longer than 5s: accept the position
+							; this time and re-baseline.
+							AI\X# = NewX#
+							AI\Z# = NewZ#
+						Else
+							Local SpeedAttr# = 1.0
+							If AI\Attributes\Maximum[SpeedStat] > 0
+								SpeedAttr# = Float#(AI\Attributes\Value[SpeedStat]) / Float#(AI\Attributes\Maximum[SpeedStat])
+							EndIf
+							; Base unit/ms (matches GameServer's 1.5 base unit/tick
+							; for AI movement; assume ~50ms tick i.e. /50 -> /33 with
+							; a 1.5x running and 3x lag tolerance fold-in).
+							Local MaxUnitsPerMs# = 0.15 * (SpeedAttr# + 0.5)
+							Local MaxDelta# = MaxUnitsPerMs# * Float#(ElapsedMs)
+							If MaxDelta# < 2.0 Then MaxDelta# = 2.0
+							Local DX# = NewX# - AI\X#
+							Local DZ# = NewZ# - AI\Z#
+							Local MoveDist# = Sqr#(DX# * DX# + DZ# * DZ#)
+							If MoveDist# > MaxDelta#
+								; Too fast: hold the client at the prior position.
+								; The next update will look like the client agreed.
+								; Client will re-sync to server state on next
+								; reposition broadcast.
+							Else
+								AI\X# = NewX#
+								AI\Z# = NewZ#
+							EndIf
+						EndIf
+						AI\LastPosUpdateMs = NowMs
 						AI\OldX# = AI\X#
 						AI\OldZ# = AI\Z#
 
