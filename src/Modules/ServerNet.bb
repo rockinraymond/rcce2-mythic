@@ -1502,8 +1502,8 @@ Function UpdateNetwork()
 						; covers lag spikes, collision shove-back, and the
 						; 1.5x base unit-per-tick coefficient that GameServer
 						; uses for server-driven movement.
-						Local NowMs% = MilliSecs()
-						Local ElapsedMs% = NowMs - AI\LastPosUpdateMs
+						Local PosNowMs% = MilliSecs()
+						Local ElapsedMs% = PosNowMs - AI\LastPosUpdateMs
 						If AI\LastPosUpdateMs = 0 Or ElapsedMs < 0 Or ElapsedMs > 5000
 							; First update for this actor, or clock skew, or
 							; a lag spike longer than 5s: accept the position
