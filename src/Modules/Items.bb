@@ -143,8 +143,16 @@ Function ReadItemInstance.ItemInstance(Stream)
 		I\ItemHealth = ReadByte(Stream)
 	Else
 		WriteLog(MainLog, "Item not found: Item with ID " + ID + " has been found during the character loading.!")
-		; Jump the block
-		SeekFile( stream, FilePos(stream) + 40*2 + 1)
+		; Consume the 40 attribute shorts + 1 health byte one read at a
+		; time so EOF stops us rather than the SeekFile silently moving
+		; the cursor past the end of the file (which would then surface
+		; on the next ReadShort as a silent zero).
+		Local k
+		For k = 0 To 39
+			If Eof(Stream) Then Exit
+			ReadShort(Stream)
+		Next
+		If Not Eof(Stream) Then ReadByte(Stream)
 	EndIf
 	Return I
 

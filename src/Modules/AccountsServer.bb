@@ -266,22 +266,31 @@ Function LoadAccounts()
 			Return 0
 		EndIf
 
-		; File does exist, read in all accounts
+		; File does exist, read in all accounts. Use ReadBoundedString$
+		; on every length-prefixed field so a corrupted / hostile save
+		; file with absurd length prefixes can't trigger 2GB allocations
+		; or read past EOF into silent zero-padded strings.
+		;   Usernames / passwords / emails: 256 bytes is a generous cap
+		;   QuestLog entry text: 1024 bytes
+		;   ActionBar slot text: 256 bytes
 		While Eof(F) = False
 			Accounts\TotalAccounts = Accounts\TotalAccounts + 1
 			A.Account = New Account
-			A\User$ = ReadString$(F)
-			A\Pass$ = ReadString$(F)
-			A\Email$ = ReadString$(F)
+			A\User$ = ReadBoundedString$(F, 256)
+			A\Pass$ = ReadBoundedString$(F, 256)
+			A\Email$ = ReadBoundedString$(F, 256)
 			A\IsDM = ReadByte(F)
 			A\IsBanned = ReadByte(F)
-			A\Ignore$ = ReadString$(F)
+			A\Ignore$ = ReadBoundedString$(F, 4096)
 			A\LoggedOn = -1
 			AddListBoxItem Accounts\List, FormatAccountListEntry$(A\IsDM, A\IsBanned, A\LoggedOn, A\User$, A\Email$)
 			If A\IsBanned Then Accounts\TotalBanned = Accounts\TotalBanned + 1
 			If A\IsDM Then Accounts\TotalDMs = Accounts\TotalDMs + 1
 			A\ListID = CountGadgetItems(Accounts\List) - 1
 			Chars = ReadByte(F)
+			; Bound the character count -- a corrupted file with 255 in
+			; this slot would read 255 character blobs, walking past EOF.
+			If Chars > 10 Then Chars = 10
 			For i = 1 To Chars
 				A\Character[i - 1] = ReadActorInstance(F)
 				; Previously this dereferenced A\Character[i - 1]\Account
@@ -296,12 +305,17 @@ Function LoadAccounts()
 				EndIf
 				A\QuestLog[i - 1] = New QuestLog
 				For j = 0 To 499
-					A\QuestLog[i - 1]\EntryName$[j] = ReadString$(F)
-					A\QuestLog[i - 1]\EntryStatus$[j] = ReadString$(F)
+					; Bail the per-character QuestLog block on early EOF so we
+					; don't fill the remaining 500 - j slots with zero-padded
+					; strings consumed off the end of the file.
+					If Eof(F) Then Exit
+					A\QuestLog[i - 1]\EntryName$[j] = ReadBoundedString$(F, 1024)
+					A\QuestLog[i - 1]\EntryStatus$[j] = ReadBoundedString$(F, 1024)
 				Next
 				A\ActionBar[i - 1] = New ActionBarData
 				For j = 0 To 35
-					A\ActionBar[i - 1]\Slots$[j] = ReadString$(F)
+					If Eof(F) Then Exit
+					A\ActionBar[i - 1]\Slots$[j] = ReadBoundedString$(F, 256)
 				Next
 				If A\Character[i - 1] = Null Then Delete A\QuestLog[i - 1] : Delete A\ActionBar[i - 1]
 			Next

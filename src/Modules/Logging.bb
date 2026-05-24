@@ -72,6 +72,37 @@ Function SafeWriteAbort(TempPath$)
 	If FileType(TempPath$) = 1 Then DeleteFile(TempPath$)
 End Function
 
+; --- Bounded ReadString --------------------------------------------------
+;
+; Blitz3D's ReadString$ reads a 4-byte length prefix and then that many
+; bytes. A truncated, corrupted, or hostile save file with a wild length
+; (negative, or e.g. 0x7FFFFFFF) makes the runtime try to allocate gigs
+; of memory and read past EOF -- which Blitz silently zero-fills,
+; producing huge empty-padding strings that then propagate through the
+; rest of the load.
+;
+; ReadBoundedString$ peeks the length prefix as an Int, refuses lengths
+; outside [0, MaxLen], and reads the bytes manually. On a bad length it
+; logs once via MainLog (caller is expected to bail the surrounding load
+; if they care about partial-state corruption -- the function itself
+; just returns "" so the caller can detect the failure).
+Function ReadBoundedString$(F, MaxLen)
+	If F = 0 Then Return ""
+	Local L = ReadInt(F)
+	If L < 0 Or L > MaxLen
+		WriteLog(MainLog, "ReadBoundedString: length " + L + " out of range (cap " + MaxLen + "), refusing to read")
+		Return ""
+	EndIf
+	If L = 0 Then Return ""
+	Local s$ = ""
+	Local i
+	For i = 1 To L
+		If Eof(F) Then Exit
+		s$ = s$ + Chr$(ReadByte(F))
+	Next
+	Return s$
+End Function
+
 ; Cached debug-log handle. WriteLog used to call StartLog+StopLog every
 ; entry under LogMode>0, which opens, writes one line, and closes the
 ; DEBUG log per call — a serious IO load. Hold the handle for the life
