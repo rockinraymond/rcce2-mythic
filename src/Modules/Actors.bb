@@ -117,6 +117,14 @@ Type ActorInstance
 	Field IsTrading ; 0 for not trading, 1 for trading with NPC, 2 for trading with pet, 3 for trading with player, 4/5 for accepted trading with player
 	Field TradingActor.ActorInstance
 	Field TradeResult$
+	; Server-authoritative per-slot trade offer state. Populated by
+	; each P_UpdateTrading packet from this actor (slot index 0..31,
+	; value = amount of Inventory[SlotI_Backpack + i] offered). Used
+	; on accept to ignore the client-supplied accept-packet TradeResult$
+	; amounts and only swap what was actually shown via UpdateTrading
+	; -- prevents the dupe where the accept packet swaps a different
+	; stack than what the trade UI displayed.
+	Field TradeOfferedAmount[31]
 	Field Underwater
 	Field IgnoreUpdate   ;used to ignore standard update while waiting for client to complete actor moves
 	

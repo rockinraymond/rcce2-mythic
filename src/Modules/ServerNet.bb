@@ -637,7 +637,18 @@ Function UpdateNetwork()
 						; would push the array index past the inventory bounds; without this,
 						; a crafted Slot reads (and the ItemInstanceToString$ helper writes)
 						; from adjacent ActorInstance fields.
-						If Slot >= 0 And Slot + SlotI_Backpack <= Slots_Inventory
+						If Slot >= 0 And Slot <= 31 And Slot + SlotI_Backpack <= Slots_Inventory
+							; Record the server-authoritative offer state.
+							; The accept-side swap reads from this rather than
+							; from the client-controlled accept-packet bytes;
+							; that closes the dupe where the client's accept
+							; payload claims a different stack than what the
+							; trade UI showed via P_UpdateTrading.
+							If Amount > AI\Inventory\Amounts[Slot + SlotI_Backpack]
+								Amount = AI\Inventory\Amounts[Slot + SlotI_Backpack]
+							EndIf
+							If Amount < 0 Then Amount = 0
+							AI\TradeOfferedAmount[Slot] = Amount
 							Pa$ = M\MessageData$
 							If Amount > 0 Then Pa$ = Pa$ + ItemInstanceToString$(AI\Inventory\Items[Slot + SlotI_Backpack])
 							RCE_Send(Host, AI\TradingActor\RNID, P_UpdateTrading, Pa$, True)
@@ -830,11 +841,19 @@ Function UpdateNetwork()
 										RCE_Send(Host, A2\RNID, P_GoldChange, "U" + RCE_StrFromInt$(A2Cost, 4), True)
 									EndIf
 
-									; Swap items
+									; Swap items. Read amounts from the server-tracked
+									; TradeOfferedAmount[i] (populated by each
+									; P_UpdateTrading) rather than the client's
+									; accept-packet TradeResult$ bytes; otherwise
+									; either party could craft an accept packet
+									; that promises to give a different stack
+									; (smaller, less valuable, or a stack they
+									; don't have at all) than the trade UI
+									; displayed during negotiation.
 									For i = 0 To 31
 										SlotID = i + SlotI_Backpack
 										; Actor 1
-										Amount = RCE_IntFromStr(Mid$(AI\TradeResult$, 101 + (i * 2), 2))
+										Amount = AI\TradeOfferedAmount[i]
 										If Amount > AI\Inventory\Amounts[SlotID] Then Amount = AI\Inventory\Amounts[SlotID]
 										If AI\Inventory\Items[SlotID] <> Null And Amount > 0
 											GiveItem.ItemInstance = CopyItemInstance(AI\Inventory\Items[SlotID])
@@ -849,7 +868,7 @@ Function UpdateNetwork()
 											RCE_Send(Host, A2\RNID, P_InventoryUpdate, "G" + RCE_StrFromInt$(Handle(GiveItem), 4) + Pa$, True)
 										EndIf
 										; Actor 2
-										Amount = RCE_IntFromStr(Mid$(A2\TradeResult$, 101 + (i * 2), 2))
+										Amount = A2\TradeOfferedAmount[i]
 										If Amount > A2\Inventory\Amounts[SlotID] Then Amount = A2\Inventory\Amounts[SlotID]
 										If A2\Inventory\Items[SlotID] <> Null And Amount > 0
 											GiveItem.ItemInstance = CopyItemInstance(A2\Inventory\Items[SlotID])
@@ -866,7 +885,14 @@ Function UpdateNetwork()
 									Next
 								 EndIf
 
-								; End trading mode for both players
+								; End trading mode for both players. Clear the
+								; per-slot offer state so it can't carry stale
+								; amounts into the next trade either side
+								; opens.
+								For ResetI = 0 To 31
+									AI\TradeOfferedAmount[ResetI] = 0
+									A2\TradeOfferedAmount[ResetI] = 0
+								Next
 								AI\TradeResult$ = ""
 								AI\IsTrading = 0
 								AI\TradingActor = Null
