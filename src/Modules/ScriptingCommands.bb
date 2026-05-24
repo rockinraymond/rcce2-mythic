@@ -2109,6 +2109,10 @@ Function BVM_SETGOLD(Param1%, Param2%)
 End Function
 
 Function BVM_SETMONEY(Param1%, Param2%)
+	; Privilege gate parity with BVM_SETGOLD above. Without this any NPC
+	; Examine / Trade / RightClick script could call SetMoney(player, N)
+	; and set arbitrary gold values on an arbitrary actor.
+	If Not BVM_RequirePrivileged() Then Return
 	Actor.ActorInstance = Object.ActorInstance(Param1%)
 	If Actor <> Null
 		Amount = Param2%
