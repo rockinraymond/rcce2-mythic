@@ -622,7 +622,15 @@ Function UpdateNetwork()
 			Case P_UpdateTrading
 				AI.ActorInstance = FindActorInstanceFromRNID(M\FromID)
 				If AI <> Null
-					If AI\IsTrading = 4 And AI\TradingActor <> Null
+					; Reject self-trade: if AI\TradingActor somehow points
+					; back at AI (script bug, logout race, or wire injection)
+					; the slot loop below aliases source = destination and
+					; the accept path later tries to consume the same slot
+					; twice. Also require reciprocal binding: A's partner
+					; must claim A as its own partner -- otherwise an
+					; injection that sets only one side's TradingActor
+					; would let A drain inventory into a one-way channel.
+					If AI\IsTrading = 4 And AI\TradingActor <> Null And AI\TradingActor <> AI And AI\TradingActor\TradingActor = AI
 						Slot = RCE_IntFromStr(Left$(M\MessageData$, 1))
 						Amount = RCE_IntFromStr(Mid$(M\MessageData$, 2, 2))
 						; Slot is a backpack-relative offset (0..31). Reject anything that
@@ -1244,7 +1252,23 @@ Function UpdateNetwork()
 						D.DroppedItem = Object.DroppedItem(RCE_IntFromStr(Mid$(M\MessageData$, 2, 4)))
 						If D <> Null
 							AI.ActorInstance = FindActorInstanceFromRNID(M\FromID)
+							; Require pickup to come from an actor in the same
+							; AreaInstance as the dropped item AND within a
+							; sane distance. Without these, anyone holding (or
+							; guessing -- handles are sequential) the 4-byte
+							; DroppedItem handle could pick it up from another
+							; area or across the map. Distance limit allows a
+							; little slack over the right-click InteractDist.
+							PickupAllowed = False
 							If AI <> Null
+								If D\ServerHandle = AI\ServerArea
+									Local PdX# = AI\X# - D\X#
+									Local PdZ# = AI\Z# - D\Z#
+									Local PickupDist# = Sqr#(PdX# * PdX# + PdZ# * PdZ#)
+									If PickupDist# <= InteractDist + 50.0 Then PickupAllowed = True
+								EndIf
+							EndIf
+							If AI <> Null And PickupAllowed
 								SlotI = RCE_IntFromStr(Mid$(M\MessageData$, 6, 1))
 								; SlotI comes straight off the wire — must be bounded before
 								; it's used as an index into the Items / Amounts arrays.
