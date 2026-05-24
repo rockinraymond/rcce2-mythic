@@ -24,13 +24,21 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
         with:
-          submodules: recursive
+          # BlitzForge submodule; nested reshade deps are not needed for
+          # compile/test so we skip recursive to keep the checkout fast.
+          submodules: true
 
-      - name: Verify BlitzForge submodule is initialized
+      - name: Add MSBuild to PATH
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Build BlitzForge compiler
         shell: cmd
+        working-directory: compiler/BlitzForge
         run: |
-          if not exist compiler\BlitzForge\bin\blitzcc.exe (
-            echo BlitzForge submodule did not populate bin\blitzcc.exe
+          call compile.bat
+          if errorlevel 1 exit /b %errorlevel%
+          if not exist bin\blitzcc.exe (
+            echo BlitzForge compile.bat did not produce bin\blitzcc.exe
             exit /b 1
           )
 
