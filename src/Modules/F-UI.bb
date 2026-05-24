@@ -2768,10 +2768,12 @@ Function FUI_SendMessage$( ID, Message, Param1$="", Param2$="" )
 					EndIf
 				EndIf
 			Case M_SETIMAGE
+				; Free the prior icon before replacing it; otherwise the
+				; old image handle leaks every time M_SETIMAGE is sent.
+				If tabp\Icon <> 0 Then FreeImage tabp\Icon
+				tabp\Icon = Null
 				If FUI_IsImageSource( Param1$ ) = True
 					tabp\Icon = LoadImage( Param1$ )
-				Else
-					tabp\Icon = Null
 				EndIf
 				FUI_BuildTabPage tabp
 				
@@ -2951,10 +2953,12 @@ Function FUI_SendMessage$( ID, Message, Param1$="", Param2$="" )
 			Case M_SETID
 				btn\ID = Int(Param1)
 			Case M_SETIMAGE
+				; Free the prior icon before replacing it; otherwise the
+				; old image handle leaks every time M_SETIMAGE is sent.
+				If btn\Icon <> 0 Then FreeImage btn\Icon
+				btn\Icon = Null
 				If FUI_IsImageSource( Param1$ ) = True
 					btn\Icon = LoadImage( Param1$ )
-				Else
-					btn\Icon = Null
 				EndIf
 				FUI_BuildButton btn
 				
@@ -3352,11 +3356,17 @@ Function FUI_SendMessage$( ID, Message, Param1$="", Param2$="" )
 			Case M_SETSIZE_H
 				img\H = Int Param1
 				FUI_BuildImageBox img
-			Case M_SETIMAGE 
+			Case M_SETIMAGE
+				; Free the prior image before replacing it; sending
+				; M_SETIMAGE repeatedly to the same ImageBox would
+				; otherwise leak one image handle per call.
+				If img\Image <> 0 Then FreeImage img\Image
 				img\Image = LoadImage(Param1)
-				If (img\Flags And CS_RESIZE) = CS_RESIZE 
-				   ResizeImage img\Image, img\W, img\H 
-				EndIf 
+				If img\Image <> 0
+					If (img\Flags And CS_RESIZE) = CS_RESIZE
+					   ResizeImage img\Image, img\W, img\H
+					EndIf
+				EndIf
 				FUI_BuildImageBox img
 				
 			Case M_GETPOS
