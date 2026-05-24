@@ -65,6 +65,25 @@ End Function
 
 Global MySQL = False
 
+; Logging stubs so AccountsServer's SafeWrite/WriteLog calls resolve in this
+; unit-test build. The real implementations live in Modules\Logging.bb but
+; pulling that in here would also pull in its file/UI deps.
+Global MainLog = 0
+
+Function WriteLog(LogID%, Message$)
+End Function
+
+Function SafeWriteOpen$(FinalPath$)
+	Return FinalPath$ + ".tmp"
+End Function
+
+Function SafeWriteCommit%(TempPath$, FinalPath$, F)
+	Return True
+End Function
+
+Function SafeWriteAbort(TempPath$, F)
+End Function
+
 Include "Modules\AccountsServer.bb"
 
 Test testFindAccountByListIDReturnsMatchingAccount()

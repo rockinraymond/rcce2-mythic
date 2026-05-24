@@ -192,13 +192,29 @@ Function AddAccount(User$, Pass$, Email$)
 
 End Function
 
-; Saves all game accounts
+; Saves all game accounts atomically.
+;
+; Writes to Accounts.dat.tmp, then on success demotes the current
+; Accounts.dat to Accounts.dat.bak and promotes the temp into place.
+; A crash, power loss, or disk-full during the write leaves Accounts.dat
+; unchanged (and Accounts.dat.tmp on disk for manual inspection).
+; A crash during the promote step leaves Accounts.dat.bak containing the
+; previous good copy. See SafeWriteOpen / SafeWriteCommit in Logging.bb.
+;
+; Returns True on commit success, False on any failure — callers must
+; treat False as "save did not happen" so they don't log "Saved accounts"
+; when the data didn't land.
 Function SaveAccounts()
 
-	If MySQL Then Return
+	If MySQL Then Return True
 
-	F = WriteFile("Data\Server Data\Accounts.dat")
-	If F = 0 Then Return False
+	Local FinalPath$ = "Data\Server Data\Accounts.dat"
+	Local TempPath$ = SafeWriteOpen(FinalPath$)
+	F = WriteFile(TempPath$)
+	If F = 0
+		WriteLog(MainLog, "SaveAccounts: cannot open " + TempPath$ + " for write")
+		Return False
+	EndIf
 
 		For A.Account = Each Account
 			WriteString F, A\User$
@@ -226,8 +242,7 @@ Function SaveAccounts()
 			Next
 		Next
 
-	CloseFile(F)
-	Return True
+	Return SafeWriteCommit(TempPath$, FinalPath$, F)
 
 End Function
 

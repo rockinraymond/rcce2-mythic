@@ -271,8 +271,20 @@ Function ReadActorInstance.ActorInstance(Stream)
 
 	; This actor instance
 	ActorID = ReadShort(Stream)
+	; Bound ActorID before indexing ActorList — ReadShort is signed, and
+	; ActorList is Dim'd 0..65535. A corrupted or tampered Accounts.dat
+	; with a negative ID would otherwise write through a wild pointer
+	; on every server boot. Track A bounded the same pattern in
+	; LoadItems/Spells/Projectiles; round 3 caught this missed per-character
+	; site. Treat out-of-range as "actor no longer exists" — the existing
+	; placeholder path keeps the stream offset correct so subsequent
+	; characters still parse.
+	If ActorID < 0 Or ActorID > 65535
+		A.ActorInstance = New ActorInstance
+		A\Attributes = New Attributes
+		A\Inventory = New Inventory
 	; Actor no longer exists, read in data to keep offset correct, then return nothing
-	If ActorList(ActorID) = Null
+	ElseIf ActorList(ActorID) = Null
 		A.ActorInstance = New ActorInstance
 		A\Attributes = New Attributes
 		A\Inventory = New Inventory

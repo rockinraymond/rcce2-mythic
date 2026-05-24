@@ -96,32 +96,61 @@ Function LoadEnvironment()
 
 End Function
 
-; Saves all environment settings
+; Saves all environment settings.
+;
+; Two modes:
+;   FullSave=True  — rewrites the whole file (time fields + season/month
+;                    config tables). Atomic temp+rename to avoid partial
+;                    writes on crash.
+;   FullSave=False — updates only the time fields at the start of the
+;                    existing file (OpenFile, no truncate). Refuse this
+;                    path if the file doesn't already exist OR is too small
+;                    to hold the full config — otherwise LoadEnvironment
+;                    later reads past EOF for TimeFactor/Seasons/Months and
+;                    silently sets them to zero (TimeFactor=0 then triggers
+;                    divide-by-zero in UpdateEnvironment).
 Function SaveEnvironment(FullSave = False)
 
+	Local FinalPath$ = "Data\Server Data\Environment.dat"
+
 	If FullSave = True
-		F = WriteFile("Data\Server Data\Environment.dat")
-	Else
-		F = OpenFile("Data\Server Data\Environment.dat")
+		Local TempPath$ = SafeWriteOpen(FinalPath$)
+		F = WriteFile(TempPath$)
+		If F = 0
+			WriteLog(MainLog, "SaveEnvironment: cannot open " + TempPath$ + " for write")
+			Return False
+		EndIf
+		WriteInt F, Year
+		WriteInt F, Day
+		WriteInt F, TimeH
+		WriteInt F, TimeM
+		WriteInt F, TimeFactor
+		For i = 0 To 11
+			WriteString F, SeasonName$(i)
+			WriteInt F, SeasonStartDay(i)
+			WriteInt F, SeasonDuskH(i)
+			WriteInt F, SeasonDawnH(i)
+		Next
+		For i = 0 To 19
+			WriteString F, MonthName$(i)
+			WriteInt F, MonthStartDay(i)
+		Next
+		Return SafeWriteCommit(TempPath$, FinalPath$, F)
 	EndIf
+
+	; Mid-session time-only update path.
+	If FileType(FinalPath$) <> 1
+		; No full save has ever happened. Refuse to write a half file that
+		; LoadEnvironment would parse as TimeFactor=0 + zeroed Seasons/Months.
+		WriteLog(MainLog, "SaveEnvironment: refusing partial save before a FullSave has been committed")
+		Return False
+	EndIf
+	F = OpenFile(FinalPath$)
 	If F = 0 Then Return False
 		WriteInt F, Year
 		WriteInt F, Day
 		WriteInt F, TimeH
 		WriteInt F, TimeM
-		If FullSave = True
-			WriteInt F, TimeFactor
-			For i = 0 To 11
-				WriteString F, SeasonName$(i)
-				WriteInt F, SeasonStartDay(i)
-				WriteInt F, SeasonDuskH(i)
-				WriteInt F, SeasonDawnH(i)
-			Next
-			For i = 0 To 19
-				WriteString F, MonthName$(i)
-				WriteInt F, MonthStartDay(i)
-			Next
-		EndIf
 	CloseFile(F)
 	Return True
 
