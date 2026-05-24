@@ -28,17 +28,42 @@ jobs:
           # compile/test so we skip recursive to keep the checkout fast.
           submodules: true
 
+      # Cache the BlitzForge runtime binaries keyed on the submodule SHA.
+      # rcce2 PRs rarely change the BlitzForge pointer, so the common-case
+      # CI run avoids the ~3min MSBuild step entirely.
+      - name: Resolve BlitzForge submodule SHA
+        id: bf
+        shell: bash
+        run: echo "sha=$(git -C compiler/BlitzForge rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Restore BlitzForge bin from cache
+        id: bf-cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            compiler/BlitzForge/bin/blitzcc.exe
+            compiler/BlitzForge/bin/runtime.dll
+            compiler/BlitzForge/bin/linker.dll
+            compiler/BlitzForge/bin/debugger.dll
+          key: blitzforge-bin-${{ runner.os }}-${{ steps.bf.outputs.sha }}
+
       - name: Add MSBuild to PATH
+        if: steps.bf-cache.outputs.cache-hit != 'true'
         uses: microsoft/setup-msbuild@v2
 
       - name: Build BlitzForge compiler
+        if: steps.bf-cache.outputs.cache-hit != 'true'
         shell: cmd
         working-directory: compiler/BlitzForge
         run: |
           call compile.bat
           if errorlevel 1 exit /b %errorlevel%
-          if not exist bin\blitzcc.exe (
-            echo BlitzForge compile.bat did not produce bin\blitzcc.exe
+
+      - name: Verify BlitzForge binaries are present
+        shell: cmd
+        run: |
+          if not exist compiler\BlitzForge\bin\blitzcc.exe (
+            echo blitzcc.exe missing after build/restore
             exit /b 1
           )
 
