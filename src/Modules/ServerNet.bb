@@ -1439,8 +1439,8 @@ Function UpdateNetwork()
 							If MaxDelta# < 2.0 Then MaxDelta# = 2.0
 							Local DX# = NewX# - AI\X#
 							Local DZ# = NewZ# - AI\Z#
-							Local Dist# = Sqr#(DX# * DX# + DZ# * DZ#)
-							If Dist# > MaxDelta#
+							Local MoveDist# = Sqr#(DX# * DX# + DZ# * DZ#)
+							If MoveDist# > MaxDelta#
 								; Too fast: hold the client at the prior position.
 								; The next update will look like the client agreed.
 								; Client will re-sync to server state on next
