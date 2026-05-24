@@ -11,6 +11,7 @@ RCCE picks up where the original RealmCrafter left off — modernized, cross-pla
 
 ---
 
+[![CI](https://github.com/RydeTec/rcce2/actions/workflows/ci.yml/badge.svg?branch=develop)](https://github.com/RydeTec/rcce2/actions/workflows/ci.yml?query=branch%3Adevelop)
 [![Latest Release](https://img.shields.io/github/v/release/RydeTec/rcce2?display_name=tag&sort=semver&color=2ea44f)](https://github.com/RydeTec/rcce2/releases/latest)
 [![Downloads](https://img.shields.io/github/downloads/RydeTec/rcce2/total?color=blue)](https://github.com/RydeTec/rcce2/releases)
 [![Stars](https://img.shields.io/github/stars/RydeTec/rcce2?style=flat&color=yellow)](https://github.com/RydeTec/rcce2/stargazers)
