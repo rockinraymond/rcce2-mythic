@@ -495,7 +495,9 @@ Function BVM_SETACTORGENDER(Param1%, Param2%)
 End Function
 
 Function BVM_ACTORBEARD%(Param1%)
-	Actor.ActorInstance = Object.ActorInstance(Param%)
+	; Typo: was Param% (undeclared, silently 0) instead of Param1%.
+	; Every call resolved Object.ActorInstance(0) -> Null -> Result=0.
+	Actor.ActorInstance = Object.ActorInstance(Param1%)
 	If Actor <> Null Then Result% = Actor\Beard + 1
 Return Result%
 End Function
@@ -517,7 +519,8 @@ Function BVM_SETACTORBEARD(Param1%, Param2%)
 End Function
 
 Function BVM_ACTORHAIR%(Param1%)
-	Actor.ActorInstance = Object.ActorInstance(Param%)
+	; Typo: was Param% (undeclared, silently 0) instead of Param1%.
+	Actor.ActorInstance = Object.ActorInstance(Param1%)
 	If Actor <> Null Then Result% = Actor\Hair + 1
 Return Result%
 End Function
@@ -1551,7 +1554,10 @@ Function BVM_DEFAULTFACTIONRATING%(Param1$, Param2$)
 	For i = 0 To 99
 		If Upper$(FactionNames$(i)) = Faction1$
 			For j = 0 To 99
-				If Upper$(FactionNames$(i)) = Faction1$
+				; Inner loop must compare against Faction2$, not
+				; Faction1$ again -- the typo made this return
+				; FactionDefaultRatings(i, 0) for any Faction2 pair.
+				If Upper$(FactionNames$(j)) = Faction2$
 					Result% = FactionDefaultRatings(i, j)
 					Exit
 				EndIf
@@ -1977,22 +1983,27 @@ Function BVM_CHANGEATTRIBUTE(Param1%, Param2$, Param3%)
 	Actor.ActorInstance = Object.ActorInstance(Param1%)
 	If Actor <> Null
 		Attribute = FindAttribute(Param2$)
-		If Attribute > -1 Then Result% = Actor\Attributes\Value[Attribute]
-		Result = Result + Param3
-		; Important attribute, tell everyone
-		If Attribute = HealthStat Or Attribute = SpeedStat Or Attribute = EnergyStat
-			UpdateAttribute(Actor, Attribute, Result)
-				; Death
-			If Actor\Attributes\Value[HealthStat] <= 0 Then KillActor(Actor, Null)
-		; Unimportant attribute, only tell specific player (if it is a human player)
-		Else
-			Actor\Attributes\Value[Attribute] = Result%
-			If Actor\Attributes\Value[Attribute] > Actor\Attributes\Maximum[Attribute]
-				Actor\Attributes\Value[Attribute] = Actor\Attributes\Maximum[Attribute]
-			EndIf
-			If Actor\RNID > 0
-				Pa$ = RCE_StrFromInt$(Actor\RuntimeID, 2) + RCE_StrFromInt$(Attribute, 1) + RCE_StrFromInt$(Actor\Attributes\Value[Attribute], 2)
-				RCE_Send(Host, Actor\RNID, P_StatUpdate, "A" + Pa$, True)
+		; Bail if the attribute name is unknown -- without this, the
+		; "Else" branch below ran with Attribute = -1 and indexed
+		; Actor\Attributes\Value[-1], an OOB Blitz Dim access.
+		If Attribute > -1
+			Result% = Actor\Attributes\Value[Attribute]
+			Result = Result + Param3
+			; Important attribute, tell everyone
+			If Attribute = HealthStat Or Attribute = SpeedStat Or Attribute = EnergyStat
+				UpdateAttribute(Actor, Attribute, Result)
+					; Death
+				If Actor\Attributes\Value[HealthStat] <= 0 Then KillActor(Actor, Null)
+			; Unimportant attribute, only tell specific player (if it is a human player)
+			Else
+				Actor\Attributes\Value[Attribute] = Result%
+				If Actor\Attributes\Value[Attribute] > Actor\Attributes\Maximum[Attribute]
+					Actor\Attributes\Value[Attribute] = Actor\Attributes\Maximum[Attribute]
+				EndIf
+				If Actor\RNID > 0
+					Pa$ = RCE_StrFromInt$(Actor\RuntimeID, 2) + RCE_StrFromInt$(Attribute, 1) + RCE_StrFromInt$(Actor\Attributes\Value[Attribute], 2)
+					RCE_Send(Host, Actor\RNID, P_StatUpdate, "A" + Pa$, True)
+				EndIf
 			EndIf
 		EndIf
 	EndIf
@@ -2330,6 +2341,9 @@ Function BVM_OPENTRADING(Param1%, Param2%)
 End Function
 
 Function BVM_SETACTORGLOBAL(Param1%, Param2%, Param3$)
+	; ScriptGlobals$ is Field [9] (10 slots); without this bound a
+	; script could write past the actor record into adjacent fields.
+	If Param2% < 0 Or Param2% > 9 Then Return
 	Actor.ActorInstance = Object.ActorInstance(Param1%)
 	If Actor <> Null
 		Actor\ScriptGlobals$[Param2%] = Param3$
@@ -2337,6 +2351,7 @@ Function BVM_SETACTORGLOBAL(Param1%, Param2%, Param3$)
 End Function
 
 Function BVM_ACTORGLOBAL$(Param1%, Param2%)
+	If Param2% < 0 Or Param2% > 9 Then Return ""
 	Actor.ActorInstance = Object.ActorInstance(Param1%)
 	If Actor <> Null
 		Result$ = Actor\ScriptGlobals$[Param2%]
@@ -2646,10 +2661,15 @@ Return SI\WaitResult$
 End Function
 
 Function BVM_SETSUPERGLOBAL(Param1%, Param2$)
+	; SuperGlobals$ is Dim'd (99) -> 100 slots, indices 0..99.
+	; Without this bound a script's bad index is a Blitz Dim OOB write
+	; (no runtime check) and corrupts adjacent globals or crashes.
+	If Param1% < 0 Or Param1% > 99 Then Return
 	SuperGlobals$(Param1%) = Param2$
 End Function
 
 Function BVM_GETSUPERGLOBAL$(Param1%)
+	If Param1% < 0 Or Param1% > 99 Then Return ""
 Return  SuperGlobals$(Param1%)
 End Function
 
