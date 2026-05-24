@@ -1298,8 +1298,13 @@ Function UpdateNetwork()
 					Case "G"
 						AI.ActorInstance = FindActorInstanceFromRNID(M\FromID)
 						II.ItemInstance = Object.ItemInstance(RCE_IntFromStr(Mid$(M\MessageData$, 3, 4)))
+						; II\Assignment > 0 + II\AssignTo = AI together mean "this
+						; item was assigned to this actor and not already claimed".
+						; Without the AssignTo check, anyone holding (or guessing)
+						; the 4-byte handle could claim items intended for another
+						; player -- the P_OpenTrading buy path uses the same pair.
 						If II <> Null And AI <> Null
-							If II\Assignment > 0
+							If II\Assignment > 0 And II\AssignTo = AI
 								If Mid$(M\MessageData$, 2, 1) = "Y"
 									SlotI = RCE_IntFromStr(Right$(M\MessageData$, 1))
 									; Bound SlotI before any inventory array access (same as the "P"
@@ -1329,10 +1334,18 @@ Function UpdateNetwork()
 						SlotA = RCE_IntFromStr(Mid$(M\MessageData$, 4, 1))
 						SlotB = RCE_IntFromStr(Mid$(M\MessageData$, 5, 1))
 						Amount = RCE_IntFromStr(Mid$(M\MessageData$, 6, 2))
+						; Slot indices come straight off the wire as 1-byte
+						; values (0..255). Subsequent array reads below
+						; (Amounts[SlotA], Items[SlotA]) would walk past the
+						; Inventory record into the adjacent ActorInstance
+						; fields if SlotA / SlotB exceed Slots_Inventory.
+						; Bound BEFORE the Amount comparison at line 1346.
+						If SlotA < 0 Or SlotA > Slots_Inventory Then SlotA = -1
+						If SlotB < 0 Or SlotB > Slots_Inventory Then SlotB = -1
 						AI.ActorInstance = RuntimeIDList(RuntimeID)
 						AIFrom.ActorInstance = FindActorInstanceFromRNID(M\FromID)
 						; Check that actor instance is valid (e.g. it isn't trying to change someone else's inventory)
-						If AI <> Null And AIFrom <> Null
+						If AI <> Null And AIFrom <> Null And SlotA >= 0 And SlotB >= 0
 							IsPet = False
 							Slaves = AIFrom\NumberOfSlaves
 							While Slaves > 0
@@ -1609,7 +1622,10 @@ Function UpdateNetwork()
 					If Upper$(A\User$) = Upper$(Username$) And A\LoggedOn = -1
 						Offset = 2 + UsernameLen
 						PwdLen = RCE_IntFromStr(Mid$(M\MessageData$, Offset, 1))
-						If A\Pass$ = Mid$(M\MessageData$, Offset + 1, PwdLen) And A\IsBanned = False
+						; PwdLen >= 1 + A\Pass$ <> "" reject truncated packets
+						; and accounts with empty stored passwords (same guard
+						; as P_VerifyAccount).
+						If PwdLen >= 1 And A\Pass$ <> "" And A\Pass$ = Mid$(M\MessageData$, Offset + 1, PwdLen) And A\IsBanned = False
 							Offset = Offset + 1 + PwdLen
 							Number = Asc(Mid$(M\MessageData$, Offset, 1))
 
@@ -1900,8 +1916,18 @@ Function UpdateNetwork()
 							Else
 								Offset = 2 + UsernameLen
 								PwdLen = RCE_IntFromStr(Mid$(M\MessageData$, Offset, 1))
+								; Reject truncated / empty-password packets. Without
+								; this guard a 1-byte packet leaves PwdLen=0 and Mid$
+								; returns "" -- which matches any account whose Pass$
+								; was ever stored as the empty string (legacy import,
+								; corrupted accounts file tail). Treated the same as
+								; a wrong-password attempt so the response doesn't
+								; betray the cause.
+								If PwdLen < 1
+									LoginAttemptRecord(M\FromID, False)
+									RCE_Send(Host, M\FromID, P_VerifyAccount, "P", True)
 								; If password is correct, send back character list
-								If A\Pass$ = Mid$(M\MessageData$, Offset + 1, PwdLen) And A\IsBanned = False
+								ElseIf A\Pass$ <> "" And A\Pass$ = Mid$(M\MessageData$, Offset + 1, PwdLen) And A\IsBanned = False
 									LoginAttemptRecord(M\FromID, True)
 									Pa$ = "Y"
 									For i = 0 To 9
@@ -1945,12 +1971,17 @@ Function UpdateNetwork()
 					If Upper$(A\User$) = Upper$(Username$)
 						Offset = 2 + UsernameLen
 						PwdLen = RCE_IntFromStr(Mid$(M\MessageData$, Offset, 1))
-						; If password is correct AND the requester is the currently-
-						; logged-in session for this account, change it. Without
-						; the session check, a captured/replayed P_ChangePassword
-						; lets any party with the (broken-MD5) hash steal the
-						; account permanently.
-						If A\Pass$ = Mid$(M\MessageData$, Offset + 1, PwdLen) And RequesterOwnsAccountSession(A, M\FromID)
+						; PwdLen >= 1 + A\Pass$ <> "" reject truncated packets
+						; and accounts with empty stored passwords. Without
+						; this guard, a 1-byte packet would match any account
+						; whose Pass$ was ever stored as the empty string.
+						;
+						; If password is correct AND the requester is the
+						; currently-logged-in session for this account, change
+						; it. Without the session check, a captured/replayed
+						; P_ChangePassword lets any party with the (broken-
+						; MD5) hash steal the account permanently.
+						If PwdLen >= 1 And A\Pass$ <> "" And A\Pass$ = Mid$(M\MessageData$, Offset + 1, PwdLen) And RequesterOwnsAccountSession(A, M\FromID)
 							Offset = 2 + PwdLen
 							PwdLen = RCE_IntFromStr(Mid$(M\MessageData$, Offset, 1))
 							A\Pass$ = Mid$(M\MessageData$, Offset + 1, PwdLen)
@@ -1978,8 +2009,9 @@ Function UpdateNetwork()
 					If Upper$(A\User$) = Upper$(Username$)
 						Offset = 2 + UsernameLen
 						PwdLen = RCE_IntFromStr(Mid$(M\MessageData$, Offset, 1))
-						; If password is correct
-						If A\Pass$ = Mid$(M\MessageData$, Offset + 1, PwdLen) And A\IsBanned = False
+						; PwdLen >= 1 + A\Pass$ <> "" reject truncated packets
+						; and accounts with empty stored passwords.
+						If PwdLen >= 1 And A\Pass$ <> "" And A\Pass$ = Mid$(M\MessageData$, Offset + 1, PwdLen) And A\IsBanned = False
 							Offset = Offset + 1 + PwdLen
 							Number = Asc(Mid$(M\MessageData$, Offset, 1))
 							If Number > -1 And Number < 10
@@ -2080,8 +2112,9 @@ Function UpdateNetwork()
 					If Upper$(A\User$) = Upper$(Username$)
 						Offset = 2 + UsernameLen
 						PwdLen = RCE_IntFromStr(Mid$(M\MessageData$, Offset, 1))
-						; If password is correct
-						If A\Pass$ = Mid$(M\MessageData$, Offset + 1, PwdLen)
+						; If password is correct (PwdLen >= 1 + A\Pass$ <> ""
+						; reject truncated packets and empty stored passwords)
+						If PwdLen >= 1 And A\Pass$ <> "" And A\Pass$ = Mid$(M\MessageData$, Offset + 1, PwdLen)
 							Offset = Offset + 1 + PwdLen
 
 							; Check character name is valid. Bound length and reject
@@ -2226,12 +2259,13 @@ Function UpdateNetwork()
 					If Upper$(A\User$) = Upper$(Username$)
 						Offset = 2 + UsernameLen
 						PwdLen = RCE_IntFromStr(Mid$(M\MessageData$, Offset, 1))
-						; If password is correct AND the requester is the
-						; currently-logged-in session for this account.
-						; A replayed P_DeleteCharacter would otherwise let
-						; anyone with the hash permanently destroy character
-						; slots on the account.
-						If A\Pass$ = Mid$(M\MessageData$, Offset + 1, PwdLen) And RequesterOwnsAccountSession(A, M\FromID)
+						; If password is correct (PwdLen >= 1 + A\Pass$ <> ""
+						; reject truncated packets and empty stored passwords)
+						; AND the requester is the currently-logged-in session
+						; for this account. A replayed P_DeleteCharacter would
+						; otherwise let anyone with the hash permanently
+						; destroy character slots on the account.
+						If PwdLen >= 1 And A\Pass$ <> "" And A\Pass$ = Mid$(M\MessageData$, Offset + 1, PwdLen) And RequesterOwnsAccountSession(A, M\FromID)
 							Offset = Offset + 1 + PwdLen
 							Number = Asc(Mid$(M\MessageData$, Offset, 1))
 							If Number > -1 And Number < 10
