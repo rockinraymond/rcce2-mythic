@@ -3437,6 +3437,10 @@ Cls
 			; Allow new account creation from client
 			Case BNewAccounts
 				F = WriteFile("Data\Game Data\Hosts.dat")
+				; Match the F=0 guard that the surrounding TServerHost /
+				; TUpdatesHost cases use. Without it, WriteLine on a 0
+				; handle null-derefs and crashes the editor.
+				If F = 0 Then RuntimeError("Could not open Data\Game Data\Hosts.dat!")
 					WriteLine F, FUI_SendMessage(TServerHost, M_GETCAPTION)
 					WriteLine F, FUI_SendMessage(TUpdatesHost, M_GETCAPTION)
 					WriteLine F, FUI_SendMessage(BNewAccounts, M_GETCHECKED)
