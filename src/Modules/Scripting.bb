@@ -308,18 +308,22 @@ Function LoadSuperGlobals(File$)
 
 End Function
 
-; Saves the superglobal variables
+; Saves the superglobal variables atomically.
+; See SafeWriteOpen / SafeWriteCommit in Logging.bb.
 Function SaveSuperGlobals(File$)
 
-	F = WriteFile(File$)
-	If F = 0 Then Return False
+	Local TempPath$ = SafeWriteOpen(File$)
+	F = WriteFile(TempPath$)
+	If F = 0
+		WriteLog(MainLog, "SaveSuperGlobals: cannot open " + TempPath$ + " for write")
+		Return False
+	EndIf
 
 		For i = 0 To 99
 			WriteString F, SuperGlobals$(i)
 		Next
 
-	CloseFile F
-	Return True
+	Return SafeWriteCommit(TempPath$, File$, F)
 
 End Function
 

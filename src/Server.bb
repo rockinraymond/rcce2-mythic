@@ -799,6 +799,11 @@ Function LoadDroppedItems(Filename$)
 			D.DroppedItem = New DroppedItem
 			Zone$ = ReadString$(F)
 			Instance = ReadByte(F)
+			; AreaInstance Instances is Dim'd 0..99. ReadByte returns 0..255;
+			; a corrupted DroppedItems.dat with Instance >= 100 triggers OOB
+			; on every server boot. Treat out-of-range as instance 0 (the
+			; default instance that always exists).
+			If Instance < 0 Or Instance > 99 Then Instance = 0
 			For Ar.Area = Each Area
 				If Ar\Name$ = Zone$
 					If Ar\Instances[Instance] = Null Then ServerCreateAreaInstance(Ar, Instance)
@@ -811,7 +816,14 @@ Function LoadDroppedItems(Filename$)
 			D\X# = ReadFloat#(F)
 			D\Y# = ReadFloat#(F)
 			D\Z# = ReadFloat#(F)
-			Items = Items + 1
+			; Drop entries with no resolvable item (item ID removed from
+			; data files between sessions). The next pickup would otherwise
+			; null-deref D\Item\Item\Stackable.
+			If D\Item = Null
+				Delete D
+			Else
+				Items = Items + 1
+			EndIf
 		Wend
 
 	CloseFile F
@@ -819,11 +831,16 @@ Function LoadDroppedItems(Filename$)
 
 End Function
 
-; Saves dropped items to file
+; Saves dropped items to file atomically.
+; See SafeWriteOpen / SafeWriteCommit in Logging.bb.
 Function SaveDroppedItems(Filename$)
 
-	F = WriteFile(Filename$)
-	If F = 0 Then Return False
+	Local TempPath$ = SafeWriteOpen(Filename$)
+	F = WriteFile(TempPath$)
+	If F = 0
+		WriteLog(MainLog, "SaveDroppedItems: cannot open " + TempPath$ + " for write")
+		Return False
+	EndIf
 
 		For D.DroppedItem = Each DroppedItem
 			AInstance.AreaInstance = Object.AreaInstance(D\ServerHandle)
@@ -836,8 +853,7 @@ Function SaveDroppedItems(Filename$)
 			WriteFloat F, D\Z#
 		Next
 
-	CloseFile(F)
-	Return True
+	Return SafeWriteCommit(TempPath$, Filename$, F)
 
 End Function
 
