@@ -943,6 +943,18 @@ Function UpdateNetwork()
 							If Len(M\MessageData$) > 3
 								RuntimeID = RCE_IntFromStr(Mid$(M\MessageData$, 4, 2))
 								Context = RuntimeIDList(RuntimeID)
+								; Reject targets that are dead or in a different
+								; area. Without this, the spell script fires
+								; against an actor whose FreeActorInstance is
+								; queued in PendingKill (use-after-free), and a
+								; cross-area target can be hit despite the
+								; client's view being area-local.
+								If Context <> Null
+									If Context\Attributes\Value[HealthStat] <= 0 Then Context = Null
+								EndIf
+								If Context <> Null
+									If Context\ServerArea <> AI\ServerArea Then Context = Null
+								EndIf
 							EndIf
 							; Convert ID into known spell number
 							Found = False
@@ -1206,10 +1218,19 @@ Function UpdateNetwork()
 					If MilliSecs() - AI\LastAttack >= CombatDelay And AI\Mount = Null
 						A2.ActorInstance = RuntimeIDList(RCE_IntFromStr(M\MessageData$))
 						If A2 <> Null
+							; Require attacker and target to be in the same
+							; AreaInstance. Without this, a target mid-portal
+							; (target's ServerArea hasn't ack'd P_ChangeArea
+							; yet) could be hit from the attacker's old area,
+							; and friendly-fire / PvP rules from the wrong
+							; area apply.
 							AInstance.AreaInstance = Object.AreaInstance(AI\ServerArea)
-							If A2\RNID < 0 Or AInstance\Area\PvP = True
-								ActorAttack(AI, A2)
-								AI\AITarget = A2
+							TInstance.AreaInstance = Object.AreaInstance(A2\ServerArea)
+							If AInstance <> Null And AInstance = TInstance
+								If A2\RNID < 0 Or AInstance\Area\PvP = True
+									ActorAttack(AI, A2)
+									AI\AITarget = A2
+								EndIf
 							EndIf
 						EndIf
 					EndIf
