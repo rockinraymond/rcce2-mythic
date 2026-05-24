@@ -624,17 +624,16 @@ Function UpdateActorInstances(Broadcast)
 		If AI\RuntimeID > -1
 			AInstance.AreaInstance = Object.AreaInstance(AI\ServerArea)
 
-			; Recharge spells
+			; Recharge spells. SpellCharge is now uniformly indexed by
+			; spell ID (matches the unified P_SpellUpdate "F" handler in
+			; ServerNet.bb). The previous split (memorise-slot 0..9 vs
+			; known-spell-index 0..999) let a player double-cast by
+			; toggling RequireMemorise or re-memorising into a different
+			; slot.
 			If Recharge = True
-				If RequireMemorise
-					For i = 0 To 9
-						If AI\SpellCharge[i] > 0 Then AI\SpellCharge[i] = AI\SpellCharge[i] - 100
-					Next
-				Else
-					For i = 0 To 999
-						If AI\SpellCharge[i] > 0 Then AI\SpellCharge[i] = AI\SpellCharge[i] - 100
-					Next
-				EndIf
+				For i = 0 To 999
+					If AI\SpellCharge[i] > 0 Then AI\SpellCharge[i] = AI\SpellCharge[i] - 100
+				Next
 			EndIf
 
 			; Move (except mounts)

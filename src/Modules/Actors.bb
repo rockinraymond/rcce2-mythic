@@ -113,7 +113,12 @@ Type ActorInstance
 	Field KnownSpells[999]
 	Field SpellLevels[999]
 	Field MemorisedSpells[9]
-	Field SpellCharge[999] ; How long until the spell is usable
+	Field SpellCharge[999] ; How long until the spell is usable -- indexed by spell ID (matches SpellsList)
+	; Server-side cooldown floor: timestamp of the last P_SpellUpdate "F"
+	; this actor was allowed to process. Prevents same-tick spell spam
+	; against zero-RechargeTime spells (a legal but cheese-prone setting
+	; in the spell data).
+	Field LastSpellFireMs
 	Field IsTrading ; 0 for not trading, 1 for trading with NPC, 2 for trading with pet, 3 for trading with player, 4/5 for accepted trading with player
 	Field TradingActor.ActorInstance
 	Field TradeResult$

@@ -1000,29 +1000,42 @@ Function UpdateNetwork()
 								EndIf
 							Next
 							If Found = True
-								; Spell must be memorised to fire
-								If RequireMemorise
-									For i = 0 To 9
-										If AI\MemorisedSpells[i] = Num
-											Sp.Spell = SpellsList(AI\KnownSpells[Num])
-											If AI\SpellCharge[i] <= 0
-												ThreadScript(Sp\Script$, Sp\SMethod$, Handle(AI), Handle(Context), AI\SpellLevels[Num])
-												AI\SpellCharge[i] = Sp\RechargeTime
-											Else
-												ml = Len(Chr$(253) + LanguageString$(LS_AbilityNotRecharged))
-												RCE_Send(Host, AI\RNID, P_ChatMessage, Chr$(253) + LanguageString$(LS_AbilityNotRecharged), True)
-											EndIf
-											Exit
-										EndIf
-									Next
-								; Fire spell directly
-								Else
-									Sp.Spell = SpellsList(AI\KnownSpells[Num])
-									If AI\SpellCharge[Num] <= 0
-										ThreadScript(Sp\Script$, Sp\SMethod$, Handle(AI), Handle(Context), AI\SpellLevels[Num])
-										AI\SpellCharge[Num] = Sp\RechargeTime
+								; Both cooldown paths now index AI\SpellCharge by
+								; the underlying spell ID (KnownSpells[Num])
+								; rather than two different slot-index spaces.
+								; Previously, RequireMemorise=True stored at the
+								; memorise-slot index 0..9 while
+								; RequireMemorise=False stored at the known-
+								; spell-index 0..999 -- same physical spell had
+								; two independent cooldowns, and toggling the
+								; global RequireMemorise or re-memorising into a
+								; different slot let the player double-cast.
+								; Also enforce a per-actor 100ms floor so
+								; zero-RechargeTime spells can't be spammed
+								; every UpdateNetwork tick.
+								Local SpellID = AI\KnownSpells[Num]
+								If SpellID >= 0 And SpellID <= 999
+									Local NowMs = MilliSecs()
+									Local Memorised = False
+									If RequireMemorise
+										For i = 0 To 9
+											If AI\MemorisedSpells[i] = Num Then Memorised = True : Exit
+										Next
 									Else
-										RCE_Send(Host, AI\RNID, P_ChatMessage, Chr$(253) + LanguageString$(LS_AbilityNotRecharged), True)
+										Memorised = True
+									EndIf
+									If Memorised
+										If NowMs - AI\LastSpellFireMs < 100
+											; Too fast; drop silently to avoid
+											; chat-spamming the user.
+										ElseIf AI\SpellCharge[SpellID] > 0
+											RCE_Send(Host, AI\RNID, P_ChatMessage, Chr$(253) + LanguageString$(LS_AbilityNotRecharged), True)
+										Else
+											Sp.Spell = SpellsList(SpellID)
+											ThreadScript(Sp\Script$, Sp\SMethod$, Handle(AI), Handle(Context), AI\SpellLevels[Num])
+											AI\SpellCharge[SpellID] = Sp\RechargeTime
+											AI\LastSpellFireMs = NowMs
+										EndIf
 									EndIf
 								EndIf
 							EndIf
@@ -1489,8 +1502,8 @@ Function UpdateNetwork()
 						; covers lag spikes, collision shove-back, and the
 						; 1.5x base unit-per-tick coefficient that GameServer
 						; uses for server-driven movement.
-						Local NowMs% = MilliSecs()
-						Local ElapsedMs% = NowMs - AI\LastPosUpdateMs
+						Local PosNowMs% = MilliSecs()
+						Local ElapsedMs% = PosNowMs - AI\LastPosUpdateMs
 						If AI\LastPosUpdateMs = 0 Or ElapsedMs < 0 Or ElapsedMs > 5000
 							; First update for this actor, or clock skew, or
 							; a lag spike longer than 5s: accept the position
