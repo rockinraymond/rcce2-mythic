@@ -787,13 +787,19 @@ Function SaveAll()
 
 End Function
 
-; Updates the B3D file of the current mesh with its rotation
+; Updates the B3D file of the current mesh with its rotation.
+;
+; Note: .eb3d (encrypted Blitz3D) rotation editing is not fully supported
+; in this build -- EncryptMesh below is empty, so any rotation save on an
+; encrypted mesh writes the rotated vertices to a sibling foo.eb3d.b3d
+; file (the DecryptMesh scratch output) and leaves the original .eb3d
+; untouched. Callers should treat .eb3d rotation as a no-op until the
+; encryption pipeline is restored.
 Function SaveRotation(TargetMeshID)
 
 	Local TName$ = ""
 	Local Name$ = ""
-	Local isEncrypted = False
-	
+
 	If PreviewMesh <> 0
 		Name$ = EditorMeshName$(TargetMeshID)
 		If Right$(Upper$(Name$), 3) = "B3D" Then
@@ -801,7 +807,6 @@ Function SaveRotation(TargetMeshID)
 				TName$ = Name$
 				DecryptMesh("Data\Meshes\" + Name$)
 				Name$ = Name$ + ".b3d"
-				;isEncrypted = True
 			End If
 		Else
 			Return
@@ -889,13 +894,16 @@ Function SaveRotation(TargetMeshID)
 	
 	
 ; REMOVE FOR DECRYPT SIREDBLOOD SAYS MUHAHAHA #######################
-	
+;
+; Re-encrypt path retired: the isEncrypted gate was always False (its
+; setter at line 804 was commented out), and EncryptMesh below has been
+; an empty function for the lifetime of this tool. The branch only ran
+; to delete the just-written .b3d sidecar; without re-encryption the
+; .eb3d would have been the stale original anyway. See header comment
+; on SaveRotation -- .eb3d rotation is documented as a no-op until the
+; encryption pipeline is restored.
+
 	Name$ = EditorMeshName$(TargetMeshID)
-	
-	If TName$ <> "" And isEncrypted Then
-		EncryptMesh("Data\Meshes\" + Name$)
-		DeleteFile "Data\Meshes\" + Name$
-	End If
 
 ;#####################################################################
 

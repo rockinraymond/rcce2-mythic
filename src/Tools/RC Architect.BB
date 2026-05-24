@@ -1550,12 +1550,24 @@ If FileType(fname$)<>1 Then Return -1
  EndIf
 
 ;wite to file
-; Newf=WriteFile(newn$)
-DeleteFile (fname$)
- Fsave=WriteFile(fname$)
- b=PeekByte(thisbank,i)
- WriteBytes thisbank,fsave,0,offset
- CloseFile fsave
+; Write to .tmp first so a failed WriteFile can't wipe the source.
+TmpPath$ = fname$ + ".tmp"
+If FileType(TmpPath$) = 1 Then DeleteFile(TmpPath$)
+Fsave = WriteFile(TmpPath$)
+If Fsave = 0
+	FreeBank thisbank
+	Return -1
+EndIf
+WriteBytes thisbank, fsave, 0, offset
+CloseFile fsave
+If FileSize(TmpPath$) <> offset
+	DeleteFile(TmpPath$)
+	FreeBank thisbank
+	Return -1
+EndIf
+DeleteFile(fname$)
+CopyFile TmpPath$, fname$
+DeleteFile(TmpPath$)
 
 ; WriteBytes thisbank,newf,0,ts
 ; CloseFile newf
