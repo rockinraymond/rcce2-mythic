@@ -392,7 +392,9 @@ Function UpdateNetwork()
 				ElseIf Left$(M\MessageData$, 1) = "E"
 					Att = RCE_IntFromStr(Mid$(M\MessageData$, 2, 1))
 					Amount = RCE_IntFromStr(Mid$(M\MessageData$, 3, 4))
-					Me\Attributes\Value[Att] = Me\Attributes\Value[Att] + Amount
+					If Att >= 0 And Att < 40 And Me <> Null
+						Me\Attributes\Value[Att] = Me\Attributes\Value[Att] + Amount
+					EndIf
 				; Removed
 				ElseIf Left$(M\MessageData$, 1) = "R"
 					ID = RCE_IntFromStr(Mid$(M\MessageData$, 2, 4))
@@ -403,10 +405,18 @@ Function UpdateNetwork()
 							Exit
 						EndIf
 					Next
-					For i = 0 To 39
-						Amount = RCE_IntFromStr(Mid$(M\MessageData$, 6 + (i * 4), 4))
-						Me\Attributes\Value[i] = Me\Attributes\Value[i] - Amount
-					Next
+					; The "R" payload must carry 40*4=160 bytes of per-attribute
+					; deltas starting at offset 6. A hostile or truncated server
+					; packet could send fewer bytes; Mid$ would return zero-
+					; padded reads and the loop would silently zero attributes
+					; on the client. Bail the per-attribute walk unless the
+					; full delta block is present.
+					If Me <> Null And Len(M\MessageData$) >= 6 + 40 * 4
+						For i = 0 To 39
+							Amount = RCE_IntFromStr(Mid$(M\MessageData$, 6 + (i * 4), 4))
+							Me\Attributes\Value[i] = Me\Attributes\Value[i] - Amount
+						Next
+					EndIf
 				EndIf
 
 			; Trading updated
@@ -642,19 +652,47 @@ Function UpdateNetwork()
 				YPos# = RCE_FloatFromStr#(Mid$(M\MessageData$, 13, 4))
 				ZPos# = RCE_FloatFromStr#(Mid$(M\MessageData$, 17, 4))
 				Name$ = Mid$(M\MessageData$, 21)
-				Em.ScriptedEmitter = New ScriptedEmitter
-				Em\Length = Time
-				Em\StartTime = MilliSecs()
-				Config = RP_LoadEmitterConfig("Data\Emitter Configs\" + Name$ + ".rpc", GetTexture(TexID), Cam)
-				If Config = 0 Then RuntimeError("Could not load emitter: " + Name$ + "!")
-				Em\EN = RP_CreateEmitter(Config)
-				AI.ActorInstance = RuntimeIDList(RuntimeID)
-				If AI <> Null
-					EntityParent(Em\EN, AI\CollisionEN)
-					RotateEntity(Em\EN, EntityPitch#(AI\CollisionEN), EntityYaw#(AI\CollisionEN), EntityRoll#(AI\CollisionEN))
-					If AI = Me Then Em\AttachedToPlayer = True
+				; Reject path-traversal names from a hostile / compromised
+				; server. Without these checks, a server could pass "..\..\<x>"
+				; to navigate out of Data\Emitter Configs, and a non-existent
+				; file would RuntimeError the client (DoS by any malicious
+				; server sending one packet).
+				ValidEmitter = True
+				If Len(Name$) < 1 Or Len(Name$) > 240 Then ValidEmitter = False
+				If ValidEmitter
+					For nameI = 1 To Len(Name$)
+						Local nameCh = Asc(Mid$(Name$, nameI, 1))
+						; Reject control bytes, drive-letter ':', and slashes.
+						If nameCh < 32 Or nameCh > 126 Or nameCh = 58 Or nameCh = 47 Or nameCh = 92
+							ValidEmitter = False
+							Exit
+						EndIf
+					Next
 				EndIf
-				PositionEntity Em\EN, XPos#, YPos#, ZPos#
+				If ValidEmitter And Instr(Name$, "..") > 0 Then ValidEmitter = False
+				If ValidEmitter
+					Em.ScriptedEmitter = New ScriptedEmitter
+					Em\Length = Time
+					Em\StartTime = MilliSecs()
+					Config = RP_LoadEmitterConfig("Data\Emitter Configs\" + Name$ + ".rpc", GetTexture(TexID), Cam)
+					; Soft-fail (log + drop) instead of RuntimeError on missing
+					; or unloadable emitter -- any server can otherwise hard-
+					; kill clients with one packet referencing a non-existent
+					; name.
+					If Config = 0
+						WriteLog(MainLog, "P_CreateEmitter: failed to load " + Name$)
+						Delete Em
+					Else
+						Em\EN = RP_CreateEmitter(Config)
+						AI.ActorInstance = RuntimeIDList(RuntimeID)
+						If AI <> Null
+							EntityParent(Em\EN, AI\CollisionEN)
+							RotateEntity(Em\EN, EntityPitch#(AI\CollisionEN), EntityYaw#(AI\CollisionEN), EntityRoll#(AI\CollisionEN))
+							If AI = Me Then Em\AttachedToPlayer = True
+						EndIf
+						PositionEntity Em\EN, XPos#, YPos#, ZPos#
+					EndIf
+				EndIf
 
 			; Known spell update
 			Case P_KnownSpellUpdate
@@ -809,14 +847,25 @@ Function UpdateNetwork()
 			; Character stat update
 			Case P_StatUpdate
 				A.ActorInstance = RuntimeIDList(RCE_IntFromStr(Mid$(M\MessageData$, 2, 2)))
-				If Left$(M\MessageData$, 1) = "A"
-					Attribute = RCE_IntFromStr(Mid$(M\MessageData$, 4, 1))
-					A\Attributes\Value[Attribute] = RCE_IntFromStr(Mid$(M\MessageData$, 5, 2))
-				ElseIf Left$(M\MessageData$, 1) = "M"
-					Attribute = RCE_IntFromStr(Mid$(M\MessageData$, 4, 1))
-					A\Attributes\Maximum[Attribute] = RCE_IntFromStr(Mid$(M\MessageData$, 5, 2))
-				ElseIf Left$(M\MessageData$, 1) = "R"
-					A\Reputation = RCE_IntFromStr(Mid$(M\MessageData$, 4, 2))
+				; A can be Null if the server names a RuntimeID we haven't
+				; created yet (race on actor spawn) -- guard before any
+				; field access. Attribute index also comes off the wire
+				; as a 1-byte 0..255 value; bound against the 40-entry
+				; Attributes\Value / Maximum arrays.
+				If A <> Null
+					If Left$(M\MessageData$, 1) = "A"
+						Attribute = RCE_IntFromStr(Mid$(M\MessageData$, 4, 1))
+						If Attribute >= 0 And Attribute < 40
+							A\Attributes\Value[Attribute] = RCE_IntFromStr(Mid$(M\MessageData$, 5, 2))
+						EndIf
+					ElseIf Left$(M\MessageData$, 1) = "M"
+						Attribute = RCE_IntFromStr(Mid$(M\MessageData$, 4, 1))
+						If Attribute >= 0 And Attribute < 40
+							A\Attributes\Maximum[Attribute] = RCE_IntFromStr(Mid$(M\MessageData$, 5, 2))
+						EndIf
+					ElseIf Left$(M\MessageData$, 1) = "R"
+						A\Reputation = RCE_IntFromStr(Mid$(M\MessageData$, 4, 2))
+					EndIf
 				EndIf
 
 			; Scripted text input dialog

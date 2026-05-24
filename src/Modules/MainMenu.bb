@@ -196,6 +196,16 @@ Function UpdateFiles()
 					U.UpdateFile = New UpdateFile
 					U\Checksum = RCE_IntFromStr(Mid$(Pa$, Offset, 4))
 					NameLen = RCE_IntFromStr(Mid$(Pa$, Offset + 4, 1))
+					; Validate that the announced NameLen actually fits inside
+					; the remaining payload. A server that lies about NameLen
+					; (or a truncated final entry) would otherwise silently
+					; produce a short Name$ and desync the parser on the next
+					; iteration.
+					If Offset + 5 + NameLen > Len(Pa$) + 1
+						Delete U
+						WriteLog(MainLog, "P_FetchUpdateFiles: NameLen overruns payload, stopping parse")
+						Exit
+					EndIf
 					U\Name$ = Mid$(Pa$, Offset + 5, NameLen)
 					Offset = Offset + 5 + NameLen
 					; Path-containment: refuse any name that would let the server
@@ -302,10 +312,13 @@ Function UpdateFiles()
 				EndGraphics()
 				ExecFile("Data\Patch.exe " + GameName$)
 				End
-			; Copy file to overwrite old version
+			; Copy file to overwrite old version. (U\Name without the
+			; sigil resolved to a different/zero handle field; both calls
+			; here used to mis-target their path on the first apply cycle
+			; until subsequent Mid$ access populated the field.)
 			Else
-				If FileType(U\Name) = 1 Then DeleteFile(U\Name$)
-				CopyFile("Temp2.dat", U\Name)
+				If FileType(U\Name$) = 1 Then DeleteFile(U\Name$)
+				CopyFile("Temp2.dat", U\Name$)
 				Delay(40)
 				DeleteFile("Temp2.dat")
 			EndIf
