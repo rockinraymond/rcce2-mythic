@@ -274,6 +274,14 @@ End Function
 ; Makes one actor instance attack another
 Function ActorAttack(A1.ActorInstance, A2.ActorInstance)
 
+	; Bail on null and on already-dead targets. Two attackers landing
+	; in the same tick previously both saw HP>0, both subtracted, both
+	; called KillActor -- second call ran against freed (NPC) memory
+	; for double XP + a use-after-free crash window. Also guards
+	; against script-spawned attacks racing the death broadcast.
+	If A1 = Null Or A2 = Null Then Return False
+	If A2\Attributes\Value[HealthStat] <= 0 Then Return False
+
 	; Get distance between the actor instances
 	XDist# = A1\X# - A2\X#
 	ZDist# = A1\Z# - A2\Z#
