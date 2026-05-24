@@ -442,12 +442,31 @@ Repeat
 		Case BCLOSE
 			app\Quit = True
 		Case ProName
-			local F.BBStream = WriteFile("Data\Game Data\Misc.dat")
-			If F = Null Then RuntimeError("Could not open Data\Game Data\Misc.dat!")
+			; Atomic rewrite: previous direct-WriteFile truncated and
+			; started writing immediately, so any crash between WriteFile
+			; and CloseFile (operator clicks Quit, AV scan, disk full)
+			; left the project's core metadata file with whatever bytes
+			; had landed -- typically empty. Write to .tmp, then on
+			; success demote current Misc.dat to .bak and swap in.
+			local MiscFinal$ = "Data\Game Data\Misc.dat"
+			local MiscTemp$ = MiscFinal + ".tmp"
+			local F.BBStream = WriteFile(MiscTemp)
+			If F = Null Then RuntimeError("Could not open " + MiscTemp + " for write")
 			WriteLine F, FUI_SendMessage(ProName, M_GETCAPTION)
 			WriteLine F, UpdateGame$
 			WriteLine F, UpdateMusic
 			CloseFile(F)
+			If FileSize(MiscTemp) > 0
+				If FileType(MiscFinal) = 1
+					If FileType(MiscFinal + ".bak") = 1 Then DeleteFile(MiscFinal + ".bak")
+					CopyFile(MiscFinal, MiscFinal + ".bak")
+					DeleteFile(MiscFinal)
+				EndIf
+				CopyFile(MiscTemp, MiscFinal)
+				DeleteFile(MiscTemp)
+			Else
+				DeleteFile(MiscTemp)
+			EndIf
 		Case M_Meshes
 			ExecFile(OMF$)
 		Case M_Textures

@@ -800,10 +800,14 @@ Function LoadArea(Name$, CameraEN, DisplayItems = False, UpdateRottNet = False)
 
 End Function
 
-; Saves the current area back to file
+; Saves the current area back to file. Atomic rewrite via SafeWrite:
+; a crash mid-flush previously truncated the area file and broke load
+; on the next area entry.
 Function SaveArea(Name$)
 
-	F = WriteFile("Data\Areas\" + Name$ + ".dat")
+	Local FinalPath$ = "Data\Areas\" + Name$ + ".dat"
+	Local TempPath$ = SafeWriteOpen(FinalPath$)
+	F = WriteFile(TempPath$)
 	If F = 0 Then Return False
 
 		; Loading screen
@@ -953,8 +957,7 @@ Function SaveArea(Name$)
 			WriteByte F, SZ\Volume
 		Next
 
-	CloseFile(F)
-	Return True
+	Return SafeWriteCommit(TempPath$, FinalPath$, F)
 
 End Function
 
