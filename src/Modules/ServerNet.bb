@@ -1584,13 +1584,44 @@ Function UpdateNetwork()
 					EndIf
 					AI\ServerArea = 0
 
-					; Cancel trading if he was trading with another player
+					; Cancel trading if he was trading with another player.
+					;
+					; Two-phase cleanup: the partner side and the disconnecting
+					; side both carry trade state (IsTrading, TradingActor,
+					; TradeResult$, TradeOfferedAmount[]). The original handler
+					; only zeroed the partner's IsTrading and TradingActor, and
+					; only sent P_CloseTrading when the partner had already
+					; clicked accept (IsTrading >= 4). That left:
+					;   - The partner's TradeOfferedAmount[] populated with
+					;     amounts from this dead trade. The next P_OpenTrading
+					;     accept against a fresh partner would read those
+					;     server-tracked offers (NN wave 2's authoritative-
+					;     swap source) and let the partner duplicate items
+					;     that were never offered in the new trade.
+					;   - A partner at IsTrading = 3 (window open, not yet
+					;     accepted) with no CloseTrading notification: their
+					;     trade UI stays open and they can still send
+					;     P_UpdateTrading slots into a Null TradingActor.
+					;   - AI's own trade fields still populated, which only
+					;     matters when the ActorInstance survives logout (no
+					;     MySQL branch); a subsequent re-login that reuses the
+					;     same instance would pick up the stale state.
 					If AI\IsTrading >= 3
 						If AI\TradingActor <> Null
-							If AI\TradingActor\IsTrading >= 4 Then RCE_Send(Host, AI\TradingActor\RNID, P_CloseTrading, "", True)
-							AI\TradingActor\IsTrading = 0
-							AI\TradingActor\TradingActor = Null
+							Local Partner.ActorInstance = AI\TradingActor
+							If Partner\RNID > 0 Then RCE_Send(Host, Partner\RNID, P_CloseTrading, "", True)
+							Partner\IsTrading = 0
+							Partner\TradingActor = Null
+							Partner\TradeResult$ = ""
+							For TradeSlot = 0 To 31
+								Partner\TradeOfferedAmount[TradeSlot] = 0
+							Next
 						EndIf
+						AI\TradingActor = Null
+						AI\TradeResult$ = ""
+						For TradeSlot = 0 To 31
+							AI\TradeOfferedAmount[TradeSlot] = 0
+						Next
 					EndIf
 
 					; Dehorsify
