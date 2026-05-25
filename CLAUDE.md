@@ -166,6 +166,8 @@ RCE_Send(Connection, PeerToHost, P_X, Pa$, True)
 
 See PRs [#144](https://github.com/RydeTec/rcce2/pull/144) (every-frame `PlayerTarget` cluster) and the audit history of `Object.ActorInstance` callers under `src/Modules/` for the established pattern.
 
+The same shape applies to `AInstance.AreaInstance = Object.AreaInstance(Actor\ServerArea)` lookups: an actor with a stale `ServerArea` (mid-warp, freed zone, brief window during `SetArea` re-binding) makes the lookup return Null. The standard recovery is to skip the broadcast loop / per-tick update that needed it — the actor's in-memory state (HP, position, attribute changes) has already applied; only the network propagation drops, and the next tick after `SetArea` settles will reach the actor again. PRs [#154](https://github.com/RydeTec/rcce2/pull/154) / [#155](https://github.com/RydeTec/rcce2/pull/155) / [#176](https://github.com/RydeTec/rcce2/pull/176) / [#182](https://github.com/RydeTec/rcce2/pull/182)–[#188](https://github.com/RydeTec/rcce2/pull/188) cover the full sweep across `GameServer.bb` / `ScriptingCommands.bb` / `ServerNet.bb` / `Server.bb`.
+
 ### Strict-mode tests
 
 Test files under [src/Tests/](src/Tests/) use `Strict` + `EnableGC` at the top. They cannot include `Server.bb` or other heavy entry points (would pull in network/world deps). Instead they `Include` the one module under test and *inline-stub* its missing dependencies — see [src/Tests/Modules/ItemsTest.bb:8-49](src/Tests/Modules/ItemsTest.bb#L8) for the canonical pattern. The **rcce2-test-writing** skill walks through this.
