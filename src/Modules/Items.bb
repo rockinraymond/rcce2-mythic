@@ -268,11 +268,14 @@ Function LoadItems(Filename$)
 				Exit
 			EndIf
 			ItemList(I\ID) = I
-			I\Name$            = ReadString$(F)
-			I\ExclusiveRace$   = ReadString$(F)
-			I\ExclusiveClass$  = ReadString$(F)
-			I\Script$          = ReadString$(F)
-			I\SMethod$          = ReadString$(F)
+			; Bound every length-prefixed string against corrupted Items.dat.
+			; 256 for display/restriction fields; 1024 for script paths
+			; (matches ReadActorInstance's per-character Script$ cap).
+			I\Name$            = ReadBoundedString$(F, 256)
+			I\ExclusiveRace$   = ReadBoundedString$(F, 256)
+			I\ExclusiveClass$  = ReadBoundedString$(F, 256)
+			I\Script$          = ReadBoundedString$(F, 1024)
+			I\SMethod$          = ReadBoundedString$(F, 1024)
 			I\ItemType         = ReadByte(F)
 			I\Value            = ReadInt(F)
 			I\Mass             = ReadShort(F)
@@ -291,7 +294,7 @@ Function LoadItems(Filename$)
 					I\WeaponType       = ReadShort(F)
 					I\RangedProjectile = ReadShort(F)
 					I\Range#           = ReadFloat#(F)
-					I\RangedAnimation$ = ReadString$(F)
+					I\RangedAnimation$ = ReadBoundedString$(F, 256)
 				Case I_Armour
 					I\ArmourLevel      = ReadShort(F)
 				Case I_Potion, I_Ingredient
@@ -299,7 +302,10 @@ Function LoadItems(Filename$)
 				Case I_Image
 					I\ImageID          = ReadShort(F)
 			End Select
-			I\MiscData$        = ReadString$(F)
+			; MiscData$ can carry user-defined item data (free-form strings
+			; from item scripts). Generous cap so legitimate content isn't
+			; truncated; still bounded so a corrupt file can't DoS the load.
+			I\MiscData$        = ReadBoundedString$(F, 4096)
 			Items = Items + 1
 		Wend
 
@@ -375,13 +381,14 @@ Function SaveItems(Filename$)
 
 End Function
 
-; Loads attribute names from file
+; Loads damage type names from file. Bound each name against a corrupted
+; DamageTypes.dat (same shape as the rest of the data-loader sweep).
 Function LoadDamageTypes(Filename$)
 
 	F = ReadFile(Filename$)
 	If F = 0 Then Return False
 		For i = 0 To 19
-			DamageTypes$(i) = ReadString$(F)
+			DamageTypes$(i) = ReadBoundedString$(F, 256)
 		Next
 	CloseFile(F)
 	Return True

@@ -45,10 +45,15 @@ Function LoadProjectiles(Filename$)
 				Exit
 			EndIf
 			ProjectileList(P\ID) = P
-			P\Name$ = ReadString$(F)
+			; Bound length-prefixed strings against corrupted Projectiles.dat.
+			; Same shape as the Spells.bb / Items.bb / Animations.bb sweep.
+			; Name is a display field, Emitter1/2 are relative paths into
+			; Data\Emitter Configs; 256 covers either with comfortable
+			; headroom.
+			P\Name$ = ReadBoundedString$(F, 256)
 			P\MeshID = ReadShort(F)
-			P\Emitter1$ = ReadString$(F)
-			P\Emitter2$ = ReadString$(F)
+			P\Emitter1$ = ReadBoundedString$(F, 256)
+			P\Emitter2$ = ReadBoundedString$(F, 256)
 			P\Emitter1TexID = ReadShort(F)
 			P\Emitter2TexID = ReadShort(F)
 			P\Homing = ReadByte(F)
