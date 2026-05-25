@@ -630,11 +630,16 @@ Function LoadActors(Filename$)
 			A\Attributes = New Attributes
 			A\ID = ReadShort(F)
 			ActorList(A\ID) = A
-			A\Race$ = ReadString$(F)
-			A\Class$ = ReadString$(F)
-			A\Description$ = ReadString$(F)
-			A\StartArea$ = ReadString$(F)
-			A\StartPortal$ = ReadString$(F)
+			; Bound every length-prefixed string against a corrupted
+			; Actors.dat (same shape as the data-loader sweep in PR #149).
+			; Race / Class / area names are short identifiers; Description
+			; is editor-authored flavor text; StartArea/StartPortal are
+			; area + portal names.
+			A\Race$ = ReadBoundedString$(F, 256)
+			A\Class$ = ReadBoundedString$(F, 256)
+			A\Description$ = ReadBoundedString$(F, 4096)
+			A\StartArea$ = ReadBoundedString$(F, 256)
+			A\StartPortal$ = ReadBoundedString$(F, 256)
 			A\MAnimationSet = ReadShort(F)
 			A\FAnimationSet = ReadShort(F)
 			A\Scale# = ReadFloat(F)
@@ -743,7 +748,9 @@ Function LoadAttributes(Filename$)
 
 		AttributeAssignment = ReadByte(F)
 		For i = 0 To 39
-			AttributeNames$(i) = ReadString$(F)
+			; Bound attribute display names against a corrupted
+			; Attributes.dat (same shape as the data-loader sweep).
+			AttributeNames$(i) = ReadBoundedString$(F, 256)
 			AttributeIsSkill(i) = ReadByte(F)
 			AttributeHidden(i) = ReadByte(F)
 		Next
@@ -918,7 +925,8 @@ Function LoadFactions(Filename$)
 	If F = 0 Then Return -1
 
 		For i = 0 To 99
-			FactionNames$(i) = ReadString$(F)
+			; Bound faction names against a corrupted Factions.dat.
+			FactionNames$(i) = ReadBoundedString$(F, 256)
 			If Len(FactionNames$(i)) > 0 Then Factions = Factions + 1
 		Next
 
