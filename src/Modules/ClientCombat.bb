@@ -18,8 +18,14 @@ Function UpdateCombat()
 	; If I have a human target and I'm not riding a mount
 	If PlayerTarget > 0 And Me\Attributes\Value[HealthStat] > 0 And AttackTarget = True And Me\Mount = Null
 		A.ActorInstance = Object.ActorInstance(PlayerTarget)
-		
-		If A\Attributes\Value[HealthStat] < 1
+
+		; PlayerTarget can carry a stale handle if the target was
+		; freed without the usual SafeFreeActorInstance / P_ActorDead /
+		; P_ActorGone path clearing PlayerTarget (race window, mount
+		; pathway, or simply a missed cleanup site). Treat a Null
+		; lookup the same as a dead target so the next deref doesn't
+		; crash UpdateCombat -- this runs every frame.
+		If A = Null Or A\Attributes\Value[HealthStat] < 1
 			PlayerTarget = 0
 			HideEntity(ActorSelectEN)			; Replace through clean function
 			DestroyCharInteractionWindow()
