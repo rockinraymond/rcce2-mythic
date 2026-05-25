@@ -832,6 +832,19 @@ Function ActorInstanceFromString.ActorInstance(Pa$)
 
 	RuntimeID = RCE_IntFromStr(Mid$(Pa$, 5, 2))
 	ActorID = RCE_IntFromStr(Mid$(Pa$, 13, 2))
+	; Race the server announced is unknown to this client. Same DoS
+	; surface as P_NewActor's mesh-load failure (see PR #128) but one
+	; step earlier: CreateActorInstance previously RuntimeError'd on
+	; a Null Actor template, so any P_NewActor / P_FetchCharacter for
+	; a race the client doesn't have loaded would crash the client.
+	; Reachable when the client is running an older Actors.dat than
+	; the server (update-channel skew), or from a hostile/buggy
+	; server. The lone caller (P_NewActor at ClientNet.bb:1456)
+	; already drops the actor on a Null return.
+	If ActorID < 0 Or ActorID > 65535 Or ActorList(ActorID) = Null
+		WriteLog(MainLog, "ActorInstanceFromString: unknown ActorID " + ActorID + " (RuntimeID=" + RuntimeID + "), dropping actor")
+		Return Null
+	EndIf
 	A.ActorInstance = CreateActorInstance(ActorList(ActorID))
 	A\RuntimeID = RuntimeID
 	RuntimeIDList(RuntimeID) = A
