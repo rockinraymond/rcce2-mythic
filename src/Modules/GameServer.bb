@@ -818,15 +818,24 @@ Function UpdateActorInstances(Broadcast)
 							AI\Y# = AInstance\Area\WaypointY#[AI\CurrentWaypoint] + Rnd#(-1.5, 1.5)
 							AI\OldX# = AInstance\Area\WaypointX#[AI\CurrentWaypoint]
 							AI\OldZ# = AInstance\Area\WaypointZ#[AI\CurrentWaypoint]
+							; WaypointX/Y/Z are Field[1999]. Next/PrevWaypoint
+							; are ReadShort at load (-32768..32767); the
+							; original runtime guard only rejected `> 1999`
+							; so a negative slot bypassed the check and
+							; Field-OOB'd the destination read below.
+							; Treat anything outside 0..1999 as "no next
+							; waypoint" by setting to 9999 (above the upper
+							; bound, which the runtime already uses as
+							; "give up and Wait").
 							If Rand(1, 2) = 1
 								NextWP = AInstance\Area\NextWaypointA[AI\CurrentWaypoint]
-								If NextWP > 1999 Then NextWP = AInstance\Area\NextWaypointB[AI\CurrentWaypoint]
+								If NextWP < 0 Or NextWP > 1999 Then NextWP = AInstance\Area\NextWaypointB[AI\CurrentWaypoint]
 							Else
 								NextWP = AInstance\Area\NextWaypointB[AI\CurrentWaypoint]
-								If NextWP > 1999 Then NextWP = AInstance\Area\NextWaypointA[AI\CurrentWaypoint]
+								If NextWP < 0 Or NextWP > 1999 Then NextWP = AInstance\Area\NextWaypointA[AI\CurrentWaypoint]
 							EndIf
-							If NextWP > 1999 Then NextWP = AInstance\Area\PrevWaypoint[AI\CurrentWaypoint]
-							If NextWP > 1999
+							If NextWP < 0 Or NextWP > 1999 Then NextWP = AInstance\Area\PrevWaypoint[AI\CurrentWaypoint]
+							If NextWP < 0 Or NextWP > 1999
 								AI\AIMode = AI_Wait
 							Else
 								AI\DestX# = AInstance\Area\WaypointX#[NextWP] + Rnd#(-2.0, 2.0)
