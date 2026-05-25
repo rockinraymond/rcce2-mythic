@@ -610,6 +610,12 @@ Function UpdateNetwork()
 							Num = 0
 							LockTextures()
 							While Offset < Len(M\MessageData$)
+								; TradeItems / TradeAmounts / ServerTradeIDs /
+								; BSlotsHis are all Dim'd (31) = 32 slots. A
+								; malformed P_OpenTrading payload longer than
+								; 32 items would Dim-OOB the client. Stop
+								; walking once the slot table is full.
+								If Num < 0 Or Num > 31 Then Exit
 								Item.ItemInstance = ItemInstanceFromString(Mid$(M\MessageData$, Offset, ItemInstanceStringLength()))
 								TradeItems(Num) = Item
 								Offset = Offset + ItemInstanceStringLength()
