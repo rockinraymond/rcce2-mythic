@@ -1052,15 +1052,30 @@ Function UpdateInterface()
 			If MouseSlotSource = -1
 				; Spell
 				If ActionBarSlots(Slot) < 0
+					; Resolve to a Spell with bound checks at every hop
+					; (MemorisedSpells is Field[9]; KnownSpells is Field[999];
+					; SpellsList is Dim'd 65534). A stale ActionBarSlots
+					; reference (deleted spell, corrupt save) otherwise
+					; crashes on the Sp\RechargeTime deref.
+					Local SpId = -1
+					Num = 0
 					If RequireMemorise
 						Num = ActionBarSlots(Slot) + 10
-						RechargeTime = SpellsList(Me\KnownSpells[Me\MemorisedSpells[Num]])\RechargeTime
-						Pa$ = RCE_StrFromInt$(Me\KnownSpells[Me\MemorisedSpells[Num]], 2)
+						If Num >= 0 And Num <= 9
+							Local Mem = Me\MemorisedSpells[Num]
+							If Mem >= 0 And Mem <= 999 Then SpId = Me\KnownSpells[Mem]
+						EndIf
 					Else
 						Num = ActionBarSlots(Slot) + 1000
-						RechargeTime = SpellsList(Me\KnownSpells[Num])\RechargeTime
-						Pa$ = RCE_StrFromInt$(Me\KnownSpells[Num], 2)
+						If Num >= 0 And Num <= 999 Then SpId = Me\KnownSpells[Num]
 					EndIf
+					Local SpClick.Spell = Null
+					If SpId >= 0 And SpId <= 65534 Then SpClick = SpellsList(SpId)
+					If SpClick = Null
+						ActionBarSlots(Slot) = 0  ; stale -- clear + skip cast
+					Else
+					RechargeTime = SpClick\RechargeTime
+					Pa$ = RCE_StrFromInt$(SpId, 2)
 					; Recharged
 					If Me\SpellCharge[Num] <= 0
 						If PlayerTarget > 0
@@ -1089,6 +1104,7 @@ Function UpdateInterface()
 			;		Else
 			;			Output(LanguageString$(LS_AbilityNotRecharged), 255, 50, 50)
 					EndIf
+					EndIf  ; SpClick = Null fall-through
 				; Item
 				ElseIf ActionBarSlots(Slot) < 65535
 					For i = 0 To Slots_Inventory
@@ -1164,15 +1180,28 @@ Function UpdateInterface()
 			EndIf
 			; Spell
 			If ActionBarSlots(Slot) < 0
+				; Same defensive resolve as the mouse-click branch above:
+				; bound-check every hop, fall back to clearing the slot
+				; if the referenced spell is stale.
+				Local SpId2 = -1
+				Num = 0
 				If RequireMemorise
 					Num = ActionBarSlots(Slot) + 10
-					RechargeTime = SpellsList(Me\KnownSpells[Me\MemorisedSpells[Num]])\RechargeTime
-					Pa$ = RCE_StrFromInt$(Me\KnownSpells[Me\MemorisedSpells[Num]], 2)
+					If Num >= 0 And Num <= 9
+						Local Mem2 = Me\MemorisedSpells[Num]
+						If Mem2 >= 0 And Mem2 <= 999 Then SpId2 = Me\KnownSpells[Mem2]
+					EndIf
 				Else
 					Num = ActionBarSlots(Slot) + 1000
-					RechargeTime = SpellsList(Me\KnownSpells[Num])\RechargeTime
-					Pa$ = RCE_StrFromInt$(Me\KnownSpells[Num], 2)
+					If Num >= 0 And Num <= 999 Then SpId2 = Me\KnownSpells[Num]
 				EndIf
+				Local SpKey.Spell = Null
+				If SpId2 >= 0 And SpId2 <= 65534 Then SpKey = SpellsList(SpId2)
+				If SpKey = Null
+					ActionBarSlots(Slot) = 0
+				Else
+				RechargeTime = SpKey\RechargeTime
+				Pa$ = RCE_StrFromInt$(SpId2, 2)
 				; Recharged
 				If Me\SpellCharge[Num] <= 0
 					If PlayerTarget > 0
@@ -1205,6 +1234,7 @@ Function UpdateInterface()
 			;	Else
 			;		Output(LanguageString$(LS_AbilityNotRecharged), 255, 50, 50)
 			;	EndIf
+				EndIf  ; SpKey = Null fall-through
 			; Item
 			ElseIf ActionBarSlots(Slot) < 65535
 				For i = 0 To Slots_Inventory
@@ -1449,9 +1479,20 @@ Function UpdateInterface()
 				; Left click to fire spell
 				ElseIf GY_ButtonHit(BSpellImgs(i))
 					Num = KnownSpellSort(FirstSpell + i) - 1
-					; Recharged
-					If Me\SpellCharge[Num] <= 0
-						Pa$ = RCE_StrFromInt$(Me\KnownSpells[Num], 2)
+					; KnownSpells is Field[999]; bail if KnownSpellSort gave
+					; us an OOB Num (corrupt sort table or 0-known-spells).
+					If Num < 0 Or Num > 999
+						; nothing to cast
+					ElseIf Me\SpellCharge[Num] <= 0
+						; Spell may have been deleted between sessions while
+						; still in KnownSpells; SpellsList(...) returns Null
+						; and the bare \RechargeTime deref crashes. Resolve
+						; safely + skip cast if Null.
+						Local SIDBk = Me\KnownSpells[Num]
+						Local SpBk.Spell = Null
+						If SIDBk >= 0 And SIDBk <= 65534 Then SpBk = SpellsList(SIDBk)
+						If SpBk <> Null
+						Pa$ = RCE_StrFromInt$(SIDBk, 2)
 						If PlayerTarget > 0
 							AI.ActorInstance = Object.ActorInstance(PlayerTarget)
 							; Mirror the action-bar cast path: stale target
@@ -1459,7 +1500,8 @@ Function UpdateInterface()
 							If AI <> Null Then Pa$ = Pa$ + RCE_StrFromInt$(AI\RuntimeID, 2)
 						EndIf
 						RCE_Send(Connection, PeerToHost, P_SpellUpdate, "F" + Pa$, True)
-						Me\SpellCharge[Num] = SpellsList(Me\KnownSpells[Num])\RechargeTime
+						Me\SpellCharge[Num] = SpBk\RechargeTime
+						EndIf  ; SpBk <> Null
 					; Not recharged
 					Else
 						Output(LanguageString$(LS_AbilityNotRecharged), 255, 50, 50)
