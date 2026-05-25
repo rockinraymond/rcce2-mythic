@@ -1,0 +1,201 @@
+# CLAUDE.md — RCCE 2 (RealmCrafter Community Edition)
+
+Orientation for Claude agents working in this repo. User-facing docs live in [ReadMe.md](ReadMe.md) and [docs/](docs/); this file is the developer's-eye view that the README skips.
+
+## What this repo is
+
+Server + Client + tools for an open-source MMORPG engine, written in the **BlitzForge** language (a modernized Blitz3D fork — *not* base Blitz3D). The compiler is vendored as a git submodule at [compiler/BlitzForge](compiler/BlitzForge).
+
+The four shipping executables built from `src/`:
+
+| Source | Output | Purpose |
+|---|---|---|
+| [src/Server.bb](src/Server.bb) | `bin/Server.exe` | Authoritative game server |
+| [src/Client.bb](src/Client.bb) | `bin/Client.exe` | Game client |
+| [src/GUE.bb](src/GUE.bb) | `bin/GUE.exe` | Graphical world editor |
+| [src/Project Manager.bb](src/Project%20Manager.bb) | `Project Manager.exe` | Project launcher |
+
+Plus seven editor tools under `src/Tools/` (RC Architect, Terrain/Cave/Rock/Tree editors, Gubbin Tool).
+
+## Skills available in this repo
+
+Always check `.claude/skills/` for relevant skills before working in a specialty area. The user-invocable list shows them at session start; the most load-bearing ones:
+
+- **blitzforge-language** — invoke whenever writing or reviewing any `.bb` file. Your training data is base Blitz3D from 2003; BlitzForge added Strict, GC, inheritance, methods, `BBList`, `Async/Await`, `Try/Catch`. Without this skill you *will* write outdated code.
+- **rcce2-packet-handler** — invoke before touching [ServerNet.bb](src/Modules/ServerNet.bb) or [ClientNet.bb](src/Modules/ClientNet.bb). Wire encoding, bounds-checking, soft-fail patterns.
+- **rcce2-bvm-command** — invoke before adding/modifying a `BVM_*` function in [ScriptingCommands.bb](src/Modules/ScriptingCommands.bb). The dispatch in [RC_Standard_Invoker.bb](src/Modules/RC_Standard_Invoker.bb) is alphabetically opcode-ordered and has a 142-case renumber trap.
+- **rcce2-test-writing** — invoke before adding a test under `src/Tests/`. Test files are `Strict`+`EnableGC`+inline-stubbed and must not pull in network/world deps.
+
+## Build and test
+
+Always run from the repo root.
+
+```powershell
+# Windows (PowerShell or cmd)
+.\compile.bat              # build engine + all tools
+.\compile.bat -t           # build engine only (skip tools — ~10x faster)
+.\compile.bat -b           # also rebuild BlitzForge (slow, MSBuild)
+.\compile.bat -e           # skip engine, build tools only
+.\test.bat                 # compile + run every Strict test under src/Tests/
+
+# macOS (Apple Silicon, alpha)
+./compile.sh
+./test.sh
+```
+
+After any change to a `.bb` file under `src/`, run `compile.bat -t` and confirm clean compile before committing. `Local`-shadowing-a-`Global`, missing field, wrong sigil — Strict mode catches all of these at compile time.
+
+The compile target (`Server.exe`, `Client.exe`, `GUE.exe`, `Project Manager.exe`) depends on which top-level `.bb` includes the file. Most modules are included by Server *and* Client, so check both compile.
+
+## Repo layout
+
+```
+rcce2/
+├── src/                          # all engine source — your primary work area
+│   ├── Server.bb · Client.bb     # entry points (include cascade — start here)
+│   ├── GUE.bb · Project Manager.bb
+│   ├── Modules/                  # ~70 .bb files; see "Module map" below
+│   ├── Tools/                    # standalone editor utilities (each .bb → .exe)
+│   └── Tests/                    # Strict-mode test files (see test skill)
+├── compiler/BlitzForge/          # SUBMODULE — compiler + runtime (C++17)
+├── extras/vscode-blitz-forge/    # SUBMODULE — VS Code language extension
+├── extras/reshade/               # SUBMODULE — post-processing
+├── data/                         # default game project (worlds, scripts, assets)
+├── docs/                         # user-facing engine + scripting docs
+├── bin/                          # compiled binaries + vendored DLLs (gitignored .exe)
+├── scripts/                      # cross-platform build helpers
+├── .claude/skills/               # agent skills for specialty work
+├── compile.bat · compile.sh      # build scripts (read these for flags)
+├── test.bat · test.sh
+└── ReadMe.md                     # user-facing overview
+```
+
+## Module map (`src/Modules/`)
+
+The ~70 module files split into rough categories. Names overloaded with `Server*` or `Client*` are split intentionally — same name without a prefix means it's shared.
+
+| Category | Files |
+|---|---|
+| **Wire / packets** | [RCEnet.bb](src/Modules/RCEnet.bb), [Packets.bb](src/Modules/Packets.bb), [ServerNet.bb](src/Modules/ServerNet.bb) (huge `Select Case` packet dispatch), [ClientNet.bb](src/Modules/ClientNet.bb) |
+| **World / areas** | [Actors.bb](src/Modules/Actors.bb), [ServerAreas.bb](src/Modules/ServerAreas.bb), [ClientAreas.bb](src/Modules/ClientAreas.bb), [GameServer.bb](src/Modules/GameServer.bb), [Environment.bb](src/Modules/Environment.bb), [Environment3D.bb](src/Modules/Environment3D.bb) |
+| **Items / combat / spells** | [Items.bb](src/Modules/Items.bb), [Inventories.bb](src/Modules/Inventories.bb), [Spells.bb](src/Modules/Spells.bb), [Projectiles.bb](src/Modules/Projectiles.bb), [ClientCombat.bb](src/Modules/ClientCombat.bb) |
+| **Persistence / auth** | [AccountsServer.bb](src/Modules/AccountsServer.bb), [PasswordHash.bb](src/Modules/PasswordHash.bb), [MySQL.bb](src/Modules/MySQL.bb), [Logging.bb](src/Modules/Logging.bb) (`SafeWriteOpen$` / `SafeWriteCommit%` atomic write helpers) |
+| **BVM scripting** | [Scripting.bb](src/Modules/Scripting.bb), [ScriptingCommands.bb](src/Modules/ScriptingCommands.bb) (native `BVM_*` functions), [RC_Standard_Invoker.bb](src/Modules/RC_Standard_Invoker.bb) (opcode dispatch table) |
+| **UI** | [Gooey.bb](src/Modules/Gooey.bb), [F-UI.bb](src/Modules/F-UI.bb), [Interface.bb](src/Modules/Interface.bb), [Interface3D.bb](src/Modules/Interface3D.bb), [MainMenu.bb](src/Modules/MainMenu.bb) |
+| **3D / media** | [Actors3D.bb](src/Modules/Actors3D.bb), [Animations.bb](src/Modules/Animations.bb), [Projectiles3D.bb](src/Modules/Projectiles3D.bb), [Media.bb](src/Modules/Media.bb) |
+| **Misc** | [Language.bb](src/Modules/Language.bb), [Radar.bb](src/Modules/Radar.bb), [b3dfile.bb](src/Modules/b3dfile.bb), [MD5.bb](src/Modules/MD5.bb) |
+
+Subdirectories under `Modules/` (`Framework/`, `Graphics/`, `Helpers/`, `IO/`, `Project Manager/`, `Traits/`) hold smaller utility groups.
+
+## Conventions you must follow
+
+### Wire encoding ([RCEnet.bb](src/Modules/RCEnet.bb))
+
+`RCE_StrFromInt$(num, length=4)` packs an integer into `length` bytes (big-endian-ish via Bank). `RCE_IntFromStr(s$)` reverses it. Every packet field uses these. The bundled `length` is critical — a 2-byte ID written as 4 bytes will corrupt every subsequent field. Always pair sender's `RCE_StrFromInt$(x, N)` with receiver's `Mid$(MessageData$, offset, N)` of the same `N`.
+
+### Atomic writes ([Logging.bb](src/Modules/Logging.bb))
+
+Never write to a final on-disk file directly. Use:
+
+```basic
+Local TempPath$ = SafeWriteOpen$(FinalPath$)
+Local F = WriteFile(TempPath$)
+; ... WriteX(F, ...) ...
+SafeWriteCommit%(TempPath$, FinalPath$, F)   ; closes F + atomic rename
+```
+
+This prevents corruption if the process crashes mid-write. Apply to any persistent data file.
+
+### Soft-fail on server-controlled data
+
+Server packet handlers and client renderers must **not** call `RuntimeError` on values they read from the wire or from save files. A single malformed packet or a missing mesh ID would crash the entire process and disconnect every other player. Recovery pattern:
+
+```basic
+If Result = False
+    WriteLog(MainLog, "Handler: bad value, dropping (context: " + ctx + ")")
+    SafeFreeActorInstance(A)   ; or appropriate cleanup
+    Return                     ; or skip the rest of the Case
+EndIf
+```
+
+See the `Soft-fail` series of merged PRs (#128–#134) for the established pattern — the audit comment block in each fix explains the threat model.
+
+### Bounds checks before array index
+
+Any value read from a packet or save file used as an array index must be range-checked first. `ActorList` is `Dim`ed `[65535]`, but a client-supplied ActorID also needs `<> Null` check on the slot (most slots are empty). Pattern in [ServerNet.bb:2398](src/Modules/ServerNet.bb#L2398):
+
+```basic
+If ActorID < 0 Or ActorID > 65535 Or ActorList(ActorID) = Null
+    WriteLog(MainLog, "rejecting invalid ActorID " + ActorID)
+    RCE_Send(Host, M\FromID, P_..., "N", True)
+    Exists = True : Exit
+EndIf
+```
+
+### Strict-mode tests
+
+Test files under [src/Tests/](src/Tests/) use `Strict` + `EnableGC` at the top. They cannot include `Server.bb` or other heavy entry points (would pull in network/world deps). Instead they `Include` the one module under test and *inline-stub* its missing dependencies — see [src/Tests/Modules/ItemsTest.bb:8-49](src/Tests/Modules/ItemsTest.bb#L8) for the canonical pattern. The **rcce2-test-writing** skill walks through this.
+
+### Privilege gating in BVM commands
+
+BVM functions that mutate global server state (`BVM_BANPLAYER`, `BVM_SETGOLD`, `BVM_WARP`, faction mutators) must guard with `If Not BVM_RequirePrivileged() Then Return` at the top. Functions that take an actor handle but are safe when targeting the script's own actor use `BVM_RequireSelfOrPrivileged(handle)` instead. Without these, any NPC's right-click script can ban its own clicker.
+
+## Workflow
+
+### Branching + PRs
+
+- Branch from `develop`. PRs target `develop`. Releases are `develop → master` PRs.
+- Commits include the trailer `Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>` when authored with Claude.
+- PRs merge via `gh pr merge <N> --merge --admin --delete-branch`. **Squash merge is not used.**
+- Never push directly to `develop` or `master`.
+
+### CI ([.github/workflows/ci.yml](.github/workflows/ci.yml))
+
+- Build step caches BlitzForge binaries keyed on the submodule SHA. Most PRs hit cache.
+- Test step runs every file under `src/Tests/` and exits 1 on first failure.
+- **Known intermittent flake**: `ItemsTest.bb` sometimes fails with `Stack overflow!` for unrelated PRs. If a PR's CI fails *only* with that error and your change doesn't touch items/inventory/serialization, retry via close + reopen of the PR:
+  ```bash
+  gh pr close <N> && sleep 3 && gh pr reopen <N>
+  ```
+  Two retries is plenty; if it still fails, investigate.
+
+### Git submodules
+
+`compiler/BlitzForge`, `extras/vscode-blitz-forge`, `extras/reshade` are submodules.
+
+```bash
+# After cloning:
+git submodule update --init --recursive
+
+# Updating: stage submodule pointer like any other file, but never `git submodule update --remote`
+# unless you intend to bump the version. The BlitzForge submodule moves frequently;
+# bump it in a dedicated "BlitzForge bump" PR (see merged PR history for examples).
+```
+
+## Gotchas
+
+- **Blitz3D array semantics**: `Field arr[N]` and `Dim arr(N)` both allocate **`N+1` slots, indexed `0..N` inclusive**. `For i = 0 To N` is correct, not `0 To N-1`. Frequent source of "off-by-one" misreads.
+- **BVM opcode ordering**: opcodes in [RC_Standard_Invoker.bb](src/Modules/RC_Standard_Invoker.bb) are assigned by the BlitzForge command-set parser in **alphabetical order of function name**. Inserting `BVM_NEAREST_*` between `BVM_NAME` (case 436) and `BVM_NEWQUEST` (case 437) shifts every subsequent case number. Don't manually renumber unless you mean to; the **rcce2-bvm-command** skill covers the safe insertion procedure.
+- **Stale `.bb_bak1` / `.bb_bak2` files**: gitignored snapshots from a legacy IDE. Never edit them; they are not the source of truth. If you see one in a diff, something is wrong.
+- **Backup file naming**: same convention applies to `ServerNet.bb_bak2` etc. — ignore.
+- **PowerShell vs Bash**: both work via tools (PowerShell for `.bat` build scripts, Bash for git/gh). `gh.exe` lives at `/c/Program Files/GitHub CLI/gh.exe` in Bash — `gh` alone isn't on PATH in MSYS.
+- **Encoding**: write `.bb` files as UTF-8 without BOM. `Set-Content` and `Out-File` default to UTF-16 LE; use `-Encoding utf8` if you must use them. Prefer the Write tool, which is correct by default.
+- **`Continue` keyword**: BlitzForge added it but it was buggy in earlier versions — see commit `78f3204` "Fix RC Terrain Editor use of continue keyword". Safe to use now in current BlitzForge, but be wary inside `Select Case` inside `For` (test the specific shape).
+- **`Local` shadowing `Global`**: Strict mode flags this. Many legacy modules in `src/Modules/` aren't Strict — they tolerate the pattern but it's still a code smell.
+- **`.cursor/` and `compiler/IDEs/Visual Studio Code.url`**: local IDE state, not tracked. Don't `git add` them.
+
+## Memory + skills hygiene for you (the agent)
+
+When you discover something **non-obvious, project-specific, and durable** while working, save it as a memory (see your auto-memory instructions). Examples of save-worthy:
+
+- A subtle invariant: "the Bank used by `RCE_StrFromInt$` is 8 bytes; `Length > 8` will silently truncate."
+- A workflow tip the user explicitly confirmed.
+- A surprising consequence: "ScriptInstance handles can become stale across `BVM_THREADEXECUTE` boundaries; always re-resolve via `Object.ScriptInstance(hSI)`."
+
+Do not save things derivable from reading the code. The memory store is at `C:\Users\dyanr\.claude\projects\C--Users-dyanr-Desktop-rcce2\memory\`.
+
+## What's NOT in this repo
+
+- The game's actual content (worlds, scripted quests, custom art). The `data/` directory has a starter project but real content lives in user installations.
+- BlitzForge compiler source — it's in the [submodule](compiler/BlitzForge). Has its own [CLAUDE.md](compiler/BlitzForge/CLAUDE.md) for C++ work.
+- Documentation site / wiki — that's on `realmcrafter.fandom.com`, not in-repo.
