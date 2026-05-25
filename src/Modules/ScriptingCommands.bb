@@ -1067,11 +1067,13 @@ Function BVM_SETACTORCLOTHES(Param1%, Param2%)
 		Actor\BodyTex = Param2% - 1
 		Pa$ = "B" + RCE_StrFromInt$(Actor\RuntimeID, 2) + Chr$(Actor\BodyTex)
 		AInstance.AreaInstance = Object.AreaInstance(Actor\ServerArea)
-		A2.ActorInstance = AInstance\FirstInZone
-		While A2 <> Null
-			If A2\RNID > 0 Then RCE_Send(Host, A2\RNID, P_AppearanceUpdate, Pa$, True)
-			A2 = A2\NextInZone
-		Wend
+		If AInstance <> Null
+			A2.ActorInstance = AInstance\FirstInZone
+			While A2 <> Null
+				If A2\RNID > 0 Then RCE_Send(Host, A2\RNID, P_AppearanceUpdate, Pa$, True)
+				A2 = A2\NextInZone
+			Wend
+		EndIf
 	EndIf
 End Function
 
@@ -1087,11 +1089,13 @@ Function BVM_SETACTORFACE(Param1%, Param2%)
 		Actor\FaceTex = Param2% - 1
 		Pa$ = "F" + RCE_StrFromInt$(Actor\RuntimeID, 2) + Chr$(Actor\FaceTex)
 		AInstance.AreaInstance = Object.AreaInstance(Actor\ServerArea)
-		A2.ActorInstance = AInstance\FirstInZone
-		While A2 <> Null
-			If A2\RNID > 0 Then RCE_Send(Host, A2\RNID, P_AppearanceUpdate, Pa$, True)
-			A2 = A2\NextInZone
-		Wend
+		If AInstance <> Null
+			A2.ActorInstance = AInstance\FirstInZone
+			While A2 <> Null
+				If A2\RNID > 0 Then RCE_Send(Host, A2\RNID, P_AppearanceUpdate, Pa$, True)
+				A2 = A2\NextInZone
+			Wend
+		EndIf
 	EndIf
 End Function
 
@@ -1849,13 +1853,15 @@ Function BVM_SETACTORLEVEL(Param1%, Param2%)
 		; Tell all other players
 		Pa$ = RCE_StrFromInt$(Actor\RuntimeID, 2) + RCE_StrFromInt$(Actor\Level, 2)
 		AInstance.AreaInstance = Object.AreaInstance(Actor\ServerArea)
-		A2.ActorInstance = AInstance\FirstInZone
-		While A2 <> Null
-			If A2\RNID > 0
-				If A2 <> Actor Then RCE_Send(Host, A2\RNID, P_XPUpdate, "L" + Pa$, True)
-			EndIf
-			A2 = A2\NextInZone
-		Wend
+		If AInstance <> Null
+			A2.ActorInstance = AInstance\FirstInZone
+			While A2 <> Null
+				If A2\RNID > 0
+					If A2 <> Actor Then RCE_Send(Host, A2\RNID, P_XPUpdate, "L" + Pa$, True)
+				EndIf
+				A2 = A2\NextInZone
+			Wend
+		EndIf
 	EndIf
 End Function
 
