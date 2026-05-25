@@ -15,6 +15,25 @@ Type LoadedMediaData
 	Field Scale#, X#, Y#, Z#
 End Type
 
+; Self-contained bounded ReadString$ used by the GetMesh / GetTexture /
+; GetSound filename reads below. Module-local so the Tools (RC Architect,
+; etc.) can include Media.bb without pulling Logging.bb in for the
+; ReadBoundedString$ definition. Same shape: ReadInt prefix, refuse on
+; negative or >MaxLen, then byte-by-byte read. No WriteLog dependency.
+Function MediaReadFilename$(F, MaxLen)
+	If F = 0 Then Return ""
+	Local L = ReadInt(F)
+	If L < 0 Or L > MaxLen Then Return ""
+	If L = 0 Then Return ""
+	Local s$ = ""
+	Local i
+	For i = 1 To L
+		If Eof(F) Then Exit
+		s$ = s$ + Chr$(ReadByte(F))
+	Next
+	Return s$
+End Function
+
 ; Locks the meshes database (keeps the file open for faster batched Get...() calls)
 Function LockMeshes()
 
@@ -754,7 +773,10 @@ Function GetMesh(ID, Duplicate = False)
 			If LockedMeshes = 0 Then CloseFile(F)
 			Return 0
 		EndIf
-		; Read in mesh data
+		; Read in mesh data. Bound the filename read so a corrupted
+		; Meshes.dat (or one tampered with via the update channel)
+		; can't hang the client allocating gigabytes on a wild
+		; length prefix. 260 covers a generous max path length.
 		SeekFile F, DataAddress
 		IsAnim = ReadByte(F)
 		LoadedMeshScales#(ID) = ReadFloat#(F)
@@ -762,7 +784,7 @@ Function GetMesh(ID, Duplicate = False)
 		LoadedMeshY#(ID) = ReadFloat#(F)
 		LoadedMeshZ#(ID) = ReadFloat#(F)
 		LoadedMeshShaders(ID) = ReadShort(F)
-		Name$ = ReadString$(F)
+		Name$ = MediaReadFilename$(F, 260)
 
 		If LockedMeshes = 0 Then CloseFile(F)
 
@@ -838,13 +860,18 @@ Function GetTexture(ID, Copy = False)
 			If LockedTextures = 0 Then CloseFile(F)
 			Return 0
 		EndIf
-		; Read in texture data
+		; Read in texture data. Bound filename + path-traversal guard
+		; mirror GetMesh's defense: an update-channel payload could
+		; otherwise plant `..\..\<x>` and force LoadTexture against an
+		; arbitrary file. LoadTexture won't execute the contents, but
+		; reading from outside Data\Textures\ is the wrong shape.
 		SeekFile(F, DataAddress)
 		Flags = ReadShort(F)
-		Name$ = ReadString$(F)
+		Name$ = MediaReadFilename$(F, 260)
 
 		If LockedTextures = 0 Then CloseFile(F)
 
+		If Instr(Name$, "..") > 0 Then Return 0
 		LoadedTextures(ID) = LoadTexture("Data\Textures\" + Name$, Flags)
 		TextureFlags(ID) = Flags
 
@@ -880,13 +907,15 @@ Function GetSound(ID)
 			If LockedSounds = 0 Then CloseFile(F)
 			Return 0
 		EndIf
-		; Read in sound data
+		; Read in sound data. Bound filename + path-traversal guard
+		; mirror GetMesh / GetTexture (see above).
 		SeekFile F, DataAddress
 		Is3D = ReadByte(F)
-		Name$ = ReadString$(F)
+		Name$ = MediaReadFilename$(F, 260)
 
 		If LockedSounds = 0 Then CloseFile(F)
 
+		If Instr(Name$, "..") > 0 Then Return 0
 		LoadedSounds(ID) = LoadSound("Data\Sounds\" + Name$, Is3D)
 
 	EndIf
