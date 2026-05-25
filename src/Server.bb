@@ -544,7 +544,12 @@ Repeat
 						If UpdateArea\Instances[j]\SpawnLast[i] = 0
 							UpdateArea\Instances[j]\SpawnLast[i] = MilliSecs()
 						ElseIf MilliSecs() - UpdateArea\Instances[j]\SpawnLast[i] > UpdateArea\SpawnFrequency[i] * 1000
-							 If ActorList(UpdateArea\SpawnActor[i]) <> Null
+							; ActorList is Dim'd 0..65535. SpawnActor[i] is
+							; loaded as ReadShort (signed) -- a corrupt area
+							; file would drive ActorList(SpawnActor[i]) OOB
+							; before the existing `<> Null` guard runs. Skip
+							; the spawn slot rather than crash the live world.
+							If UpdateArea\SpawnActor[i] >= 0 And UpdateArea\SpawnActor[i] <= 65535 And ActorList(UpdateArea\SpawnActor[i]) <> Null
 							WriteLog(MainLog, "Spawning AI actor: " + ActorList(UpdateArea\SpawnActor[i])\Race$ + " in zone: " + UpdateArea\Name$)
 							AI.ActorInstance = CreateActorInstance.ActorInstance(ActorList(UpdateArea\SpawnActor[i]))
 							AI\RNID = -1
@@ -746,7 +751,12 @@ If ua\Instances[j]\Spawned[i] < ua\SpawnMax[i]
 ; -- called once at startup as an optimisation -- skipped the check.
 ; A single misconfigured area (admin deleted the race but left
 ; SpawnActor pointing at it) prevented the server from booting.
-If ActorList(ua\SpawnActor[i]) = Null
+; Bound-check SpawnActor[i] before the ActorList read -- ReadShort
+; can carry a negative or >65535 value from a corrupt area file,
+; which would Dim-OOB before the `= Null` branch is even reached.
+If ua\SpawnActor[i] < 0 Or ua\SpawnActor[i] > 65535
+WriteLog(MainLog, "PreLoadSpawns: skipping spawn point " + i + " in '" + ua\Name$ + "' (instance " + j + "): ActorID " + ua\SpawnActor[i] + " out of range")
+ElseIf ActorList(ua\SpawnActor[i]) = Null
 WriteLog(MainLog, "PreLoadSpawns: skipping spawn point " + i + " in '" + ua\Name$ + "' (instance " + j + "): ActorID " + ua\SpawnActor[i] + " not in Actors.dat")
 Else
 For h = 0 To ua\SpawnMax[i] - 1
