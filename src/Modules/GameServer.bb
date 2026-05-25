@@ -1168,7 +1168,12 @@ Function SetArea(A.ActorInstance, Ar.Area, Instance, Waypoint = -1, Portal = 0, 
 	; Set new position
 	If Waypoint = -1
 		; Portal
-		If Portal > -1
+		; PortalX/Y/Z/Yaw are Field[99]; a caller passing a corrupt or
+		; out-of-range Portal index (e.g. from a script BVM_WARP with a
+		; bad portal name lookup, or a saved character with a stale
+		; LastPortal) would Field-OOB here. Drop to direct-position
+		; placement at origin when out of range.
+		If Portal > -1 And Portal <= 99
 			A\Yaw# = Ar\PortalYaw#[Portal]
 			A\X# = Ar\PortalX#[Portal]
 			A\Y# = Ar\PortalY#[Portal]
@@ -1185,11 +1190,23 @@ Function SetArea(A.ActorInstance, Ar.Area, Instance, Waypoint = -1, Portal = 0, 
 		EndIf
 	; Waypoint
 	Else
-		A\Yaw# = 0.0
-		A\X# = Ar\WaypointX#[Waypoint]
-		A\Y# = Ar\WaypointY#[Waypoint]
-		A\Z# = Ar\WaypointZ#[Waypoint]
-		A\CurrentWaypoint = Waypoint
+		; WaypointX/Y/Z are Field[1999]; Waypoint is caller-supplied
+		; (script BVM, spawner SpawnWaypoint[]). Drop to origin if out
+		; of range rather than crash on Field OOB.
+		If Waypoint < 0 Or Waypoint > 1999
+			WriteLog(MainLog, "SetArea: waypoint " + Waypoint + " out of range in '" + Ar\Name$ + "'; placing at origin")
+			A\Yaw# = 0.0
+			A\X# = 0
+			A\Y# = 0
+			A\Z# = 0
+			A\CurrentWaypoint = 0
+		Else
+			A\Yaw# = 0.0
+			A\X# = Ar\WaypointX#[Waypoint]
+			A\Y# = Ar\WaypointY#[Waypoint]
+			A\Z# = Ar\WaypointZ#[Waypoint]
+			A\CurrentWaypoint = Waypoint
+		EndIf
 		; Waypoint-based placement is not a portal entry: -1 disables the
 		; lock so a legitimate portal in the destination area triggers
 		; normally. The previous LastPortal=0 stamp had no lock-time
