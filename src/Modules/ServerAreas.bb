@@ -176,19 +176,25 @@ Function ServerLoadArea.Area(Name$)
 		A.Area = New Area
 		A\Name$ = Name$
 		For i = 0 To 4 : A\WeatherChance[i] = ReadByte(F) : Next
-		A\EntryScript$ = ReadString$(F)
-		A\ExitScript$  = ReadString$(F)
+		; Bound every string read against a corrupted / tampered
+		; Area .dat file. 1024 caps match ReadActorInstance's per-char
+		; Script$/DeathScript$ ceiling; 256 caps cover short identifiers
+		; like portal / area names. Same shape as the data-loader sweep
+		; in PR #149 -- a wild ReadInt length prefix would otherwise hang
+		; the server at boot allocating gigabytes per Area file.
+		A\EntryScript$ = ReadBoundedString$(F, 1024)
+		A\ExitScript$  = ReadBoundedString$(F, 1024)
 		A\PvP          = ReadByte(F)
 		A\Gravity      = ReadShort(F)
 		A\Outdoors     = ReadByte(F)
-		A\WeatherLink$ = ReadString$(F)
+		A\WeatherLink$ = ReadBoundedString$(F, 256)
 		For i = 0 To 149
 			A\TriggerX#[i]      = ReadFloat#(F)
 			A\TriggerY#[i]      = ReadFloat#(F)
 			A\TriggerZ#[i]      = ReadFloat#(F)
 			A\TriggerSize#[i]   = ReadFloat#(F)
-			A\TriggerScript$[i] = ReadString$(F)
-			A\TriggerMethod$[i] = ReadString$(F)
+			A\TriggerScript$[i] = ReadBoundedString$(F, 1024)
+			A\TriggerMethod$[i] = ReadBoundedString$(F, 256)
 		Next
 		For i = 0 To 1999
 			A\WaypointX#[i]    = ReadFloat#(F)
@@ -200,9 +206,9 @@ Function ServerLoadArea.Area(Name$)
 			A\WaypointPause[i] = ReadInt(F)
 		Next
 		For i = 0 To 99
-			A\PortalName$[i]     = ReadString$(F)
-			A\PortalLinkArea$[i] = ReadString$(F)
-			A\PortalLinkName$[i] = ReadString$(F)
+			A\PortalName$[i]     = ReadBoundedString$(F, 256)
+			A\PortalLinkArea$[i] = ReadBoundedString$(F, 256)
+			A\PortalLinkName$[i] = ReadBoundedString$(F, 256)
 			A\PortalX#[i]        = ReadFloat#(F)
 			A\PortalY#[i]        = ReadFloat#(F)
 			A\PortalZ#[i]        = ReadFloat#(F)
@@ -213,9 +219,9 @@ Function ServerLoadArea.Area(Name$)
 			A\SpawnActor[i]        = ReadShort(F)
 			A\SpawnWaypoint[i]     = ReadShort(F)
 			A\SpawnSize#[i]        = ReadFloat#(F)
-			A\SpawnScript$[i]      = ReadString$(F)
-			A\SpawnActorScript$[i] = ReadString$(F)
-			A\SpawnDeathScript$[i] = ReadString$(F)
+			A\SpawnScript$[i]      = ReadBoundedString$(F, 1024)
+			A\SpawnActorScript$[i] = ReadBoundedString$(F, 1024)
+			A\SpawnDeathScript$[i] = ReadBoundedString$(F, 1024)
 			A\SpawnMax[i]          = ReadShort(F)
 			A\SpawnFrequency[i]    = ReadShort(F)
 			A\SpawnRange#[i]       = ReadFloat#(F)
