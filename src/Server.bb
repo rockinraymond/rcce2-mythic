@@ -27,6 +27,7 @@ Include "Modules\ServerAreas.bb"          ; Areas module
 Include "Modules\SpawnTracking.bb"        ; Spawn bookkeeping helpers
 Include "Modules\Scripting.bb"            ; Script language module
 Include "Modules\Logging.bb"              ; Logging module
+Include "Modules\PasswordHash.bb"         ; Password hashing (SHA-256 + salted v1 format)
 Include "Modules\AccountsServer.bb"       ; Accounts server module
 Include "Modules\GameServer.bb"           ; Game server module
 Include "Modules\UpdatesServer.bb"        ; Updates server module

@@ -1787,7 +1787,12 @@ Function UpdateNetwork()
 						; PwdLen >= 1 + A\Pass$ <> "" reject truncated packets
 						; and accounts with empty stored passwords (same guard
 						; as P_VerifyAccount).
-						If PwdLen >= 1 And A\Pass$ <> "" And A\Pass$ = Mid$(M\MessageData$, Offset + 1, PwdLen) And A\IsBanned = False
+						Local IncomingPwd$ = Mid$(M\MessageData$, Offset + 1, PwdLen)
+						If PwdLen >= 1 And A\Pass$ <> "" And VerifyPassword%(A\Pass$, IncomingPwd$) And A\IsBanned = False
+							; Lazy-migrate the on-disk record to the salted v1
+							; format once we know this MD5 is valid. The next
+							; SaveAccounts() persists the upgrade.
+							A\Pass$ = UpgradePasswordIfLegacy$(A\Pass$, IncomingPwd$)
 							Offset = Offset + 1 + PwdLen
 							Number = Asc(Mid$(M\MessageData$, Offset, 1))
 
@@ -2089,8 +2094,10 @@ Function UpdateNetwork()
 									LoginAttemptRecord(M\FromID, False)
 									RCE_Send(Host, M\FromID, P_VerifyAccount, "P", True)
 								; If password is correct, send back character list
-								ElseIf A\Pass$ <> "" And A\Pass$ = Mid$(M\MessageData$, Offset + 1, PwdLen) And A\IsBanned = False
+								ElseIf A\Pass$ <> "" And VerifyPassword%(A\Pass$, Mid$(M\MessageData$, Offset + 1, PwdLen)) And A\IsBanned = False
 									LoginAttemptRecord(M\FromID, True)
+									; Lazy-migrate to v1 on first successful login.
+									A\Pass$ = UpgradePasswordIfLegacy$(A\Pass$, Mid$(M\MessageData$, Offset + 1, PwdLen))
 									Pa$ = "Y"
 									For i = 0 To 9
 										If A\Character[i] <> Null
@@ -2143,10 +2150,12 @@ Function UpdateNetwork()
 						; it. Without the session check, a captured/replayed
 						; P_ChangePassword lets any party with the (broken-
 						; MD5) hash steal the account permanently.
-						If PwdLen >= 1 And A\Pass$ <> "" And A\Pass$ = Mid$(M\MessageData$, Offset + 1, PwdLen) And RequesterOwnsAccountSession(A, M\FromID)
+						If PwdLen >= 1 And A\Pass$ <> "" And VerifyPassword%(A\Pass$, Mid$(M\MessageData$, Offset + 1, PwdLen)) And RequesterOwnsAccountSession(A, M\FromID)
 							Offset = 2 + PwdLen
 							PwdLen = RCE_IntFromStr(Mid$(M\MessageData$, Offset, 1))
-							A\Pass$ = Mid$(M\MessageData$, Offset + 1, PwdLen)
+							; Store the new password in the v1 salted format
+							; immediately, not the raw client MD5.
+							A\Pass$ = HashPassword$(Mid$(M\MessageData$, Offset + 1, PwdLen))
 							RCE_Send(Host, M\FromID, P_ChangePassword, "Y", True)
 							//If MySQL = True Then My_SaveAccount(A, False)
 						; Otherwise return password failure
@@ -2173,7 +2182,7 @@ Function UpdateNetwork()
 						PwdLen = RCE_IntFromStr(Mid$(M\MessageData$, Offset, 1))
 						; PwdLen >= 1 + A\Pass$ <> "" reject truncated packets
 						; and accounts with empty stored passwords.
-						If PwdLen >= 1 And A\Pass$ <> "" And A\Pass$ = Mid$(M\MessageData$, Offset + 1, PwdLen) And A\IsBanned = False
+						If PwdLen >= 1 And A\Pass$ <> "" And VerifyPassword%(A\Pass$, Mid$(M\MessageData$, Offset + 1, PwdLen)) And A\IsBanned = False
 							Offset = Offset + 1 + PwdLen
 							Number = Asc(Mid$(M\MessageData$, Offset, 1))
 							If Number > -1 And Number < 10
@@ -2276,7 +2285,7 @@ Function UpdateNetwork()
 						PwdLen = RCE_IntFromStr(Mid$(M\MessageData$, Offset, 1))
 						; If password is correct (PwdLen >= 1 + A\Pass$ <> ""
 						; reject truncated packets and empty stored passwords)
-						If PwdLen >= 1 And A\Pass$ <> "" And A\Pass$ = Mid$(M\MessageData$, Offset + 1, PwdLen)
+						If PwdLen >= 1 And A\Pass$ <> "" And VerifyPassword%(A\Pass$, Mid$(M\MessageData$, Offset + 1, PwdLen))
 							Offset = Offset + 1 + PwdLen
 
 							; Check character name is valid. Bound length and reject
@@ -2428,7 +2437,7 @@ Function UpdateNetwork()
 						; for this account. A replayed P_DeleteCharacter would
 						; otherwise let anyone with the hash permanently
 						; destroy character slots on the account.
-						If PwdLen >= 1 And A\Pass$ <> "" And A\Pass$ = Mid$(M\MessageData$, Offset + 1, PwdLen) And RequesterOwnsAccountSession(A, M\FromID)
+						If PwdLen >= 1 And A\Pass$ <> "" And VerifyPassword%(A\Pass$, Mid$(M\MessageData$, Offset + 1, PwdLen)) And RequesterOwnsAccountSession(A, M\FromID)
 							Offset = Offset + 1 + PwdLen
 							Number = Asc(Mid$(M\MessageData$, Offset, 1))
 							If Number > -1 And Number < 10
