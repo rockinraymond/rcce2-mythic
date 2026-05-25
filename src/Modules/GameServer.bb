@@ -884,7 +884,13 @@ Function UpdateActorInstances(Broadcast)
 				ElseIf AI\AIMode = AI_PetChase
 					; Keep updated with leader's target
 					AI\AITarget = AI\Leader\AITarget
-					If AI\AITarget <> Null Then AI\AIMode = AI_Pet
+					; Bug fix: the original condition demoted the pet OUT
+					; of chase mode the moment it acquired a target,
+					; oscillating between AI_Pet and AI_PetChase every
+					; frame. The "lost target" demotion at line ~901 below
+					; already handles the AI_PetChase -> AI_Pet transition
+					; when the target goes Null; remove the inverted line
+					; here.
 
 					; Check if leader is too far away
 					XDist# = AI\X# - AI\Leader\X#

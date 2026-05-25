@@ -680,17 +680,33 @@ Repeat
 	EndIf
 	UpdateEnvironment()
 
-	; Update spell memorisation progress
+	; Update spell memorisation progress.
+	;
+	; Bug fix: SpellCharge[] is keyed by spell ID 0..999 across the rest
+	; of the codebase (see Actors.bb field comment and the unified
+	; cooldown handling in ServerNet.bb's P_SpellUpdate "F" branch).
+	; The old line `MS\AI\SpellCharge[i] = 0` indexed by the
+	; memorise-slot 0..9, so completing any memorisation zeroed the
+	; cooldown for spell IDs 0..9 -- making low-ID spells instantly
+	; recastable. Zero the cooldown for the spell that was actually
+	; learned instead.
+	;
+	; Also guard against the owning actor having been freed mid-
+	; memorise (e.g. logout race): MemorisingSpell records were not
+	; previously reaped on FreeActorInstance, so a stale MS\AI here
+	; would null-deref on SpellLevels.
 	For MS.MemorisingSpell = Each MemorisingSpell
 		If MilliSecs() - MS\CreatedTime > 6000
-			If MS\AI\SpellLevels[MS\KnownNum] > 0
-				For i = 0 To 9
-					If MS\AI\MemorisedSpells[i] = 5000
-						MS\AI\MemorisedSpells[i] = MS\KnownNum
-						MS\AI\SpellCharge[i] = 0
-						Exit
-					EndIf
-				Next
+			If MS\AI <> Null And MS\KnownNum >= 0 And MS\KnownNum <= 999
+				If MS\AI\SpellLevels[MS\KnownNum] > 0
+					For i = 0 To 9
+						If MS\AI\MemorisedSpells[i] = 5000
+							MS\AI\MemorisedSpells[i] = MS\KnownNum
+							MS\AI\SpellCharge[MS\KnownNum] = 0
+							Exit
+						EndIf
+					Next
+				EndIf
 			EndIf
 			Delete MS
 		EndIf

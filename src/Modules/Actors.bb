@@ -958,10 +958,20 @@ Function CreateActorEffect.ActorEffect( AI.ActorInstance, Effects.Attributes, Ef
 	EndIf
 	FoundAE\CreatedTime = MilliSecs()
 	FoundAE\Length = EffectLength%
+	; Bug fix: previously read from `AI\Inventory\Items[Slot]` where
+	; `Slot` is not a parameter of this function -- Blitz silently
+	; resolved it to whatever module-global of that name existed (the
+	; ServerNet P_EatItem handler's local, post-call, or zero). Every
+	; script-applied buff therefore copied attributes from whatever
+	; was in the actor's inventory slot 0, not from the `Effects`
+	; table the caller passed in. P_EatItem's open-coded inventory
+	; copy at ServerNet.bb:1131+ already does the right thing; this
+	; function takes `Effects.Attributes` precisely so script callers
+	; can pass arbitrary buff vectors -- honour that.
 	For i = 0 To 39
 		If Effects\Value[i] <> 0
 			Old = FoundAE\Attributes\Value[i]
-			FoundAE\Attributes\Value[i] = AI\Inventory\Items[Slot]\Attributes\Value[i]
+			FoundAE\Attributes\Value[i] = Effects\Value[i]
 			Pa$ = RCE_StrFromInt$(i, 1) + RCE_StrFromInt$(FoundAE\Attributes\Value[i] - Old, 4)
 			FoundAE\Owner\Attributes\Value[i] = FoundAE\Owner\Attributes\Value[i] + (FoundAE\Attributes\Value[i] - Old)
 			RCE_Send(Host, FoundAE\Owner\RNID, P_ActorEffect, "E" + Pa$, True)
