@@ -1833,9 +1833,18 @@ Function CharSelect()
 						ElseIf Left$(M\MessageData$, 1) = "S"
 							Offset = 2
 							While Offset < Len(M\MessageData$)
+								; KnownSpells / SpellLevels are Field[999]; SpellsList
+								; is Dim'd 65534. A malformed P_FetchCharacter "S"
+								; block could push past either bound -- drain the
+								; remaining bytes once full.
+								If Spells < 0 Or Spells > 999 Then Exit
 								Me\SpellLevels[Spells] = RCE_IntFromStr(Mid$(M\MessageData$, Offset, 2))
 								Sp.Spell = New Spell
 								Sp\ID = RCE_IntFromStr(Mid$(M\MessageData$, Offset + 2, 2))
+								If Sp\ID < 0 Or Sp\ID > 65534
+									Delete Sp
+									Exit
+								EndIf
 								SpellsList(Sp\ID) = Sp
 								Me\KnownSpells[Spells] = Sp\ID
 								Sp\ThumbnailTexID = RCE_IntFromStr(Mid$(M\MessageData$, Offset + 4, 2))

@@ -785,12 +785,24 @@ Function UpdateNetwork()
 			Case P_KnownSpellUpdate
 				; Spell added
 				If Left$(M\MessageData$, 1) = "A"
-					If Me\SpellLevels[Spells] = 0
+					; KnownSpells / SpellLevels are Field[999] (1000 slots).
+					; The global `Spells` counter grew unchecked from the
+					; previous handler; a malformed or hostile server could
+					; spam P_KnownSpellUpdate "A" past 999 and OOB-write the
+					; client. Drop further adds once the slot table is full.
+					If Spells >= 0 And Spells <= 999 And Me\SpellLevels[Spells] = 0
 						DebugLog "Spell creation entered"
 						Offset = 2
 						Me\SpellLevels[Spells] = RCE_IntFromStr(Mid$(M\MessageData$, Offset, 2))
 						Sp.Spell = New Spell
 						Sp\ID = RCE_IntFromStr(Mid$(M\MessageData$, Offset + 2, 2))
+						; SpellsList is Dim'd 65534. Wire field carries 0..65535;
+						; clamp Sp\ID before the Dim write to avoid an OOB
+						; assignment that would corrupt adjacent globals.
+						If Sp\ID < 0 Or Sp\ID > 65534
+							Delete Sp
+							Goto SkipKnownSpellAdd
+						EndIf
 						SpellsList(Sp\ID) = Sp
 						Me\KnownSpells[Spells] = Sp\ID
 						Sp\ThumbnailTexID = RCE_IntFromStr(Mid$(M\MessageData$, Offset + 4, 2))
@@ -808,6 +820,7 @@ Function UpdateNetwork()
 						EndIf
 						Spells = Spells + 1
 						SortSpells()
+						.SkipKnownSpellAdd
 					EndIf
 				; Spell removed
 				ElseIf Left$(M\MessageData$, 1) = "D"
