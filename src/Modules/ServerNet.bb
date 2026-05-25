@@ -2406,7 +2406,19 @@ Function UpdateNetwork()
 									C\Gold = StartGold
 									C\Reputation = StartReputation
 									Ar.Area = FindArea(C\Area$)
-									If Ar = Null Then RuntimeError("Start zone for new character not found!")
+									If Ar = Null
+										; Misconfigured race (StartArea references
+										; a deleted area). Previously RuntimeError
+										; here killed the entire server -- and with
+										; it every other connected player -- the
+										; moment any user tried to create a
+										; character on a broken race. Reject the
+										; creation cleanly and log instead.
+										WriteLog(MainLog, "P_CreateCharacter: race '" + C\Actor\Race$ + "' StartArea '" + C\Area$ + "' not found, rejecting")
+										FreeActorInstance(A\Character[FreeSlot])
+										RCE_Send(Host, M\FromID, P_CreateCharacter, "N", True)
+										Exists = True : Exit
+									EndIf
 									For i = 0 To 99
 										If Upper$(Ar\PortalName$[i]) = Upper$(C\Actor\StartPortal$)
 											C\LastPortal = i
