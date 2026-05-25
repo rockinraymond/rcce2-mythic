@@ -666,7 +666,11 @@ End Function
 Function BVM_SPAWN%(Param1%, Param2$, Param3#, Param4#, Param5#, Param6$ = "", Param7$ = "", Param8%=0)
 	; Find actor
 	ID = Param1%
-	If ID > -1
+	; ActorList is Dim'd 0..65535. Bound-check both sides before the
+	; Null check -- Blitz3D does not bounds-check Dim accesses, so a
+	; script-supplied ID of 99999 or -1 would read off the end of the
+	; array and crash the server. Same shape as P_KillActor handler.
+	If ID >= 0 And ID <= 65535
 		If ActorList(ID) <> Null
 			; Find zone
 			Name$ = Upper$(Param2$)
@@ -1871,8 +1875,13 @@ End Function
 
 Function BVM_ACTORXPMULTIPLIER%(Param1%)
 	ID = Param1%
-	If ActorList(ID) <> Null
-		Result% = ActorList(ID)\XPMultiplier
+	; ActorList is Dim'd 0..65535. Bound-check before the Null check;
+	; otherwise a script-supplied ID of -1 / 99999 would read off the
+	; end of the Dim and crash. Same shape as P_KillActor / BVM_SPAWN.
+	If ID >= 0 And ID <= 65535
+		If ActorList(ID) <> Null
+			Result% = ActorList(ID)\XPMultiplier
+		EndIf
 	EndIf
 Return Result%
 End Function
