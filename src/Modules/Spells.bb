@@ -72,10 +72,11 @@ Function LoadSpells(Filename$)
 
 End Function
 
-; Saves all spells to file
+; Saves all spells to file via SafeWriteOpen/Commit (atomic).
 Function SaveSpells(Filename$)
 
-	F = WriteFile(Filename$)
+	Local Temp$ = SafeWriteOpen$(Filename$)
+	F = WriteFile(Temp$)
 	If F = 0 Then Return False
 
 		For S.Spell = Each Spell
@@ -90,7 +91,6 @@ Function SaveSpells(Filename$)
 			WriteString F, S\SMethod$
 		Next
 
-	CloseFile(F)
-	Return True
+	Return SafeWriteCommit%(Temp$, Filename$, F)
 
 End Function

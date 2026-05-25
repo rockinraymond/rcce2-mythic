@@ -678,10 +678,13 @@ Function LoadActors(Filename$)
 
 End Function
 
-; Saves all actors to file
+; Saves all actors to file via SafeWriteOpen/Commit (atomic). A crash
+; mid-write previously truncated Actors.dat, losing the entire actor
+; template catalog -- same Track FF rationale as SaveItems.
 Function SaveActors(Filename$)
 
-	F = WriteFile(Filename$)
+	Local Temp$ = SafeWriteOpen$(Filename$)
+	F = WriteFile(Temp$)
 	If F = 0 Then Return False
 
 		For A.Actor = Each Actor
@@ -728,8 +731,7 @@ Function SaveActors(Filename$)
 			WriteByte(F, A\PolyCollision)
 		Next
 
-	CloseFile F
-	Return True
+	Return SafeWriteCommit%(Temp$, Filename$, F)
 
 End Function
 
@@ -751,10 +753,11 @@ Function LoadAttributes(Filename$)
 
 End Function
 
-; Saves attribute names to file
+; Saves attribute names to file via SafeWriteOpen/Commit (atomic).
 Function SaveAttributes(Filename$)
 
-	F = WriteFile(Filename$)
+	Local Temp$ = SafeWriteOpen$(Filename$)
+	F = WriteFile(Temp$)
 	If F = 0 Then Return False
 
 		WriteByte(F, AttributeAssignment)
@@ -764,8 +767,7 @@ Function SaveAttributes(Filename$)
 			WriteByte(F, AttributeHidden(i))
 		Next
 
-	CloseFile(F)
-	Return True
+	Return SafeWriteCommit%(Temp$, Filename$, F)
 
 End Function
 
@@ -918,10 +920,11 @@ Function LoadFactions(Filename$)
 
 End Function
 
-; Saves faction data to file
+; Saves faction data to file via SafeWriteOpen/Commit (atomic).
 Function SaveFactions(Filename$)
 
-	F = WriteFile(Filename$)
+	Local Temp$ = SafeWriteOpen$(Filename$)
+	F = WriteFile(Temp$)
 	If F = 0 Then Return False
 
 		For i = 0 To 99
@@ -934,8 +937,7 @@ Function SaveFactions(Filename$)
 			Next
 		Next
 
-	CloseFile(F)
-	Return True
+	Return SafeWriteCommit%(Temp$, Filename$, F)
 
 End Function
 
