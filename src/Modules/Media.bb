@@ -673,6 +673,12 @@ End Function
 ; Changes the scale for a mesh
 Function SetMeshScale(ID, Scale#)
 
+	; LoadedMeshScales# is Dim'd 0..65534. Mirror GetMesh's bound check
+	; (line 756) -- editor-supplied IDs from MediaDialogs can land here
+	; via the Architect's mesh-config flow; a typo or sentinel would
+	; otherwise OOB-write into adjacent globals.
+	If ID < 0 Or ID > 65534 Then Return False
+
 	LoadedMeshScales#(ID) = Scale#
 
 	; Open index file
@@ -702,6 +708,9 @@ End Function
 
 ; Changes the offset for a mesh
 Function SetMeshOffset(ID, X#, Y#, Z#)
+
+	; LoadedMeshX#/Y#/Z# are Dim'd 0..65534. Same bound as SetMeshScale.
+	If ID < 0 Or ID > 65534 Then Return False
 
 	LoadedMeshX#(ID) = X#
 	LoadedMeshY#(ID) = Y#
@@ -736,6 +745,9 @@ End Function
 
 ; Changes the shader for a mesh
 Function SetMeshShader(ID, Shader)
+
+	; LoadedMeshShaders is Dim'd 0..65534. Same bound as SetMeshScale.
+	If ID < 0 Or ID > 65534 Then Return False
 
 	LoadedMeshShaders(ID) = Shader
 
@@ -1090,6 +1102,9 @@ End Function
 
 ;Bump mapping
 Function GetMeshNameClean$(ID)
+; Same bound as GetMeshName$ -- ID seeks into the 4-byte-per-entry
+; mesh index table; a sentinel like -1 would SeekFile to -4.
+If ID < 0 Or ID > 65534 Then Return ""
 If LockedMeshes = 0
    F = OpenFile("Data\Game Data\Meshes.dat")
    If F = 0 Then Return ""
