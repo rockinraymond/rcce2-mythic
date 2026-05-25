@@ -427,6 +427,14 @@ Function ReadActorInstance.ActorInstance(Stream)
 	Next
 	For i = 0 To 9
 		A\MemorisedSpells[i] = ReadShort(Stream)
+		; MemorisedSpells stores an index into KnownSpells (Field[999])
+		; or the sentinel 5000 ("no spell memorised"). ReadShort returns
+		; -32768..32767; a corrupt slot bypassed the `<> 5000` guards in
+		; ClientNet / Interface3D and indexed KnownSpells[OOB] -- Blitz
+		; field-array OOB crashes the client every frame an action-bar
+		; redraw walks the memorised list.
+		If A\MemorisedSpells[i] < 0 Then A\MemorisedSpells[i] = 5000
+		If A\MemorisedSpells[i] > 999 And A\MemorisedSpells[i] <> 5000 Then A\MemorisedSpells[i] = 5000
 	Next
 
 	; v1: LastPortal triad. Older saves (no magic header in
