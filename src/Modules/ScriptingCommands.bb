@@ -879,14 +879,17 @@ Return Result%
 End Function
 
 Function BVM_ACTORDESTINATIONX#(Param1%)
+	; Bug fix: previously returned Actor\X# (current position), making
+	; this command a duplicate of BVM_ACTORX. Mirror BVM_SETACTORDESTINATION
+	; which writes to DestX#/DestZ#.
 	Actor.ActorInstance = Object.ActorInstance(Param1%)
-	If Actor <> Null Then Result# = Actor\X#
+	If Actor <> Null Then Result# = Actor\DestX#
 Return Result#
 End Function
 
 Function BVM_ACTORDESTINATIONZ#(Param1%)
 	Actor.ActorInstance = Object.ActorInstance(Param1%)
-	If Actor <> Null Then Result# = Actor\Z#
+	If Actor <> Null Then Result# = Actor\DestZ#
 Return Result#
 End Function
 
@@ -1542,10 +1545,16 @@ Return Result%
 End Function
 
 Function BVM_GETFACTION$(Param1%)
-		For i = 0 To Param1%
-			Result$ = FactionNames$(i)
-		Next
-Return Result$
+	; Bug fix: previously a degenerate `For i = 0 To Param1%` loop that
+	; overwrote Result$ every iteration. The intent is a direct index
+	; into FactionNames$; the loop did the right thing only when
+	; Param1=99 (the last walked index) and was an off-by-one mirage
+	; for every other input. Add a range check too -- the array is
+	; sized 0..99.
+	If Param1% >= 0 And Param1% <= 99
+		Return FactionNames$(Param1%)
+	EndIf
+	Return ""
 End Function
 
 Function BVM_DEFAULTFACTIONRATING%(Param1$, Param2$)
@@ -2042,17 +2051,24 @@ Function BVM_CHANGEMAXATTRIBUTE(Param1%, Param2$, Param3%)
 	Actor.ActorInstance = Object.ActorInstance(Param1%)
 	If Actor <> Null
 		Attribute = FindAttribute(Param2$)
-		If Attribute > -1 Then Result% = Actor\Attributes\Maximum[Attribute]
-		Result = Result + Param3
-		; Important attribute, tell everyone
-		If Attribute = HealthStat Or Attribute = SpeedStat Or Attribute = EnergyStat
-			UpdateAttributeMax(Actor, Attribute, Result%)
-		; Unimportant attribute, only tell specific player (if it is a human player)
-		Else
-			Actor\Attributes\Maximum[Attribute] = Result%
-			If Actor\RNID > 0
-				Pa$ = RCE_StrFromInt$(Actor\RuntimeID, 2) + RCE_StrFromInt$(Attribute, 1) + RCE_StrFromInt$(Actor\Attributes\Maximum[Attribute], 2)
-				RCE_Send(Host, Actor\RNID, P_StatUpdate, "M" + Pa$, True)
+		; Bug fix: previously the `If Attribute > -1` guard only
+		; protected the read; the subsequent write to
+		; Actor\Attributes\Maximum[Attribute] and UpdateAttributeMax
+		; ran unconditionally, so a typo in Param2$ produced an OOB
+		; write at Maximum[-1] (no Blitz bounds check on Dim). Mirror
+		; the bail-on-unknown-name pattern from BVM_CHANGEATTRIBUTE.
+		If Attribute > -1
+			Result% = Actor\Attributes\Maximum[Attribute] + Param3
+			; Important attribute, tell everyone
+			If Attribute = HealthStat Or Attribute = SpeedStat Or Attribute = EnergyStat
+				UpdateAttributeMax(Actor, Attribute, Result%)
+			; Unimportant attribute, only tell specific player (if it is a human player)
+			Else
+				Actor\Attributes\Maximum[Attribute] = Result%
+				If Actor\RNID > 0
+					Pa$ = RCE_StrFromInt$(Actor\RuntimeID, 2) + RCE_StrFromInt$(Attribute, 1) + RCE_StrFromInt$(Actor\Attributes\Maximum[Attribute], 2)
+					RCE_Send(Host, Actor\RNID, P_StatUpdate, "M" + Pa$, True)
+				EndIf
 			EndIf
 		EndIf
 	EndIf
@@ -2456,11 +2472,17 @@ Function BVM_GIVEITEM(Param1%, Param2$, Param3%=1)
 	EndIf
 End Function
 
-Function BVM_HASITEM%(Param1%, Param2$, Param3$ = 1)
+; Bug fix: Param3 is the required Amount (int); the invoker contract
+; in RC_Standard_Invoker.bb declares it as Param3%=1. The original
+; type-tagged it as Param3$ and passed the string to InventoryHasItem
+; whose third arg is an integer count -- Blitz coerced silently for
+; literal counts but rounded through string for any computed amount
+; like `HasItem(p, "Coin", Gold(p))`.
+Function BVM_HASITEM%(Param1%, Param2$, Param3% = 1)
 	Actor.ActorInstance = Object.ActorInstance(Param1%)
 	If Actor <> Null
 		ItemName$ = Param2$
-		Result% = InventoryHasItem(Actor\Inventory, ItemName$, Param3$)
+		Result% = InventoryHasItem(Actor\Inventory, ItemName$, Param3%)
 	EndIf
 Return Result%
 End Function
@@ -2483,7 +2505,12 @@ Function BVM_BUBBLEOUTPUT(Param1%, Param2$, Param3%=255, Param4%=255, Param5%=25
 	EndIf
 End Function
 
-Function BVM_OUTPUT(Param1%, Param2$, Param3%=0, Param4%=255, Param5%=255)
+; Bug fix: default R was 0 instead of 255. The invoker contract in
+; RC_Standard_Invoker.bb declares all three RGB defaults as 255 so
+; `Output(player, "hi")` produces white text -- but the impl
+; defaulted red to 0, making any 2-arg call print black-on-black-ish
+; messages. Restore the documented default.
+Function BVM_OUTPUT(Param1%, Param2$, Param3%=255, Param4%=255, Param5%=255)
 	Actor.ActorInstance = Object.ActorInstance(Param1%)
 	If Actor <> Null
 		If Actor\RNID > 0
