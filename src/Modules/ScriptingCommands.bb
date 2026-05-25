@@ -451,14 +451,19 @@ Function BVM_CHANGEACTOR(Param1%, Param2%)
 				Actor\Actor = ActorList(ID)
 				If Actor\Actor\Genders = 2 And Actor\Gender <> 1 Then Actor\Gender = 1
 				If (Actor\Actor\Genders = 1 Or Actor\Actor\Genders = 3) And Actor\Gender <> 0 Then Actor\Gender = 0
-				; Tell other players in the area
+				; Tell other players in the area. Skip the broadcast loop
+				; if the actor's area lookup fails (mid-warp / freed zone)
+				; -- the appearance change still applies to the actor's
+				; in-memory state; only the network broadcast is dropped.
 				Pa$ = "C" + RCE_StrFromInt$(Actor\RuntimeID, 2) + RCE_StrFromInt$(ID, 2)
 				AInstance.AreaInstance = Object.AreaInstance(Actor\ServerArea)
-				A2.ActorInstance = AInstance\FirstInZone
-				While A2 <> Null
-					If A2\RNID > 0 Then RCE_Send(Host, A2\RNID, P_AppearanceUpdate, Pa$, True)
-					A2 = A2\NextInZone
-				Wend
+				If AInstance <> Null
+					A2.ActorInstance = AInstance\FirstInZone
+					While A2 <> Null
+						If A2\RNID > 0 Then RCE_Send(Host, A2\RNID, P_AppearanceUpdate, Pa$, True)
+						A2 = A2\NextInZone
+					Wend
+				EndIf
 			EndIf
 		EndIf
 	Else
@@ -478,10 +483,24 @@ Function BVM_SPAWNITEM(Param1$, Param2%, Param3$, Param4#, Param5#, Param6#, Par
 			D\X# = Param4#
 			D\Y# = Param5#
 			D\Z# = Param6#
+			; Bound the script-supplied Instance index. Instances is
+			; Dim'd 0..99; a wild value would walk past the array on the
+			; first probe below. Clamp out-of-range to 0 (the default
+			; instance) and fall through to the existing "instance is
+			; Null" path which auto-falls back to 0 anyway.
 			Instance = Param7%
+			If Instance < 0 Or Instance > 99 Then Instance = 0
 			If Zone\Instances[Instance] = Null
 				Instance = 0
-				WriteLog(MainLog, "Error: Cannot spawn item in instance #" + Str$(Instance) + " of " + Zone\Name$ + " as the instance does not exist")
+				WriteLog(MainLog, "BVM_SPAWNITEM: requested instance does not exist in " + Zone\Name$ + ", spawning in instance 0")
+			EndIf
+			; If even instance 0 is uninitialised, give up cleanly --
+			; can't broadcast into a non-existent zone.
+			If Zone\Instances[Instance] = Null
+				WriteLog(MainLog, "BVM_SPAWNITEM: instance 0 also missing for " + Zone\Name$ + ", dropping spawn")
+				FreeItemInstance(D\Item)
+				Delete D
+				Return
 			EndIf
 			D\ServerHandle = Handle(Zone\Instances[Instance])
 			; Tell other players in the area
