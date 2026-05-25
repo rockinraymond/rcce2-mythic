@@ -1599,19 +1599,31 @@ Function CharSelect()
 
 				A.Actor = ActorList(CharActors(i))
 				If PreviewA <> Null Then SafeFreeActorInstance(PreviewA)
+				If A = Null
+					; Race no longer exists client-side (admin deleted from
+					; Actors.dat after this character was saved, or update
+					; channel is out of sync). CreateActorInstance would
+					; RuntimeError on Null; leave the preview empty instead
+					; so the player can still pick another character. The
+					; Press Start path below catches the same gap before
+					; entering the game.
+					PreviewA = Null
+					WriteLog(MainLog, "Character preview: ActorID " + CharActors(i) + " for '" + CharNames$(i) + "' not in client ActorList; skipping preview")
+				Else
 				PreviewA = CreateActorInstance(A)
 				PreviewA\Gender = CharGender(i)
 				PreviewA\FaceTex = CharFaceTex(i)
 				PreviewA\Hair = CharHair(i)
 				PreviewA\Beard = CharBeard(i)
 				PreviewA\BodyTex = CharBodyTex(i)
-				
+
 				Result = LoadActorInstance3D(PreviewA, 1, False, False)
 				If Result = False Then RuntimeError("Could not load actor mesh for " + A\Race$ + "!")
 				;If PreviewA\ShadowEN <> 0 Then HideEntity(PreviewA\ShadowEN) [###]
 				;If PreviewA\NametagEN <> 0 Then HideEntity(PreviewA\NametagEN)
 				PlayAnimation(PreviewA, 1, 0.001, Anim_Idle)
 				PositionEntity PreviewA\CollisionEN, 30, -(35.0 + EntityY#(PreviewA\EN, True)), 100
+				EndIf
 				Exit
 			EndIf
 		Next
@@ -1693,14 +1705,26 @@ Function CharSelect()
 
 		; Start game button
 		If GY_ButtonHit(BStart) = True And SelectedChar > -1
-		
-		RP_Clear(SnowEmitter1)	
+			; Validate the selected character's race before committing to the
+			; start sequence. CreateActorInstance below would RuntimeError on
+			; a Null Actor template -- this happens when the server's
+			; Actors.dat had the race deleted since this account's character
+			; was saved, or when the update channel is out of sync. Refuse
+			; cleanly so the player can pick another character.
+			If ActorList(CharActors(SelectedChar)) = Null
+				WriteLog(MainLog, "Press Start: ActorID " + CharActors(SelectedChar) + " for character '" + CharNames$(SelectedChar) + "' not in client ActorList; cannot enter game")
+				GY_SetButtonState(CharButtons(SelectedChar), False)
+				SelectedChar = -1
+				Goto StartGameAborted
+			EndIf
+
+		RP_Clear(SnowEmitter1)
 		RP_Clear(SnowEmitter2)
 		RP_Clear(SnowEmitter3)
 		RP_Clear(SnowEmitter4)
 		RP_Clear(SnowEmitter5)
 		RP_Clear(SnowEmitter6)
-					
+
 			GY_LockGadget(BStart) : GY_LockGadget(BDelete)
 			For i = 0 To LastChar + 1 : GY_LockGadget(CharButtons(i)) : Next
 
@@ -1829,11 +1853,12 @@ Function CharSelect()
 			; Start the game!
 			RCE_Disconnect()
 			SelectedCharacter = SelectedChar
-			
-			
+
+
 			Exit
 		EndIf
-		
+		.StartGameAborted
+
 		; Camera
 		;If GY_ButtonDown(BRight)
 		;	CamAngle# = CamAngle# + 90/fps
