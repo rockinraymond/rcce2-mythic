@@ -1237,7 +1237,12 @@ Function UpdateNetwork()
 					Else
 						A2 = Null
 					EndIf
-					If SlotIndex >= 0 And SlotIndex < 50
+					; Tighten upper bound to the actual inventory size.
+					; Previous limit was the unrelated literal 50 -- larger
+					; than Slots_Inventory (45), so a crafted P_ItemScript
+					; with SlotIndex 46..49 read past the Items array
+					; (same shape as the P_EatItem fix at ~1172).
+					If SlotIndex >= 0 And SlotIndex <= Slots_Inventory
 						If AI\Inventory\Items[SlotIndex] <> Null
 							; Bug fix: the ExclusiveClass gate originally
 							; compared Actor\Race$ against ExclusiveClass$
