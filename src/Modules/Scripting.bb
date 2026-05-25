@@ -205,8 +205,15 @@ Function UpdateScripts()
 	Local PSNext.PausedScript = Null
 	While PS <> Null
 		PSNext = After PS
+		; Defense in depth: drop any PausedScript whose ScriptInstance
+		; is Null. The BVM_SETWAIT* setters now early-return on Null SI
+		; (#228), but a stale queue entry from a pre-#228 boot or a
+		; future code path that bypasses the SI guard would otherwise
+		; deref PS\S\WaitResult$ below and crash the server.
+		If PS\S = Null
+			Delete PS
 		; Check whether waited for items are available
-		If PS\Reason = 3
+		ElseIf PS\Reason = 3
 			If PS\ReasonActor <> Null
 				If InventoryHasItem(PS\ReasonActor\Inventory, PS\ReasonItem$, PS\ReasonAmount)
 					PS\S\WaitResult$ = "1"
