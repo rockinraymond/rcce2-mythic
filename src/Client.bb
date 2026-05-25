@@ -556,8 +556,16 @@ Function UpdateActorInstances()
 ;						EndIf
 ;					EndIf
 
-					; Calculate speed
-					Speed# = 1.5 * (Float#(AI\Attributes\Value[SpeedStat]) / Float#(AI\Attributes\Maximum[SpeedStat])) * Delta#  ; the delta makes the character move at the same speed when the fps rate drops
+					; Calculate speed. Guard divide-by-zero on SpeedStat
+					; Maximum (misconfigured actor template, mid-session
+					; cap zeroing, corrupted save). Fall back to a full-
+					; speed ratio so the actor still moves; same shape as
+					; the GameServer.bb authoritative-move guard.
+					If AI\Attributes\Maximum[SpeedStat] > 0
+						Speed# = 1.5 * (Float#(AI\Attributes\Value[SpeedStat]) / Float#(AI\Attributes\Maximum[SpeedStat])) * Delta#  ; the delta makes the character move at the same speed when the fps rate drops
+					Else
+						Speed# = 1.5 * Delta#
+					EndIf
 					If AI\IsRunning = True
 						Speed# = Speed# * 2.0
 					ElseIf AI\WalkingBackward = True

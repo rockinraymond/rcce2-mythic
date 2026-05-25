@@ -670,12 +670,25 @@ Function UpdateActorInstances(Broadcast)
 				Next
 			EndIf
 
-			; Move (except mounts)
+			; Move (except mounts). Guard divide-by-zero on SpeedStat
+			; Maximum: a misconfigured actor template (or a script that
+			; zeroed the cap mid-session) would otherwise crash the
+			; per-tick movement update for every actor in the world.
+			; Fall back to a full-speed ratio (1.0) so the actor still
+			; moves; speed-tuning content is a softer failure mode.
 			If AI\Rider = Null
 				If AI\Mount = Null
-					Speed# = 1.5 * (Float#(AI\Attributes\Value[SpeedStat]) / Float#(AI\Attributes\Maximum[SpeedStat]))
+					If AI\Attributes\Maximum[SpeedStat] > 0
+						Speed# = 1.5 * (Float#(AI\Attributes\Value[SpeedStat]) / Float#(AI\Attributes\Maximum[SpeedStat]))
+					Else
+						Speed# = 1.5
+					EndIf
 				Else
-					Speed# = 1.5 * (Float#(AI\Mount\Attributes\Value[SpeedStat]) / Float#(AI\Mount\Attributes\Maximum[SpeedStat]))
+					If AI\Mount\Attributes\Maximum[SpeedStat] > 0
+						Speed# = 1.5 * (Float#(AI\Mount\Attributes\Value[SpeedStat]) / Float#(AI\Mount\Attributes\Maximum[SpeedStat]))
+					Else
+						Speed# = 1.5
+					EndIf
 				EndIf
 				If AI\WalkingBackward = True Then Speed# = Speed# / 2.0
 				If AI\IsRunning = True
