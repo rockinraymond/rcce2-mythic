@@ -659,6 +659,14 @@ Function LoadActors(Filename$)
 			A\StartPortal$ = ReadBoundedString$(F, 256)
 			A\MAnimationSet = ReadShort(F)
 			A\FAnimationSet = ReadShort(F)
+			; AnimList is Dim'd 0..999. A ReadShort returns -32768..32767;
+			; either side of 0..999 is a Blitz Dim OOB at every PlayAnimation
+			; call (Animations.bb:44, Actors3D.bb:210, ClientNet.bb:683).
+			; A missing-set slot is already tolerated via `If A = Null Then
+			; Return`, but only after the index is in-range; clamp at load
+			; so the downstream Null check is reachable.
+			If A\MAnimationSet < 0 Or A\MAnimationSet > 999 Then A\MAnimationSet = 0
+			If A\FAnimationSet < 0 Or A\FAnimationSet > 999 Then A\FAnimationSet = 0
 			A\Scale# = ReadFloat(F)
 			A\Radius# = ReadFloat(F)
 			For i = 0 To 7  : A\MeshIDs[i] = ReadShort(F) : Next
