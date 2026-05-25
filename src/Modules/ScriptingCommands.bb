@@ -2785,6 +2785,12 @@ End Function
 
 Function BVM_SETWAITSPEAK(Param1%, Param2%)
 	SI.ScriptInstance = Object.ScriptInstance(hSI)
+	; Null-SI guard: storing PS\S = Null queues a PausedScript the
+	; Scripting loop later derefs as PS\S\WaitResult$ -- a script
+	; freed between the command call and the resume crashes the
+	; server. Skip the PausedScript allocation entirely; the wait
+	; never completes (script is already dead) and that's correct.
+	If SI = Null Then Return
 	Actor.ActorInstance = Object.ActorInstance(Param1)
 	If Actor <> Null
 		CActor.ActorInstance = Object.ActorInstance(Param2)
@@ -2801,6 +2807,8 @@ End Function
 Function BVM_SETWAITITEM(Param1%, Param2$, Param3%)
 	Actor.ActorInstance = Object.ActorInstance(Param1%)
 	SI.ScriptInstance = Object.ScriptInstance(hSI%)
+	; See BVM_SETWAITSPEAK above -- same Null-SI hazard.
+	If SI = Null Then Return
 	If Actor <> Null
 		PS.PausedScript = New PausedScript
 		PS\S = SI
@@ -2814,6 +2822,8 @@ End Function
 Function BVM_SETWAITKILL(Param1%, Param2%, Param3%)
 	Actor.ActorInstance = Object.ActorInstance(Param1%)
 	SI.ScriptInstance = Object.ScriptInstance(hSI%)
+	; See BVM_SETWAITSPEAK above -- same Null-SI hazard.
+	If SI = Null Then Return
 	If Actor <> Null
 		KillActor = Param2%
 		; ActorList is Dim'd 0..65535. A script supplying a negative or
