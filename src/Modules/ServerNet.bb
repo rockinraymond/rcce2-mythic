@@ -1309,7 +1309,11 @@ Function UpdateNetwork()
 							Local PSNext.PausedScript = Null
 							While PS <> Null
 								PSNext = After PS
-								If PS\Reason = 4
+								; Defense in depth: drop Null-S PausedScripts.
+								; See Scripting.bb / GameServer.bb sibling guards.
+								If PS\S = Null
+									Delete PS
+								ElseIf PS\Reason = 4
 									If PS\ReasonActor = AI And PS\ReasonContextActor = A2
 										PS\S\WaitResult$ = "1"
 										Delete PS

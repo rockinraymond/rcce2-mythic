@@ -163,7 +163,13 @@ Function KillActor(A.ActorInstance, Killer.ActorInstance)
 	Local PSNext.PausedScript = Null
 	While PS <> Null
 		PSNext = After PS
-		If PS\Reason = 2
+		; Defense in depth: drop any PausedScript with Null PS\S so the
+		; deref below can't fault. The BVM_SETWAIT* setters early-return
+		; on Null SI (#228), but a stale queue entry or future code path
+		; that bypasses the SI guard would otherwise crash the server.
+		If PS\S = Null
+			Delete PS
+		ElseIf PS\Reason = 2
 			If PS\ReasonActor = Killer And PS\ReasonKillActor = A\Actor
 				PS\ReasonCount = PS\ReasonCount + 1
 				If PS\ReasonCount >= PS\ReasonAmount
