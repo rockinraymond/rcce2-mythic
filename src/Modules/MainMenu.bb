@@ -1544,6 +1544,11 @@ Function CharSelect()
 	; Character buttons (max of 10 characters)
 	Offset = 1 : Number = 0
 	While Offset < Len(CharList$)
+		; CharNames$/CharActors/CharGender/CharFaceTex/CharHair/CharBeard/
+		; CharBodyTex are all Dim'd (9) -- 10 slots. A malformed CharList$
+		; longer than 10 chars would Dim-OOB the client. Stop walking once
+		; the slot table is full.
+		If Number < 0 Or Number > 9 Then Exit
 		; Extract data
 		Length = RCE_IntFromStr(Mid$(CharList$, Offset, 1))
 		CharNames$(Number) = Mid$(CharList$, Offset + 1, Length)
@@ -1884,6 +1889,11 @@ Function CharSelect()
 						ElseIf Left$(M\MessageData$, 1) = "Q"
 							Offset = 2
 							While Offset < Len(M\MessageData$)
+								; QuestLog\EntryName$/EntryStatus$ are Field[499]
+								; (500 slots). A malformed P_FetchCharacter "Q"
+								; block longer than 500 quests would Field-OOB
+								; the client. Stop walking once full.
+								If Quests < 0 Or Quests > 499 Then Exit
 								NameLen = RCE_IntFromStr(Mid$(M\MessageData$, Offset, 1))
 								QuestLog\EntryName$[Quests] = Mid$(M\MessageData$, Offset + 1, NameLen)
 								Offset = Offset + 1 + NameLen
