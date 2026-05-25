@@ -20,7 +20,10 @@ Function LoadGubbinNames()
 	F = ReadFile("Data\Game Data\Gubbins.dat")
 	If F = 0 Then RuntimeError("File not found: " + "Data\Game Data\Gubbins.dat!")
 		For i = 0 To 5
-			GubbinJoints$(i) = ReadString$(F)
+			; Bound joint names against a corrupted Gubbins.dat. Joints are
+			; short identifiers like "Head", "Hand"; 64 covers any realistic
+			; mesh joint label.
+			GubbinJoints$(i) = ReadBoundedString$(F, 64)
 		Next
 	CloseFile(F)
 
