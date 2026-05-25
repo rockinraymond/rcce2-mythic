@@ -1589,9 +1589,13 @@ Function CharSelect()
 		; Check for existing character buttons being pressed
 		For i = 0 To LastChar - 1
 			If GY_ButtonHit(CharButtons(i)) = True
-				setup = True
+				; Defer setup=True until we know we have a usable preview
+				; entity. Without this guard the camera animation block at
+				; ~line 1880 dereferences PreviewA\EN unconditionally and
+				; crashes if PreviewA ended up Null below.
+				setup = False
 				targetEntity = 0
-								
+
 				; Untoggle old button
 				If SelectedChar > -1 Then GY_SetButtonState(CharButtons(SelectedChar), False)
 				SelectedChar = i
@@ -1599,6 +1603,7 @@ Function CharSelect()
 
 				A.Actor = ActorList(CharActors(i))
 				If PreviewA <> Null Then SafeFreeActorInstance(PreviewA)
+				PreviewA = Null
 				If A = Null
 					; Race no longer exists client-side (admin deleted from
 					; Actors.dat after this character was saved, or update
@@ -1607,7 +1612,6 @@ Function CharSelect()
 					; so the player can still pick another character. The
 					; Press Start path below catches the same gap before
 					; entering the game.
-					PreviewA = Null
 					WriteLog(MainLog, "Character preview: ActorID " + CharActors(i) + " for '" + CharNames$(i) + "' not in client ActorList; skipping preview")
 				Else
 				PreviewA = CreateActorInstance(A)
@@ -1618,11 +1622,22 @@ Function CharSelect()
 				PreviewA\BodyTex = CharBodyTex(i)
 
 				Result = LoadActorInstance3D(PreviewA, 1, False, False)
-				If Result = False Then RuntimeError("Could not load actor mesh for " + A\Race$ + "!")
+				If Result = False
+					; Mesh file missing/corrupt for this race. Drop the
+					; partial instance; player can still pick another
+					; character. (Press Start later validates the race
+					; itself; this catches the post-template mesh-load
+					; failure that the unknown-ActorID guard above doesn't.)
+					WriteLog(MainLog, "Character preview: could not load actor mesh for race '" + A\Race$ + "' (CharID " + i + " '" + CharNames$(i) + "'); skipping preview")
+					SafeFreeActorInstance(PreviewA)
+					PreviewA = Null
+				Else
 				;If PreviewA\ShadowEN <> 0 Then HideEntity(PreviewA\ShadowEN) [###]
 				;If PreviewA\NametagEN <> 0 Then HideEntity(PreviewA\NametagEN)
 				PlayAnimation(PreviewA, 1, 0.001, Anim_Idle)
 				PositionEntity PreviewA\CollisionEN, 30, -(35.0 + EntityY#(PreviewA\EN, True)), 100
+				setup = True
+				EndIf
 				EndIf
 				Exit
 			EndIf
@@ -1648,8 +1663,14 @@ Function CharSelect()
 		; Delete character button
 		If GY_ButtonHit(BDelete) = True And SelectedChar > -1
 		;Fix increased Animation speed bug when a error message appears cysis145 [234]
-			Animate(PreviewA\EN, 0)
-			PlayAnimation(PreviewA, 1, 0.0001, Anim_Idle)
+			; PreviewA may be Null if the selected character's race / mesh
+			; failed to resolve at click time (see the click handler above).
+			; The delete itself still proceeds; only the animation tweak is
+			; skipped.
+			If PreviewA <> Null
+				Animate(PreviewA\EN, 0)
+				PlayAnimation(PreviewA, 1, 0.0001, Anim_Idle)
+			EndIf
 
 			If GY_RequestBox("Warning!", LanguageString$(LS_ReallyDeleteChar)) ;LanguageString$(LS_Warning)
 				Pa$ = RCE_StrFromInt$(Len(UName$), 1) + UName$ + RCE_StrFromInt$(Len(PWord$), 1) + PWord$
@@ -1674,6 +1695,8 @@ Function CharSelect()
 							GY_FreeGadget(BStart) : GY_FreeGadget(BDelete)
 						;	;GY_FreeGadget(BLeft) : GY_FreeGadget(BRight)
 							If PreviewA <> Null Then SafeFreeActorInstance(PreviewA)
+							PreviewA = Null
+							setup = False
 							
 							
 							
@@ -1698,9 +1721,11 @@ Function CharSelect()
 			EndIf
 			
 			;[234]
-			Animate(PreviewA\EN, 0)
-			PlayAnimation(PreviewA, 1, 0.003, Anim_Idle)
-			
+			If PreviewA <> Null
+				Animate(PreviewA\EN, 0)
+				PlayAnimation(PreviewA, 1, 0.003, Anim_Idle)
+			EndIf
+
 		EndIf
 
 		; Start game button
