@@ -536,6 +536,13 @@ End Function
 ; Gets the name and animation byte for a given mesh
 Function GetMeshName$(ID)
 
+	; Mirror GetMesh's bound check. The sibling getter does the same.
+	; Negative ID makes SeekFile go to a negative offset (undefined);
+	; > 65534 walks past the index table. Sentinel IDs like -1 (used
+	; by some Actors paths to mean "no mesh") would otherwise crash
+	; the client every frame an actor with that sentinel renders.
+	If ID < 0 Or ID > 65534 Then Return ""
+
 	; Open index file
 	If LockedMeshes = 0
 		F = OpenFile("Data\Game Data\Meshes.dat")
@@ -570,6 +577,9 @@ End Function
 ; Gets the name and flags for a given texture
 Function GetTextureName$(ID)
 
+	; Mirror GetTexture's bound check (line 844).
+	If ID < 0 Or ID > 65534 Then Return ""
+
 	; Open index file
 	If LockedTextures = 0
 		F = OpenFile("Data\Game Data\Textures.dat")
@@ -599,6 +609,9 @@ End Function
 ; Gets the name and 3D byte for a given sound
 Function GetSoundName$(ID)
 
+	; Mirror GetSound's bound check (line 891).
+	If ID < 0 Or ID > 65534 Then Return ""
+
 	; Open index file
 	If LockedSounds = 0
 		F = OpenFile("Data\Game Data\Sounds.dat")
@@ -627,6 +640,10 @@ End Function
 
 ; Gets the name of a given piece of music
 Function GetMusicName$(ID)
+
+	; Music IDs are also indexed into a 4-byte-per-entry Data/Game
+	; Data/Music.dat table. Same bound as GetSound / GetMesh / etc.
+	If ID < 0 Or ID > 65534 Then Return ""
 
 	; Open index file
 	If LockedMusic = 0
