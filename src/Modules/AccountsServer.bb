@@ -167,13 +167,15 @@ Function SetAccountBanStatus(A.Account, Flag)
 
 End Function
 
-; Creates a new account
+; Creates a new account. Pass$ is the client-supplied MD5; we wrap it
+; in the v1 salted-SHA-256 storage format so the on-disk record is
+; not directly replayable on the wire.
 Function AddAccount(User$, Pass$, Email$)
 
 	; Create account
 	A.Account = New Account
 	A\User$ = User$
-	A\Pass$ = Pass$
+	A\Pass$ = HashPassword$(Pass$)
 	A\Email$ = Email$
 	A\LoggedOn = -1
 	AddListBoxItem(Accounts\List, User$ + "  (" + Email$ + ")")
@@ -184,9 +186,9 @@ Function AddAccount(User$, Pass$, Email$)
 	; Add to accounts file
 	F = OpenFile("Data\Server Data\Accounts.dat")
 	SeekFile(F, FileSize("Data\Server Data\Accounts.dat"))
-		WriteString F, User$
-		WriteString F, Pass$
-		WriteString F, Email$
+		WriteString F, A\User$
+		WriteString F, A\Pass$
+		WriteString F, A\Email$
 		WriteByte F, 0
 	CloseFile(F)
 

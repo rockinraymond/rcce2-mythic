@@ -88,6 +88,7 @@ Function ReadBoundedString$(F, MaxLen)
 	Return ""
 End Function
 
+Include "Modules\PasswordHash.bb"
 Include "Modules\AccountsServer.bb"
 
 Test testFindAccountByListIDReturnsMatchingAccount()
