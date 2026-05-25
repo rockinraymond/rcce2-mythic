@@ -187,6 +187,45 @@ Actor\Z# = ClampWorldCoord#(Param4#)
 
 A single NaN in a broadcast position poisons spatial code (collision, LOD culling, `EntityDistance#`) on every receiving client; NaN yaw poisons rotation matrices; NaN anim speed locks up the animation timer for that actor on every receiver. The BVM sweep (#237–#239) covered `BVM_MOVEACTOR`, `BVM_ROTATEACTOR`, `BVM_SETACTORDESTINATION`, `BVM_SPAWN`, `BVM_SPAWNITEM`, `BVM_ANIMATEACTOR`, `BVM_CREATEEMITTER`. The server's `P_InventoryUpdate "D"` drop-item handler (ServerNet.bb ~1467) is the original template.
 
+### Iterator-during-iteration hazards (Blitz3D `For Each` + `Delete`)
+
+Blitz3D's `For X = Each Type` iterator advances via the deleted element's "next" pointer on each `Next`. Calling `Delete X` (or `FreeActorInstance(X)` / `Delete PausedScript` etc.) inside the loop body corrupts the cursor for the next iteration.
+
+Three established fixes, in order of preference:
+
+1. **After-cursor walk** — capture `XNext = After X` *before* the Delete. Works when the body only deletes the current element. Pattern in `Scripting.bb:204`, `ServerNet.bb:1310`, `GameServer.bb:163`:
+
+    ```basic
+    Local PS.PausedScript = First PausedScript
+    Local PSNext.PausedScript = Null
+    While PS <> Null
+        PSNext = After PS
+        ; ... maybe Delete PS ...
+        PS = PSNext
+    Wend
+    ```
+
+2. **Deferred kill list** — collect into a side type, process after the loop. Pattern in `GameServer.bb`'s `DeferKillActor` / `ProcessPendingKills`. Right tool when the loop body might delete *multiple* actors (or other types) including ones past the cursor.
+
+3. **Restart-on-Delete** — re-enter the For loop after every Delete. Right tool when the body recurses and the recursion can delete elements past the outer cursor's captured `After` pointer (the After-walk's invariant breaks). Pattern in `Actors.bb`'s `FreeActorInstanceSlaves` (PR #246):
+
+    ```basic
+    Local Found = True
+    While Found
+        Found = False
+        For A2.ActorInstance = Each ActorInstance
+            If A2\Leader = A
+                Found = True
+                FreeActorInstanceSlaves(A2)  ; recursive
+                FreeActorInstance(A2)        ; Deletes A2
+                Exit                          ; fresh iterator next outer pass
+            EndIf
+        Next
+    Wend
+    ```
+
+    O(n×items) worst case but cheap (body is a field comparison) and safe under recursive deletion of arbitrary list positions.
+
 ### Strict-mode tests
 
 Test files under [src/Tests/](src/Tests/) use `Strict` + `EnableGC` at the top. They cannot include `Server.bb` or other heavy entry points (would pull in network/world deps). Instead they `Include` the one module under test and *inline-stub* its missing dependencies — see [src/Tests/Modules/ItemsTest.bb:8-49](src/Tests/Modules/ItemsTest.bb#L8) for the canonical pattern. The **rcce2-test-writing** skill walks through this.
