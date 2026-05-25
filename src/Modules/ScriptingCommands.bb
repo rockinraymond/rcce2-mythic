@@ -2325,14 +2325,18 @@ Return Result%
 End Function
 
 Function BVM_NEXTACTORINZONE%(Param1%)
+	; Bug fix: the original implementation wrapped to FirstInZone
+	; when reaching end-of-list, which made every AOE / "for each
+	; actor in zone" script using the `Repeat ... Until Player =
+	; Target` pattern (see AOE Damage Spell Template) loop forever
+	; if the player wasn't the very first actor in the zone. Return
+	; 0 at end-of-list instead so the standard `Until iter = 0`
+	; termination idiom works. Scripts that genuinely want the
+	; wrapping behaviour can call BVM_FIRSTACTORINZONE explicitly.
 	StartActor.ActorInstance = Object.ActorInstance(Param1%)
 	If StartActor <> Null
 		Actor.ActorInstance = StartActor\NextInZone
-		If Actor = Null
-			AInstance.AreaInstance = Object.AreaInstance(StartActor\ServerArea)
-			Actor.ActorInstance = AInstance\FirstInZone
-		EndIf
-		Result% = Handle(Actor)
+		If Actor <> Null Then Result% = Handle(Actor)
 	EndIf
 Return Result%
 End Function
