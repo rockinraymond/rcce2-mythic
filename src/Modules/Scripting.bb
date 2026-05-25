@@ -293,7 +293,16 @@ Function UpdateScripts()
 
 End Function
 
-; Loads the superglobal variables
+; Loads the superglobal variables.
+;
+; Each slot is read via ReadBoundedString$ (cap 8192 bytes) so a
+; corrupted or tampered Superglobals.dat with a wild length prefix
+; can't hang the server at startup allocating gigabytes or silently
+; zero-padding past EOF. The 8 KiB cap is generously larger than
+; any realistic gameplay-state string a script would stuff in a
+; superglobal -- BVM_SETSUPERGLOBAL doesn't enforce a per-call cap
+; today, but real-world content uses superglobals for short flags,
+; quest state, counters, and the like.
 Function LoadSuperGlobals(File$)
 
 	F = ReadFile(File$)
@@ -301,7 +310,7 @@ Function LoadSuperGlobals(File$)
 		F = WriteFile(File$)
 	Else
 		For i = 0 To 99
-			SuperGlobals$(i) = ReadString$(F)
+			SuperGlobals$(i) = ReadBoundedString$(F, 8192)
 		Next
 	EndIf
 	CloseFile(F)
