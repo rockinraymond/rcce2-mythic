@@ -241,13 +241,20 @@ Function BVM_ACTORSINZONE%(Param1$, Instance%=0)
 				Next
 				; In a specific instance
 			Else
-				AInstance.AreaInstance = Ar\Instances[Instance]
-				If AInstance <> Null
-					A2.ActorInstance = AInstance\FirstInZone
-					While A2 <> Null
-						Count = Count + 1
-						A2 = A2\NextInZone
-					Wend
+				; Bound the script-supplied Instance index. Instances
+				; is Dim'd 0..99; a wild value would read past the array
+				; (Blitz3D has no runtime Dim bounds check). Return 0 on
+				; out-of-range -- the caller's count comparison naturally
+				; handles "no actors found".
+				If Instance >= 0 And Instance <= 99
+					AInstance.AreaInstance = Ar\Instances[Instance]
+					If AInstance <> Null
+						A2.ActorInstance = AInstance\FirstInZone
+						While A2 <> Null
+							Count = Count + 1
+							A2 = A2\NextInZone
+						Wend
+					EndIf
 				EndIf
 			EndIf
 			Result% = Count
@@ -276,13 +283,16 @@ Function BVM_PLAYERSINZONE%(Param1$, Instance%=0)
 				Next
 			; In a specific instance
 			Else
-				AInstance.AreaInstance = Ar\Instances[Instance]
-				If AInstance <> Null
-					A2.ActorInstance = AInstance\FirstInZone
-					While A2 <> Null
-						If A2\RNID > 0 Then Count = Count + 1
-							A2 = A2\NextInZone
-					Wend
+				; Same bounds guard as BVM_ACTORSINZONE above.
+				If Instance >= 0 And Instance <= 99
+					AInstance.AreaInstance = Ar\Instances[Instance]
+					If AInstance <> Null
+						A2.ActorInstance = AInstance\FirstInZone
+						While A2 <> Null
+							If A2\RNID > 0 Then Count = Count + 1
+								A2 = A2\NextInZone
+						Wend
+					EndIf
 				EndIf
 			EndIf
 			Result% = Count
@@ -296,6 +306,9 @@ Function BVM_ZONEINSTANCEEXISTS%(Param1$, Param2%)
 	Zone.Area = FindArea(Param1$)
 	If Zone <> Null
 		Instance = Param2%
+		; Bound the script-supplied Instance index. Returning 0 on
+		; out-of-range matches "instance does not exist".
+		If Instance < 0 Or Instance > 99 Then Return 0
 		If Zone\Instances[Instance] <> Null Then Result% = 1
 	EndIf
 Return Result%
