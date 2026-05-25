@@ -1432,11 +1432,13 @@ Function BVM_ANIMATEACTOR(Param1%, Param2$, Param3#, Param4%=0)
 		Pa$ = RCE_StrFromInt$(Actor\RuntimeID, 2) + RCE_StrFromInt$(Param4%, 1)
 		Pa$ = Pa$ + RCE_StrFromFloat$(Param3#) + Param2$
 		AInstance.AreaInstance = Object.AreaInstance(Actor\ServerArea)
-		A2.ActorInstance = AInstance\FirstInZone
-		While A2 <> Null
-			If A2\RNID > 0 Then RCE_Send(Host, A2\RNID, P_AnimateActor, Pa$, True)
-			A2 = A2\NextInZone
-		Wend
+		If AInstance <> Null
+			A2.ActorInstance = AInstance\FirstInZone
+			While A2 <> Null
+				If A2\RNID > 0 Then RCE_Send(Host, A2\RNID, P_AnimateActor, Pa$, True)
+				A2 = A2\NextInZone
+			Wend
+		EndIf
 	EndIf
 End Function
 
@@ -1448,11 +1450,13 @@ Function BVM_PLAYMUSIC(Param1%, Param2%, Param3%=0)
 		; Play to all
 		If Param3% = True
 			AInstance.AreaInstance = Object.AreaInstance(Actor\ServerArea)
-			A2.ActorInstance = AInstance\FirstInZone
-			While A2 <> Null
-				If A2\RNID > 0 Then RCE_Send(Host, A2\RNID, P_Music, Pa$, True)
-				A2 = A2\NextInZone
-			Wend
+			If AInstance <> Null
+				A2.ActorInstance = AInstance\FirstInZone
+				While A2 <> Null
+					If A2\RNID > 0 Then RCE_Send(Host, A2\RNID, P_Music, Pa$, True)
+					A2 = A2\NextInZone
+				Wend
+			EndIf
 		; Play to single person only
 		ElseIf Actor\RNID > 0
 			RCE_Send(Host, Actor\RNID, P_Music, Pa$, True)
@@ -1468,11 +1472,13 @@ Function BVM_PLAYSOUND(Param1%, Param2%, Param3%=0)
 		; Play to all
 		If Param3% = True
 			AInstance.AreaInstance = Object.AreaInstance(Actor\ServerArea)
-			A2.ActorInstance = AInstance\FirstInZone
-			While A2 <> Null
-				If A2\RNID > 0 Then RCE_Send(Host, A2\RNID, P_Sound, Pa$, True)
-				A2 = A2\NextInZone
-			Wend
+			If AInstance <> Null
+				A2.ActorInstance = AInstance\FirstInZone
+				While A2 <> Null
+					If A2\RNID > 0 Then RCE_Send(Host, A2\RNID, P_Sound, Pa$, True)
+					A2 = A2\NextInZone
+				Wend
+			EndIf
 		; Play to single person only
 		ElseIf Actor\RNID > 0
 			RCE_Send(Host, Actor\RNID, P_Sound, Pa$, True)
@@ -1487,11 +1493,13 @@ Function BVM_PLAYSPEECH(Param1%, Param2%=0)
 		Pa$ = RCE_StrFromInt$(ID, 2) + RCE_StrFromInt$(Actor\RuntimeID, 2)
 		; Play to all
 		AInstance.AreaInstance = Object.AreaInstance(Actor\ServerArea)
-		A2.ActorInstance = AInstance\FirstInZone
-		While A2 <> Null
-			If A2\RNID > 0 Then RCE_Send(Host, A2\RNID, P_Speech, Pa$, True)
-			A2 = A2\NextInZone
-		Wend
+		If AInstance <> Null
+			A2.ActorInstance = AInstance\FirstInZone
+			While A2 <> Null
+				If A2\RNID > 0 Then RCE_Send(Host, A2\RNID, P_Speech, Pa$, True)
+				A2 = A2\NextInZone
+			Wend
+		EndIf
 	EndIf
 End Function
 
@@ -1511,13 +1519,19 @@ Function BVM_CREATEEMITTER(Param1%, Param2$, Param3%, Param4%, Param5#=0, Param6
 	; Display to all actors in zone
 	If Actor2 = Null
 		; Send to actors in the same zone as specified actor (or the zone of the script actor if none specified)
-		If Actor = Null Then Actor = Object.ActorInstance(S\AI)
+		If Actor = Null
+			If S = Null Then Return
+			Actor = Object.ActorInstance(S\AI)
+			If Actor = Null Then Return
+		EndIf
 		AInstance.AreaInstance = Object.AreaInstance(Actor\ServerArea)
-		A2.ActorInstance = AInstance\FirstInZone
-		While A2 <> Null
-			If A2\RNID > 0 Then RCE_Send(Host, A2\RNID, P_CreateEmitter, Pa$, True)
-			A2 = A2\NextInZone
-		Wend
+		If AInstance <> Null
+			A2.ActorInstance = AInstance\FirstInZone
+			While A2 <> Null
+				If A2\RNID > 0 Then RCE_Send(Host, A2\RNID, P_CreateEmitter, Pa$, True)
+				A2 = A2\NextInZone
+			Wend
+		EndIf
 	; Display to specific actor
 	Else
 		RCE_Send(Host, Actor2\RNID, P_CreateEmitter, Pa$, True)
