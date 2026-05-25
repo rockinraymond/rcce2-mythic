@@ -47,6 +47,8 @@ After any change to a `.bb` file under `src/`, run `compile.bat -t` and confirm 
 
 The compile target (`Server.exe`, `Client.exe`, `GUE.exe`, `Project Manager.exe`) depends on which top-level `.bb` includes the file. Most modules are included by Server *and* Client, so check both compile.
 
+**Run full `compile.bat` (no `-t`) when touching modules that the Tools also include.** `-t` skips `src/Tools/*.bb` for speed (~10× faster), but several utility modules are shared between the engine and the Tools — `src/Modules/Media.bb`, `src/Modules/b3dfile.bb`, `src/Modules/MD5.bb`, and others. CI runs the full compile, so a change that adds an unresolved reference inside `Media.bb` (e.g. calling a helper from `Logging.bb` that the Tools don't include) will pass `-t` locally but fail CI on the Tools target. Quick rule of thumb: if you touched anything in `src/Modules/` that doesn't have `Server`/`Client` in the filename, prefer the full compile.
+
 ## Repo layout
 
 ```
