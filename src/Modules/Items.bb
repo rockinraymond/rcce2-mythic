@@ -91,6 +91,23 @@ Function ItemInstanceFromString.ItemInstance(Pa$)
 
 	Local I.ItemInstance = Null
 	Local id% = RCE_IntFromStr(Left$(Pa$, 2))
+	; ItemList is Dim'd 0..65534; 65535 is the "no item" sentinel
+	; that WriteItemInstance emits for Null items. A 2-byte wire
+	; field carries 0..65535 -- without the upper bound, id=65535
+	; Dim-OOB reads ItemList(65535) before the `<> Null` branch
+	; can run. Same shape as the read-side guard in #209.
+	If id < 0 Or id > 65534
+		; Still consume the trailing bytes so the caller's offset
+		; math stays in sync (matches the existing Null-fallback
+		; branch below).
+		Offset = 3
+		For j = 0 To 39
+			RCE_IntFromStr(Mid$(Pa$, Offset, 2))
+			Offset = Offset + 2
+		Next
+		RCE_IntFromStr(Mid$(Pa$, Offset, 1))
+		Return Null
+	EndIf
 	If ItemList(id) <> Null
 		I.ItemInstance = CreateItemInstance(ItemList(id))
 		Offset = 3
