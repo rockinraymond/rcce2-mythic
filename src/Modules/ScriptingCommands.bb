@@ -518,8 +518,13 @@ End Function
 Function BVM_SETACTORGENDER(Param1%, Param2%)
 	Actor.ActorInstance = Object.ActorInstance(Param1%)
 	If Actor <> Null
-		Actor\Gender = (Param2% - 1)
-		If Actor\Gender = 2 Then Actor\Gender = 0
+		; Param2% is 1-based on the script side (1=male, 2=female).
+		; Clamp the resulting 0-based gender to 0..1 before storing so a
+		; script can't drive Actor\Gender to arbitrary values that then
+		; flow into Chr$()/array indexing downstream.
+		Local NewGender = Param2% - 1
+		If NewGender < 0 Or NewGender > 1 Then NewGender = 0
+		Actor\Gender = NewGender
 		If Actor\Actor\Genders = 2 And Actor\Gender <> 1 Then Actor\Gender = 1
 		If (Actor\Actor\Genders = 1 Or Actor\Actor\Genders = 3) And Actor\Gender <> 0 Then Actor\Gender = 0
 		Pa$ = "G" + RCE_StrFromInt$(Actor\RuntimeID, 2) + Chr$(Actor\Gender)
