@@ -1469,6 +1469,12 @@ Function BVM_CREATEEMITTER(Param1%, Param2$, Param3%, Param4%, Param5#=0, Param6
 End Function
 
 Function BVM_SETFACTIONRATING(Param1%, Param2$, Param3%)
+	; Faction rating drives the combat-engagement gate in GameServer.bb
+	; (an unprivileged script that flips a guard's faction rating > 150
+	; against the player makes the guard friendly). Restrict the
+	; mutator the same way Round 5's privilege sweep restricted the
+	; admin family.
+	If Not BVM_RequirePrivileged() Then Return
 	Actor.ActorInstance = Object.ActorInstance(Param1%)
 	If Actor <> Null
 		Faction$ = Upper$(Param2$)
@@ -1487,6 +1493,8 @@ Function BVM_SETFACTIONRATING(Param1%, Param2$, Param3%)
 End Function
 
 Function BVM_CHANGEFACTIONRATING(Param1%, Param2$, Param3%)
+	; See BVM_SETFACTIONRATING above -- same privilege story.
+	If Not BVM_RequirePrivileged() Then Return
 	Actor.ActorInstance = Object.ActorInstance(Param1%)
 	If Actor <> Null
 		Faction$ = Upper$(Param2$)
@@ -1505,6 +1513,10 @@ Function BVM_CHANGEFACTIONRATING(Param1%, Param2$, Param3%)
 End Function
 
 Function BVM_SETHOMEFACTION(Param1%, Param2$)
+	; HomeFaction is the rating-table key against which NPC
+	; engagement is decided; unprivileged scripts that flip it
+	; can make the player invisible to any aggressive faction.
+	If Not BVM_RequirePrivileged() Then Return
 	Actor.ActorInstance = Object.ActorInstance(Param1%)
 	If Actor <> Null
 		Faction$ = Upper$(Param2$)

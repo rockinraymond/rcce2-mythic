@@ -987,7 +987,14 @@ Function UpdateNetwork()
 							; Spell ID and target
 							Num = RCE_IntFromStr(Mid$(M\MessageData$, 2, 2))
 							Context.ActorInstance = Null
-							If Len(M\MessageData$) > 3
+							; Bug fix: previously `Len > 3` admitted 4-byte
+							; packets that then read `Mid$(...,4,2)` past
+							; end of string -- Blitz pads short Mid$ with
+							; empty bytes and RCE_IntFromStr returns a
+							; truncated/zero RuntimeID, aliasing Context
+							; to actor 0. Require both target-RuntimeID
+							; bytes to be present.
+							If Len(M\MessageData$) >= 5
 								RuntimeID = RCE_IntFromStr(Mid$(M\MessageData$, 4, 2))
 								Context = RuntimeIDList(RuntimeID)
 								; Reject targets that are dead or in a different
