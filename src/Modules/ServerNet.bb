@@ -425,13 +425,21 @@ Function UpdateNetwork()
 										If A2\RNID > 0
 											If Upper$(A2\Name$) = Name$
 												Ar.Area = FindArea(Trim$(Split$(Params$, 2, ",")))
-												Instance = Split$(Params$, 3, ",")
-												For i = 0 To 99
-													If Ar\PortalName$[i] <> ""
-														SetArea(A2, Ar, Instance, -1, i)
-														Exit
-													EndIf
-												Next
+												; Sibling LS_SCWarp branch above
+												; checks `Ar <> Null` before the
+												; portal loop; this one didn't,
+												; so a DM typo (/warpother Alice,
+												; "Bad Name") crashed the entire
+												; server.
+												If Ar <> Null
+													Instance = Split$(Params$, 3, ",")
+													For i = 0 To 99
+														If Ar\PortalName$[i] <> ""
+															SetArea(A2, Ar, Instance, -1, i)
+															Exit
+														EndIf
+													Next
+												EndIf
 												Exit
 											EndIf
 										EndIf
