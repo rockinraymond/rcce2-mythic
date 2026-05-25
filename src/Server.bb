@@ -355,7 +355,7 @@ Repeat
 					For AI.ActorInstance = Each ActorInstance
 						If AI\RNID > 0
 							AInstance.AreaInstance = Object.AreaInstance(AI\ServerArea)
-							If AInstance\Area = GameArea
+							If AInstance <> Null And AInstance\Area = GameArea
 								If AI\Name$ + " (" + AInstance\ID + ")" = Name$
 									DataAux$ = RCE_StrFromInt(AI\RNID)
 									RCE_FSend(0, RCE_PlayerKicked, DataAux$, True, Len(DataAux$))
@@ -397,7 +397,7 @@ Repeat
 				For AI.ActorInstance = Each ActorInstance
 					If AI\RNID > 0
 						AInstance.AreaInstance = Object.AreaInstance(AI\ServerArea)
-						If AInstance\Area = GameArea
+						If AInstance <> Null And AInstance\Area = GameArea
 							AddListBoxItem(Game\PlayersList, AI\Name$ + " (" + AInstance\ID + ")")
 						EndIf
 					EndIf
@@ -570,7 +570,7 @@ Repeat
 				For AI.ActorInstance = Each ActorInstance
 					If AI\RuntimeID > -1 And AI\RNID > 0
 						AInstance.AreaInstance = Object.AreaInstance(AI\ServerArea)
-						If AInstance\Area = UpdateArea
+						If AInstance <> Null And AInstance\Area = UpdateArea
 							; Portals
 							For i = 0 To 99
 								If Len(UpdateArea\PortalName$[i]) > 0
