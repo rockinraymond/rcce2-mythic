@@ -2891,6 +2891,10 @@ End Function
 ;-Dialog Helper Functions---------------------------
 Function RCE_SendOpenDialog(Host%, ARNID%, CARuntimeID%, BackgroundTexID%, Title$)
 	SI.ScriptInstance = Object.ScriptInstance(hSI)
+	; Null-SI guard: hSI can be dead between dispatch and command body
+	; (script Free'd mid-flight, host-side invocation, BVM reentry).
+	; The bare SI\WaitResult$ deref below crashes the server.
+	If SI = Null Then Return
 	SI\WaitResult$ = ""
 	Pa$ = "N" + RCE_StrFromInt$(hSI, 4) + RCE_StrFromInt$(CARuntimeID, 2) + RCE_StrFromInt$(BackgroundTexID, 2) + Title$
 	RCE_Send(Host, ARNID, P_Dialog, Pa$, True)
@@ -2903,6 +2907,7 @@ End Function
 
 Function RCE_SendDialogOutput(Host%, ARNID%, Red%, Green%, Blue%, dhandle%, Message$)
 	SI.ScriptInstance = Object.ScriptInstance(hSI)
+	If SI = Null Then Return
 	SI\WaitResult$ = ""
 	Pa$ = "T" + RCE_StrFromInt$(Red, 1) + RCE_StrFromInt$(Green, 1) + RCE_StrFromInt$(Blue, 1) + RCE_StrFromInt$(dhandle) + Message$
 	RCE_Send(Host, ARNID, P_Dialog, Pa$, True)
@@ -2910,6 +2915,7 @@ End Function
 
 Function RCE_SendDialogInput(Host%, ARNID%, dhandle%, Options$, Delim$ = ",")
 	SI.ScriptInstance = Object.ScriptInstance(hSI)
+	If SI = Null Then Return
 	SI\WaitResult$ = ""
 	Pa$ = RCE_StrFromInt$(dhandle)
 	For Opt = 1 To 9
@@ -2922,6 +2928,7 @@ End Function
 
 Function RCE_SendInput(Host%, ARNID%, iType%, Title$, Prompt$)
 	SI.ScriptInstance = Object.ScriptInstance(hSI)
+	If SI = Null Then Return
 	SI\WaitResult$ = ""
 	Pa$ = RCE_StrFromInt$(hSI, 4) + RCE_StrFromInt$(iType, 1) + RCE_StrFromInt$(Len(Title$), 2) + Title$ + Prompt$
 	RCE_Send(Host, ARNID, P_ScriptInput, Pa$, True)
@@ -2931,6 +2938,7 @@ End Function
 
 Function RCE_SendCreateProgressBar(Host%, ARNID%, R%, G%, B%, X#, Y#, W#, H#, Maximum%, Value%, Label$)
 	SI.ScriptInstance = Object.ScriptInstance(hSI)
+	If SI = Null Then Return
 	SI\WaitResult$ = ""
 	Pa$ = RCE_StrFromInt$(R, 1) + RCE_StrFromInt$(G, 1) + RCE_StrFromInt$(B, 1)
 	Pa$ = Pa$ + RCE_StrFromFloat$(X#) + RCE_StrFromFloat$(Y#) + RCE_StrFromFloat$(W#) + RCE_StrFromFloat$(H#)
