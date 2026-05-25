@@ -282,16 +282,18 @@ Function UpdateNetwork()
 							Case LanguageString$(LS_SCMe)
 								Pa$ = Chr$(252) + "* " + AI\Name$ + " " + Params$
 								AInstance.AreaInstance = Object.AreaInstance(AI\ServerArea)
-								A2.ActorInstance = AInstance\FirstInZone
-								While A2 <> Null
-									If A2\RNID > 0
-										If PlayerIgnoring(A2, AI) = 0
-											RCE_Send(Host, A2\RNID, P_ChatMessage, Pa$, True)
+								If AInstance <> Null
+									A2.ActorInstance = AInstance\FirstInZone
+									While A2 <> Null
+										If A2\RNID > 0
+											If PlayerIgnoring(A2, AI) = 0
+												RCE_Send(Host, A2\RNID, P_ChatMessage, Pa$, True)
+											EndIf
 										EndIf
-									EndIf
-									A2 = A2\NextInZone
-								Wend
-								If AInstance\Area = GameArea Then AddListBoxItem(Game\ChatText, Pa$ + Chr$(13))
+										A2 = A2\NextInZone
+									Wend
+									If AInstance\Area = GameArea Then AddListBoxItem(Game\ChatText, Pa$ + Chr$(13))
+								EndIf
 							Case LanguageString$(LS_SCYell)
 								Pa$ = Chr$(253) + "<" + AI\Name$ + "> " + Params$
 								For A2.ActorInstance = Each ActorInstance
@@ -397,11 +399,13 @@ Function UpdateNetwork()
 							Case LanguageString$(LS_SCPlayers)
 								Players = 0
 								AInstance.AreaInstance = Object.AreaInstance(AI\ServerArea)
-								A2.ActorInstance = AInstance\FirstInZone
-								While A2 <> Null
-									If A2\RNID > 0 Then Players = Players + 1
-									A2 = A2\NextInZone
-								Wend
+								If AInstance <> Null
+									A2.ActorInstance = AInstance\FirstInZone
+									While A2 <> Null
+										If A2\RNID > 0 Then Players = Players + 1
+										A2 = A2\NextInZone
+									Wend
+								EndIf
 								RCE_Send(Host, AI\RNID, P_ChatMessage, Chr$(254) + LanguageString$(LS_PlayersInZone) + " " + Str$(Players - 1), True)
 							Case LanguageString$(LS_SCWarp)
 								A.Account = Object.Account(AI\Account)
@@ -553,12 +557,14 @@ Function UpdateNetwork()
 					Else
 						Pa$ = "<" + AI\Name$ + "> " + M\MessageData$
 						AInstance.AreaInstance = Object.AreaInstance(AI\ServerArea)
-						A2.ActorInstance = AInstance\FirstInZone
-						While A2 <> Null
-							If A2\RNID > 0 Then RCE_Send(Host, A2\RNID, P_ChatMessage, Pa$, True)
-							A2 = A2\NextInZone
-						Wend
-						If AInstance\Area = GameArea
+						If AInstance <> Null
+							A2.ActorInstance = AInstance\FirstInZone
+							While A2 <> Null
+								If A2\RNID > 0 Then RCE_Send(Host, A2\RNID, P_ChatMessage, Pa$, True)
+								A2 = A2\NextInZone
+							Wend
+						EndIf
+						If AInstance <> Null And AInstance\Area = GameArea
 							AddListBoxItem(Game\ChatText, Pa$ + Chr$(13))
 							If ChatLoggingMode > 0 Then WriteLog(ChatLog, Pa$, True, True)
 						ElseIf ChatLoggingMode = 2
@@ -928,11 +934,13 @@ Function UpdateNetwork()
 						; Tell other players in the same area
 						Pa$ = RCE_StrFromInt$(AI\RuntimeID, 2)
 						AInstance.AreaInstance = Object.AreaInstance(AI\ServerArea)
-						A2.ActorInstance = AInstance\FirstInZone
-						While A2 <> Null
-							If A2\RNID > 0 Then RCE_Send(Host, A2\RNID, P_Jump, Pa$, True)
-							A2 = A2\NextInZone
-						Wend
+						If AInstance <> Null
+							A2.ActorInstance = AInstance\FirstInZone
+							While A2 <> Null
+								If A2\RNID > 0 Then RCE_Send(Host, A2\RNID, P_Jump, Pa$, True)
+								A2 = A2\NextInZone
+							Wend
+						EndIf
 					EndIf
 				EndIf
 
@@ -1407,13 +1415,15 @@ Function UpdateNetwork()
 										; Tell other players it's gone
 										Pa$ = "P" + RCE_StrFromInt$(Handle(D))
 										AInstance.AreaInstance = Object.AreaInstance(AI\ServerArea)
-										A2.ActorInstance = AInstance\FirstInZone
-										While A2 <> Null
-											If A2\RNID > 0
-												If A2 <> AI Then RCE_Send(Host, A2\RNID, P_InventoryUpdate, Pa$, True)
-											EndIf
-											A2 = A2\NextInZone
-										Wend
+										If AInstance <> Null
+											A2.ActorInstance = AInstance\FirstInZone
+											While A2 <> Null
+												If A2\RNID > 0
+													If A2 <> AI Then RCE_Send(Host, A2\RNID, P_InventoryUpdate, Pa$, True)
+												EndIf
+												A2 = A2\NextInZone
+											Wend
+										EndIf
 
 										; Delete it
 										Delete D
@@ -1448,11 +1458,13 @@ Function UpdateNetwork()
 								Pa$ = "D" + RCE_StrFromInt$(Amount, 2) + RCE_StrFromFloat$(D\X#) + RCE_StrFromFloat$(D\Y#) + RCE_StrFromFloat$(D\Z#)
 								Pa$ = Pa$ + RCE_StrFromInt$(Handle(D), 4) + ItemInstanceToString$(D\Item)
 								AInstance.AreaInstance = Object.AreaInstance(AI\ServerArea)
-								A2.ActorInstance = AInstance\FirstInZone
-								While A2 <> Null
-									If A2\RNID > 0 Then RCE_Send(Host, A2\RNID, P_InventoryUpdate, Pa$, True)
-									A2 = A2\NextInZone
-								Wend
+								If AInstance <> Null
+									A2.ActorInstance = AInstance\FirstInZone
+									While A2 <> Null
+										If A2\RNID > 0 Then RCE_Send(Host, A2\RNID, P_InventoryUpdate, Pa$, True)
+										A2 = A2\NextInZone
+									Wend
+								EndIf
 							EndIf
 						EndIf
 					; Reply to a given item message
@@ -2641,15 +2653,18 @@ Function SendEquippedUpdate(A.ActorInstance)
 		Pa$ = Pa$ + RCE_StrFromInt$(ActivateGubbins(i), 1)
 	Next
 
-	; Send to all players in the same area
+	; Send to all players in the same area. Skip if the actor's area
+	; lookup is Null -- the equipment change still applies in-memory.
 	AInstance.AreaInstance = Object.AreaInstance(A\ServerArea)
-	A2.ActorInstance = AInstance\FirstInZone
-	While A2 <> Null
-		If A2\RNID > 0
-			If A2 <> A Then RCE_Send(Host, A2\RNID, P_InventoryUpdate, Pa$, True)
-		EndIf
-		A2 = A2\NextInZone
-	Wend
+	If AInstance <> Null
+		A2.ActorInstance = AInstance\FirstInZone
+		While A2 <> Null
+			If A2\RNID > 0
+				If A2 <> A Then RCE_Send(Host, A2\RNID, P_InventoryUpdate, Pa$, True)
+			EndIf
+			A2 = A2\NextInZone
+		Wend
+	EndIf
 
 End Function
 
