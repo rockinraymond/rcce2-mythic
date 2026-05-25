@@ -467,13 +467,22 @@ Next
 				UnloadTexture(S\TexID[S\CurrentPhase])	
 			EndIf
 					
-			; Sun position
+			; Sun position. Guard divide-by-zero on PathLength: a sun
+			; configured with the same Start and End time for the
+			; current season (zero-duration phase, often a placeholder
+			; in custom content) would otherwise crash the client on
+			; every render tick. Treat zero-duration as "no path" and
+			; pin the sun at its start position.
 			ShowEntity(S\EN)
 			PathLength = TimeDelta(S\StartH[CurrentSeason], S\StartM[CurrentSeason], S\EndH[CurrentSeason], S\EndM[CurrentSeason])
 			DoneLengthM = TimeDelta(S\StartH[CurrentSeason], S\StartM[CurrentSeason], TimeH, TimeM)
 			AmountOfMinuteDone# = Float#(MilliSecs() - TimeUpdate) / Float#(60000 / TimeFactor)
 			DoneLength# = Float#(DoneLengthM) + AmountOfMinuteDone#
-			Pitch# = (DoneLength# / Float#(PathLength)) * 220.0 ;180
+			If PathLength > 0
+				Pitch# = (DoneLength# / Float#(PathLength)) * 220.0 ;180
+			Else
+				Pitch# = 0.0
+			EndIf
 			PositionEntity(S\EN, EntityX#(Cam), EntityY#(Cam) + 100, EntityZ#(Cam))
 			RotateEntity(S\EN, -Pitch#, S\PathAngle#, 0)
 			MoveEntity(S\EN, 0, 0, 100.0)
