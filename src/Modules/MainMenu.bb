@@ -2143,16 +2143,28 @@ Function CreateChar()
 		EndIf
 	Next
 
-	; Set preview to first playable actor
+	; Set preview to first playable actor whose mesh loads. Walk the
+	; Actor list looking for a candidate; if a race's mesh fails to
+	; load (corrupt mesh file, missing asset, hostile content update),
+	; skip it and try the next playable race rather than crash the
+	; entire character-creation flow on a single bad race. Only bail
+	; with a RuntimeError if NO playable race has a loadable mesh --
+	; an unrecoverable project state.
 	A.Actor = First Actor
 	If A = Null Then RuntimeError("No actors in project!")
-	While A\Playable = False
+	Preview.ActorInstance = Null
+	While A <> Null
+		If A\Playable = True
+			Preview = CreateActorInstance(A)
+			Result = LoadActorInstance3D(Preview, 1.0, False, False)
+			If Result <> False Then Exit
+			WriteLog(MainLog, "CharCreation: skipping race '" + A\Race$ + "' (mesh load failed)")
+			SafeFreeActorInstance(Preview)
+			Preview = Null
+		EndIf
 		A = After A
-		If A = Null Then RuntimeError("No playable actors in project!")
 	Wend
-	Preview.ActorInstance = CreateActorInstance(A)
-	Result = LoadActorInstance3D(Preview, 1.0, False, False)
-	If Result = False Then RuntimeError("Could not load actor mesh for " + A\Race$ + "!")
+	If Preview = Null Then RuntimeError("No playable race with a loadable mesh!")
 	PlayAnimation(Preview, 1, 0.003, Anim_Idle)
 	PositionEntity Preview\CollisionEN, 30, -(35.0 + EntityY#(Preview\EN, True)), 100
 	;HideEntity Preview\ShadowEN [###]
