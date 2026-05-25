@@ -480,9 +480,13 @@ Function BVM_SPAWNITEM(Param1$, Param2%, Param3$, Param4#, Param5#, Param6#, Par
 			D.DroppedItem = New DroppedItem
 			D\Item = CreateItemInstance(ItemTemplate)
 			D\Amount = Param2%
-			D\X# = Param4#
-			D\Y# = Param5#
-			D\Z# = Param6#
+			; Sanitise drop coords -- NaN/Inf poisons spatial code on
+			; every receiver that walks DroppedItem positions. Mirror
+			; the P_InventoryUpdate "D" flow (ServerNet.bb ~1467) which
+			; already clamps before persisting.
+			D\X# = ClampWorldCoord#(Param4#)
+			D\Y# = ClampWorldCoord#(Param5#)
+			D\Z# = ClampWorldCoord#(Param6#)
 			; Bound the script-supplied Instance index. Instances is
 			; Dim'd 0..99; a wild value would walk past the array on the
 			; first probe below. Clamp out-of-range to 0 (the default
@@ -647,8 +651,11 @@ Function BVM_SETACTORDESTINATION(Param1%, Param2#, Param3#)
 	If Not BVM_RequireSelfOrPrivileged(Param1%) Then Return
 	Actor.ActorInstance = Object.ActorInstance(Param1%)
 	If Actor <> Null
-		Actor\DestX# = Param2#
-		Actor\DestZ# = Param3#
+		; Sanitise -- NaN destination poisons the AI patrol move
+		; vector (XDist/ZDist) and propagates to clients via every
+		; broadcast that quotes Actor\DestX#/DestZ#.
+		Actor\DestX# = ClampWorldCoord#(Param2#)
+		Actor\DestZ# = ClampWorldCoord#(Param3#)
 	EndIf
 End Function
 
@@ -680,7 +687,9 @@ Function BVM_SPAWN%(Param1%, Param2$, Param3#, Param4#, Param5#, Param6$ = "", P
 					AI\RNID = -1
 					AssignRuntimeID(AI)
 					Instance = Param8%
-					SetArea(AI, Ar, Instance, -1, -1, Param3#, Param4#, Param5#)
+					; Sanitise spawn coords -- SetArea writes them directly
+					; to A\X#/Y#/Z# which then broadcast on every update.
+					SetArea(AI, Ar, Instance, -1, -1, ClampWorldCoord#(Param3#), ClampWorldCoord#(Param4#), ClampWorldCoord#(Param5#))
 					AI\AIMode = AI_Wait
 					AI\Script$ = Param6$
 					AI\DeathScript$ = Param7$
