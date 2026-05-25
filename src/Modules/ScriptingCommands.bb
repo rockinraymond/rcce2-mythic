@@ -524,11 +524,13 @@ Function BVM_SETACTORGENDER(Param1%, Param2%)
 		If (Actor\Actor\Genders = 1 Or Actor\Actor\Genders = 3) And Actor\Gender <> 0 Then Actor\Gender = 0
 		Pa$ = "G" + RCE_StrFromInt$(Actor\RuntimeID, 2) + Chr$(Actor\Gender)
 		AInstance.AreaInstance = Object.AreaInstance(Actor\ServerArea)
-		A2.ActorInstance = AInstance\FirstInZone
-		While A2 <> Null
-			If A2\RNID > 0 Then RCE_Send(Host, A2\RNID, P_AppearanceUpdate, Pa$, True)
-				A2 = A2\NextInZone
-		Wend
+		If AInstance <> Null
+			A2.ActorInstance = AInstance\FirstInZone
+			While A2 <> Null
+				If A2\RNID > 0 Then RCE_Send(Host, A2\RNID, P_AppearanceUpdate, Pa$, True)
+					A2 = A2\NextInZone
+			Wend
+		EndIf
 	EndIf
 End Function
 
@@ -547,11 +549,13 @@ Function BVM_SETACTORBEARD(Param1%, Param2%)
 			Actor\Beard = Param2% - 1
 			Pa$ = "D" + RCE_StrFromInt$(Actor\RuntimeID, 2) + Chr$(Actor\Beard)
 			AInstance.AreaInstance = Object.AreaInstance(Actor\ServerArea)
-			A2.ActorInstance = AInstance\FirstInZone
-			While A2 <> Null
-				If A2\RNID > 0 Then RCE_Send(Host, A2\RNID, P_AppearanceUpdate, Pa$, True)
-				A2 = A2\NextInZone
-			Wend
+			If AInstance <> Null
+				A2.ActorInstance = AInstance\FirstInZone
+				While A2 <> Null
+					If A2\RNID > 0 Then RCE_Send(Host, A2\RNID, P_AppearanceUpdate, Pa$, True)
+					A2 = A2\NextInZone
+				Wend
+			EndIf
 		EndIf
 	EndIf
 End Function
@@ -570,11 +574,13 @@ Function BVM_SETACTORHAIR(Param1%, Param2%)
 			Actor\Hair = Param2% - 1
 			Pa$ = "D" + RCE_StrFromInt$(Actor\RuntimeID, 2) + Chr$(Actor\Hair)
 			AInstance.AreaInstance = Object.AreaInstance(Actor\ServerArea)
-			A2.ActorInstance = AInstance\FirstInZone
-			While A2 <> Null
-				If A2\RNID > 0 Then RCE_Send(Host, A2\RNID, P_AppearanceUpdate, Pa$, True)
-				A2 = A2\NextInZone
-			Wend
+			If AInstance <> Null
+				A2.ActorInstance = AInstance\FirstInZone
+				While A2 <> Null
+					If A2\RNID > 0 Then RCE_Send(Host, A2\RNID, P_AppearanceUpdate, Pa$, True)
+					A2 = A2\NextInZone
+				Wend
+			EndIf
 		EndIf
 	EndIf
 End Function
@@ -693,11 +699,13 @@ Function BVM_ROTATEACTOR(Param1%, Param2#)
 		Actor\Yaw# = Param2#
 		Pa$ = "R" + RCE_StrFromInt$(Actor\RuntimeID, 2) + RCE_StrFromFloat$(Actor\Yaw#)
 		AInstance.AreaInstance = Object.AreaInstance(Actor\ServerArea)
-		A2.ActorInstance = AInstance\FirstInZone
-		While A2 <> Null
-			If A2\RNID > 0 Then RCE_Send(Host, A2\RNID, P_RepositionActor, Pa$, True)
-			A2 = A2\NextInZone
-		Wend
+		If AInstance <> Null
+			A2.ActorInstance = AInstance\FirstInZone
+			While A2 <> Null
+				If A2\RNID > 0 Then RCE_Send(Host, A2\RNID, P_RepositionActor, Pa$, True)
+				A2 = A2\NextInZone
+			Wend
+		EndIf
 	EndIf
 End Function
 
@@ -713,11 +721,13 @@ Function BVM_MOVEACTOR(Param1%, Param2#, Param3#, Param4#, Param5%=0, Param6%=0)
 		Pa$ = "M" + RCE_StrFromInt$(Actor\RuntimeID, 2) + RCE_StrFromFloat$(Actor\X#) + RCE_StrFromFloat$(Actor\Y#) + RCE_StrFromFloat$(Actor\Z#)
 		Pa$ = Pa$ + RCE_StrFromInt$(Param5%, 1) + RCE_StrFromInt$(Param6%, 1)
 		AInstance.AreaInstance = Object.AreaInstance(Actor\ServerArea)
-		A2.ActorInstance = AInstance\FirstInZone
-		While A2 <> Null
-			If A2\RNID > 0 Then RCE_Send(Host, A2\RNID, P_RepositionActor, Pa$, True)
-			A2 = A2\NextInZone
-		Wend
+		If AInstance <> Null
+			A2.ActorInstance = AInstance\FirstInZone
+			While A2 <> Null
+				If A2\RNID > 0 Then RCE_Send(Host, A2\RNID, P_RepositionActor, Pa$, True)
+				A2 = A2\NextInZone
+			Wend
+		EndIf
 	EndIf
 End Function
 
@@ -731,11 +741,13 @@ Function BVM_CREATEFLOATINGNUMBER(Param1%, Param2%, Param3%=255, Param4%=255, Pa
 		Pa$ = RCE_StrFromInt$(Actor\RuntimeID, 2) + RCE_StrFromInt$(Amount, 4)
 		Pa$ = Pa$ + RCE_StrFromInt$(R, 1) + RCE_StrFromInt$(G, 1) + RCE_StrFromInt$(B, 1)
 		AInstance.AreaInstance = Object.AreaInstance(Actor\ServerArea)
-		A2.ActorInstance = AInstance\FirstInZone
-		While A2 <> Null
-			If A2\RNID > 0 Then RCE_Send(Host, A2\RNID, P_FloatingNumber, Pa$, True)
-			A2 = A2\NextInZone
-		Wend
+		If AInstance <> Null
+			A2.ActorInstance = AInstance\FirstInZone
+			While A2 <> Null
+				If A2\RNID > 0 Then RCE_Send(Host, A2\RNID, P_FloatingNumber, Pa$, True)
+				A2 = A2\NextInZone
+			Wend
+		EndIf
 	EndIf
 End Function
 
