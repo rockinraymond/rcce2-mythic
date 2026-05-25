@@ -317,14 +317,16 @@ End Function
 Function BVM_CREATEZONEINSTANCE%(Param1$, Instance%=0)
 	Zone.Area = FindArea(Param1$)
 	If Zone <> Null
-		; Script requests a specific ID
-		If Instance > 0
+		; Script requests a specific ID. Bound to the (Dim 0..99)
+		; Instances array; out-of-range returns 0 ("instance not
+		; created") rather than a Dim OOB write.
+		If Instance > 0 And Instance <= 99
 			If Zone\Instances[Instance] = Null
 				ServerCreateAreaInstance(Zone, Instance)
 				Result% = Instance
 			EndIf
-		; Use first free ID
-		Else
+		ElseIf Instance = 0
+			; Use first free ID
 			For i = 1 To 99
 				If Zone\Instances[i] = Null
 					ServerCreateAreaInstance(Zone, i)
@@ -332,6 +334,9 @@ Function BVM_CREATEZONEINSTANCE%(Param1$, Instance%=0)
 					Exit
 				EndIf
 			Next
+		; Instance > 99 or negative: silently return 0 (caller's
+		; if-instance-was-created check fires the same "no slot"
+		; branch).
 		EndIf
 	Else
 		WriteLog(MainLog, "Instance can not be created, Zone " + Param1$ + " does not exist.")
@@ -342,7 +347,8 @@ End Function
 Function BVM_REMOVEZONEINSTANCE(Param1$, Instance%)
 	Zone.Area = FindArea(Param1$)
 	If Zone <> Null
-		If Instance > 0
+		; Bound the script-supplied Instance index against Dim 0..99.
+		If Instance > 0 And Instance <= 99
 			If Zone\Instances[Instance] <> Null
 				; Move players to instance #0, and delete AI actor instances
 				Actor.ActorInstance = Zone\Instances[Instance]\FirstInZone
