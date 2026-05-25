@@ -408,6 +408,13 @@ Function ReadActorInstance.ActorInstance(Stream)
 		A\NumberOfSlaves = 0
 	EndIf
 	A\HomeFaction    = ReadByte(Stream)
+	; FactionNames$ / FactionDefaultRatings are Dim'd (99) -> 0..99.
+	; A byte-wide HomeFaction can hold 100..255 (corrupt or stale save).
+	; That value flows into FactionRatings[A\HomeFaction] and
+	; FactionNames$(Actor\HomeFaction) at runtime -- both Blitz Dim
+	; reads, neither bounds-checked. Clamp at the load site so every
+	; downstream consumer can deref freely.
+	If A\HomeFaction < 0 Or A\HomeFaction > 99 Then A\HomeFaction = 0
 	For i = 0 To 99
 		A\FactionRatings[i] = ReadByte(Stream)
 	Next
@@ -683,6 +690,12 @@ Function LoadActors(Filename$)
 			A\InventorySlots = ReadInt(F)
 			A\DefaultDamageType = ReadByte(F)
 			A\DefaultFaction = ReadByte(F)
+			; DefaultFaction propagates to ActorInstance\HomeFaction
+			; (CreateActorInstance line ~510). FactionNames$ /
+			; FactionDefaultRatings are Dim'd (99). Clamp at load
+			; so a malformed Actors.dat can't poison every new
+			; ActorInstance with an OOB HomeFaction.
+			If A\DefaultFaction < 0 Or A\DefaultFaction > 99 Then A\DefaultFaction = 0
 			A\XPMultiplier = ReadInt(F)
 			A\PolyCollision = ReadByte(F)
 			Actors = Actors + 1
@@ -909,6 +922,10 @@ Function ActorInstanceFromString.ActorInstance(Pa$)
 	If HatID < 65535 Then A\Inventory\Items[SlotI_Hat] = CreateItemInstance(ItemList(HatID))
 	If ChestID < 65535 Then A\Inventory\Items[SlotI_Chest] = CreateItemInstance(ItemList(ChestID))
 	A\HomeFaction = RCE_IntFromStr(Mid$(Pa$, Offset + 26, 1))
+	; FactionNames$ / FactionDefaultRatings are Dim'd (99) -> 0..99;
+	; FactionRatings is Field[99]. A wire byte can carry 100..255.
+	; Clamp before downstream readers index either array.
+	If A\HomeFaction < 0 Or A\HomeFaction > 99 Then A\HomeFaction = 0
 	Offset = Offset + 27
 	For i = 0 To 99
 		A\FactionRatings[i] = RCE_IntFromStr(Mid$(Pa$, Offset + i, 1))

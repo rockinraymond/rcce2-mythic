@@ -645,6 +645,11 @@ Function My_LoadActorInstance.ActorInstance(ActID, Q.Questlog, C.ActionBarData, 
 	A\Gold				= ReadSQLField(Row, "gold")
 	A\NumberOfslaves	= ReadSQLField(Row, "slaves")
 	A\HomeFaction		= ReadSQLField(Row, "homefaction")
+	; FactionNames$ / FactionDefaultRatings are Dim'd (99) and
+	; FactionRatings is Field[99]. A corrupt SQL row could carry an
+	; OOB HomeFaction; clamp at load so downstream readers can deref
+	; without bounds-checking.
+	If A\HomeFaction < 0 Or A\HomeFaction > 99 Then A\HomeFaction = 0
 	; Column is `xpbarlev` on the SaveActor side (above); the read here
 	; used to look up `xbbarlev`, which silently returned 0 on every load
 	; and made the XP bar reset to empty on relog.
