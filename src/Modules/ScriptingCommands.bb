@@ -3000,7 +3000,21 @@ Function BVM_REFRESHSCRIPTS()
 End Function
 
 ;-UDP Networking commands
+; UDP networking surface -- the entire family is privileged-only.
+; Without this gate, any NPC's right-click script could:
+;   - Open a UDP socket on the server's interface
+;   - Send arbitrary UDP datagrams to any IP/port (DNS amplification,
+;     internal-network scanning, firewall-bypass via the server's
+;     outbound socket)
+;   - Block on receive against a hostile target
+; Privileged scripts (admin/GM-spawned via /script chat command or
+; the privileged BVM_THREADEXECUTE caller-propagation path) keep
+; full access -- this is the same gate the file-system family
+; (BVM_DELETEFILE, BVM_WRITEFILE, BVM_OPENFILE, BVM_APPENDFILE,
+; BVM_CREATEDIR) already uses.
+
 Function BVM_CreateUDPStream%(Param1%=0)
+	If Not BVM_RequirePrivileged() Then Return 0
 	Port = Param1%
 	If Port > 0
 		Result% = CreateUDPStream(Port)
@@ -3011,10 +3025,12 @@ Return Result%
 End Function
 
 Function BVM_CloseUDPStream(Param1%)
+	If Not BVM_RequirePrivileged() Then Return
 	CloseUDPStream(Param1%)
 End Function
 
 Function BVM_SendUDPMsg(Param1%, Param2%, Param3%)
+	If Not BVM_RequirePrivileged() Then Return
 	Port% = Param3%
 	If Port > 0
 		SendUDPMsg(Param1%, Param2%, Port%)
@@ -3024,45 +3040,54 @@ Function BVM_SendUDPMsg(Param1%, Param2%, Param3%)
 End Function
 
 Function BVM_RecvUDPMsg$(Param1%)
+	If Not BVM_RequirePrivileged() Then Return ""
 	Result$ = RecvUDPMsg(Param1%)
 Return Result$
 End Function
 
 Function BVM_UDPStreamIP%(Param1%)
+	If Not BVM_RequirePrivileged() Then Return 0
 	Result% = UDPStreamIP(Param1%)
 Return Result%
 End Function
 
 Function BVM_UDPStreamPort%(Param1%)
+	If Not BVM_RequirePrivileged() Then Return 0
 	Result% = UDPStreamPort(Param1%)
 Return Result%
 End Function
 
 Function BVM_UDPMsgIP%(Param1%)
+	If Not BVM_RequirePrivileged() Then Return 0
 	Result% = UDPMsgIP(Param1%)
 Return Result%
 End Function
 
 Function BVM_UDPMsgPort%(Param1%)
+	If Not BVM_RequirePrivileged() Then Return 0
 	Result% = UDPMsgPort(Param1%)
 Return Result%
 End Function
 
 Function BVM_UDPTimeouts(Param1%)
+	If Not BVM_RequirePrivileged() Then Return
 	UDPTimeouts(Param1%)
 End Function
 
 Function BVM_CountHostIPs%(Param1%)
+	If Not BVM_RequirePrivileged() Then Return 0
 	Result% = CountHostIPs(Param1%)
 Return Result%
 End Function
 
 Function BVM_HostIP%(Param1%)
+	If Not BVM_RequirePrivileged() Then Return 0
 	Result% = HostIP(Param1%)
 Return Result%
 End Function
 
 Function BVM_DottedIP$(Param1%)
+	If Not BVM_RequirePrivileged() Then Return ""
 	Result$ = DottedIP$(Param1%)
 Return Result$
 End Function
