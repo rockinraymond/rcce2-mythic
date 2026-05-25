@@ -1503,8 +1503,13 @@ End Function
 Function BVM_ANIMATEACTOR(Param1%, Param2$, Param3#, Param4%=0)
 	Actor.ActorInstance = Object.ActorInstance(Param1%)
 	If Actor <> Null
+		; Sanitise animation speed -- NaN broadcast to every receiving
+		; client locks up the animation timer for that actor on each
+		; receiver. ClampSaneFloat tolerates any legitimate playback
+		; rate while rejecting NaN/Inf/extreme magnitudes.
+		Local AnimSpeed# = ClampSaneFloat#(Param3#)
 		Pa$ = RCE_StrFromInt$(Actor\RuntimeID, 2) + RCE_StrFromInt$(Param4%, 1)
-		Pa$ = Pa$ + RCE_StrFromFloat$(Param3#) + Param2$
+		Pa$ = Pa$ + RCE_StrFromFloat$(AnimSpeed#) + Param2$
 		AInstance.AreaInstance = Object.AreaInstance(Actor\ServerArea)
 		If AInstance <> Null
 			A2.ActorInstance = AInstance\FirstInZone
@@ -1584,9 +1589,14 @@ Function BVM_CREATEEMITTER(Param1%, Param2$, Param3%, Param4%, Param5#=0, Param6
 	Name$ = Param2$
 	TexID = Param3%
 	Time = Param4%
-	OffsetX# = Param5#
-	OffsetY# = Param6#
-	OffsetZ# = Param7#
+	; Sanitise offset floats -- NaN broadcast to receiving clients
+	; poisons emitter positioning on each receiver. Emitter offsets
+	; are actor-relative and usually small; ClampSaneFloat is the
+	; right tool (ClampWorldCoord would also work but is sized for
+	; world-space).
+	OffsetX# = ClampSaneFloat#(Param5#)
+	OffsetY# = ClampSaneFloat#(Param6#)
+	OffsetZ# = ClampSaneFloat#(Param7#)
 	Pa$ = RCE_StrFromInt$(TexID, 2) + RCE_StrFromInt$(Time, 4) + RCE_StrFromInt(RuntimeID, 2)
 	Pa$ = Pa$ + RCE_StrFromFloat$(OffsetX#) + RCE_StrFromFloat$(OffsetY#) + RCE_StrFromFloat$(OffsetZ#) + Name$
 	Actor2.ActorInstance = Object.ActorInstance(Param8%)
