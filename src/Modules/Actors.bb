@@ -93,6 +93,13 @@ Type ActorInstance
 	; portal #5 (different physical portal), and conversely the AI spawn
 	; path's deliberate LastPortal=0 stamp would bleed across areas.
 	Field LastPortal, LastTrigger, LastPortalTime, LastPortalArea
+	; Transient companion of LastPortalArea: the area's name string,
+	; persisted across save/load (Handle() is process-local and cannot
+	; survive a server restart). When non-empty AND LastPortalArea = 0,
+	; the portal-walk in Server.bb resolves the name to a live Handle
+	; once at first opportunity. Cleared back to "" when LastPortal
+	; gets reset to -1.
+	Field LastPortalAreaName$
 	Field TeamID ; Used to allow scripting to put people together in teams
 	Field PartyID, AcceptPending ; Holds the handle of a Party object (or 0 if the actor is not in a party)
 	Field Gender ; 0 for male, 1 for female
@@ -278,6 +285,20 @@ Function WriteActorInstance(Stream, A.ActorInstance)
 		WriteShort Stream, A\MemorisedSpells[i]
 	Next
 
+	; v1: LastPortal triad. Persisting these closes the bypass where
+	; a logout/login cycle resets the portal-lock anti-cheat (Track
+	; TT) to zero -- a returning player can immediately re-trigger
+	; the portal they were placed at by their previous session.
+	; LastPortalAreaName$ is the persistable companion of
+	; LastPortalArea (Handle, process-local). Don't reference the
+	; Area type here: Actors.bb is included by Client.bb too, and the
+	; Area type only exists on the server. Writing the name string
+	; and re-resolving lazily in Server.bb's portal walk keeps the
+	; serializer pure.
+	WriteString Stream, A\LastPortalAreaName$
+	WriteShort Stream, A\LastPortal
+	WriteInt Stream, A\LastPortalTime
+
 	; Data for any slaves
 	Slaves = A\NumberOfSlaves
 	While Slaves > 0
@@ -391,6 +412,20 @@ Function ReadActorInstance.ActorInstance(Stream)
 		A\MemorisedSpells[i] = ReadShort(Stream)
 	Next
 
+	; v1: LastPortal triad. Older saves (no magic header in
+	; Accounts.dat) skip this block; the fields default to the
+	; New-actor sentinel. The version is exposed via the
+	; ACCOUNTS_LOAD_VERSION global set in LoadAccounts before any
+	; per-actor reads. Re-resolving the area-name string back into
+	; a live Handle is deferred to Server.bb's portal walk (Actors.bb
+	; is shared with Client.bb and cannot reference the Area type).
+	If ACCOUNTS_LOAD_VERSION% >= 1
+		A\LastPortalAreaName$ = ReadBoundedString$(Stream, 256)
+		A\LastPortal = ReadShort(Stream)
+		A\LastPortalTime = ReadInt(Stream)
+		A\LastPortalArea = 0
+	EndIf
+
 	; Slaves
 	For i = 1 To A\NumberOfSlaves
 		Slave.ActorInstance = ReadActorInstance(Stream)
@@ -482,6 +517,7 @@ Function CreateActorInstance.ActorInstance(Actor.Actor)
 	A\LastTrigger = -1
 	A\LastPortal = -1
 	A\LastPortalArea = 0
+	A\LastPortalAreaName$ = ""
 	A\IgnoreUpdate = 0
 	Return A
 
