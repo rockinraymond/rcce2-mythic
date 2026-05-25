@@ -69,7 +69,19 @@ Function CreateEnvironment()
 	Return SaveEnvironment(True)
 End Function
 
-; Loads all environment settings
+; Loads all environment settings.
+;
+; Defensive reads throughout:
+;   * Season/Month names go through ReadBoundedString$ (cap 256) so a
+;     corrupted file's wild length prefix can't hang the server at boot.
+;   * TimeFactor is clamped to a sane minimum (1) on load -- the comment
+;     in SaveEnvironment notes the danger ("TimeFactor=0 then triggers
+;     divide-by-zero in UpdateEnvironment"), but UpdateEnvironment itself
+;     was unguarded. Clamp here so the SaveEnvironment-partial-write
+;     defense is no longer the only line between corruption and a server
+;     crash on the first UpdateEnvironment tick.
+;   * TimeH / TimeM bounded to wall-clock ranges; Year / Day clamped to
+;     non-negative.
 Function LoadEnvironment()
 
 	F = ReadFile("Data\Server Data\Environment.dat")
@@ -80,16 +92,27 @@ Function LoadEnvironment()
 	TimeM = ReadInt(F)
 	TimeFactor = ReadInt(F)
 	For i = 0 To 11
-		SeasonName$(i) = ReadString$(F)
+		SeasonName$(i) = ReadBoundedString$(F, 256)
 		SeasonStartDay(i) = ReadInt(F)
 		SeasonDuskH(i) = ReadInt(F)
 		SeasonDawnH(i) = ReadInt(F)
 	Next
 	For i = 0 To 19
-		MonthName$(i) = ReadString$(F)
+		MonthName$(i) = ReadBoundedString$(F, 256)
 		MonthStartDay(i) = ReadInt(F)
 	Next
 	CloseFile(F)
+
+	; Clamp values that would crash or wedge UpdateEnvironment downstream.
+	If TimeFactor < 1
+		WriteLog(MainLog, "LoadEnvironment: TimeFactor was " + TimeFactor + " (would divide-by-zero); resetting to 10")
+		TimeFactor = 10
+	EndIf
+	If Year < 0 Then Year = 0
+	If Day < 0 Then Day = 0
+	If TimeH < 0 Or TimeH > 23 Then TimeH = 0
+	If TimeM < 0 Or TimeM > 59 Then TimeM = 0
+
 	TimeUpdate = MilliSecs()
 	CurrentSeason = GetSeason()
 	Return True

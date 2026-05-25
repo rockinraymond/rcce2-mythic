@@ -1,8 +1,9 @@
 Strict
 EnableGC
 
-; Logging stubs so Environment's SafeWrite/WriteLog calls resolve without
-; pulling Modules\Logging.bb (which has its own UI/file deps).
+; Logging stubs so Environment's SafeWrite/WriteLog/ReadBoundedString$
+; calls resolve without pulling Modules\Logging.bb (which has its own
+; UI/file deps).
 Global MainLog = 0
 
 Function WriteLog(LogID%, Message$)
@@ -17,6 +18,15 @@ Function SafeWriteCommit%(TempPath$, FinalPath$, F)
 End Function
 
 Function SafeWriteAbort(TempPath$, F)
+End Function
+
+; LoadEnvironment now reads SeasonName / MonthName via ReadBoundedString$
+; (added to harden against corrupted Environment.dat). The real helper
+; lives in Logging.bb; this test doesn't exercise the load path -- only
+; TimeDelta is the unit under test below -- so a no-op stub is enough
+; to let Environment.bb compile under Strict.
+Function ReadBoundedString$(F, MaxLen)
+	Return ""
 End Function
 
 Include "Modules\Environment.bb"
