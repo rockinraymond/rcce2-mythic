@@ -1045,9 +1045,29 @@ Function UpdateNetwork()
 											RCE_Send(Host, AI\RNID, P_ChatMessage, Chr$(253) + LanguageString$(LS_AbilityNotRecharged), True)
 										Else
 											Sp.Spell = SpellsList(SpellID)
-											ThreadScript(Sp\Script$, Sp\SMethod$, Handle(AI), Handle(Context), AI\SpellLevels[Num])
-											AI\SpellCharge[SpellID] = Sp\RechargeTime
-											AI\LastSpellFireMs = NowMs
+											; Race / class restriction check.
+											; The Spell type has ExclusiveRace$/ExclusiveClass$
+											; (persisted by SaveSpells / loaded by
+											; LoadSpells, editor-exposed in GUE), but
+											; the cast path never enforced them -- so
+											; a paladin-only Smite taught to a thief
+											; via script or recovered from a stale save
+											; would fire normally. The check mirrors
+											; the item-eat gate in P_EatItem.
+											Local SpellAllowed = True
+											If Len(Sp\ExclusiveRace$) > 0
+												If Upper$(AI\Actor\Race$) <> Upper$(Sp\ExclusiveRace$) Then SpellAllowed = False
+											EndIf
+											If SpellAllowed And Len(Sp\ExclusiveClass$) > 0
+												If Upper$(AI\Actor\Class$) <> Upper$(Sp\ExclusiveClass$) Then SpellAllowed = False
+											EndIf
+											If SpellAllowed = False
+												RCE_Send(Host, AI\RNID, P_ChatMessage, Chr$(253) + LanguageString$(LS_AbilityNotRecharged), True)
+											Else
+												ThreadScript(Sp\Script$, Sp\SMethod$, Handle(AI), Handle(Context), AI\SpellLevels[Num])
+												AI\SpellCharge[SpellID] = Sp\RechargeTime
+												AI\LastSpellFireMs = NowMs
+											EndIf
 										EndIf
 									EndIf
 								EndIf
@@ -1171,7 +1191,12 @@ Function UpdateNetwork()
 					EndIf
 					If SlotIndex >= 0 And SlotIndex < 50
 						If AI\Inventory\Items[SlotIndex] <> Null
-							If AI\Inventory\Items[SlotIndex]\Item\ExclusiveClass$ = "" Or Upper$(AI\Actor\Race$) = Upper$(AI\Inventory\Items[SlotIndex]\Item\ExclusiveClass$)
+							; Bug fix: the ExclusiveClass gate originally
+							; compared Actor\Race$ against ExclusiveClass$
+							; (copy-paste typo from the line below). Compare
+							; Class$ against ExclusiveClass$, mirroring
+							; P_EatItem at line ~1107.
+							If AI\Inventory\Items[SlotIndex]\Item\ExclusiveClass$ = "" Or Upper$(AI\Actor\Class$) = Upper$(AI\Inventory\Items[SlotIndex]\Item\ExclusiveClass$)
 								If AI\Inventory\Items[SlotIndex]\Item\ExclusiveRace$ = "" Or Upper$(AI\Actor\Race$) = Upper$(AI\Inventory\Items[SlotIndex]\Item\ExclusiveRace$)
 									If AI\Inventory\Items[SlotIndex]\Item\Script$ <> ""
 										If AI\Inventory\Amounts[SlotIndex] > 0
@@ -1215,7 +1240,16 @@ Function UpdateNetwork()
 								If (A2\Leader = Null Or A2\Leader = AI) And AI\Mount = Null
 									AI\Mount = A2
 									A2\Rider = AI
-									A2\AIMode = AI_None
+									; Bug fix: AI_None was never declared in
+									; Actors.bb (only AI_Wait..AI_PetWait
+									; exist). Blitz silently coerced it to 0
+									; (= AI_Wait), so the AILookForTargets
+									; sweep still ran every 10 ticks against
+									; the mount's own rider. Clear the AI
+									; target and use the existing AI_Wait
+									; sentinel.
+									A2\AIMode = AI_Wait
+									A2\AITarget = Null
 									ThreadScript("Mount", "Mount", Handle(AI), Handle(A2))
 								EndIf
 							EndIf
