@@ -138,10 +138,11 @@ Function LoadAnimSets(Filename$)
 
 End Function
 
-; Saves all animation sets
+; Saves all animation sets via SafeWriteOpen/Commit (atomic).
 Function SaveAnimSets(Filename$)
 
-	F = WriteFile(Filename$)
+	Local Temp$ = SafeWriteOpen$(Filename$)
+	F = WriteFile(Temp$)
 	If F = 0 Then Return False
 
 		For A.AnimSet = Each AnimSet
@@ -155,10 +156,12 @@ Function SaveAnimSets(Filename$)
 			Next
 		Next
 
-	CloseFile(F)
+	If Not SafeWriteCommit%(Temp$, Filename$, F) Then Return False
+
 	;Allows for animation sets to be recovered or something... cysis145
+	; The debug dump is not load-critical; direct write is fine.
 	G = WriteFile("Data\Game Data\Animations_debug.txt")
-	If G = 0 Then Return False  
+	If G = 0 Then Return True
 	For A.AnimSet = Each AnimSet
 		WriteLine(G, "Anim ID: " + A\ID)
 		WriteLine(G, "Anim Set: " + A\Name$)
@@ -170,7 +173,6 @@ Function SaveAnimSets(Filename$)
 	Next
 	CloseFile(G)
 
-	
 	Return True
 
 End Function

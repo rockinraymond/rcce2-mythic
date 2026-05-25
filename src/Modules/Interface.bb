@@ -336,10 +336,11 @@ Function LoadInterfaceSettings(Filename$)
 
 End Function
 
-; Saves the interface settings to a file
+; Saves the interface settings via SafeWriteOpen/Commit (atomic).
 Function SaveInterfaceSettings(Filename$)
 
-	F = WriteFile(Filename$)
+	Local Temp$ = SafeWriteOpen$(Filename$)
+	F = WriteFile(Temp$)
 	If F = 0 Then Return False
 
 		; Main game screen
@@ -362,8 +363,7 @@ Function SaveInterfaceSettings(Filename$)
 			WriteInterfaceComponent(InventoryButtons(i), F)
 		Next
 
-	CloseFile(F)
-	Return True
+	Return SafeWriteCommit%(Temp$, Filename$, F)
 
 End Function
 

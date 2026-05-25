@@ -65,10 +65,11 @@ Function LoadProjectiles(Filename$)
 
 End Function
 
-; Saves all loaded projectiles to a file
+; Saves all loaded projectiles via SafeWriteOpen/Commit (atomic).
 Function SaveProjectiles(Filename$)
 
-	F = WriteFile(Filename$)
+	Local Temp$ = SafeWriteOpen$(Filename$)
+	F = WriteFile(Temp$)
 	If F = 0 Then Return False
 
 		For P.Projectile = Each Projectile
@@ -86,8 +87,7 @@ Function SaveProjectiles(Filename$)
 			WriteByte F, P\Speed
 		Next
 
-	CloseFile F
-	Return True
+	Return SafeWriteCommit%(Temp$, Filename$, F)
 
 End Function
 

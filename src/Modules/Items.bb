@@ -311,7 +311,14 @@ End Function
 ; Saves all loaded items to a file
 Function SaveItems(Filename$)
 
-	F = WriteFile(Filename$)
+	; Atomic-save through SafeWriteOpen/Commit so a crash, power loss,
+	; or disk-full mid-write doesn't truncate Items.dat (the entire
+	; item catalog). The previous direct WriteFile was the unfinished
+	; half of Track FF; the editor's "Save All" path blasted through
+	; nine such direct-write savers in sequence, any one of which
+	; could leave the catalog half-written.
+	Local Temp$ = SafeWriteOpen$(Filename$)
+	F = WriteFile(Temp$)
 	If F = 0 Then Return False
 
 		For I.Item = Each Item
@@ -350,10 +357,13 @@ Function SaveItems(Filename$)
 			WriteString F, I\MiscData$
 		Next
 
-	CloseFile(F)
+	If Not SafeWriteCommit%(Temp$, Filename$, F) Then Return False
+
 	; Small edit, allows to quickly find IMPORTANT item values, cysis145
+	; The debug dump is not load-critical; keep it as a direct write
+	; (overwriting Items_debug.txt with a partial copy is harmless).
 	G = WriteFile("Data\Server Data\Items_debug.txt")
-	If G = 0 Then Return False
+	If G = 0 Then Return True
 		For I.Item = Each Item
 			WriteLine(G, "Item ID: " + I\ID)
 			WriteLine(G, "Item Name: " + I\Name$)
@@ -361,7 +371,6 @@ Function SaveItems(Filename$)
 		Next
 	CloseFile(G)
 
-	
 	Return True
 
 End Function
