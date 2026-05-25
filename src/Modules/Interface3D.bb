@@ -103,6 +103,11 @@ End Function
 Function DialogOutput(Han, T$, R = 255, G = 255, B = 255, Opt = 0)
 
 	D.Dialog = Object.Dialog(Han)
+	; Stale dialog handle: server can send P_Dialog "T" / "O" against
+	; a dialog the client has already freed (window-close race, dialog
+	; reuse). The unguarded D\TextLines[0] deref below was a crash on
+	; the next message in that flow.
+	If D = Null Then Return
 
 	; Word wrap
 	Gad.GY_Gadget = Object.GY_Gadget(D\TextLines[0])
