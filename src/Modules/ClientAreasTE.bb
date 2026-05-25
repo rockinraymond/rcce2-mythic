@@ -280,9 +280,11 @@ Function LoadArea(Name$, CameraEN, DisplayItems = False, UpdateRottNet = False)
 			; Collision/picking
 			S\CatchRain = ReadByte(F)
 			Collides = ReadByte(F)
-			; Lightmap information and RCTE data
-			S\Lightmap$ = ReadString$(F)
-			S\RCTE$ = ReadString$(F)
+			; Lightmap information and RCTE data. Bound the asset paths
+			; so a corrupted Area data file can't hang the loader on a
+			; wild ReadInt length prefix (260 = Windows MAX_PATH).
+			S\Lightmap$ = ReadBoundedString$(F, 260)
+			S\RCTE$ = ReadBoundedString$(F, 260)
 
 			If S\EN <> 0
 				; Toolbox extras
@@ -501,8 +503,8 @@ Function LoadArea(Name$, CameraEN, DisplayItems = False, UpdateRottNet = False)
 			Else
 				E\EN = CreatePivot()
 			EndIf
-			; Read in emitter data
-			E\ConfigName$ = ReadString$(F)
+			; Read in emitter data. Same length-prefix DoS hardening.
+			E\ConfigName$ = ReadBoundedString$(F, 260)
 			E\TexID = ReadShort(F)
 			Texture = GetTexture(E\TexID)
 			X# = ReadFloat#(F) : Y# = ReadFloat#(F) : Z# = ReadFloat#(F)
@@ -703,8 +705,9 @@ Function LoadAreaTE(Name$)
 		dm\TextureID = ReadShort(F)
 		dm\CatchRain = ReadByte(F)
 		dm\Collides = ReadByte(F)
-		dm\Lightmap$ = ReadString$(F)
-		dm\rcTe$ = ReadString$(F)
+		; Bound the asset paths (260 = Windows MAX_PATH).
+		dm\Lightmap$ = ReadBoundedString$(F, 260)
+		dm\rcTe$ = ReadBoundedString$(F, 260)
 		
 		If Left$(dm\rcTe$,5)<>"_TRRN"
 			dm\ent = GetMesh(dm\id)
@@ -755,7 +758,7 @@ Function LoadAreaTE(Name$)
 	Emitters = ReadShort(F)
 	For i = 1 To Emitters
 		E.Emitter = New Emitter
-		E\ConfigName$ = ReadString$(F)
+		E\ConfigName$ = ReadBoundedString$(F, 260)
 		E\TexID = ReadShort(F)
 		E\X# = ReadFloat#(F) : E\Y# = ReadFloat#(F) : E\Z# = ReadFloat#(F)
 		E\Pitch# = ReadFloat#(F) : E\Yaw# = ReadFloat#(F) : E\Roll# = ReadFloat#(F)
