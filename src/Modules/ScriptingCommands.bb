@@ -1804,11 +1804,18 @@ Return Result%
 End Function
 
 Function BVM_FILESIZE%(Param1$)
+	; Stat is non-mutating, same posture as BVM_READFILE -- leave the
+	; privilege gate off but enforce path safety. Without the
+	; traversal check a non-priv script could probe metadata on host
+	; files outside RCScriptFiles$ (recon for further attacks even if
+	; no read access).
+	If Not BVM_ScriptPathIsSafe(Param1$) Then Return 0
 	Result% = FileSize(RCScriptFiles$ + Param1$)
 Return Result%
 End Function
 
 Function BVM_FILETYPE%(Param1$)
+	If Not BVM_ScriptPathIsSafe(Param1$) Then Return 0
 	Result% = FileType(RCScriptFiles$ + Param1$)
 Return Result%
 End Function
