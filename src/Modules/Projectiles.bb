@@ -60,6 +60,12 @@ Function LoadProjectiles(Filename$)
 			P\HitChance = ReadByte(F)
 			P\Damage = ReadShort(F)
 			P\DamageType = ReadShort(F)
+			; DamageTypes$ is Dim'd (19); A\Resistances field is [19].
+			; ReadShort returns -32768..32767; clamp before downstream
+			; readers (GameServer combat at line ~257/265, Resistances
+			; indexing) crash on Field/Dim OOB. Same shape as #207's
+			; WeaponDamageType clamp.
+			If P\DamageType < 0 Or P\DamageType > 19 Then P\DamageType = 0
 			P\Speed = ReadByte(F)
 
 			Projectiles = Projectiles + 1

@@ -237,6 +237,11 @@ Function ServerLoadArea.Area(Name$)
 			W\Depth#     = ReadFloat#(F)
 			W\Damage     = ReadShort(F)
 			W\DamageType = ReadShort(F)
+			; A\Resistances is Field[19]; DamageTypes$ is Dim'd (19).
+			; ReadShort can carry -32768..32767; clamp before the runtime
+			; SafeZone-damage loop (GameServer.bb ~773) indexes
+			; A\Resistances[SW\DamageType].
+			If W\DamageType < 0 Or W\DamageType > 19 Then W\DamageType = 0
 		Next
 
 	CloseFile(F)
