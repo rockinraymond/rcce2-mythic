@@ -163,6 +163,13 @@ Function SetActorHat(AI.ActorInstance, MeshID)
 		If AI\TeamID = True Then TurnEntity AI\HatEN, 0, 180, 90
 		CreateEntityEmitters(AI\HatEN)
 	Else
+		; Bound AI\Hair to the [4]-slot Hair-ID arrays (5 entries each).
+		; Hair can arrive from the wire (Asc of one byte = 0..255) or a
+		; saved character (ReadShort = 0..65535); without this guard a
+		; hostile / out-of-range value reads past MaleHairIDs/FemaleHairIDs
+		; into adjacent Actor type fields, corrupting the actor template
+		; in memory on every hair fallback for that race.
+		If AI\Hair < 0 Or AI\Hair > 4 Then Return
 		If AI\Gender = 0
 			ID = AI\Actor\MaleHairIDs[AI\Hair]
 		Else
@@ -287,8 +294,20 @@ Function LoadActorInstance3D(A.ActorInstance, Scale# = 1.0, SkipAttachments = Fa
 			UnloadTexture(A\Actor\MaleBodyIDs[BodyTex])
 		EndIf
 
-		; Beard
-		If A\Actor\BeardIDs[A\Beard] > -1 And A\Actor\BeardIDs[A\Beard] < 65535 And SkipAttachments = False
+		; Beard. Bound A\Beard against the [4]-slot BeardIDs array
+		; (5 entries). A\Beard arrives from the wire (Asc of one byte =
+		; 0..255), from a saved character (ReadShort = 0..65535), or
+		; from a script-driven SetActorBeard call; without this guard a
+		; hostile / out-of-range value reads past BeardIDs into adjacent
+		; Actor type fields. Blitz3D's And is not short-circuiting, so
+		; the bounds check has to be a separate If above the array read.
+		Local BeardOK = False
+		If A\Beard >= 0 And A\Beard <= 4
+			If A\Actor\BeardIDs[A\Beard] > -1 And A\Actor\BeardIDs[A\Beard] < 65535 And SkipAttachments = False
+				BeardOK = True
+			EndIf
+		EndIf
+		If BeardOK
 			ID = A\Actor\BeardIDs[A\Beard]
 			BeardEN = GetMesh(ID, True)
 			If BeardEN <> 0
