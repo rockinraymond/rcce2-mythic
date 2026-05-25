@@ -230,7 +230,7 @@ Function UpdateFiles()
 				Wend
 				If CreatedFiles = RequiredFiles Then Delete M : Done = True : Exit
 			ElseIf M\MessageType = RN_HostHasLeft Or M\MessageType = RN_Disconnected
-				RuntimeError(LanguageString$(LS_LostConnection))
+				OnLostConnection()
 			EndIf
 			Delete M
 		Next
@@ -819,7 +819,7 @@ Function LogIn()
 						EndIf
 						Delete M : Done = True : Exit
 					ElseIf M\MessageType = RN_HostHasLeft Or M\MessageType = RN_Disconnected
-						RuntimeError(LanguageString$(LS_LostConnection))
+						OnLostConnection()
 					EndIf
 					Delete M
 				Next
@@ -1072,7 +1072,7 @@ Function LogIn()
 								EndIf
 							EndIf
 						ElseIf M\MessageType = RN_HostHasLeft Or M\MessageType = RN_Disconnected
-							RuntimeError(LanguageString$(LS_LostConnection))
+							OnLostConnection()
 						EndIf
 					Next
 					
@@ -1143,7 +1143,7 @@ Function LogIn()
 						If M\MessageData$ = "Y" Then Result = True Else Result = False
 						Delete M : Done = True : Exit
 					ElseIf M\MessageType = RN_HostHasLeft Or M\MessageType = RN_Disconnected
-						RuntimeError(LanguageString$(LS_LostConnection))
+						OnLostConnection()
 					EndIf
 					Delete M
 				Next
@@ -1170,7 +1170,7 @@ Function LogIn()
 		For M.RCE_Message = Each RCE_Message
 			Select M\MessageType
 				Case RN_Disconnected, RN_HostHasLeft
-					RuntimeError(LanguageString$(LS_LostConnection))
+					OnLostConnection()
 			End Select
 			Delete M
 		Next
@@ -1702,7 +1702,7 @@ Function CharSelect()
 							
 							Goto RestartCharSelection
 						ElseIf M\MessageType = RN_HostHasLeft Or M\MessageType = RN_Disconnected
-							RuntimeError(LanguageString$(LS_LostConnection))
+							OnLostConnection()
 						EndIf
 						Delete M
 					Next
@@ -1861,7 +1861,7 @@ Function CharSelect()
 							Done = True : Exit
 						EndIf
 					ElseIf M\MessageType = RN_HostHasLeft Or M\MessageType = RN_Disconnected
-						RuntimeError(LanguageString$(LS_LostConnection))
+						OnLostConnection()
 						Delete M
 					EndIf
 				Next
@@ -1963,7 +1963,7 @@ Function CharSelect()
 		For M.RCE_Message = Each RCE_Message
 			Select M\MessageType
 				Case RN_Disconnected, RN_HostHasLeft
-					RuntimeError(LanguageString$(LS_LostConnection))
+					OnLostConnection()
 			End Select
 			Delete M
 		Next
@@ -2256,7 +2256,7 @@ Function CreateChar()
 								EndIf
 								Delete(M) : Done = True : Exit
 							ElseIf M\MessageType = RN_HostHasLeft Or M\MessageType = RN_Disconnected
-								RuntimeError(LanguageString$(LS_LostConnection))
+								OnLostConnection()
 							EndIf
 							Delete(M)
 						Next
@@ -2616,7 +2616,7 @@ Function CreateChar()
        For M.RCE_Message = Each RCE_Message 
           Select M\MessageType 
              Case RN_Disconnected, RN_HostHasLeft 
-                RuntimeError(LanguageString$(LS_LostConnection)) 
+                OnLostConnection() 
           End Select 
           Delete M 
        Next
