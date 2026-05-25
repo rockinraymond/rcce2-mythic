@@ -45,6 +45,16 @@ Function PlayAnimation(AI.ActorInstance, Mode, Speed#, Seq, FixedSpeed = True)
 	Else
 		A.AnimSet = AnimList(AI\Actor\FAnimationSet)
 	EndIf
+	; AnimList is sparse: a slot is Null when the referenced animation
+	; set was deleted from Animations.dat (typical content-editing drift
+	; -- admin deletes an animset while existing actors still reference
+	; it). The unguarded deref below was an every-frame crash since
+	; PlayAnimation is called from the actor render / movement code.
+	If A = Null Then Return
+	; Bound Seq against the animation arrays (declared [149]). Defensive
+	; even though callers use the Anim_* constants -- one bad caller or
+	; an Asc()-derived index from the wire shouldn't crash.
+	If Seq < 0 Or Seq > 149 Then Return
 	If A\AnimEnd[Seq] = 0 Or A\AnimStart[Seq] > A\AnimEnd[Seq] Then Return
 	If FixedSpeed = True
 		Length# = A\AnimEnd[Seq] - A\AnimStart[Seq]
