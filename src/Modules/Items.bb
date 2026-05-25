@@ -291,6 +291,11 @@ Function LoadItems(Filename$)
 				Case I_Weapon
 					I\WeaponDamage     = ReadShort(F)
 					I\WeaponDamageType = ReadShort(F)
+					; DamageTypes$ is Dim'd (19). WeaponDamageType is
+					; the index used to render damage in combat output
+					; (ClientNet P_AttackUpdate) and BVM_DAMAGETYPE$.
+					; ReadShort can carry -32768..32767; clamp at load.
+					If I\WeaponDamageType < 0 Or I\WeaponDamageType > 19 Then I\WeaponDamageType = 0
 					I\WeaponType       = ReadShort(F)
 					I\RangedProjectile = ReadShort(F)
 					I\Range#           = ReadFloat#(F)

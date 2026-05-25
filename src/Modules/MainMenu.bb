@@ -969,6 +969,10 @@ Function LogIn()
 										Case I_Weapon
 											It\WeaponDamage = RCE_IntFromStr(Mid$(Pa$, Offset, 2))
 											It\WeaponDamageType = RCE_IntFromStr(Mid$(Pa$, Offset + 2, 2))
+											; DamageTypes$ is Dim'd (19); wire field is 0..65535.
+											; Clamp before downstream readers (Interface3D tooltips,
+											; BVM_DAMAGETYPE$) index DamageTypes$(WeaponDamageType).
+											If It\WeaponDamageType < 0 Or It\WeaponDamageType > 19 Then It\WeaponDamageType = 0
 											It\WeaponType = RCE_IntFromStr(Mid$(Pa$, Offset + 4, 2))
 											It\Range# = RCE_FloatFromStr#(Mid$(Pa$, Offset + 6, 4))
 											Offset = Offset + 10

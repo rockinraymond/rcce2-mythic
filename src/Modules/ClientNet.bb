@@ -1060,7 +1060,12 @@ Function UpdateNetwork()
 						AnimateActorAttack(Me)
 						PlayActorSound(Me, Rand(Speech_Attack1, Speech_Attack2))
 						Damage = RCE_IntFromStr(Mid$(M\MessageData$, 4, 2)) - 1
-						DType$ = DamageTypes$(RCE_IntFromStr(Mid$(M\MessageData$, 6, 1)))
+						; DamageTypes$ is Dim'd (19); wire byte is 0..255.
+						; Clamp before indexing -- avoids Blitz Dim OOB
+						; from a malformed P_AttackUpdate "H".
+						Local DTI = RCE_IntFromStr(Mid$(M\MessageData$, 6, 1))
+						If DTI < 0 Or DTI > 19 Then DTI = 0
+						DType$ = DamageTypes$(DTI)
 						; And hit them
 						If Damage > 0
 							CombatDamageOutput(A, Damage, DType$)
@@ -1083,7 +1088,12 @@ Function UpdateNetwork()
 					; Someone else attacked me
 					ElseIf Left$(M\MessageData$, 1) = "Y"
 						Damage = RCE_IntFromStr(Mid$(M\MessageData$, 4, 2)) - 1
-						DType$ = DamageTypes$(RCE_IntFromStr(Mid$(M\MessageData$, 6, 1)))
+						; DamageTypes$ is Dim'd (19); wire byte is 0..255.
+						; Clamp before indexing -- avoids Blitz Dim OOB
+						; from a malformed P_AttackUpdate "Y".
+						Local DTI2 = RCE_IntFromStr(Mid$(M\MessageData$, 6, 1))
+						If DTI2 < 0 Or DTI2 > 19 Then DTI2 = 0
+						DType$ = DamageTypes$(DTI2)
 						PointEntity A\CollisionEN, Me\CollisionEN
 						RotateEntity A\CollisionEN, 0.0, EntityYaw#(A\CollisionEN) + 180.0, 0.0
 						; And hit me
