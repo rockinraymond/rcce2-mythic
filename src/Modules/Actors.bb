@@ -654,6 +654,14 @@ Function LoadActors(Filename$)
 			A.Actor = New Actor
 			A\Attributes = New Attributes
 			A\ID = ReadShort(F)
+			; ActorList is Dim'd 0..65535. ReadShort returns -32768..32767
+			; (signed); a negative or any other out-of-range A\ID OOB-writes
+			; into adjacent globals. Stop loading the rest of the file on
+			; the first bad ID -- the partial state is still consistent.
+			If A\ID < 0 Or A\ID > 65535
+				Delete A\Attributes : Delete A
+				Exit
+			EndIf
 			ActorList(A\ID) = A
 			; Bound every length-prefixed string against a corrupted
 			; Actors.dat (same shape as the data-loader sweep in PR #149).
