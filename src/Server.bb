@@ -896,6 +896,14 @@ Function SaveDroppedItems(Filename$)
 
 		For D.DroppedItem = Each DroppedItem
 			AInstance.AreaInstance = Object.AreaInstance(D\ServerHandle)
+			; Skip dropped items whose host area instance is gone (zone
+			; unload race, freed area). Writing AInstance\Area\Name$ on
+			; a Null handle previously crashed the server during the
+			; periodic SaveDroppedItems flush -- the entire save aborts
+			; and dropped item state is lost.
+			If AInstance = Null Then Continue
+			If AInstance\Area = Null Then Continue
+			If D\Item = Null Then Continue
 			WriteString F, AInstance\Area\Name$
 			WriteByte F, AInstance\ID
 			WriteString F, ItemInstanceToString$(D\Item)
