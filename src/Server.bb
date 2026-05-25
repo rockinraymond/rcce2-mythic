@@ -933,14 +933,16 @@ Function UpdateAttribute(AI.ActorInstance, Att, Value)
 	If AI\Attributes\Value[Att] > AI\Attributes\Maximum[Att]
 		AI\Attributes\Value[Att] = AI\Attributes\Maximum[Att]
 	EndIf
-	If AI\RNID > 0 Or AI\RNID = -1 
+	If AI\RNID > 0 Or AI\RNID = -1
 		Pa$ = "A" + RCE_StrFromInt$(AI\RuntimeID, 2) + RCE_StrFromInt$(Att, 1) + RCE_StrFromInt$(AI\Attributes\Value[Att], 2)
 		AInstance.AreaInstance = Object.AreaInstance(AI\ServerArea)
-		A2.ActorInstance = AInstance\FirstInZone
-		While A2 <> Null
-			If A2\RNID > 0 Then RCE_Send(Host, A2\RNID, P_StatUpdate, Pa$, True)
-			A2 = A2\NextInZone
-		Wend
+		If AInstance <> Null
+			A2.ActorInstance = AInstance\FirstInZone
+			While A2 <> Null
+				If A2\RNID > 0 Then RCE_Send(Host, A2\RNID, P_StatUpdate, Pa$, True)
+				A2 = A2\NextInZone
+			Wend
+		EndIf
 	EndIf
 End Function
 
@@ -948,14 +950,16 @@ End Function
 Function UpdateAttributeMax(AI.ActorInstance, Att, Value)
 	AI\Attributes\Maximum[Att] = Value
 
-	If AI\RNID > 0 Or AI\RNID = -1 
+	If AI\RNID > 0 Or AI\RNID = -1
 		Pa$ = "M" + RCE_StrFromInt$(AI\RuntimeID, 2) + RCE_StrFromInt$(Att, 1) + RCE_StrFromInt$(Value, 2)
 		AInstance.AreaInstance = Object.AreaInstance(AI\ServerArea)
-		A2.ActorInstance = AInstance\FirstInZone
-		While A2 <> Null
-			If A2\RNID > 0 Then RCE_Send(Host, A2\RNID, P_StatUpdate, Pa$, True)
-			A2 = A2\NextInZone
-		Wend
+		If AInstance <> Null
+			A2.ActorInstance = AInstance\FirstInZone
+			While A2 <> Null
+				If A2\RNID > 0 Then RCE_Send(Host, A2\RNID, P_StatUpdate, Pa$, True)
+				A2 = A2\NextInZone
+			Wend
+		EndIf
 	EndIf
 End Function
 
@@ -966,10 +970,12 @@ Function UpdateReputation(AI.ActorInstance, Value)
 	If AI\RNID > 0
 		Pa$ = "R" + RCE_StrFromInt$(AI\RuntimeID, 2) + RCE_StrFromInt$(Value, 2)
 		AInstance.AreaInstance = Object.AreaInstance(AI\ServerArea)
-		A2.ActorInstance = AInstance\FirstInZone
-		While A2 <> Null
-			If A2\RNID > 0 Then RCE_Send(Host, A2\RNID, P_StatUpdate, Pa$, True)
-			A2 = A2\NextInZone
-		Wend
+		If AInstance <> Null
+			A2.ActorInstance = AInstance\FirstInZone
+			While A2 <> Null
+				If A2\RNID > 0 Then RCE_Send(Host, A2\RNID, P_StatUpdate, Pa$, True)
+				A2 = A2\NextInZone
+			Wend
+		EndIf
 	EndIf
 End Function
