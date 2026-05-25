@@ -714,7 +714,10 @@ Function BVM_ROTATEACTOR(Param1%, Param2#)
 	If Not BVM_RequireSelfOrPrivileged(Param1%) Then Return
 	Actor.ActorInstance = Object.ActorInstance(Param1%)
 	If Actor <> Null
-		Actor\Yaw# = Param2#
+		; ClampSaneFloat catches NaN/Inf/extreme magnitudes -- a
+		; script-supplied NaN yaw poisons rotation matrices on
+		; every receiver.
+		Actor\Yaw# = ClampSaneFloat#(Param2#)
 		Pa$ = "R" + RCE_StrFromInt$(Actor\RuntimeID, 2) + RCE_StrFromFloat$(Actor\Yaw#)
 		AInstance.AreaInstance = Object.AreaInstance(Actor\ServerArea)
 		If AInstance <> Null
@@ -731,9 +734,14 @@ Function BVM_MOVEACTOR(Param1%, Param2#, Param3#, Param4#, Param5%=0, Param6%=0)
 	If Not BVM_RequireSelfOrPrivileged(Param1%) Then Return
 	Actor.ActorInstance = Object.ActorInstance(Param1%)
 	If Actor <> Null
-		Actor\X# = Param2#
-		Actor\Y# = Param3#
-		Actor\Z# = Param4#
+		; Sanitise positions before they're persisted into the actor
+		; record and broadcast. A script supplying NaN/Inf would
+		; poison every receiving client's spatial code (collision,
+		; LOD culling, EntityDistance#). Mirrors the P_InventoryUpdate
+		; "D" drop-item flow (ServerNet.bb ~1467).
+		Actor\X# = ClampWorldCoord#(Param2#)
+		Actor\Y# = ClampWorldCoord#(Param3#)
+		Actor\Z# = ClampWorldCoord#(Param4#)
 		Actor\DestX# = Actor\X#
 		Actor\DestZ# = Actor\Z#
 		Pa$ = "M" + RCE_StrFromInt$(Actor\RuntimeID, 2) + RCE_StrFromFloat$(Actor\X#) + RCE_StrFromFloat$(Actor\Y#) + RCE_StrFromFloat$(Actor\Z#)
