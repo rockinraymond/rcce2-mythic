@@ -3038,10 +3038,19 @@ Function BVM_REFRESHSCRIPTS()
 	Next
 	UpdateScripts()
 
-	For SS.ScriptSource = Each ScriptSource
+	; After-cursor walk: the body Deletes SS, which would corrupt
+	; the For-Each cursor on the next iteration step (Blitz3D
+	; advances via the deleted element's "next" pointer). Established
+	; pattern from PausedScript / ThreadScript sweeps; documented in
+	; CLAUDE.md ("Iterator-during-iteration hazards", #247).
+	Local SS.ScriptSource = First ScriptSource
+	Local SSNext.ScriptSource = Null
+	While SS <> Null
+		SSNext = After SS
 		BVM_ReleaseModule(SS\hModule)
 		Delete SS
-	Next
+		SS = SSNext
+	Wend
 
 	WriteLog(MainLog, "Deleted all loaded scripts")
 	Number = LoadScripts() : WriteLog(MainLog, "Loaded " + Str$(Number) + " scripts.")
