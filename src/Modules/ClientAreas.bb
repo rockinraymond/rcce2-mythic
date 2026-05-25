@@ -91,6 +91,15 @@ End Type
 ; Creates a subdivided plane (used for water)
 Function CreateSubdividedPlane(XDivs, ZDivs, UScale# = 1.0, VScale# = 1.0, Parent = 0)
 
+	; Clamp divisions to a sane minimum. A water with ScaleX or ScaleZ
+	; below the Ceil/15.0 threshold (or a misconfigured area data file)
+	; would arrive here with XDivs / ZDivs = 1, then divide-by-zero on
+	; the XPos / ZPos normalization below. Below 2 there's no actual
+	; subdivision; force at least a 2x2 grid so the mesh has a real
+	; surface and the normalization divisor is non-zero.
+	If XDivs < 2 Then XDivs = 2
+	If ZDivs < 2 Then ZDivs = 2
+
 	EN = CreateMesh(Parent)
 	Surf = CreateSurface(EN)
 
