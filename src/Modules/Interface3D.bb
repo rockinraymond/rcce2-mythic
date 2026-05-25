@@ -229,13 +229,20 @@ Function BubbleOutput(Label$, R, G, B, AI.ActorInstance, NoText = False)
 		EndIf
 	EndIf
 
-	; Remove any chat bubbles already attached to this actor instance
-	For Bb.Bubble = Each Bubble
+	; Remove any chat bubbles already attached to this actor instance.
+	; After-cursor walk: the body Deletes Bb, which would corrupt
+	; the For-Each cursor on the next iteration. Documented in
+	; CLAUDE.md (#247).
+	Local Bb.Bubble = First Bubble
+	Local BbNext.Bubble = Null
+	While Bb <> Null
+		BbNext = After Bb
 		If Bb\ActorInstance = AI
 			FreeEntity(Bb\EN)
 			Delete(Bb)
 		EndIf
-	Next
+		Bb = BbNext
+	Wend
 
 	; Create new bubble
 	Bb.Bubble = New Bubble
@@ -1549,12 +1556,18 @@ Function UpdateInterface()
 		EndIf
 	Next
 	; Update text input dialogs
-	For TI.TextInput = Each TextInput
+	; After-cursor walk: FreeTextInput Deletes TI. Documented in
+	; CLAUDE.md (#247).
+	Local TI.TextInput = First TextInput
+	Local TINext.TextInput = Null
+	While TI <> Null
+		TINext = After TI
 		If GY_TextFieldHit(TI\TextBox) Or GY_ButtonHit(TI\AcceptButton) And Len(GY_TextFieldText$(TI\TextBox)) > 0
 			RCE_Send(Connection, PeerToHost, P_ScriptInput, RCE_StrFromInt$(TI\ScriptHandle, 4) + GY_TextFieldText$(TI\TextBox), True)
 			FreeTextInput(Handle(TI))
 		EndIf
-	Next
+		TI = TINext
+	Wend
 	If First Dialog = Null And First TextInput = Null And MouseDown(2) = False Then InDialog = False : FlushMouse()
 
 	;- Update chat bubbles
@@ -4258,11 +4271,17 @@ Function FreeInterface()
 	FreeEntity(Compass\Component); = GY_CreateQuad(GY_Cam)	;entity
 	FreeEntity(CompassBackground); = GY_CreateQuad(GY_Cam)	;entity
 
-	; Actor effect icons
-	For EIS.EffectIconSlot = Each EffectIconslot
+	; Actor effect icons.
+	; After-cursor walk: the body Deletes EIS. Documented in
+	; CLAUDE.md (#247).
+	Local EIS.EffectIconSlot = First EffectIconslot
+	Local EISNext.EffectIconSlot = Null
+	While EIS <> Null
+		EISNext = After EIS
 		FreeEntity(EIS\EN)
 		Delete EIS
-	Next
+		EIS = EISNext
+	Wend
 
 	; Action bar
 	FreeEntity(ActionEN); = GY_CreateQuad(GY_Cam)	;entity
