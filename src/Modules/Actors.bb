@@ -370,6 +370,16 @@ Function ReadActorInstance.ActorInstance(Stream)
 	A\Hair       = ReadShort(Stream)
 	A\Beard      = ReadShort(Stream)
 	A\BodyTex    = ReadShort(Stream)
+	; Bound the appearance indices against the [4]-slot per-Actor ID
+	; arrays. Saved characters from before PR #199's P_CreateCharacter
+	; clamp (or characters created with a misbehaving client) may have
+	; out-of-range values that would OOB on every later appearance
+	; lookup. Match the same shape as the receive-time clamps.
+	If A\Gender < 0 Or A\Gender > 1 Then A\Gender = 0
+	If A\FaceTex < 0 Or A\FaceTex > 4 Then A\FaceTex = 0
+	If A\Hair < 0 Or A\Hair > 4 Then A\Hair = 0
+	If A\Beard < 0 Or A\Beard > 4 Then A\Beard = 0
+	If A\BodyTex < 0 Or A\BodyTex > 4 Then A\BodyTex = 0
 	For i = 0 To 39
 		A\Attributes\Value[i]   = ReadShort(Stream)
 		A\Attributes\Maximum[i] = ReadShort(Stream)
