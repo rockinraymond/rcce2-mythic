@@ -2247,7 +2247,12 @@ Function UpdateNetwork()
 						If PwdLen >= 1 And A\Pass$ <> "" And VerifyPassword%(A\Pass$, Mid$(M\MessageData$, Offset + 1, PwdLen)) And A\IsBanned = False
 							Offset = Offset + 1 + PwdLen
 							Number = Asc(Mid$(M\MessageData$, Offset, 1))
-							If Number > -1 And Number < 10
+							; Mirror P_StartGame's guard (line ~1848): an
+							; authenticated client can still send a Number for
+							; an empty slot, and dereferencing A\Character[Number]
+							; without the Null check below was a one-packet
+							; server crash. Refuse cleanly with "N" instead.
+							If Number > -1 And Number < 10 And A\Character[Number] <> Null
 								; Send character data
 								Pa$ = RCE_StrFromInt$(A\Character[Number]\Gold, 4) + RCE_StrFromInt$(A\Character[Number]\Reputation, 2)
 								Pa$ = Pa$ + RCE_StrFromInt$(A\Character[Number]\Level, 2) + RCE_StrFromInt$(A\Character[Number]\XP, 4)
