@@ -1426,30 +1426,40 @@ Function UpdateNetwork()
 			Case P_NewActor
 				A.ActorInstance = ActorInstanceFromString(M\MessageData$)
 				If A <> Null
-				
+
 					FreeShadowCaster% (A\EN)
-					
+
 					Result = LoadActorInstance3D(A, 0.05)
-					If Result = False Then RuntimeError("Could not load actor mesh for " + A\Actor\Race$ + "!")
-					PositionEntity A\CollisionEN, A\X#, A\Y#, A\Z#
-					If A\Actor\Environment <> Environment_Fly
-						SetPickModes()
-						Height# = LoadedMeshScales#(A\Actor\MeshIDs[A\Gender]) * A\Actor\Scale# * MeshHeight#(A\EN) * 0.05
-						Result = LinePick(A\X#, A\Y# + 5.0, A\Z#, 0.0, -10000.0, 0.0)
-						If Result <> 0
-							PositionEntity A\CollisionEN, A\X#, PickedY#() + Height#, A\Z#
-						Else
-							Result = LinePick(A\X#, A\Y# + 10000.0, A\Z#, 0.0, -20000.0, 0.0)
+					If Result = False
+						; Previously RuntimeError'd, which let a malicious or
+						; out-of-sync server crash the entire client by
+						; announcing a new actor whose race resolved to a
+						; missing or broken mesh. Drop the actor instead;
+						; the player just won't be visible to us until they
+						; leave + re-enter the zone.
+						WriteLog(MainLog, "P_NewActor: could not load mesh for race '" + A\Actor\Race$ + "' (RNID=" + A\RNID + "), dropping actor")
+						SafeFreeActorInstance(A)
+					Else
+						PositionEntity A\CollisionEN, A\X#, A\Y#, A\Z#
+						If A\Actor\Environment <> Environment_Fly
+							SetPickModes()
+							Height# = LoadedMeshScales#(A\Actor\MeshIDs[A\Gender]) * A\Actor\Scale# * MeshHeight#(A\EN) * 0.05
+							Result = LinePick(A\X#, A\Y# + 5.0, A\Z#, 0.0, -10000.0, 0.0)
 							If Result <> 0
 								PositionEntity A\CollisionEN, A\X#, PickedY#() + Height#, A\Z#
+							Else
+								Result = LinePick(A\X#, A\Y# + 10000.0, A\Z#, 0.0, -20000.0, 0.0)
+								If Result <> 0
+									PositionEntity A\CollisionEN, A\X#, PickedY#() + Height#, A\Z#
+								EndIf
 							EndIf
 						EndIf
-					EndIf
-					RotateEntity(A\CollisionEN, 0, A\Yaw#, 0)
-					A\Y# = 0.0
-					ResetEntity(A\CollisionEN)
-					If A\RNID = True And MilliSecs() - ZonedMS > 5000
-						Output(LanguageString$(LS_PlayerEnteredZone) + " " + A\Name$, 0, 100, 255)
+						RotateEntity(A\CollisionEN, 0, A\Yaw#, 0)
+						A\Y# = 0.0
+						ResetEntity(A\CollisionEN)
+						If A\RNID = True And MilliSecs() - ZonedMS > 5000
+							Output(LanguageString$(LS_PlayerEnteredZone) + " " + A\Name$, 0, 100, 255)
+						EndIf
 					EndIf
 				EndIf
 
