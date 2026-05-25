@@ -1596,7 +1596,7 @@ Function UpdateNetwork()
 								AI\Z# = NewZ#
 							EndIf
 						EndIf
-						AI\LastPosUpdateMs = NowMs
+						AI\LastPosUpdateMs = PosNowMs
 						AI\OldX# = AI\X#
 						AI\OldZ# = AI\Z#
 
