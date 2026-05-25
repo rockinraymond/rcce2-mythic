@@ -118,7 +118,7 @@ If Result = False
 EndIf
 ```
 
-See the `Soft-fail` series of merged PRs (#128–#134) for the established pattern — the audit comment block in each fix explains the threat model.
+See the `Soft-fail` series of merged PRs (#128–#134 for the original cluster, #138–#144 for the follow-up rounds covering `CreateActorInstance(ActorList(...))`, `PreLoadSpawns`, missing-`Head`-joint, character-select preview, and stale `PlayerTarget` handles) — the audit comment block in each fix explains the threat model.
 
 ### Bounds checks before array index
 
@@ -131,6 +131,38 @@ If ActorID < 0 Or ActorID > 65535 Or ActorList(ActorID) = Null
     Exists = True : Exit
 EndIf
 ```
+
+### Handle-lookup Null discipline
+
+`Object.X(handle)` returns `Null` for stale or invalid handles — it does not error. Any deref on the result without a `<> Null` check is a crash waiting for a freed-but-unreferenced handle. This applies on both sides:
+
+- **Server**: handles read off the wire (`Object.ActorInstance(RCE_IntFromStr(...))`, `Object.ScriptInstance(...)`, `Object.DroppedItem(...)`). The client can send any 4 bytes.
+- **Client globals**: `PlayerTarget`, `CharInteract`, and similar "currently selected" handles. Cleanup at the source side (`SafeFreeActorInstance` clears `PlayerTarget`, `P_ActorDead` / `P_ActorGone` clear it on remote death/zone-leave) catches most paths but there is no compiler enforcement. Code that runs **every frame** (`UpdateCombat`, the selection-highlight `LinePick`) is the highest-impact site for a stale-handle crash — one missed cleanup is a guaranteed crash on the next tick.
+
+Pattern:
+
+```basic
+AI.ActorInstance = Object.ActorInstance(SomeHandle)
+If AI = Null
+    ; Clear the source global so the next iteration doesn't hit this again.
+    SomeHandle = 0
+    ; Skip the work that needed AI; don't crash.
+    Return       ; or `: Continue`, depending on the loop
+EndIf
+; ... deref AI freely below ...
+```
+
+For outbound packets that include an optional target (`P_SpellUpdate "F"`, `P_ItemScript`), the server-side handlers already tolerate a missing target, so the client should send the packet **without** the target bytes rather than crash:
+
+```basic
+If PlayerTarget > 0
+    AI.ActorInstance = Object.ActorInstance(PlayerTarget)
+    If AI <> Null Then Pa$ = Pa$ + RCE_StrFromInt$(AI\RuntimeID, 2)
+EndIf
+RCE_Send(Connection, PeerToHost, P_X, Pa$, True)
+```
+
+See PRs [#144](https://github.com/RydeTec/rcce2/pull/144) (every-frame `PlayerTarget` cluster) and the audit history of `Object.ActorInstance` callers under `src/Modules/` for the established pattern.
 
 ### Strict-mode tests
 
