@@ -292,6 +292,14 @@ Function UpdateNetwork()
 						; Gender
 						Case "G"
 							AI\Gender = Asc(Right$(M\MessageData$, 1))
+							; Wire byte arrives 0..255 but Gender is a 0/1
+							; selector for Male/Female mesh + hair + face +
+							; body lookups in LoadActorInstance3D below.
+							; Clamp at the receive site -- the server's
+							; P_CreateCharacter handler already clamps on
+							; persistence (#199); this mirrors that for the
+							; in-session P_AppearanceUpdate path.
+							If AI\Gender < 0 Or AI\Gender > 1 Then AI\Gender = 0
 							X# = EntityX#(AI\CollisionEN)
 							Y# = EntityY#(AI\CollisionEN)
 							Z# = EntityZ#(AI\CollisionEN)
