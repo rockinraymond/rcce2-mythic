@@ -1,3 +1,23 @@
+; Accounts.dat format version. Older files have no magic header
+; (the very first ReadString$ in legacy LoadAccounts is User$),
+; so we use the absence of the magic to detect them. The magic is
+; carefully chosen so the first byte cannot legally be the first byte
+; of a Blitz ReadString$ length prefix that would actually parse as a
+; sensible string -- it's a four-byte sentinel "ACCT" (Big-endian).
+;
+; Version history:
+;   v0 -- pre-magic (legacy). Identified by the file not starting
+;         with ACCOUNTS_MAGIC.
+;   v1 -- adds the per-character LastPortal / LastPortalArea /
+;         LastPortalTime triad at the END of WriteActorInstance, so
+;         the portal-lock anti-exploit (Track TT) survives a
+;         logout/login cycle. Older saves load with all three
+;         defaulted to 0/-1, which still locks out per-area portals
+;         on the first re-entry.
+Const ACCOUNTS_MAGIC = $41434354  ; "ACCT"
+Const ACCOUNTS_VERSION_CURRENT% = 1
+Global ACCOUNTS_LOAD_VERSION% = 0
+
 Type AccountsWindow
 	Field Window
 	Field List
@@ -218,6 +238,10 @@ Function SaveAccounts()
 		Return False
 	EndIf
 
+		; v1 header: magic + version. New writes always v1.
+		WriteInt F, ACCOUNTS_MAGIC
+		WriteByte F, ACCOUNTS_VERSION_CURRENT%
+
 		For A.Account = Each Account
 			WriteString F, A\User$
 			WriteString F, A\Pass$
@@ -266,6 +290,26 @@ Function LoadAccounts()
 			SetGadgetText(Accounts\DMLabel, "GM accounts: 0")
 			SetGadgetText(Accounts\BannedLabel, "Banned accounts: 0")
 			Return 0
+		EndIf
+
+		; Detect format version by peeking the first 4 bytes for the
+		; magic header. If absent (pre-v1 file), seek back to 0 and
+		; read as legacy.
+		Local PeekMagic = ReadInt(F)
+		If PeekMagic = ACCOUNTS_MAGIC
+			ACCOUNTS_LOAD_VERSION% = ReadByte(F)
+			; Reject unknown versions to avoid silently mis-reading a
+			; future format. New rcce2 builds must be paired with the
+			; saves they wrote.
+			If ACCOUNTS_LOAD_VERSION% > ACCOUNTS_VERSION_CURRENT%
+				WriteLog(MainLog, "LoadAccounts: file version " + ACCOUNTS_LOAD_VERSION% + " > supported " + ACCOUNTS_VERSION_CURRENT% + ", aborting load")
+				CloseFile(F)
+				Return 0
+			EndIf
+		Else
+			; Legacy file: no magic, treat as v0 and rewind.
+			ACCOUNTS_LOAD_VERSION% = 0
+			SeekFile(F, 0)
 		EndIf
 
 		; File does exist, read in all accounts. Use ReadBoundedString$
