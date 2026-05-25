@@ -47,6 +47,21 @@ Global MainLog = 0
 Function WriteLog(LogID%, Message$, Timestamp% = True, Datestamp% = False)
 End Function
 
+; --- SafeWrite stubs --------------------------------------------------------
+; SaveItems now routes through SafeWriteOpen/Commit in Logging.bb. This
+; test build doesn't include Logging.bb (and doesn't actually exercise
+; the save path), so stub the helpers as pass-throughs: SafeWriteOpen
+; returns the same filename, SafeWriteCommit just closes the handle.
+Function SafeWriteOpen$(FinalPath$)
+	Return FinalPath$
+End Function
+
+Function SafeWriteCommit%(TempPath$, FinalPath$, F)
+	; Stub: the test build doesn't exercise SaveItems, so we never
+	; receive a real file handle here. Just acknowledge.
+	Return True
+End Function
+
 ; --- Language helper stub ---------------------------------------------------
 ; GetItemType$ / GetWeaponType$ in Items.bb route through LanguageString
 ; (from Language.bb) for localization. We don't exercise those paths here.
