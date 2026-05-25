@@ -740,6 +740,15 @@ For j = 0 To 99
 If ua\Instances[j] <> Null
 For i = 0 To 999
 If ua\Instances[j]\Spawned[i] < ua\SpawnMax[i]
+; Skip spawn points whose actor race no longer exists in Actors.dat.
+; CreateActorInstance(Null) RuntimeError's; the live spawner at the
+; main game loop already guards this (Server.bb:547) but PreLoadSpawns
+; -- called once at startup as an optimisation -- skipped the check.
+; A single misconfigured area (admin deleted the race but left
+; SpawnActor pointing at it) prevented the server from booting.
+If ActorList(ua\SpawnActor[i]) = Null
+WriteLog(MainLog, "PreLoadSpawns: skipping spawn point " + i + " in '" + ua\Name$ + "' (instance " + j + "): ActorID " + ua\SpawnActor[i] + " not in Actors.dat")
+Else
 For h = 0 To ua\SpawnMax[i] - 1
 Delay 10
 AI.ActorInstance = CreateActorInstance.ActorInstance(ActorList(ua\SpawnActor[i]))
@@ -758,6 +767,7 @@ AI\DeathScript$ = ua\SpawnDeathScript$[i]
 If Len(ua\SpawnScript$[i]) > 0 Then ThreadScript(ua\SpawnScript$[i], "Main", Handle(AI), 0)
 Count = Count + 1
 Next
+EndIf
 EndIf
 Next
 EndIf
