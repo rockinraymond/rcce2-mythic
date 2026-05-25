@@ -141,7 +141,7 @@ Function RemoveMeshFromDatabase(ID)
 		L\Y# = ReadFloat#(F)
 		L\Z# = ReadFloat#(F)
 		L\Shader = ReadShort(F)
-		L\Name$ = ReadString$(F)
+		L\Name$ = MediaReadFilename$(F, 260)
 	Next
 
 	; Clear the database
@@ -202,7 +202,7 @@ Function RemoveTextureFromDatabase(ID)
 	For L.LoadedMediaData = Each LoadedMediaData
 		SeekFile F, L\DataAddress
 		L\ExtraData = ReadShort(F)
-		L\Name$ = ReadString$(F)
+		L\Name$ = MediaReadFilename$(F, 260)
 	Next
 
 	; Clear the database
@@ -258,7 +258,7 @@ Function RemoveSoundFromDatabase(ID)
 	For L.LoadedMediaData = Each LoadedMediaData
 		SeekFile F, L\DataAddress
 		L\ExtraData = ReadByte(F)
-		L\Name$ = ReadString$(F)
+		L\Name$ = MediaReadFilename$(F, 260)
 	Next
 
 	; Clear the database
@@ -311,7 +311,7 @@ Function RemoveMusicFromDatabase(ID)
 	; Read in the actual data for each existing ID
 	For L.LoadedMediaData = Each LoadedMediaData
 		SeekFile F, L\DataAddress
-		L\Name$ = ReadString$(F)
+		L\Name$ = MediaReadFilename$(F, 260)
 	Next
 
 	; Clear the database
@@ -359,7 +359,7 @@ Function AddMeshToDatabase(Filename$, IsAnim)
 		ReadFloat#(F)
 		ReadFloat#(F)
 		ReadShort(F)
-		Name$ = ReadString$(F)
+		Name$ = MediaReadFilename$(F, 260)
 		; If this mesh is already in the file, return error
 		If (Upper$(Name$) = Upper$(Filename$)) And (MIsAnim = IsAnim)
 			If LockedMeshes = 0 Then CloseFile(F)
@@ -410,7 +410,7 @@ Function AddTextureToDatabase(Filename$, Flags)
 	SeekFile(F, 65535 * 4)
 	While Eof(F) = False
 		TFlags = ReadShort(F)
-		Name$ = ReadString$(F)
+		Name$ = MediaReadFilename$(F, 260)
 		; If this texture is already in the file, return error
 		If (Upper$(Name$) = Upper$(Filename$)) And (TFlags = Flags)
 			If LockedTextures = 0 Then CloseFile(F)
@@ -456,7 +456,7 @@ Function AddSoundToDatabase(Filename$, Is3D)
 	SeekFile(F, 65535 * 4)
 	While Eof(F) = False
 		SIs3D = ReadByte(F)
-		Name$ = ReadString$(F)
+		Name$ = MediaReadFilename$(F, 260)
 		; If this sound is already in the file, return error
 		If (Upper$(Name$) = Upper$(Filename$)) And (SIs3D = Is3D)
 			If LockedSounds = 0 Then CloseFile(F)
@@ -501,7 +501,7 @@ Function AddMusicToDatabase(Filename$)
 	; Check all music to make sure this one isn't already there
 	SeekFile F, (65535 * 4)
 	While Eof(F) = False
-		Name$ = ReadString$(F)
+		Name$ = MediaReadFilename$(F, 260)
 		; If this music is already in the file, return error. Previously
 		; the dup branch closed the file but then fell through to the
 		; insert path below -- so every duplicate was added a second time.
@@ -559,7 +559,7 @@ Function GetMeshName$(ID)
 	ReadFloat#(F)
 	ReadFloat#(F)
 	ReadShort(F)
-	Name$ = ReadString$(F)
+	Name$ = MediaReadFilename$(F, 260)
 
 	If LockedMeshes = 0 Then CloseFile(F)
 
@@ -588,7 +588,7 @@ Function GetTextureName$(ID)
 	; Read in texture data
 	SeekFile F, DataAddress
 	Flags = ReadShort(F)
-	Name$ = ReadString$(F)
+	Name$ = MediaReadFilename$(F, 260)
 
 	If LockedTextures = 0 Then CloseFile(F)
 
@@ -617,7 +617,7 @@ Function GetSoundName$(ID)
 	; Read in sound data
 	SeekFile F, DataAddress
 	Is3D = ReadByte(F)
-	Name$ = ReadString$(F)
+	Name$ = MediaReadFilename$(F, 260)
 
 	If LockedSounds = 0 Then CloseFile(F)
 
@@ -645,7 +645,7 @@ Function GetMusicName$(ID)
 	EndIf
 	; Read in sound data
 	SeekFile F, DataAddress
-	Name$ = ReadString$(F)
+	Name$ = MediaReadFilename$(F, 260)
 
 	If LockedMusic = 0 Then CloseFile(F)
 
@@ -1094,7 +1094,7 @@ ReadFloat#(F)
 ReadFloat#(F)
 ReadFloat#(F)
 ReadShort(F)
-NameWithExt$ = ReadString$(F)
+NameWithExt$ = MediaReadFilename$(F, 260)
 NameClean$ = Left(NameWithExt$, Len(NameWithExt$)-4)   
 If LockedMeshes = 0 Then CloseFile(F)
 Return NameClean$
