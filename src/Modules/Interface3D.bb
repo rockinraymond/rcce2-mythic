@@ -2906,11 +2906,17 @@ EndIf
 	EndIf
 	;***********************************************************************************************
 
-	; Attribute displays
+	; Attribute displays. Guard divide-by-zero on Me\Attributes\Maximum
+	; -- this loop runs every frame; a single attribute with Maximum=0
+	; (mid-session stat reload, corrupted save, or a script that wrote 0)
+	; otherwise crashes the client on the next HUD update tick.
 	For i = 0 To 39
 		If AttributeDisplays(i)\Component <> 0
-			GY_UpdateProgressBar(AttributeDisplays(i)\Component, (Float#(Me\Attributes\Value[i]) / Float#(Me\Attributes\Maximum[i])) * 100.0)
-			GY_UpdateLabel(AttributeDisplayNumbers(i), Str$(Me\Attributes\Value[i]) + " / " + Str$(Me\Attributes\Maximum[i]))	
+			Local AttrMax = Me\Attributes\Maximum[i]
+			Local AttrBar# = 0.0
+			If AttrMax > 0 Then AttrBar# = (Float#(Me\Attributes\Value[i]) / Float#(AttrMax)) * 100.0
+			GY_UpdateProgressBar(AttributeDisplays(i)\Component, AttrBar#)
+			GY_UpdateLabel(AttributeDisplayNumbers(i), Str$(Me\Attributes\Value[i]) + " / " + Str$(Me\Attributes\Maximum[i]))
 		EndIf
 	Next
 
@@ -3142,9 +3148,19 @@ Function CreateCharInteractionWindow(AI.ActorInstance)
 		WCharInteract = GY_CreateWindow(Name$, 0.60, 0.03, 0.27, 0.15, True, True, False, LoadTexture("Data\Textures\GUI\PartyBG.png"))
 	EndIf
 	GY_CreateLabel(WCharInteract, 0.05, 0.1, AttributeNames$(HealthStat) + ":")
-	HealthVal = (Float#(AI\Attributes\Value[HealthStat]) / Float#(AI\Attributes\Maximum[HealthStat])) * 500.0
+	; Same divide-by-zero + faction-OOB guards as UpdateCharInteractionWindow
+	; (PR #179) -- the create path computes the initial values from the
+	; same fields and crashes on the same shape of bad input.
+	Local CharCreateHealthMax = AI\Attributes\Maximum[HealthStat]
+	If CharCreateHealthMax > 0
+		HealthVal = (Float#(AI\Attributes\Value[HealthStat]) / Float#(CharCreateHealthMax)) * 500.0
+	Else
+		HealthVal = 500.0
+	EndIf
 	SCharInteractHealth = GY_CreateProgressBar(WCharInteract, 0.3, 0.1, 0.6, 0.18, HealthVal, 500, 255, 0, 0)
-	LCharInteractFaction = GY_CreateLabel(WCharInteract, 0.05, 0.35, LanguageString$(LS_Faction) + " " + FactionNames$(AI\HomeFaction))
+	Local CharCreateFactionIdx = AI\HomeFaction
+	If CharCreateFactionIdx < 0 Or CharCreateFactionIdx > 99 Then CharCreateFactionIdx = 0
+	LCharInteractFaction = GY_CreateLabel(WCharInteract, 0.05, 0.35, LanguageString$(LS_Faction) + " " + FactionNames$(CharCreateFactionIdx))
 	LCharInteractLevel = GY_CreateLabel(WCharInteract, 0.05, 0.55, LanguageString$(LS_Level) + " " + AI\Level)
 	LCharInteractReputation = GY_CreateLabel(WCharInteract, 0.05, 0.75, LanguageString$(LS_Reputation) + " " + AI\Reputation)
 
