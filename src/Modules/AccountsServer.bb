@@ -413,9 +413,15 @@ End Function
 Function PlayerIgnoring(A1.ActorInstance, A2.ActorInstance)
 
 	; Is the player ignoring anyone?
+	; Object.Account returns Null for stale handles -- bare \Ignore$ or
+	; \User$ on a Null crashes the server. Called from /me, /yell,
+	; /pmsay, /trade, /partysay, etc., so the deref runs on every chat
+	; message from every connected player.
 	Ac1.Account = Object.Account(A1\Account)
+	If Ac1 = Null Then Return 0
 	If Ac1\Ignore$ <> ""
 		Ac2.Account = Object.Account(A2\Account)
+		If Ac2 = Null Then Return 0
 
 		; Loop through every ignored account and check
 		OldPos = 1
