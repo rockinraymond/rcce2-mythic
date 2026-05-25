@@ -2703,26 +2703,41 @@ Function BVM_MYSQLQUERY$(Param1$)
 Return Result$
 End Function
 
+; MySQL row/query walkers -- privileged-only, matching BVM_MYSQLQUERY.
+; Param1 is a server-side SQL query handle. Without the gate, a
+; non-privileged script could:
+;   - Walk rows of a SQL handle obtained via SCRIPTGLOBAL passing from
+;     a privileged script (read e.g. account data the privileged script
+;     queried but didn't want to expose to the calling NPC script).
+;   - Free SQL queries the server itself is using (LoadCharacter,
+;     SaveActor) by guessing handle values -- the underlying SQL
+;     library doesn't validate "this query belongs to this caller".
+; Privileged scripts retain full access for legitimate admin queries.
 Function BVM_MYSQLNUMROWS%(Param1%)
+	If Not BVM_RequirePrivileged() Then Return 0
 	If MySQL = True Then Result% = SQLRowCount(Param1%)
 Return Result%
 End Function
 
 Function BVM_MYSQLFETCHROW$(Param1%)
+	If Not BVM_RequirePrivileged() Then Return ""
 	If MySQL = True Then Result$ = SQLFetchRow(Param1%)
 Return Result$
 End Function
 
 Function BVM_MYSQLGETVAR$(Param1%,Param2$)
+	If Not BVM_RequirePrivileged() Then Return ""
 	If MySQL = True Then Result$ = ReadSQLField(Param1%, Param2$)
 	Return Result$
 End Function
 
 Function BVM_MYSQLFREEQUERY(Param1%)
+	If Not BVM_RequirePrivileged() Then Return
 	If MySQL = True Then FreeSQLQuery(Param1%)
 End Function
 
 Function BVM_MYSQLFREEROW(Param1%)
+	If Not BVM_RequirePrivileged() Then Return
 	If MySQL = True Then FreeSQLRow(Param1%)
 End Function
 
