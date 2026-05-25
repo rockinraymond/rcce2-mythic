@@ -927,9 +927,37 @@ Function SaveDroppedItems(Filename$)
 
 End Function
 
-; Assigns a new runtime ID to an actor instance
+; Assigns a new runtime ID to an actor instance.
+;
+; RuntimeIDList is Dim'd 0..65535. The original implementation
+; auto-incremented LastRuntimeID and wrapped to 0 after 65534
+; without checking whether the candidate slot was already in use --
+; so on a long-running server (one that's churned more than 65535
+; actors across its lifetime), the wrap reassigns the RuntimeID
+; of a still-live actor, and every subsequent wire packet
+; referencing the old ID hits the new actor instead. This shows up
+; as cross-target damage, mis-targeted spells, or apparent state
+; corruption that's actually packet routing.
+;
+; Scan forward from LastRuntimeID to find the next genuinely-free
+; slot. The 65536-slot table makes a worst-case full sweep cheap
+; (the body is a Null comparison); we early-exit on the first hit.
+; If the table is somehow full, log + reuse the original slot --
+; the wrap-clobber bug above, but at least it's now visible.
 Function AssignRuntimeID(A.ActorInstance)
 
+	Local Start = LastRuntimeID
+	Local Tried = 0
+	While RuntimeIDList(LastRuntimeID) <> Null
+		LastRuntimeID = LastRuntimeID + 1
+		If LastRuntimeID > 65534 Then LastRuntimeID = 0
+		Tried = Tried + 1
+		If Tried > 65535
+			WriteLog(MainLog, "AssignRuntimeID: RuntimeIDList full (65536 actors); reusing slot " + Start)
+			LastRuntimeID = Start
+			Exit
+		EndIf
+	Wend
 	A\RuntimeID = LastRuntimeID
 	RuntimeIDList(LastRuntimeID) = A
 	LastRuntimeID = LastRuntimeID + 1
