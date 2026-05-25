@@ -80,6 +80,12 @@ End Type
 ; Creates a subdivided plane (used for water)
 Function CreateSubdividedPlane(XDivs, ZDivs, UScale# = 1.0, VScale# = 1.0, Parent = 0)
 
+	; Clamp divisions to a sane minimum (see ClientAreas.bb for the
+	; full reasoning). XDivs/ZDivs of 1 would divide-by-zero on the
+	; XPos/ZPos normalization. Below 2 has no actual subdivision.
+	If XDivs < 2 Then XDivs = 2
+	If ZDivs < 2 Then ZDivs = 2
+
 	EN = CreateMesh(Parent)
 	Surf = CreateSurface(EN)
 
