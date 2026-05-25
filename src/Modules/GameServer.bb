@@ -127,16 +127,21 @@ End Function
 
 Function KillActor(A.ActorInstance, Killer.ActorInstance)
 
-	; Tell players in the same area if it was an AI actor dying
+	; Tell players in the same area if it was an AI actor dying. If the
+	; actor's ServerArea is stale (warp-in-progress, freed area, or any
+	; cleanup race), Object.AreaInstance returns Null -- skip the
+	; broadcast rather than crash on AInstance\FirstInZone.
 	If A\RNID < 0
 		Pa$ = RCE_StrFromInt$(A\RuntimeID, 2)
 		If Killer <> Null Then Pa$ = Pa$ + RCE_StrFromInt$(Killer\RuntimeID, 2)
 		AInstance.AreaInstance = Object.AreaInstance(A\ServerArea)
-		A2.ActorInstance = AInstance\FirstInZone
-		While A2 <> Null
-			If A2\RNID > 0 Then RCE_Send(Host, A2\RNID, P_ActorDead, Pa$, True)
-			A2 = A2\NextInZone
-		Wend
+		If AInstance <> Null
+			A2.ActorInstance = AInstance\FirstInZone
+			While A2 <> Null
+				If A2\RNID > 0 Then RCE_Send(Host, A2\RNID, P_ActorDead, Pa$, True)
+				A2 = A2\NextInZone
+			Wend
+		EndIf
 	EndIf
 
 	If Killer <> Null
@@ -187,23 +192,31 @@ Function KillActor(A.ActorInstance, Killer.ActorInstance)
 			Params$ = Params$ + "," + A\ScriptGlobals$[i]
 		Next
 		If A\DeathScript$ <> "" Then ThreadScript(A\DeathScript$, "Main", Handle(Killer), 0, Params$)
-		; Remove from zone linked list
+		; Remove from zone linked list. If the area instance is already
+		; gone (zone unload race, mid-warp), there's nothing to detach
+		; from and the existing NextInZone pointers will be dangling
+		; anyway -- skip rather than crash.
 		If A\NextInZone <> Null
 			AInstance.AreaInstance = Object.AreaInstance(A\ServerArea)
-			A2.ActorInstance = AInstance\FirstInZone
-			If A2 = A
-				AInstance\FirstInZone = A\NextInZone
-			Else
-				While A2\NextInZone <> A
-					A2 = A2\NextInZone
-				Wend
-				A2\NextInZone = A\NextInZone
+			If AInstance <> Null
+				A2.ActorInstance = AInstance\FirstInZone
+				If A2 = A
+					AInstance\FirstInZone = A\NextInZone
+				Else
+					While A2\NextInZone <> A
+						A2 = A2\NextInZone
+					Wend
+					A2\NextInZone = A\NextInZone
+				EndIf
 			EndIf
 		EndIf
-		; Remove from spawn point if attached to one
+		; Remove from spawn point if attached to one. Same Null guard --
+		; if AInstance is gone, the Spawned counter is already orphaned.
 		If A\SourceSP > -1
 			AInstance.AreaInstance = Object.AreaInstance(A\ServerArea)
-			AInstance\Spawned[A\SourceSP] = AInstance\Spawned[A\SourceSP] - 1
+			If AInstance <> Null
+				AInstance\Spawned[A\SourceSP] = AInstance\Spawned[A\SourceSP] - 1
+			EndIf
 		EndIf
 		FreeActorScripts(A)
 		FreeActorInstance(A)
@@ -220,16 +233,22 @@ Function FireProjectile(P.Projectile, A1.ActorInstance, A2.ActorInstance)
 	; Check faction ratings
 	If A1\FactionRatings[A2\HomeFaction] > 150 Then Return
 
-	; Tell all players about the projectile so they can display it
+	; Tell all players about the projectile so they can display it. If
+	; the source's area lookup fails (stale ServerArea after a warp),
+	; skip the broadcast -- mid-flight projectiles whose source actor
+	; is in transit just don't get a visual ping; the damage logic
+	; below still resolves authoritatively on the server.
 	Pa$ = RCE_StrFromInt$(A1\RuntimeID, 2) + RCE_StrFromInt$(A2\RuntimeID, 2) + RCE_StrFromInt$(P\MeshID, 2)
 	Pa$ = Pa$ + RCE_StrFromInt$(P\Emitter1TexID, 2) + RCE_StrFromInt$(P\Emitter2TexID, 2) + RCE_StrFromInt$(P\Homing, 1) + RCE_StrFromInt$(P\Speed, 1)
 	Pa$ = Pa$ + RCE_StrFromInt$(Len(P\Emitter1$), 1) + P\Emitter1$ + P\Emitter2$
 	AInstance.AreaInstance = Object.AreaInstance(A1\ServerArea)
-	A3.ActorInstance = AInstance\FirstInZone
-	While A3 <> Null
-		If A3\RNID > 0 Then RCE_Send(Host, A3\RNID, P_Projectile, Pa$, True)
-		A3 = A3\NextInZone
-	Wend
+	If AInstance <> Null
+		A3.ActorInstance = AInstance\FirstInZone
+		While A3 <> Null
+			If A3\RNID > 0 Then RCE_Send(Host, A3\RNID, P_Projectile, Pa$, True)
+			A3 = A3\NextInZone
+		Wend
+	EndIf
 
 	; Does the projectile hit the target?
 	ToHit = Rand(100)
@@ -298,16 +317,19 @@ Function ActorAttack(A1.ActorInstance, A2.ActorInstance)
 					CheckDist# = A1\Inventory\Items[SlotI_Weapon]\Item\Range# + A1\Actor\Radius# + A2\Actor\Radius#
 					If Dist# > CheckDist# * CheckDist# Then Return False
 
-					; Tell other players in the same area
+					; Tell other players in the same area. Skip if
+					; the attacker's area lookup is Null (warp race).
 					Pa$ = "O" + RCE_StrFromInt$(A1\RuntimeID, 2) + RCE_StrFromInt$(A2\RuntimeID, 2)
 					AInstance.AreaInstance = Object.AreaInstance(A1\ServerArea)
-					A3.ActorInstance = AInstance\FirstInZone
-					While A3 <> Null
-						If A3\RNID > 0
-							If A3 <> A1 And A3 <> A2 Then RCE_Send(Host, A3\RNID, P_AttackActor, Pa$, True)
-						EndIf
-						A3 = A3\NextInZone
-					Wend
+					If AInstance <> Null
+						A3.ActorInstance = AInstance\FirstInZone
+						While A3 <> Null
+							If A3\RNID > 0
+								If A3 <> A1 And A3 <> A2 Then RCE_Send(Host, A3\RNID, P_AttackActor, Pa$, True)
+							EndIf
+							A3 = A3\NextInZone
+						Wend
+					EndIf
 
 					; Launch projectile
 					P.Projectile = ProjectileList(A1\Inventory\Items[SlotI_Weapon]\Item\RangedProjectile)
@@ -540,17 +562,20 @@ Function ActorAttack(A1.ActorInstance, A2.ActorInstance)
 		RCE_Send(Host, A2\RNID, P_AttackActor, "Y" + RCE_StrFromInt$(A1\RuntimeID, 2) + Pa$, True)
 	EndIf
 
-	; Tell other players in the same area
+	; Tell other players in the same area. Skip if the attacker's
+	; area lookup is Null (warp race / freed area).
 	Pa$ = "O" + RCE_StrFromInt$(A1\RuntimeID, 2) + RCE_StrFromInt$(A2\RuntimeID, 2)
 
 	AInstance.AreaInstance = Object.AreaInstance(A1\ServerArea)
-	A3.ActorInstance = AInstance\FirstInZone
-	While A3 <> Null
-		If A3\RNID > 0
-			If A3 <> A1 And A3 <> A2 Then RCE_Send(Host, A3\RNID, P_AttackActor, Pa$, True)
-		EndIf
-		A3 = A3\NextInZone
-	Wend
+	If AInstance <> Null
+		A3.ActorInstance = AInstance\FirstInZone
+		While A3 <> Null
+			If A3\RNID > 0
+				If A3 <> A1 And A3 <> A2 Then RCE_Send(Host, A3\RNID, P_AttackActor, Pa$, True)
+			EndIf
+			A3 = A3\NextInZone
+		Wend
+	EndIf
 
 	.SkipAttackNet
 
