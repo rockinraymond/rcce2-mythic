@@ -456,9 +456,11 @@ Function LoadArea(Name$, CameraEN, DisplayItems = False, UpdateRottNet = False)
 			
 			
 			Collides = ReadByte(F)
-			; Lightmap information and RCTE data
-			S\Lightmap$ = ReadString$(F)
-			S\RCTE$ = ReadString$(F)
+			; Lightmap information and RCTE data. Bound the asset paths
+			; so a corrupted Area data file can't hang the loader on a
+			; wild ReadInt length prefix (260 = Windows MAX_PATH).
+			S\Lightmap$ = ReadBoundedString$(F, 260)
+			S\RCTE$ = ReadBoundedString$(F, 260)
 			
 			;v1.104 options cysis145 [010]
 			S\CastShadow = ReadByte(F)
@@ -818,8 +820,8 @@ Function LoadArea(Name$, CameraEN, DisplayItems = False, UpdateRottNet = False)
 				E\EN = CreatePivot()
 			EndIf
 								
-			; Read in emitter data
-			E\ConfigName$ = ReadString$(F)
+			; Read in emitter data. Same length-prefix DoS hardening.
+			E\ConfigName$ = ReadBoundedString$(F, 260)
 			E\TexID = ReadShort(F)
 			Texture = GetTexture(E\TexID)
 			X# = ReadFloat#(F) : Y# = ReadFloat#(F) : Z# = ReadFloat#(F)
