@@ -3983,22 +3983,53 @@ Function UpdateActionBarIcons()
    EndIf
    
    For i = 0 To 11
+      Sp.Spell = Null
+      It.Item = Null
       ; Spell
-      If ActionBarSlots(i + Offset) < 0 And ActionBarSlots(i + Offset) <> 0   
+      If ActionBarSlots(i + Offset) < 0 And ActionBarSlots(i + Offset) <> 0
          If RequireMemorise
             Num = ActionBarSlots(i + Offset) + 10
-            Sp.Spell = SpellsList(Me\KnownSpells[Me\MemorisedSpells[Num]])
+            ; MemorisedSpells is Field[9] (sentinel 5000); KnownSpells
+            ; is Field[999]; SpellsList is Dim'd 65534. Bound + Null-
+            ; guard at every hop -- a stale ActionBarSlots reference
+            ; (deleted spell, corrupt save) would otherwise crash on
+            ; Sp\ThumbnailTexID below.
+            If Num >= 0 And Num <= 9
+               Local Mem = Me\MemorisedSpells[Num]
+               If Mem >= 0 And Mem <= 999
+                  Local SID = Me\KnownSpells[Mem]
+                  If SID >= 0 And SID <= 65534 Then Sp = SpellsList(SID)
+               EndIf
+            EndIf
          Else
             Num = ActionBarSlots(i + Offset) + 1000
-            Sp.Spell = SpellsList(Me\KnownSpells[Num])
+            If Num >= 0 And Num <= 999
+               Local SID2 = Me\KnownSpells[Num]
+               If SID2 >= 0 And SID2 <= 65534 Then Sp = SpellsList(SID2)
+            EndIf
          EndIf
          GYG.GY_Gadget = Object.GY_Gadget(BActionBar(i))
-         EntityTexture(GYG\EN, GetTexture(Sp\ThumbnailTexID))
+         If Sp <> Null
+            EntityTexture(GYG\EN, GetTexture(Sp\ThumbnailTexID))
+         Else
+            ; Stale slot -- clear it and show the default button face.
+            ActionBarSlots(i + Offset) = 0
+            GYB.GY_Button = Object.GY_Button(GYG\TypeHandle)
+            EntityTexture GYG\EN, GYB\UserTexture
+         EndIf
       ; Item
-      ElseIf ActionBarSlots(i + Offset) < 65535 And ActionBarSlots(i + Offset) <> 0   
-         It.Item = ItemList(ActionBarSlots(i + Offset))
+      ElseIf ActionBarSlots(i + Offset) < 65535 And ActionBarSlots(i + Offset) <> 0
+         Local IID = ActionBarSlots(i + Offset)
+         If IID >= 0 And IID < 65535 Then It = ItemList(IID)
          GYG.GY_Gadget = Object.GY_Gadget(BActionBar(i))
-         EntityTexture GYG\EN, GetTexture(It\ThumbnailTexID)
+         If It <> Null
+            EntityTexture GYG\EN, GetTexture(It\ThumbnailTexID)
+         Else
+            ; Stale slot -- clear and show the default button face.
+            ActionBarSlots(i + Offset) = 0
+            GYB.GY_Button = Object.GY_Button(GYG\TypeHandle)
+            EntityTexture GYG\EN, GYB\UserTexture
+         EndIf
       Else
          GYG.GY_Gadget = Object.GY_Gadget(BActionBar(i))
          GYB.GY_Button = Object.GY_Button(GYG\TypeHandle)
