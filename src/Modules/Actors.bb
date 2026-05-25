@@ -560,15 +560,37 @@ Function FreeActorInstance(A.ActorInstance)
 End Function
 
 ; Frees all the slaves of an actor instance (RECURSIVE)
+;
+; Restart-on-Delete cursor pattern: Blitz3D's `For X = Each Type`
+; iterator advances via the deleted element's "next" pointer on
+; each Next, so calling FreeActorInstance(A2) inside the loop body
+; corrupts the cursor for the next iteration. The recursion makes
+; the After-cursor walk used in PausedScript cleanup insufficient
+; (a recursive call can free an actor that's after the outer
+; cursor's captured A2Next).
+;
+; Restart the For loop after every free instead. O(n*slaves) but
+; the iteration cost is small (Leader comparison) and slaves are
+; usually 1-10 per leader. The outer loop terminates as soon as
+; the search completes without finding any remaining slaves.
 Function FreeActorInstanceSlaves(A.ActorInstance)
 
-	For A2.ActorInstance = Each ActorInstance
-		If A\NumberOfSlaves = 0 Then Exit
-		If A2\Leader = A
-			FreeActorInstanceSlaves(A2)
-			FreeActorInstance(A2)
-		EndIf
-	Next
+	Local Found = True
+	While Found
+		Found = False
+		For A2.ActorInstance = Each ActorInstance
+			If A\NumberOfSlaves = 0 Then Exit
+			If A2\Leader = A
+				Found = True
+				FreeActorInstanceSlaves(A2)
+				FreeActorInstance(A2)
+				; Restart from a fresh iterator next outer pass --
+				; the For-Each cursor is invalid after the Delete
+				; inside FreeActorInstance above.
+				Exit
+			EndIf
+		Next
+	Wend
 
 End Function
 
