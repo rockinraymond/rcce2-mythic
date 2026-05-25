@@ -1349,6 +1349,19 @@ Function BVM_SCREENFLASH(Param1%, Param2%, Param3%, Param4%, Param5%, Param6%, P
 	EndIf
 End Function
 
+; Helper: returns True if SpellsList(SpellID) exists and its upper-cased
+; Name$ matches MatchUpper$. Used to guard the BVM_ABILITY*/ABILITYLEVEL
+; family against stale character KnownSpells slots -- the SpellsList
+; slot can be Null if a spell was deleted from Spells.dat between
+; sessions, and the previous unguarded `Upper$(SpellsList(...)\Name$)`
+; check crashed the server on the first iteration that hit a stale slot.
+Function SpellNameMatches%(SpellID, MatchUpper$)
+	If SpellID < 0 Or SpellID > 65534 Then Return False
+	If SpellsList(SpellID) = Null Then Return False
+	If Upper$(SpellsList(SpellID)\Name$) = MatchUpper$ Then Return True
+	Return False
+End Function
+
 Function BVM_ADDABILITY(Param1%, Param2$, Param3%=1)
 	Actor.ActorInstance = Object.ActorInstance(Param1%)
 	If Actor <> Null
@@ -1359,7 +1372,7 @@ Function BVM_ADDABILITY(Param1%, Param2$, Param3%=1)
 		Known = False
 		For i = 0 To 999
 			If Actor\SpellLevels[i] > 0
-				If Upper$(SpellsList(Actor\KnownSpells[i])\Name$) = SpellName$ Then Known = True : Exit
+				If SpellNameMatches%(Actor\KnownSpells[i], SpellName$) Then Known = True : Exit
 			EndIf
 		Next
 		If Known = False
@@ -1376,7 +1389,7 @@ Function BVM_DELETEABILITY(Param1%, Param2$)
 		SpellName$ = Upper$(Param2$)
 		For i = 0 To 999
 			If Actor\SpellLevels[i] > 0
-				If Upper$(SpellsList(Actor\KnownSpells[i])\Name$) = SpellName$ Then DeleteSpell(Actor, i)
+				If SpellNameMatches%(Actor\KnownSpells[i], SpellName$) Then DeleteSpell(Actor, i)
 			EndIf
 		Next
 	EndIf
@@ -1388,7 +1401,7 @@ Function BVM_ABILITYKNOWN%(Param1%, Param2$)
 		SpellName$ = Upper$(Param2$)
 		For i = 0 To 999
 			If Actor\SpellLevels[i] > 0
-				If Upper$(SpellsList(Actor\KnownSpells[i])\Name$) = SpellName$ Then Result% = 1 : Exit
+				If SpellNameMatches%(Actor\KnownSpells[i], SpellName$) Then Result% = 1 : Exit
 			EndIf
 		Next
 	EndIf
@@ -1402,7 +1415,7 @@ Function BVM_ABILITYMEMORISED%(Param1%, Param2$)
 		For i = 0 To 9
 			If Actor\MemorisedSpells[i] <> 5000
 				ID = Actor\KnownSpells[Actor\MemorisedSpells[i]]
-				If Upper$(SpellsList(ID)\Name$) = SpellName$ Then Result% = 1 : Exit
+				If SpellNameMatches%(ID, SpellName$) Then Result% = 1 : Exit
 			EndIf
 		Next
 	EndIf
@@ -1415,7 +1428,7 @@ Function BVM_ABILITYLEVEL%(Param1%, Param2$)
 		SpellName$ = Upper$(Param2$)
 		For i = 0 To 999
 			If Actor\SpellLevels[i] > 0
-				If Upper$(SpellsList(Actor\KnownSpells[i])\Name$) = SpellName$ Then Result% = Actor\SpellLevels[i] : Exit
+				If SpellNameMatches%(Actor\KnownSpells[i], SpellName$) Then Result% = Actor\SpellLevels[i] : Exit
 			EndIf
 		Next
 	EndIf
@@ -1429,10 +1442,14 @@ Function BVM_SETABILITYLEVEL(Param1%, Param2$, Param3%)
 		Lvl = Param3%
 		For i = 0 To 999
 			If Actor\SpellLevels[i] > 0
-				If Upper$(SpellsList(Actor\KnownSpells[i])\Name$) = SpellName$
+				If SpellNameMatches%(Actor\KnownSpells[i], SpellName$)
 					Actor\SpellLevels[i] = Lvl
 					If Actor\RNID > 0
-						Pa$ = RCE_StrFromInt$(Lvl, 4) + SpellsList(Actor\KnownSpells[i])\Name$
+						; SpellNameMatches already verified the slot is non-Null;
+						; re-grab the Spell handle so we can pull its current name
+						; for the broadcast.
+						Local Sp.Spell = SpellsList(Actor\KnownSpells[i])
+						Pa$ = RCE_StrFromInt$(Lvl, 4) + Sp\Name$
 						RCE_Send(Host, Actor\RNID, P_KnownSpellUpdate, "L" + Pa$, True)
 					EndIf
 					Exit
