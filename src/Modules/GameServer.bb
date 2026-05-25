@@ -1105,6 +1105,7 @@ Function SetArea(A.ActorInstance, Ar.Area, Instance, Waypoint = -1, Portal = 0, 
 			A\Z# = Ar\PortalZ#[Portal]
 			A\LastPortal = Portal
 			A\LastPortalArea = Handle(Ar)
+			A\LastPortalAreaName$ = Ar\Name$
 			A\LastPortalTime = MilliSecs()
 		; Direct position
 		Else
@@ -1127,6 +1128,7 @@ Function SetArea(A.ActorInstance, Ar.Area, Instance, Waypoint = -1, Portal = 0, 
 		; pair.
 		A\LastPortal = -1
 		A\LastPortalArea = 0
+		A\LastPortalAreaName$ = ""
 	EndIf
 
 	; Reset target

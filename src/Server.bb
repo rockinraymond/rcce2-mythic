@@ -588,6 +588,19 @@ Repeat
 										; current one, and the time floor still bars
 										; immediate re-entry of the exact portal the
 										; actor was just placed on.
+										;
+										; Lazy resolve LastPortalAreaName$ -> Handle.
+										; The persisted form is the area NAME (Handles
+										; are process-local); first time we see this
+										; actor in a portal area after login, re-bind
+										; the area handle. If the area was renamed /
+										; deleted between sessions, leave the handle
+										; at 0 and the lock just stays clear -- safe
+										; direction.
+										If AI\LastPortalArea = 0 And AI\LastPortalAreaName$ <> ""
+											Local LpAr.Area = FindArea(AI\LastPortalAreaName$)
+											If LpAr <> Null Then AI\LastPortalArea = Handle(LpAr)
+										EndIf
 										If Dist# < Size# And (AI\LastPortal <> i Or AI\LastPortalArea <> Handle(UpdateArea) Or (MilliSecs() - AI\LastPortalTime > PortalLockTime))
 											InPortal = False
 											Name$ = Upper$(UpdateArea\PortalLinkArea$[i])
