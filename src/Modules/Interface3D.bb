@@ -823,19 +823,25 @@ Function UpdateInterface()
 						UsedClick = True
 
 						DItem.DroppedItem = Object.DroppedItem(EntityName$(Result))
+						; Stale handle: the dropped-item entity was picked but
+						; its Object lookup resolved to Null (entity name lost,
+						; server-side cleanup race). Skip the pickup flow rather
+						; than crash on DItem\Item below. The sibling scenery
+						; path at ~line 854 already has this guard.
 						FoundSlot = -1
-
-						For i = 0 To Slots_Inventory
-							If Me\Inventory\Items[i] = Null
-								If DItem\Item <> Null
-									If SlotsMatch(DItem\Item\Item, i) And ActorHasSlot(Me\Actor, i, DItem\Item\Item) Then FoundSlot = i : Exit
+						If DItem <> Null
+							For i = 0 To Slots_Inventory
+								If Me\Inventory\Items[i] = Null
+									If DItem\Item <> Null
+										If SlotsMatch(DItem\Item\Item, i) And ActorHasSlot(Me\Actor, i, DItem\Item\Item) Then FoundSlot = i : Exit
+									EndIf
+								ElseIf (ItemInstancesIdentical(DItem\Item, Me\Inventory\Items[i]) And  DItem\Item <> Null And i >= SlotI_Backpack)
+									If DItem\Item\Item\Stackable = True
+										If SlotsMatch(DItem\Item\Item, i) And ActorHasSlot(Me\Actor, i, DItem\Item\Item) Then FoundSlot = i : Exit
+									EndIf
 								EndIf
-							ElseIf (ItemInstancesIdentical(DItem\Item, Me\Inventory\Items[i]) And  DItem\Item <> Null And i >= SlotI_Backpack)
-								If DItem\Item\Item\Stackable = True
-									If SlotsMatch(DItem\Item\Item, i) And ActorHasSlot(Me\Actor, i, DItem\Item\Item) Then FoundSlot = i : Exit
-								EndIf
-							EndIf
-						Next
+							Next
+						EndIf
 						; Room, request it from server
 						If FoundSlot > -1
 							RCE_Send(Connection, PeerToHost, P_InventoryUpdate, "P" + RCE_StrFromInt$(DItem\ServerHandle, 4) + RCE_StrFromInt$(FoundSlot, 1), True)
