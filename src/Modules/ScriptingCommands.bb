@@ -546,7 +546,12 @@ Function BVM_SETACTORBEARD(Param1%, Param2%)
 	Actor.ActorInstance = Object.ActorInstance(Param1%)
 	If Actor <> Null
 		If Actor\Gender = 0
-			Actor\Beard = Param2% - 1
+			; Bound Param2% to the 5-slot BeardIDs array. Param2% is
+			; 1-based on the script side; clamp the resulting 0-based
+			; index to 0..4 before storing.
+			Local NewBeard = Param2% - 1
+			If NewBeard < 0 Or NewBeard > 4 Then NewBeard = 0
+			Actor\Beard = NewBeard
 			Pa$ = "D" + RCE_StrFromInt$(Actor\RuntimeID, 2) + Chr$(Actor\Beard)
 			AInstance.AreaInstance = Object.AreaInstance(Actor\ServerArea)
 			If AInstance <> Null
@@ -571,7 +576,11 @@ Function BVM_SETACTORHAIR(Param1%, Param2%)
 	Actor.ActorInstance = Object.ActorInstance(Param1%)
 	If Actor <> Null
 		If Actor\Gender = 0
-			Actor\Hair = Param2% - 1
+			; Bound Param2% to the 5-slot Hair-IDs arrays (same shape
+			; as SETACTORBEARD). 1-based -> 0-based clamp.
+			Local NewHair = Param2% - 1
+			If NewHair < 0 Or NewHair > 4 Then NewHair = 0
+			Actor\Hair = NewHair
 			Pa$ = "D" + RCE_StrFromInt$(Actor\RuntimeID, 2) + Chr$(Actor\Hair)
 			AInstance.AreaInstance = Object.AreaInstance(Actor\ServerArea)
 			If AInstance <> Null
@@ -1064,7 +1073,10 @@ End Function
 Function BVM_SETACTORCLOTHES(Param1%, Param2%)
 	Actor.ActorInstance = Object.ActorInstance(Param1%)
 	If Actor <> Null
-		Actor\BodyTex = Param2% - 1
+		; Bound Param2% to the 5-slot Body-IDs arrays. 1-based -> 0-based clamp.
+		Local NewBody = Param2% - 1
+		If NewBody < 0 Or NewBody > 4 Then NewBody = 0
+		Actor\BodyTex = NewBody
 		Pa$ = "B" + RCE_StrFromInt$(Actor\RuntimeID, 2) + Chr$(Actor\BodyTex)
 		AInstance.AreaInstance = Object.AreaInstance(Actor\ServerArea)
 		If AInstance <> Null
@@ -1086,7 +1098,10 @@ End Function
 Function BVM_SETACTORFACE(Param1%, Param2%)
 	Actor.ActorInstance = Object.ActorInstance(Param1%)
 	If Actor <> Null
-		Actor\FaceTex = Param2% - 1
+		; Bound Param2% to the 5-slot Face-IDs arrays. 1-based -> 0-based clamp.
+		Local NewFace = Param2% - 1
+		If NewFace < 0 Or NewFace > 4 Then NewFace = 0
+		Actor\FaceTex = NewFace
 		Pa$ = "F" + RCE_StrFromInt$(Actor\RuntimeID, 2) + Chr$(Actor\FaceTex)
 		AInstance.AreaInstance = Object.AreaInstance(Actor\ServerArea)
 		If AInstance <> Null
