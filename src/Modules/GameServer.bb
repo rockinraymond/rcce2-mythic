@@ -648,6 +648,15 @@ Function UpdateActorInstances(Broadcast)
 	For AI.ActorInstance = Each ActorInstance
 		If AI\RuntimeID > -1
 			AInstance.AreaInstance = Object.AreaInstance(AI\ServerArea)
+			; If the actor's area lookup fails (stale ServerArea, mid-warp,
+			; or freed zone), skip this entire per-tick update -- the body
+			; below derefs AInstance\Area for waypoint movement, water
+			; damage, AI aggression, and the broadcast loops. Each of those
+			; was a one-tick crash; rather than guard each site individually
+			; the whole pass is gated on AInstance. The actor's position,
+			; HP, and other intrinsic state are still preserved for when
+			; SetArea re-establishes the zone link.
+			If AInstance <> Null
 
 			; Recharge spells. SpellCharge is now uniformly indexed by
 			; spell ID (matches the unified P_SpellUpdate "F" handler in
@@ -950,6 +959,7 @@ Function UpdateActorInstances(Broadcast)
 					EndIf
 				EndIf
 			EndIf
+			EndIf  ; closes the AInstance <> Null guard added above
 		EndIf
 	Next
 
@@ -974,6 +984,10 @@ Function UpdateActorInstances(Broadcast)
 		For AI.ActorInstance = Each ActorInstance
 			If AI\RNID > 0
 				AInstance.AreaInstance = Object.AreaInstance(AI\ServerArea)
+				; If the player's area lookup is Null (mid-warp, freed
+				; zone), skip the per-tick broadcast for this player. They'll
+				; get caught up on their next P_ChangeArea / P_StandardUpdate.
+				If AInstance <> Null
 				A2.ActorInstance = AInstance\FirstInZone
 				While A2 <> Null
 								  
@@ -1034,6 +1048,7 @@ Function UpdateActorInstances(Broadcast)
 					EndIf
 					A2 = A2\NextInZone
 				Wend
+				EndIf  ; closes the AInstance <> Null guard added above
 			EndIf
 		Next
 	EndIf
@@ -1313,16 +1328,18 @@ Function CommandPet(AI.ActorInstance, Command$, Params$)
 				Wend
 			CloseFile(F)
 
-			; Set pet name
+			; Set pet name, broadcast to others in area if any.
 			If NameValid = True
 				AI\Name$ = Params$
 				Pa$ = RCE_StrFromInt$(AI\RuntimeID, 2) + RCE_StrFromInt$(Len(AI\Name$), 1) + AI\Name$ + AI\Tag$
 				AInstance.AreaInstance = Object.AreaInstance(AI\ServerArea)
-				A2.ActorInstance = AInstance\FirstInZone
-				While A2 <> Null
-					If A2\RNID > 0 Then RCE_Send(Host, A2\RNID, P_NameChange, Pa$, True)
-					A2 = A2\NextInZone
-				Wend
+				If AInstance <> Null
+					A2.ActorInstance = AInstance\FirstInZone
+					While A2 <> Null
+						If A2\RNID > 0 Then RCE_Send(Host, A2\RNID, P_NameChange, Pa$, True)
+						A2 = A2\NextInZone
+					Wend
+				EndIf
 			EndIf
 	End Select
 
@@ -1333,6 +1350,7 @@ Function AILookForTargets(AI.ActorInstance)
 
 	If AI\Actor\Aggressiveness = 2
 		AInstance.AreaInstance = Object.AreaInstance(AI\ServerArea)
+		If AInstance = Null Then Return
 		A2.ActorInstance = AInstance\FirstInZone
 		While A2 <> Null
 			; Must have a faction rating under 50% to be attacked
@@ -1361,6 +1379,7 @@ Function AICallForHelp(AI.ActorInstance)
 
 	If AI\AITarget <> Null
 		AInstance.AreaInstance = Object.AreaInstance(AI\ServerArea)
+		If AInstance = Null Then Return
 		A2.ActorInstance = AInstance\FirstInZone
 		While A2 <> Null
 			If A2\Actor\Aggressiveness <> 3 And A2\Actor\Aggressiveness <> 0
