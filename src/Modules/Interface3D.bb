@@ -3158,11 +3158,25 @@ End Function
 
 Function UpdateCharInteractionWindow()
 	If CharInteract = Null Then Return
-	
+
 	Local AI.ActorInstance = CharInteract
-	HealthVal = (Float#(AI\Attributes\Value[HealthStat]) / Float#(AI\Attributes\Maximum[HealthStat])) * 500.0
+	; Guard divide-by-zero. An actor with HealthStat\Maximum = 0
+	; (misconfigured template, ghost / immortal NPC, or a target whose
+	; Maximum got zeroed mid-session) would otherwise crash the client
+	; the moment its info window updates -- this runs every frame the
+	; window is open. Fall back to a full bar so the UI stays usable.
+	Local HealthMax = AI\Attributes\Maximum[HealthStat]
+	If HealthMax > 0
+		HealthVal = (Float#(AI\Attributes\Value[HealthStat]) / Float#(HealthMax)) * 500.0
+	Else
+		HealthVal = 500.0
+	EndIf
 	GY_UpdateProgressBar( SCharInteractHealth, HealthVal )
-	GY_UpdateLabel( LCharInteractFaction, LanguageString$(LS_Faction) + " " + FactionNames$(AI\HomeFaction) )
+	; HomeFaction is Dim'd 0..99; bound the array read so a misconfigured
+	; HomeFaction value can't read past the end into adjacent memory.
+	Local FactionIdx = AI\HomeFaction
+	If FactionIdx < 0 Or FactionIdx > 99 Then FactionIdx = 0
+	GY_UpdateLabel( LCharInteractFaction, LanguageString$(LS_Faction) + " " + FactionNames$(FactionIdx) )
 	GY_UpdateLabel( LCharInteractLevel, LanguageString$(LS_Level) + " " + AI\Level )
 	GY_UpdateLabel( LCharInteractReputation, LanguageString$(LS_Reputation) + " " + AI\Reputation )
 
