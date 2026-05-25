@@ -290,13 +290,23 @@ Function LoadActorInstance3D(A.ActorInstance, Scale# = 1.0, SkipAttachments = Fa
 			BeardEN = GetMesh(ID, True)
 			If BeardEN <> 0
 				Bonce = FindChild(A\EN, "Head")
-				If Bonce = 0 Then RuntimeError(A\Actor\Race$ + " actor mesh is missing a 'Head' joint!")
-				EntityParent BeardEN, Bonce, False
-				PositionEntity BeardEN, LoadedMeshX#(ID), LoadedMeshY#(ID), LoadedMeshZ#(ID)
-				ScaleEntity BeardEN, LoadedMeshScales#(ID), LoadedMeshScales#(ID), LoadedMeshScales#(ID)
-				; Correct rotation for Max models
-				If A\TeamID = True Then TurnEntity BeardEN, 0, 180, 90
-				NameEntity(BeardEN, "Beard")
+				If Bonce = 0
+					; Beard is decorative. If the actor mesh has no Head
+					; joint, just skip it -- no reason to crash the client.
+					; Mirrors the P_AppearanceUpdate "D" soft-fail in
+					; ClientNet.bb (PR #130); LoadActorInstance3D is the
+					; sibling path that runs when an actor first appears
+					; with a beard configured.
+					WriteLog(MainLog, "LoadActorInstance3D: race '" + A\Actor\Race$ + "' mesh missing 'Head' joint, skipping beard")
+					FreeEntity BeardEN
+				Else
+					EntityParent BeardEN, Bonce, False
+					PositionEntity BeardEN, LoadedMeshX#(ID), LoadedMeshY#(ID), LoadedMeshZ#(ID)
+					ScaleEntity BeardEN, LoadedMeshScales#(ID), LoadedMeshScales#(ID), LoadedMeshScales#(ID)
+					; Correct rotation for Max models
+					If A\TeamID = True Then TurnEntity BeardEN, 0, 180, 90
+					NameEntity(BeardEN, "Beard")
+				EndIf
 			EndIf
 		EndIf
 
