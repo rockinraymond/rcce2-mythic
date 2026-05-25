@@ -1362,10 +1362,13 @@ Function UpdateNetwork()
 							If A\Inventory\Items[SlotI_Shield] <> Null Then FreeItemInstance(A\Inventory\Items[SlotI_Shield])
 							If A\Inventory\Items[SlotI_Chest] <> Null Then FreeItemInstance(A\Inventory\Items[SlotI_Chest])
 							If A\Inventory\Items[SlotI_Hat] <> Null Then FreeItemInstance(A\Inventory\Items[SlotI_Hat])
-							If WeaponID < 65535 Then A\Inventory\Items[SlotI_Weapon] = CreateItemInstance(ItemList(WeaponID))
-							If ShieldID < 65535 Then A\Inventory\Items[SlotI_Shield] = CreateItemInstance(ItemList(ShieldID))
-							If ChestID < 65535 Then A\Inventory\Items[SlotI_Chest] = CreateItemInstance(ItemList(ChestID))
-							If HatID < 65535 Then A\Inventory\Items[SlotI_Hat] = CreateItemInstance(ItemList(HatID))
+							; ItemList is Dim'd 65534; 65535 is the "no item" sentinel.
+							; Range-check + Null-check the slot before CreateItemInstance --
+							; the constructor faults on a Null Item (I\Item\Attributes deref).
+							If WeaponID >= 0 And WeaponID < 65535 And ItemList(WeaponID) <> Null Then A\Inventory\Items[SlotI_Weapon] = CreateItemInstance(ItemList(WeaponID))
+							If ShieldID >= 0 And ShieldID < 65535 And ItemList(ShieldID) <> Null Then A\Inventory\Items[SlotI_Shield] = CreateItemInstance(ItemList(ShieldID))
+							If ChestID >= 0 And ChestID < 65535 And ItemList(ChestID) <> Null Then A\Inventory\Items[SlotI_Chest] = CreateItemInstance(ItemList(ChestID))
+							If HatID >= 0 And HatID < 65535 And ItemList(HatID) <> Null Then A\Inventory\Items[SlotI_Hat] = CreateItemInstance(ItemList(HatID))
 							UpdateActorItems(A)
 							For i = 0 To 5
 								If RCE_IntFromStr(Mid$(M\MessageData$, 12 + i, 1)) = True
@@ -1379,6 +1382,13 @@ Function UpdateNetwork()
 					Case "G"
 						ItemID = RCE_IntFromStr(Mid$(M\MessageData$, 6, 2))
 						Amount = RCE_IntFromStr(Mid$(M\MessageData$, 8, 2))
+						; ItemList is Dim'd 65534. A wire ItemID outside
+						; 0..65534 or pointing at a Null slot would crash
+						; CreateItemInstance (I\Item\Attributes deref on a
+						; Null Item). Drop the packet on any of those.
+						If ItemID < 0 Or ItemID > 65534 Or ItemList(ItemID) = Null
+							WriteLog(MainLog, "P_InventoryUpdate G: bad ItemID " + ItemID + ", dropping")
+						Else
 						; Find free slot
 						Found = False
 						II.ItemInstance = CreateItemInstance(ItemList(ItemID))
@@ -1417,6 +1427,7 @@ Function UpdateNetwork()
 						If Found = False
 							FreeItemInstance(II)
 							RCE_Send(Connection, PeerToHost, P_InventoryUpdate, "GN" + Mid$(M\MessageData$, 2, 4), True)
+						EndIf
 						EndIf
 				End Select
 
