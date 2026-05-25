@@ -107,11 +107,12 @@ bin/ReShade.ini
 
 compiler/BlitzPlus/
 
-# Claude Code session ephemera. Track .claude/skills/ and any CLAUDE.md
-# files, but never the per-session state, locks, or local config that
-# the runtime drops here.
+# Claude Code session ephemera. Track .claude/skills/ and the
+# .claude/INTENT.md north-star doc; ignore everything else (per-session
+# state, locks, local config the runtime drops here).
 .claude/*
 !.claude/skills/
+!.claude/INTENT.md
 .claude/settings.local.json
 
 scripts/msbuild_blitzrcplus.bat
