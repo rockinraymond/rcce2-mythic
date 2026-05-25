@@ -612,9 +612,19 @@ End Function
 ; Updates position, etc. of all actor instances
 Function UpdateActorInstances(Broadcast)
 
-	; Update actor effects
+	; Update actor effects.
+	;
+	; After-cursor walk: the body Deletes AE in two branches (owner gone,
+	; effect time expired). Blitz3D's For-Each advances via the deleted
+	; element's "next" pointer, so the original `For AE = Each ActorEffect
+	; / Delete AE / Next` shape intermittently skipped effects or crashed
+	; on bursts of simultaneous expirations. Documented in CLAUDE.md
+	; ("Iterator-during-iteration hazards", #247).
 	T = MilliSecs()
-	For AE.ActorEffect = Each ActorEffect
+	Local AE.ActorEffect = First ActorEffect
+	Local AENext.ActorEffect = Null
+	While AE <> Null
+		AENext = After AE
 		; Owner has gone
 		If AE\Owner = Null
 			Delete AE\Attributes
@@ -642,7 +652,8 @@ Function UpdateActorInstances(Broadcast)
 				EndIf
 			EndIf
 		EndIf
-	Next
+		AE = AENext
+	Wend
 
 	; Recharging this frame?
 	Recharge = False
