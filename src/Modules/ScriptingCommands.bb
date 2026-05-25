@@ -2316,6 +2316,13 @@ Function BVM_FIRSTACTORINZONE%(Param1$, Param2% = 0)
 	For Ar.Area = Each Area
 		If Upper$(Ar\Name$) = ZoneName$
 			Instance = Param2%
+			; Bound the instance index. Ar\Instances is Dim'd 0..99;
+			; a script-supplied out-of-range value would read past the
+			; array (Blitz3D's Dim has no runtime check). Also skip if
+			; the requested instance hasn't been created -- returning
+			; 0 lets the caller's iteration terminate cleanly.
+			If Instance < 0 Or Instance > 99 Then Exit
+			If Ar\Instances[Instance] = Null Then Exit
 			Actor.ActorInstance = Ar\Instances[Instance]\FirstInZone
 			If Actor <> Null Then Result% = Handle(Actor)
 			Exit
