@@ -1815,6 +1815,12 @@ Function CharSelect()
 								If Me\HomeFaction < 0 Or Me\HomeFaction > 99 Then Me\HomeFaction = 0
 								Offset = 16
 								While Offset < Len(M\MessageData$)
+									; Me\Attributes\Value/Maximum are Field[39]
+									; (40 slots). A malformed P_StatUpdate "B1"
+									; payload longer than the legitimate 40
+									; attribute pairs would Field-OOB the
+									; client. Stop walking once full.
+									If AttributesDone < 0 Or AttributesDone > 39 Then Exit
 									Me\Attributes\Value[AttributesDone] = RCE_IntFromStr(Mid$(M\MessageData$, Offset, 2))
 									Me\Attributes\Maximum[AttributesDone] = RCE_IntFromStr(Mid$(M\MessageData$, Offset + 2, 2))
 									AttributesDone = AttributesDone + 1
