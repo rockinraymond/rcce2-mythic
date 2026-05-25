@@ -858,31 +858,40 @@ Function BVM_SETLEADER(Param1%, Param2%)
 			If Leader <> Null
 				Actor\Leader = Leader
 				Actor\Leader\NumberOfSlaves = Actor\Leader\NumberOfSlaves + 1
-				; Make sure it no longer belongs to any spawn point
+				; Make sure it no longer belongs to any spawn point.
+				; Skip the spawn-count decrement if the actor's area
+				; lookup is Null (mid-warp / freed zone) -- the counter
+				; is already orphaned in that case.
 				If Actor\SourceSP > -1
 					AInstance.AreaInstance = Object.AreaInstance(Actor\ServerArea)
-					AInstance\Spawned[Actor\SourceSP] = AInstance\Spawned[Actor\SourceSP] - 1
+					If AInstance <> Null
+						AInstance\Spawned[Actor\SourceSP] = AInstance\Spawned[Actor\SourceSP] - 1
+					EndIf
 					Actor\SourceSP = -1
 				EndIf
 				Actor\AIMode = AI_Pet
 			; No leader!
 			Else
-				; Assign to first available waypoint
+				; Assign to first available waypoint. If the actor's
+				; area is gone, fall through to the kill path -- there's
+				; no zone to patrol in.
 				AInstance.AreaInstance = Object.AreaInstance(Actor\ServerArea)
 				Found = False
-				For i = 0 To 249
-					If AInstance\Area\PrevWaypoint[i] <> 255
-						Actor\OldX# = Actor\X#
-						Actor\OldZ# = Actor\Z#
-						Actor\AIMode = AI_Patrol
-						Actor\DestX# = AInstance\Area\WaypointX#[i] + Rnd#(-5.0, 5.0)
-						Actor\DestZ# = AInstance\Area\WaypointZ#[i] + Rnd#(-5.0, 5.0)
-						Actor\CurrentWaypoint = i
-						Found = True
-						Exit
-					EndIf
-				Next
-				; Die
+				If AInstance <> Null And AInstance\Area <> Null
+					For i = 0 To 249
+						If AInstance\Area\PrevWaypoint[i] <> 255
+							Actor\OldX# = Actor\X#
+							Actor\OldZ# = Actor\Z#
+							Actor\AIMode = AI_Patrol
+							Actor\DestX# = AInstance\Area\WaypointX#[i] + Rnd#(-5.0, 5.0)
+							Actor\DestZ# = AInstance\Area\WaypointZ#[i] + Rnd#(-5.0, 5.0)
+							Actor\CurrentWaypoint = i
+							Found = True
+							Exit
+						EndIf
+					Next
+				EndIf
+				; Die if no waypoint available (or area is gone)
 				If Found = False Then KillActor(Actor, Null)
 			EndIf
 		EndIf
