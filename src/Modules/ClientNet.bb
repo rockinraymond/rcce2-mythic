@@ -822,15 +822,22 @@ Function UpdateNetwork()
 					For i = 0 To 11
 						slot = i + offset
 						If ActionBarSlots(slot) < 0
+							; MemorisedSpells is Field[9]; KnownSpells is Field[999];
+							; ClientSpellNameMatches bound-checks SpellsList[65534]
+							; + Null-checks the slot. Stale slot would otherwise
+							; deref SpellsList(...)\Name$ on a Null and crash.
 							If RequireMemorise
 								Num = ActionBarSlots(slot) + 10
-								If Upper$(SpellsList(Me\KnownSpells[Me\MemorisedSpells[Num]])\Name$) = Name$
-									found = True
+								If Num >= 0 And Num <= 9
+									Mem = Me\MemorisedSpells[Num]
+									If Mem >= 0 And Mem <= 999
+										If ClientSpellNameMatches%(Me\KnownSpells[Mem], Name$) Then found = True
+									EndIf
 								EndIf
 							Else
 								Num = ActionBarSlots(slot) + 1000
-								If Upper$(SpellsList(Me\KnownSpells[Num])\Name$) = Name$
-									found = True
+								If Num >= 0 And Num <= 999
+									If ClientSpellNameMatches%(Me\KnownSpells[Num], Name$) Then found = True
 								EndIf
 							EndIf
 							If found = True
@@ -842,17 +849,20 @@ Function UpdateNetwork()
 							found = False
 						EndIf
 					Next
-					
+
 					; Remove memorised
 					For i = 0 To 9
 						If Me\MemorisedSpells[i] <> 5000
-							If Upper$(SpellsList(Me\KnownSpells[Me\MemorisedSpells[i]])\Name$) = Name$ Then Me\MemorisedSpells[i] = 5000
+							Mem = Me\MemorisedSpells[i]
+							If Mem >= 0 And Mem <= 999
+								If ClientSpellNameMatches%(Me\KnownSpells[Mem], Name$) Then Me\MemorisedSpells[i] = 5000
+							EndIf
 						EndIf
 					Next
 					; Remove known
 					For i = 0 To 999
 						If Me\SpellLevels[i] > 0
-							If Upper$(SpellsList(Me\KnownSpells[i])\Name$) = Name$
+							If ClientSpellNameMatches%(Me\KnownSpells[i], Name$)
 								Me\KnownSpells[i] = 0
 								Me\SpellLevels[i] = 0
 							EndIf
@@ -865,7 +875,7 @@ Function UpdateNetwork()
 					Name$ = Upper$(Mid$(M\MessageData$, 6))
 					For i = 0 To 999
 						If Me\SpellLevels[i] > 0
-							If Upper$(SpellsList(Me\KnownSpells[i])\Name$) = Name$ Then Me\SpellLevels[i] = Level
+							If ClientSpellNameMatches%(Me\KnownSpells[i], Name$) Then Me\SpellLevels[i] = Level
 						EndIf
 					Next
 					If SpellsVisible Then UpdateSpellbook()
@@ -1727,4 +1737,14 @@ Function UpdateNetwork()
 		
 	EndIf
 
+End Function
+; Returns True if SpellsList(SpellID) exists and its name matches
+; MatchUpper$. Bound-checks SpellID and Null-checks the slot before any
+; deref so a stale KnownSpells entry or out-of-range index can't crash
+; the client during P_KnownSpellUpdate handlers.
+Function ClientSpellNameMatches%(SpellID, MatchUpper$)
+	If SpellID < 0 Or SpellID > 65534 Then Return False
+	If SpellsList(SpellID) = Null Then Return False
+	If Upper$(SpellsList(SpellID)\Name$) = MatchUpper$ Then Return True
+	Return False
 End Function
