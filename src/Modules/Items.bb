@@ -298,6 +298,13 @@ Function LoadItems(Filename$)
 					If I\WeaponDamageType < 0 Or I\WeaponDamageType > 19 Then I\WeaponDamageType = 0
 					I\WeaponType       = ReadShort(F)
 					I\RangedProjectile = ReadShort(F)
+					; ProjectileList is Dim'd 0..5000. ReadShort can carry
+					; -32768..32767; a corrupt Items.dat would otherwise
+					; drive ProjectileList(I\RangedProjectile) OOB in the
+					; combat path (GameServer.bb ~335). Clamp to a safe
+					; sentinel (0) so the existing `If P <> Null` guard
+					; downstream catches the missing slot.
+					If I\RangedProjectile < 0 Or I\RangedProjectile > 5000 Then I\RangedProjectile = 0
 					I\Range#           = ReadFloat#(F)
 					I\RangedAnimation$ = ReadBoundedString$(F, 256)
 				Case I_Armour
