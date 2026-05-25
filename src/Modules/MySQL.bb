@@ -823,6 +823,11 @@ Function My_LoadActorInstance.ActorInstance(ActID, Q.Questlog, C.ActionBarData, 
 		
 		If i = 0 Then A\Memorised_ID		= ReadSQLField(MemSpellRow, "id")
 		A\MemorisedSpells[i] = ReadSQLField(MemSpellRow, "mem")
+		; KnownSpells is Field[999]; sentinel is 5000 ("no spell").
+		; Clamp at load so a corrupt SQL row can't drive an OOB read
+		; into KnownSpells[A\MemorisedSpells[i]] on the client.
+		If A\MemorisedSpells[i] < 0 Then A\MemorisedSpells[i] = 5000
+		If A\MemorisedSpells[i] > 999 And A\MemorisedSpells[i] <> 5000 Then A\MemorisedSpells[i] = 5000
 		
 		; Clean up
 		FreeSQLRow(ScriptRow)
