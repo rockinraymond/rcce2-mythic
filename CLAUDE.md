@@ -176,6 +176,14 @@ Test files under [src/Tests/](src/Tests/) use `Strict` + `EnableGC` at the top. 
 
 BVM functions that mutate global server state (`BVM_BANPLAYER`, `BVM_SETGOLD`, `BVM_WARP`, faction mutators) must guard with `If Not BVM_RequirePrivileged() Then Return` at the top. Functions that take an actor handle but are safe when targeting the script's own actor use `BVM_RequireSelfOrPrivileged(handle)` instead. Without these, any NPC's right-click script can ban its own clicker.
 
+Three categories beyond the obvious mutator gate, all of which also need `BVM_RequirePrivileged()`:
+
+1. **Anything that opens a host-side resource.** UDP sockets (PR #233 — `BVM_CreateUDPStream` / `SendUDPMsg` / `RecvUDPMsg` / etc.), file system (`BVM_DELETEFILE` / `BVM_WRITEFILE` / `BVM_OPENFILE` / `BVM_APPENDFILE` / `BVM_CREATEDIR`), and arbitrary SQL (`BVM_MYSQLQUERY`). Without the gate, any NPC's right-click script could open sockets, write arbitrary files, or run arbitrary SQL using the server's permissions.
+2. **Handle-walking helpers for those resources.** Once an entry-point that creates a handle is gated, the row/free family that walks the same handle space (PR #234 — `BVM_MYSQLNUMROWS` / `MYSQLFETCHROW` / `MYSQLGETVAR` / `MYSQLFREEQUERY` / `MYSQLFREEROW`) must be gated too. Otherwise a non-priv script can receive a handle via `SCRIPTGLOBAL`/`SUPERGLOBAL` passing and walk privileged data, or free a handle the server itself is using (LoadCharacter, SaveActor) by guessing the integer.
+3. **Fatal-failure entry points.** `BVM_RUNTIMEERROR` (PR series, see audit comment in the function) lets the caller `RuntimeError()` the entire server process. Gate it so non-priv scripts log + return instead.
+
+The compound rule: if the function reaches out to a resource the host owns (kernel handle, file descriptor, socket, database connection) or can terminate the server, it's privileged.
+
 ## Workflow
 
 ### Branching + PRs
