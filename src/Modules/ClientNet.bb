@@ -247,17 +247,32 @@ Function UpdateNetwork()
 							Z# = EntityZ#(AI\CollisionEN)
 							FreeActorInstance3D(AI)
 							Result = LoadActorInstance3D(AI, 0.05)
-							If Result = False Then RuntimeError("Could not load actor mesh for " + AI\Actor\Race$ + "!")
-							AI\Y# = 0.0
-							PositionEntity(AI\CollisionEN, X#, Y#, Z#)
-							ResetEntity(AI\CollisionEN)
-							If AI = Me
-								EntityType(Me\CollisionEN, C_Player)
-								FreeEntity(Me\NametagEN)
-								Me\NametagEN = 0
-								Bonce = FindChild(Me\EN, "Head")
-								If Bonce = 0 Then RuntimeError(Me\Actor\Race$ + " actor mesh is missing a 'Head' joint!")
-								CamHeight# = EntityDistance#(Bonce, Me\CollisionEN)
+							If Result = False
+								; Same DoS surface as P_NewActor (see line ~1432
+								; comment): server picks the Race, missing mesh
+								; here used to crash every observer. For other
+								; actors, drop them; we'll pick them up again on
+								; their next P_NewActor. For Me, the failure is
+								; unrecoverable (no body to control) -- keep the
+								; RuntimeError as the controlled crash.
+								If AI <> Me
+									WriteLog(MainLog, "P_AppearanceUpdate C: missing mesh for race '" + AI\Actor\Race$ + "' (RNID=" + AI\RNID + "), dropping actor")
+									SafeFreeActorInstance(AI)
+								Else
+									RuntimeError("Could not load actor mesh for " + AI\Actor\Race$ + "!")
+								EndIf
+							Else
+								AI\Y# = 0.0
+								PositionEntity(AI\CollisionEN, X#, Y#, Z#)
+								ResetEntity(AI\CollisionEN)
+								If AI = Me
+									EntityType(Me\CollisionEN, C_Player)
+									FreeEntity(Me\NametagEN)
+									Me\NametagEN = 0
+									Bonce = FindChild(Me\EN, "Head")
+									If Bonce = 0 Then RuntimeError(Me\Actor\Race$ + " actor mesh is missing a 'Head' joint!")
+									CamHeight# = EntityDistance#(Bonce, Me\CollisionEN)
+								EndIf
 							EndIf
 						; Gender
 						Case "G"
@@ -267,32 +282,45 @@ Function UpdateNetwork()
 							Z# = EntityZ#(AI\CollisionEN)
 							FreeActorInstance3D(AI)
 							Result = LoadActorInstance3D(AI, 0.05)
-							If Result = False Then RuntimeError("Could not load actor mesh for " + AI\Actor\Race$ + "!")
-							AI\Y# = 0.0
-							PositionEntity(AI\CollisionEN, X#, Y#, Z#)
-							ResetEntity(AI\CollisionEN)
+							If Result = False
+								If AI <> Me
+									WriteLog(MainLog, "P_AppearanceUpdate G: missing mesh for race '" + AI\Actor\Race$ + "' (RNID=" + AI\RNID + "), dropping actor")
+									SafeFreeActorInstance(AI)
+								Else
+									RuntimeError("Could not load actor mesh for " + AI\Actor\Race$ + "!")
+								EndIf
+							Else
+								AI\Y# = 0.0
+								PositionEntity(AI\CollisionEN, X#, Y#, Z#)
+								ResetEntity(AI\CollisionEN)
+							EndIf
 						; Beard
 						Case "D"
 							AI\Beard = Asc(Right$(M\MessageData$, 1))
 
 							Bonce = FindChild(AI\EN, "Head")
-							If Bonce = 0 Then RuntimeError(AI\Actor\Race$ + " actor mesh is missing a 'Head' joint!")
+							If Bonce = 0
+								; Beard is decorative. If the actor mesh has
+								; no Head joint, just skip the update -- no
+								; reason to crash the client.
+								WriteLog(MainLog, "P_AppearanceUpdate D: race '" + AI\Actor\Race$ + "' mesh missing 'Head' joint, skipping beard")
+							Else
+								; Remove old beard
+								BeardEN = FindChild(Bonce, "Beard")
+								If BeardEN <> 0 Then FreeEntity(BeardEN)
 
-							; Remove old beard
-							BeardEN = FindChild(Bonce, "Beard")
-							If BeardEN <> 0 Then FreeEntity(BeardEN)
-
-							; Apply new beard
-							If AI\Actor\BeardIDs[AI\Beard] > -1 And AI\Actor\BeardIDs[AI\Beard] < 65535
-								ID = AI\Actor\BeardIDs[AI\Beard]
-								BeardEN = GetMesh(ID, True)
-								If BeardEN <> 0
-									EntityParent(BeardEN, Bonce, False)
-									PositionEntity(BeardEN, LoadedMeshX#(ID), LoadedMeshY#(ID), LoadedMeshZ#(ID))
-									ScaleEntity(BeardEN, LoadedMeshScales#(ID), LoadedMeshScales#(ID), LoadedMeshScales#(ID))
-									; Correct rotation for Max models
-									If AI\TeamID = True Then TurnEntity(BeardEN, 0, 180, 90)
-									NameEntity(BeardEN, "Beard")
+								; Apply new beard
+								If AI\Actor\BeardIDs[AI\Beard] > -1 And AI\Actor\BeardIDs[AI\Beard] < 65535
+									ID = AI\Actor\BeardIDs[AI\Beard]
+									BeardEN = GetMesh(ID, True)
+									If BeardEN <> 0
+										EntityParent(BeardEN, Bonce, False)
+										PositionEntity(BeardEN, LoadedMeshX#(ID), LoadedMeshY#(ID), LoadedMeshZ#(ID))
+										ScaleEntity(BeardEN, LoadedMeshScales#(ID), LoadedMeshScales#(ID), LoadedMeshScales#(ID))
+										; Correct rotation for Max models
+										If AI\TeamID = True Then TurnEntity(BeardEN, 0, 180, 90)
+										NameEntity(BeardEN, "Beard")
+									EndIf
 								EndIf
 							EndIf
 						; Hair
