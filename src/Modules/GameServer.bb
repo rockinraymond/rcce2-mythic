@@ -1018,6 +1018,23 @@ End Function
 ; Changes the area of an actor instance
 Function SetArea(A.ActorInstance, Ar.Area, Instance, Waypoint = -1, Portal = 0, X# = 0, Y# = 0, Z# = 0)
 
+	; Defensive Null-area guard. Multiple call sites (P_StartGame,
+	; script BVM_WARP / BVM_CHANGEAREA, area-change packet handler)
+	; resolve a destination Area via FindArea, which returns Null
+	; whenever the named area was deleted from data files. Every
+	; subsequent line in this function dereferences Ar -- a missing
+	; saved-character area used to crash the server at the player's
+	; login, taking every other player offline with them. Bail out
+	; cleanly; the caller's actor stays in whatever area it was in
+	; (or, for a fresh login, never gets placed -- the login handler
+	; needs its own Null check, see P_StartGame).
+	If Ar = Null
+		Local AName$ = "<unknown>"
+		If A <> Null Then AName$ = A\Name$
+		WriteLog(MainLog, "SetArea: refusing to warp '" + AName$ + "' to a Null area")
+		Return
+	EndIf
+
 	; Check instance exists. The bounds check has to come BEFORE the
 	; Instances[] access — without it, a GM typing `/warp Area, 9999`
 	; indexed past the 100-slot Instances array (declared 0..99) and

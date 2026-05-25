@@ -1838,11 +1838,24 @@ Function UpdateNetwork()
 							Number = Asc(Mid$(M\MessageData$, Offset, 1))
 
 							If Number > -1 And Number < 10 And A\Character[Number] <> Null
+								; Resolve saved area BEFORE flipping login state.
+								; If the saved area was deleted from data files,
+								; SetArea would silently no-op (PR adding Null
+								; guard) and leave the player in limbo with no
+								; ServerArea -- they'd see a black screen and
+								; the next packet would dereference Null. Refuse
+								; the login cleanly instead so the user can pick
+								; a different character.
+								Ar.Area = FindArea(A\Character[Number]\Area$)
+								If Ar = Null
+									WriteLog(MainLog, "P_StartGame: character '" + A\Character[Number]\Name$ + "' saved area '" + A\Character[Number]\Area$ + "' not found, refusing login")
+									RCE_Send(Host, M\FromID, P_StartGame, "N", True)
+									Exists = True : Exit
+								EndIf
 								; Set his status to in game and put him in his area
 								SetLoginStatus(A, Number)
 								A\Character[Number]\RNID = M\FromID
 								AssignRuntimeID(A\Character[Number])
-								Ar.Area = FindArea(A\Character[Number]\Area$)
 								SetArea(A\Character[Number], Ar, 0, -1, -1, A\Character[Number]\X#, A\Character[Number]\Y#, A\Character[Number]\Z#)
 								; Run login script
 								ThreadScript("Login", "Main", Handle(A\Character[Number]), 0)
