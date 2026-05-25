@@ -42,7 +42,7 @@ A new RCCE developer should be able to:
 
 These are the bigger improvements still worth doing. Not every PR, but worth carrying in mind:
 
-- **Reconnect dialog** instead of `RuntimeError(LS_LostConnection)` — keep the player and their state across network blips.
+- **Reconnect dialog** instead of `RuntimeError(LS_LostConnection)` — keep the player and their state across network blips. *Phase 1 landed: all 12 `RuntimeError(LS_LostConnection)` call sites now route through a single `OnLostConnection()` helper in `ClientNet.bb` (PR #153). Phase 2 (replace the helper body with a non-fatal reconnect dialog) and phase 3 (RakNet rebind + session resume) still pending.*
 - **Modern UI dispatch tables** — replace the giant `Select Case PacketType` and BVM opcode switch with `FunctionPtr[256]` dispatch tables for clarity and extensibility.
 - **HUDPanel inheritance hierarchy** — collapse the 16 free-standing `GY_Create*` windows into typed panels using BlitzForge inheritance.
 - **AI state-machine subtypes** — turn the 180-line `If/ElseIf AIMode = ...` switch into `Type AIState` subtypes with a `Tick` method.
