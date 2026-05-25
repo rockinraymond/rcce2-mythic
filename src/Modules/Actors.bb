@@ -318,10 +318,25 @@ Function ReadActorInstance.ActorInstance(Stream)
 		A.ActorInstance = CreateActorInstance(ActorList(ActorID))
 	EndIf
 
-	; Read in data
-	A\Area$      = ReadString$(Stream)
-	A\Name$      = ReadString$(Stream)
-	A\Tag$       = ReadString$(Stream)
+	; Read in data. ReadBoundedString$ caps every length-prefixed
+	; string at a reasonable maximum -- a corrupted/tampered
+	; Accounts.dat with a wild length prefix on Area/Name/Tag/Script/
+	; DeathScript/ScriptGlobals[] would otherwise trigger multi-GB
+	; allocations and silent zero-padding past EOF. LoadAccounts
+	; already does this at the Account level (Track DD); extend the
+	; same defence to the per-character payload.
+	;
+	; Caps:
+	;   Area$ -- area names are typically <32 chars
+	;   Name$ -- character names are <50 chars (server-enforced at
+	;            P_CreateCharacter time)
+	;   Tag$  -- tags are short labels
+	;   Script$/DeathScript$ -- relative paths into Data\Scripts;
+	;            keep parity with the 1024-byte action-bar/quest cap
+	;            in LoadAccounts.
+	A\Area$      = ReadBoundedString$(Stream, 256)
+	A\Name$      = ReadBoundedString$(Stream, 256)
+	A\Tag$       = ReadBoundedString$(Stream, 256)
 	A\TeamID     = ReadInt(Stream)
 	A\X# = ReadFloat#(Stream)
 	A\Y# = ReadFloat#(Stream)
@@ -345,17 +360,28 @@ Function ReadActorInstance.ActorInstance(Stream)
 		A\Inventory\Items[i]   = ReadItemInstance(Stream)
 		A\Inventory\Amounts[i] = ReadShort(Stream)
 	Next
-	A\Script$        = ReadString$(Stream)
-	A\DeathScript$   = ReadString$(Stream)
+	A\Script$        = ReadBoundedString$(Stream, 1024)
+	A\DeathScript$   = ReadBoundedString$(Stream, 1024)
 	A\Reputation     = ReadShort(Stream)
 	A\Gold           = ReadInt(Stream)
 	A\NumberOfSlaves = ReadByte(Stream)
+	; Bound slaves at a sane cap. Without this, a corrupted byte
+	; (ReadByte returns 0..255 unsigned -- the field can also be
+	; *signed* on the wire for legacy saves, but Blitz3D treats
+	; ReadByte as 0..255) drives an unbounded recursive descent
+	; into ReadActorInstance with no inner EOF check, allocating
+	; ActorInstance + Attributes + Inventory per iteration until
+	; the heap is exhausted. The runtime pet cap is ~10; 32 is
+	; comfortable headroom.
+	If A\NumberOfSlaves < 0 Or A\NumberOfSlaves > 32
+		A\NumberOfSlaves = 0
+	EndIf
 	A\HomeFaction    = ReadByte(Stream)
 	For i = 0 To 99
 		A\FactionRatings[i] = ReadByte(Stream)
 	Next
 	For i = 0 To 9
-		A\ScriptGlobals$[i] = ReadString$(Stream)
+		A\ScriptGlobals$[i] = ReadBoundedString$(Stream, 1024)
 	Next
 	For i = 0 To 999
 		A\KnownSpells[i] = ReadShort(Stream)
