@@ -324,8 +324,15 @@ Function UpdateNetwork()
 								BeardEN = FindChild(Bonce, "Beard")
 								If BeardEN <> 0 Then FreeEntity(BeardEN)
 
-								; Apply new beard
-								If AI\Actor\BeardIDs[AI\Beard] > -1 And AI\Actor\BeardIDs[AI\Beard] < 65535
+								; Apply new beard. Same bounds + short-circuit-safe
+								; guard as the Actors3D LoadActorInstance3D path.
+								Local BeardOK = False
+								If AI\Beard >= 0 And AI\Beard <= 4
+									If AI\Actor\BeardIDs[AI\Beard] > -1 And AI\Actor\BeardIDs[AI\Beard] < 65535
+										BeardOK = True
+									EndIf
+								EndIf
+								If BeardOK
 									ID = AI\Actor\BeardIDs[AI\Beard]
 									BeardEN = GetMesh(ID, True)
 									If BeardEN <> 0
