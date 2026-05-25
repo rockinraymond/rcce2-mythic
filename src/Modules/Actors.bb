@@ -933,10 +933,16 @@ Function ActorInstanceFromString.ActorInstance(Pa$)
 	ShieldID = RCE_IntFromStr(Mid$(Pa$, Offset + 20, 2))
 	HatID = RCE_IntFromStr(Mid$(Pa$, Offset + 22, 2))
 	ChestID = RCE_IntFromStr(Mid$(Pa$, Offset + 24, 2))
-	If WeaponID < 65535 Then A\Inventory\Items[SlotI_Weapon] = CreateItemInstance(ItemList(WeaponID))
-	If ShieldID < 65535 Then A\Inventory\Items[SlotI_Shield] = CreateItemInstance(ItemList(ShieldID))
-	If HatID < 65535 Then A\Inventory\Items[SlotI_Hat] = CreateItemInstance(ItemList(HatID))
-	If ChestID < 65535 Then A\Inventory\Items[SlotI_Chest] = CreateItemInstance(ItemList(ChestID))
+	; ItemList is Dim'd 65534; 65535 is the "no item" sentinel. Beyond
+	; the sentinel check, the slot itself must be non-Null -- a deleted
+	; or never-created item ID would otherwise drive CreateItemInstance
+	; with a Null Item, which faults inside the constructor on
+	; `I\Item\Attributes` deref. Range-check + Null-check at every
+	; equipped-slot rehydrate.
+	If WeaponID >= 0 And WeaponID < 65535 And ItemList(WeaponID) <> Null Then A\Inventory\Items[SlotI_Weapon] = CreateItemInstance(ItemList(WeaponID))
+	If ShieldID >= 0 And ShieldID < 65535 And ItemList(ShieldID) <> Null Then A\Inventory\Items[SlotI_Shield] = CreateItemInstance(ItemList(ShieldID))
+	If HatID >= 0 And HatID < 65535 And ItemList(HatID) <> Null Then A\Inventory\Items[SlotI_Hat] = CreateItemInstance(ItemList(HatID))
+	If ChestID >= 0 And ChestID < 65535 And ItemList(ChestID) <> Null Then A\Inventory\Items[SlotI_Chest] = CreateItemInstance(ItemList(ChestID))
 	A\HomeFaction = RCE_IntFromStr(Mid$(Pa$, Offset + 26, 1))
 	; FactionNames$ / FactionDefaultRatings are Dim'd (99) -> 0..99;
 	; FactionRatings is Field[99]. A wire byte can carry 100..255.
