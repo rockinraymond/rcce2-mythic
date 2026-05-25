@@ -685,22 +685,28 @@ Function UpdateInterface()
 		; Talk to button was clicked
 		If ControlHit(Key_TalkTo) And TradingVisible = False And MilliSecs() - RightDownTime < 500
 			ClickedTarget = False
-			; Selected target actor, show interaction window
+			; Selected target actor, show interaction window.
+			; Stale PlayerTarget handle: clear and fall through to the
+			; click-target-pick branch below rather than crash on
+			; AI\CollisionEN.
 			If PlayerTarget > 0
 				AI.ActorInstance = Object.ActorInstance(PlayerTarget)
-				
-				If CharInteractVisible
-					UpdateCharInteractionWindow()
+				If AI = Null
+					PlayerTarget = 0
 				Else
-					CreateCharInteractionWindow( AI )
-					;CysisLibs Outline
-					;Outline ActorSelectEN
+					If CharInteractVisible
+						UpdateCharInteractionWindow()
+					Else
+						CreateCharInteractionWindow( AI )
+						;CysisLibs Outline
+						;Outline ActorSelectEN
+					EndIf
+					If EntityDistance#(AI\CollisionEN, Me\CollisionEN) < InteractRange
+						RCE_Send(Connection, PeerToHost, P_RightClick, RCE_StrFromInt$(AI\RuntimeID, 2), True)
+					EndIf
+					QuitActive = False
+					ClickedTarget = True
 				EndIf
-				If EntityDistance#(AI\CollisionEN, Me\CollisionEN) < InteractRange
-					RCE_Send(Connection, PeerToHost, P_RightClick, RCE_StrFromInt$(AI\RuntimeID, 2), True)
-				EndIf
-				QuitActive = False
-				ClickedTarget = True
 			EndIf
 			If ClickedTarget = False
 				SetPickModes(-1, 3, True)
@@ -711,22 +717,29 @@ Function UpdateInterface()
 					If Target$ = "A"
 						PlayerTarget = EntityName$(Result)
 						AI.ActorInstance = Object.ActorInstance(PlayerTarget)
-						MaxLength# = MeshWidth#(AI\EN)
-						If MeshDepth#(AI\EN) > MaxLength# Then MaxLength# = (MeshDepth#(AI\EN) + MeshWidth#(AI\EN)) / 2.0
-						ScaleEntity(ActorSelectEN, MaxLength# * 0.03, 1.0, MaxLength# * 0.03)
-						ShowEntity(ActorSelectEN)
-						If CharInteractVisible
-							UpdateCharInteractionWindow()
-						ElseIf CharInteract = Null
-							CreateCharInteractionWindow(AI)
-							;CysisLibs Outline
-							;Outline ActorSelectEN
+						; EntityName$ resolved to a non-actor handle, or
+						; the actor was freed between pick and now. Drop
+						; the selection rather than crash on AI\EN.
+						If AI = Null
+							PlayerTarget = 0
+						Else
+							MaxLength# = MeshWidth#(AI\EN)
+							If MeshDepth#(AI\EN) > MaxLength# Then MaxLength# = (MeshDepth#(AI\EN) + MeshWidth#(AI\EN)) / 2.0
+							ScaleEntity(ActorSelectEN, MaxLength# * 0.03, 1.0, MaxLength# * 0.03)
+							ShowEntity(ActorSelectEN)
+							If CharInteractVisible
+								UpdateCharInteractionWindow()
+							ElseIf CharInteract = Null
+								CreateCharInteractionWindow(AI)
+								;CysisLibs Outline
+								;Outline ActorSelectEN
+							EndIf
+							; If friendly and in range, close interact window and execute right click
+							If AI\FactionRatings[Me\HomeFaction] > 99 And EntityDistance#(AI\CollisionEN, Me\CollisionEN) < InteractRange
+								RCE_Send(Connection, PeerToHost, P_RightClick, RCE_StrFromInt$(AI\RuntimeID, 2), True)
+							EndIf
+							QuitActive = False
 						EndIf
-						; If friendly and in range, close interact window and execute right click
-						If AI\FactionRatings[Me\HomeFaction] > 99 And EntityDistance#(AI\CollisionEN, Me\CollisionEN) < InteractRange
-							RCE_Send(Connection, PeerToHost, P_RightClick, RCE_StrFromInt$(AI\RuntimeID, 2), True)
-						EndIf
-						QuitActive = False
 					EndIf
 				EndIf
 			EndIf
@@ -759,6 +772,13 @@ Function UpdateInterface()
 					OldTarget = PlayerTarget
 					PlayerTarget = EntityName$(Result)
 					AI.ActorInstance = Object.ActorInstance(PlayerTarget)
+					; Stale Object lookup (actor picked but freed before
+					; we resolved). Drop the selection rather than crash
+					; on AI\EN / AI\Actor / AI\FactionRatings below.
+					If AI = Null
+						PlayerTarget = 0
+						Goto SkipActorSelect
+					EndIf
 					MaxLength# = MeshWidth#(AI\EN)
 					If MeshDepth#(AI\EN) > MaxLength# Then MaxLength# = (MeshDepth#(AI\EN) + MeshWidth#(AI\EN)) / 2.0
 					ScaleEntity(ActorSelectEN, MaxLength# * 0.03, 1.0, MaxLength# * 0.03)
@@ -815,6 +835,7 @@ Function UpdateInterface()
 
 						AttackTarget = False
 					EndIf
+					.SkipActorSelect
 					;HideEntity(ClickMarkerEN) ;{@@@~}
 				; Target is a dropped item
 				ElseIf Target$ = "D"
