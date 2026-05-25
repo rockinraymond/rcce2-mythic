@@ -886,6 +886,16 @@ Function ActorInstanceFromString.ActorInstance(Pa$)
 	A\Hair    = RCE_IntFromStr(Mid$(Pa$, Offset + 4, 2))
 	A\BodyTex = RCE_IntFromStr(Mid$(Pa$, Offset + 6, 2))
 	A\Beard   = RCE_IntFromStr(Mid$(Pa$, Offset + 8, 2))
+	; Bound the wire-derived appearance indices. Per-Actor Face/Body/
+	; Hair/Beard ID arrays are Field [4]; an out-of-range value (server
+	; sent an unbounded byte or short, or local data drift) walks past
+	; the array. Same shape as PRs #198 / #199 / #200 for the other
+	; per-character receive sites.
+	If A\Gender < 0 Or A\Gender > 1 Then A\Gender = 0
+	If A\FaceTex < 0 Or A\FaceTex > 4 Then A\FaceTex = 0
+	If A\Hair < 0 Or A\Hair > 4 Then A\Hair = 0
+	If A\BodyTex < 0 Or A\BodyTex > 4 Then A\BodyTex = 0
+	If A\Beard < 0 Or A\Beard > 4 Then A\Beard = 0
 	A\Attributes\Value[SpeedStat] = RCE_IntFromStr(Mid$(Pa$, Offset + 10, 2))
 	A\Attributes\Maximum[SpeedStat] = RCE_IntFromStr(Mid$(Pa$, Offset + 12, 2))
 	A\Attributes\Value[HealthStat] = RCE_IntFromStr(Mid$(Pa$, Offset + 14, 2))
