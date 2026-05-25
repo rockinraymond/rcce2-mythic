@@ -312,6 +312,11 @@ Function UpdateNetwork()
 						; Beard
 						Case "D"
 							AI\Beard = Asc(Right$(M\MessageData$, 1))
+							; Beard indexes BeardIDs[4]; clamp the wire byte
+							; (0..255) at the receive site so the BeardOK
+							; gate below (and any LoadActorInstance3D
+							; reload) sees a valid index.
+							If AI\Beard < 0 Or AI\Beard > 4 Then AI\Beard = 0
 
 							Bonce = FindChild(AI\EN, "Head")
 							If Bonce = 0
@@ -348,10 +353,22 @@ Function UpdateNetwork()
 						; Hair
 						Case "H"
 							AI\Hair = Asc(Right$(M\MessageData$, 1))
+							; Hair indexes Male/FemaleHairIDs[4]; clamp the
+							; wire byte (0..255) before SetActorHat's
+							; fallback path uses it as an array index.
+							If AI\Hair < 0 Or AI\Hair > 4 Then AI\Hair = 0
 							If AI\Inventory\Items[SlotI_Hat] = Null Then SetActorHat(AI, -1)
 						; Face
 						Case "F"
 							AI\FaceTex = Asc(Right$(M\MessageData$, 1))
+							; Wire arrives as Asc (0..255) but MaleFaceIDs /
+							; FemaleFaceIDs are Field [4] (5 slots). Out of
+							; range reads past the array into adjacent Actor
+							; fields. Clamp at the receive site so every
+							; downstream lookup is safe. Similar reasoning
+							; for AI\BodyTex which is also indexed below.
+							If AI\FaceTex < 0 Or AI\FaceTex > 4 Then AI\FaceTex = 0
+							If AI\BodyTex < 0 Or AI\BodyTex > 4 Then AI\BodyTex = 0
 							; Repaint
 							If AI\Gender = 0
 								FaceTex = AI\Actor\MaleFaceIDs[AI\FaceTex]
@@ -388,6 +405,12 @@ Function UpdateNetwork()
 						; Body
 						Case "B"
 							AI\BodyTex = Asc(Right$(M\MessageData$, 1))
+							; Same bounds as the Face case above -- BodyTex
+							; is Asc 0..255 but MaleBodyIDs / FemaleBodyIDs
+							; are Field [4]. FaceTex may already be valid
+							; from a prior packet; bound it defensively too.
+							If AI\BodyTex < 0 Or AI\BodyTex > 4 Then AI\BodyTex = 0
+							If AI\FaceTex < 0 Or AI\FaceTex > 4 Then AI\FaceTex = 0
 							; Repaint
 							If AI\Gender = 0
 								FaceTex = AI\Actor\MaleFaceIDs[AI\FaceTex]
