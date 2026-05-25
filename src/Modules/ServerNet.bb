@@ -2392,6 +2392,19 @@ Function UpdateNetwork()
 								; If we have a free slot and haven't exceeded the maximum allowed characters
 								If FreeSlot > -1 And TotalChars < MaxAccountChars
 									ActorID = RCE_IntFromStr(Mid$(M\MessageData$, Offset, 2))
+									; Validate ActorID before passing to
+									; CreateActorInstance. The client controls
+									; this 2-byte value, and ActorList() returns
+									; Null for any race that doesn't exist (or
+									; was deleted). CreateActorInstance previously
+									; RuntimeError'd on Null, so any client could
+									; crash the entire server with one crafted
+									; P_CreateCharacter packet.
+									If ActorID < 0 Or ActorID > 65535 Or ActorList(ActorID) = Null
+										WriteLog(MainLog, "P_CreateCharacter: rejecting invalid ActorID " + ActorID + " from account '" + A\User$ + "'")
+										RCE_Send(Host, M\FromID, P_CreateCharacter, "N", True)
+										Exists = True : Exit
+									EndIf
 									A\QuestLog[FreeSlot] = New QuestLog
 									A\ActionBar[FreeSlot] = New ActionBarData
 									A\Character[FreeSlot] = CreateActorInstance(ActorList(ActorID))
