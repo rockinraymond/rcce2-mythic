@@ -133,9 +133,12 @@ Function LoadAnimSets(Filename$)
 				Exit
 			EndIf
 			AnimList(A\ID) = A
-			A\Name$ = ReadString$(F)
+			; Bound length-prefixed strings against corrupted AnimSets.dat.
+			; Set names and per-animation names are short editor labels;
+			; 256 leaves comfortable headroom.
+			A\Name$ = ReadBoundedString$(F, 256)
 			For i = 0 To 149
-				A\AnimName$[i] = ReadString$(F)
+				A\AnimName$[i] = ReadBoundedString$(F, 256)
 				A\AnimStart[i] = ReadShort(F)
 				A\AnimEnd[i] = ReadShort(F)
 				A\AnimSpeed#[i] = ReadFloat#(F)

@@ -69,6 +69,16 @@ Function LanguageString$(key$)
 	Return key
 End Function
 
+; --- ReadBoundedString$ stub -----------------------------------------------
+; LoadItems / LoadDamageTypes route every length-prefixed string through
+; ReadBoundedString$ (Logging.bb) so a corrupted Items.dat can't hang the
+; server. This test build doesn't exercise the load path -- the existing
+; tests construct items in-memory via CreateItem -- so a no-op stub is
+; sufficient to let Items.bb compile under Strict.
+Function ReadBoundedString$(F, MaxLen)
+	Return ""
+End Function
+
 Include "Modules\Items.bb"
 
 ; --- Test helpers -----------------------------------------------------------

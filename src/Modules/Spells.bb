@@ -56,14 +56,20 @@ Function LoadSpells(Filename$)
 				Exit
 			EndIf
 			SpellsList(S\ID) = S
-			S\Name$ = ReadString$(F)
-			S\Description$ = ReadString$(F)
+			; Bound every length-prefixed string to keep a corrupted /
+			; tampered Spells.dat from hanging the server at boot
+			; allocating gigabytes on a wild ReadInt prefix (same shape
+			; as ReadActorInstance / LoadSuperGlobals / LoadEnvironment).
+			; 256 for display names + race/class restrictions; 1024 for
+			; script paths (matches ReadActorInstance's Script$ cap).
+			S\Name$ = ReadBoundedString$(F, 256)
+			S\Description$ = ReadBoundedString$(F, 1024)
 			S\ThumbnailTexID = ReadShort(F)
-			S\ExclusiveRace$ = ReadString$(F)
-			S\ExclusiveClass$ = ReadString$(F)
+			S\ExclusiveRace$ = ReadBoundedString$(F, 256)
+			S\ExclusiveClass$ = ReadBoundedString$(F, 256)
 			S\RechargeTime = ReadInt(F)
-			S\Script$ = ReadString$(F)
-			S\SMethod$ = ReadString$(F)
+			S\Script$ = ReadBoundedString$(F, 1024)
+			S\SMethod$ = ReadBoundedString$(F, 1024)
 			Number = Number + 1
 		Wend
 
