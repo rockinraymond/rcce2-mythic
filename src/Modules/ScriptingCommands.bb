@@ -633,13 +633,19 @@ Return Result%
 End Function
 
 Function BVM_PARAMETER$(Param1%)
-S.ScriptInstance = Object.ScriptInstance(hSI)
+	; Null-S guard: hSI is the per-call script-instance handle the
+	; VM populates before invoking a BVM_* command. If the command
+	; runs without a live ScriptInstance (BVM reentry, host-side
+	; invocation, a still-running command on a script that was
+	; just FreeScriptInstance'd), Object.ScriptInstance(0) returns
+	; Null and the bare S\Param$ deref faults.
+	Local S.ScriptInstance = Object.ScriptInstance(hSI)
+	If S = Null Then Return ""
+	Local Result$ = ""
 	If S\Param$ <> ""
 		Result$ = SafeSplit(S\Param$, Param1%, ",")
-	Else
-		Result$ = ""
 	EndIf
-Return Result$
+	Return Result$
 End Function
 
 Function BVM_ROTATEACTOR(Param1%, Param2#)
@@ -1662,9 +1668,14 @@ Function BVM_APPENDFILE%(Param1$)
 	If Not BVM_ScriptPathIsSafe(Param1$) Then Return 0
 	Filename$ = RCScriptFiles$ + Param1$
 	F = OpenFile(Filename$)
+	; OpenFile returns 0 on missing-file/permission-denied; SeekFile
+	; against a null handle is undefined behaviour (Blitz dereferences
+	; internal pointers). Bail cleanly so the script gets 0 back and
+	; can detect failure, matching the OpenFile error convention used
+	; elsewhere in this module.
+	If F = 0 Then Return 0
 	SeekFile(F, FileSize(Filename$))
-	Result% = F
-Return Result%
+	Return F
 End Function
 
 Function BVM_CREATEDIR%(Param1$)
@@ -2618,6 +2629,9 @@ End Function
 
 Function BVM_SETWAITING(x%)
 	SI.ScriptInstance = Object.ScriptInstance(hSI)
+	; Null-SI guard: see BVM_PARAMETER for context. Every BVM_SET*
+	; below the wait family writes through SI\ -- a dead hSI faults.
+	If SI = Null Then Return
 	SI\WaitResult$ = ""
 	SI\Waiting = x%
 End Function
@@ -2675,28 +2689,33 @@ End Function
 
 Function BVM_SETWAITINFO(Param1%, Param2%)
 	SI.ScriptInstance = Object.ScriptInstance(hSI)
+	If SI = Null Then Return
 	SI\WaitHour% = Param1%
 	SI\WaitMinute% = Param2%
 End Function
 
 Function BVM_SETWAITTIME(Param1%)
 	SI.ScriptInstance = Object.ScriptInstance(hSI)
+	If SI = Null Then Return
 	SI\WaitTime = Param1%
 End Function
 
 Function BVM_SETWAITSTART(Param1%)
 	SI.ScriptInstance = Object.ScriptInstance(hSI)
+	If SI = Null Then Return
 	SI\WaitStart = Param1%
 End Function
 
 Function BVM_SETWAITRESULT(PARAM1$)
 	SI.ScriptInstance = Object.ScriptInstance(hSI)
+	If SI = Null Then Return
 	SI\WaitResult$ = PARAM1$
 End Function
 
 Function BVM_GETWAITRESULT$()
 	SI.ScriptInstance = Object.ScriptInstance(hSI)
-Return SI\WaitResult$
+	If SI = Null Then Return ""
+	Return SI\WaitResult$
 End Function
 
 Function BVM_SETSUPERGLOBAL(Param1%, Param2$)
