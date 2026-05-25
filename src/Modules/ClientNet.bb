@@ -9,6 +9,21 @@ Global oldEntityX#,oldEntityY#,oldEntityZ#
 Global CurrentMusicSound = 0
 Global CurrentMusicChannel = 0
 
+; Single entry point for "we lost the server connection" outcomes.
+;
+; Today this is the same `RuntimeError(LS_LostConnection)` that the 12
+; previous in-line callers had -- a controlled crash with a localized
+; message. Consolidating to one function gives a single place to swap
+; in a reconnect dialog (the long-horizon INTENT item) without having
+; to find and modify every disconnect path again.
+;
+; Callers should branch to this immediately on detecting
+; RN_HostHasLeft / RN_Disconnected / PeerToHostNotFound and similar
+; RakNet conditions. The function does not return.
+Function OnLostConnection()
+	RuntimeError(LanguageString$(LS_LostConnection))
+End Function
+
 ; Connects to the server
 Function Connect()
 
@@ -88,7 +103,7 @@ Function Connect()
 				EndIf
 				Delete M : Done = Done + 1
 			ElseIf M\MessageType = PeerToHostHasLeft
-				RuntimeError(LanguageString$(LS_LostConnection))
+				OnLostConnection()
 				Delete M
 			EndIf
 		Next
@@ -1627,7 +1642,7 @@ Function UpdateNetwork()
 			; Host disconnected
 			Case P_KickedPlayer
 				RCE_Disconnect()
-				RuntimeError(LanguageString$(LS_LostConnection))
+				OnLostConnection()
 
 		End Select
 		Delete M
