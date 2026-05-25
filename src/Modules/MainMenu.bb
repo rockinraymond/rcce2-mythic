@@ -936,6 +936,17 @@ Function LogIn()
 									It.Item = New Item
 									It\Attributes = New Attributes
 									It\ID = RCE_IntFromStr(Mid$(Pa$, Offset, 2))
+									; ItemList is Dim'd 65534. A 2-byte wire field
+									; carries 0..65535 -- clamp before the Dim
+									; write to avoid corrupting the adjacent
+									; global. Same shape as #209's read-side
+									; bound check on the P_AppearanceUpdate "X"
+									; / P_InventoryUpdate "G" / ActorInstance
+									; rehydrate paths.
+									If It\ID < 0 Or It\ID > 65534
+										Delete It\Attributes : Delete It
+										Exit
+									EndIf
 									ItemList(It\ID) = It
 									It\ItemType = RCE_IntFromStr(Mid$(Pa$, Offset + 2, 1))
 									It\TakesDamage = RCE_IntFromStr(Mid$(Pa$, Offset + 3, 1))
