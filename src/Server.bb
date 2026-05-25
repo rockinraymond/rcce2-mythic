@@ -843,7 +843,10 @@ Function LoadDroppedItems(Filename$)
 
 		While Eof(F) = False
 			D.DroppedItem = New DroppedItem
-			Zone$ = ReadString$(F)
+			; Bound Zone$ (area name) -- corrupted DroppedItems.dat with
+			; a wild length prefix would hang the server at boot. Same
+			; shape as the broader data-loader sweep.
+			Zone$ = ReadBoundedString$(F, 256)
 			Instance = ReadByte(F)
 			; AreaInstance Instances is Dim'd 0..99. ReadByte returns 0..255;
 			; a corrupted DroppedItems.dat with Instance >= 100 triggers OOB
@@ -857,7 +860,10 @@ Function LoadDroppedItems(Filename$)
 					Exit
 				EndIf
 			Next
-			D\Item = ItemInstanceFromString(ReadString$(F))
+			; Item-instance binary is 83 bytes today (ItemInstanceStringLength);
+			; cap to 256 to cover the current format with comfortable
+			; headroom and still reject a wild length prefix.
+			D\Item = ItemInstanceFromString(ReadBoundedString$(F, 256))
 			D\Amount = ReadShort(F)
 			D\X# = ReadFloat#(F)
 			D\Y# = ReadFloat#(F)
