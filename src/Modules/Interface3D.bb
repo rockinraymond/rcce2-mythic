@@ -985,11 +985,19 @@ Function UpdateInterface()
 	; Update selection highlight mesh
 	If PlayerTarget > 0
 		AI.ActorInstance = Object.ActorInstance(PlayerTarget)
-		SetPickModes()
-		Result = LinePick(EntityX#(AI\CollisionEN), EntityY#(AI\CollisionEN), EntityZ#(AI\CollisionEN), 0.0, -5000.0, 0.0)
-		If Result <> 0
-			PositionEntity(ActorSelectEN, PickedX#(), PickedY#() + 0.2, PickedZ#())
-			AlignToVector(ActorSelectEN, PickedNX#(), PickedNY#(), PickedNZ#(), 2)
+		; Stale handle (target freed without PlayerTarget being cleared)
+		; would crash this every-frame LinePick. Clear the highlight and
+		; bail; the next interaction picks a fresh target.
+		If AI = Null
+			PlayerTarget = 0
+			HideEntity(ActorSelectEN)
+		Else
+			SetPickModes()
+			Result = LinePick(EntityX#(AI\CollisionEN), EntityY#(AI\CollisionEN), EntityZ#(AI\CollisionEN), 0.0, -5000.0, 0.0)
+			If Result <> 0
+				PositionEntity(ActorSelectEN, PickedX#(), PickedY#() + 0.2, PickedZ#())
+				AlignToVector(ActorSelectEN, PickedNX#(), PickedNY#(), PickedNZ#(), 2)
+			EndIf
 		EndIf
 	Else
 		HideEntity(ActorSelectEN)
@@ -1142,7 +1150,11 @@ Function UpdateInterface()
 				If Me\SpellCharge[Num] <= 0
 					If PlayerTarget > 0
 						AI.ActorInstance = Object.ActorInstance(PlayerTarget)
-						Pa$ = Pa$ + RCE_StrFromInt$(AI\RuntimeID, 2)
+						; Stale target handle: send the cast untargeted
+						; rather than crash on AI\RuntimeID. Server's
+						; P_SpellUpdate "F" handler tolerates a missing
+						; target (Context = Null).
+						If AI <> Null Then Pa$ = Pa$ + RCE_StrFromInt$(AI\RuntimeID, 2)
 					EndIf
 					RCE_Send(Connection, PeerToHost, P_SpellUpdate, "F" + Pa$, True)
 					Me\SpellCharge[Num] = RechargeTime
@@ -1415,7 +1427,9 @@ Function UpdateInterface()
 						Pa$ = RCE_StrFromInt$(Me\KnownSpells[Num], 2)
 						If PlayerTarget > 0
 							AI.ActorInstance = Object.ActorInstance(PlayerTarget)
-							Pa$ = Pa$ + RCE_StrFromInt$(AI\RuntimeID, 2)
+							; Mirror the action-bar cast path: stale target
+							; handle means cast untargeted, not crash.
+							If AI <> Null Then Pa$ = Pa$ + RCE_StrFromInt$(AI\RuntimeID, 2)
 						EndIf
 						RCE_Send(Connection, PeerToHost, P_SpellUpdate, "F" + Pa$, True)
 						Me\SpellCharge[Num] = SpellsList(Me\KnownSpells[Num])\RechargeTime
@@ -4017,7 +4031,10 @@ Function UseItem(SlotIndex, Amount)
 				Pa$ = RCE_StrFromInt$(SlotIndex, 1)
 				If PlayerTarget > 0
 					AI.ActorInstance = Object.ActorInstance(PlayerTarget)
-					Pa$ = Pa$ + RCE_StrFromInt$(AI\RuntimeID, 2)
+					; Stale target handle: send the script untargeted
+					; rather than crash on AI\RuntimeID. The server's
+					; P_ItemScript handler tolerates A2 = Null.
+					If AI <> Null Then Pa$ = Pa$ + RCE_StrFromInt$(AI\RuntimeID, 2)
 				EndIf
 				RCE_Send(Connection, PeerToHost, P_ItemScript, Pa$, True)
 ;-------------------------------------------------------------------------------------------------
