@@ -1060,6 +1060,20 @@ Function UpdateNetwork()
 											RCE_Send(Host, AI\RNID, P_ChatMessage, Chr$(253) + LanguageString$(LS_AbilityNotRecharged), True)
 										Else
 											Sp.Spell = SpellsList(SpellID)
+											; SpellsList is sparse; a stale character save
+											; (admin deleted the spell between sessions)
+											; or a corrupted KnownSpells slot would otherwise
+											; deref Null below. P_FetchCharacter already
+											; prunes stale entries at character-select but
+											; defense-in-depth at the cast site means a
+											; race or future code path that bypasses the
+											; prune can't take down the server.
+											If Sp = Null
+												WriteLog(MainLog, "P_SpellUpdate F: SpellID " + SpellID + " in KnownSpells but not in SpellsList (stale slot); dropping cast")
+												AI\KnownSpells[Num] = 0
+												AI\SpellLevels[Num] = 0
+												Goto SkipSpellCast
+											EndIf
 											; Race / class restriction check.
 											; The Spell type has ExclusiveRace$/ExclusiveClass$
 											; (persisted by SaveSpells / loaded by
@@ -1087,6 +1101,7 @@ Function UpdateNetwork()
 									EndIf
 								EndIf
 							EndIf
+							.SkipSpellCast
 					End Select
 				EndIf
 
