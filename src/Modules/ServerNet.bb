@@ -2468,6 +2468,21 @@ Function UpdateNetwork()
 									C\Hair = RCE_IntFromStr(Mid$(M\MessageData$, Offset + 4, 1))
 									C\Beard = RCE_IntFromStr(Mid$(M\MessageData$, Offset + 5, 1))
 									C\BodyTex = RCE_IntFromStr(Mid$(M\MessageData$, Offset + 6, 1))
+									; Bound the appearance indices at the receive
+									; site. Wire bytes are 0..255 but the per-Actor
+									; Face/Body/Hair/Beard ID arrays are Field [4].
+									; Persisting out-of-range values is the long-
+									; tail bug -- the client clamps on receipt
+									; (PR #198) but storing the bad value means
+									; every login round-trip re-emits it. Clamp
+									; here so the persisted character has a valid
+									; appearance from creation. Gender clamps to
+									; 0/1; Face/Body/Hair/Beard clamp to 0..4.
+									If C\Gender < 0 Or C\Gender > 1 Then C\Gender = 0
+									If C\FaceTex < 0 Or C\FaceTex > 4 Then C\FaceTex = 0
+									If C\Hair < 0 Or C\Hair > 4 Then C\Hair = 0
+									If C\Beard < 0 Or C\Beard > 4 Then C\Beard = 0
+									If C\BodyTex < 0 Or C\BodyTex > 4 Then C\BodyTex = 0
 									C\Area$ = C\Actor\StartArea$
 									C\Gold = StartGold
 									C\Reputation = StartReputation
