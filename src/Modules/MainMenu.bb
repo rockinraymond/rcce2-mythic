@@ -1046,6 +1046,10 @@ Function LogIn()
 									A\FAnimationSet  = RCE_IntFromStr(Mid$(Pa$, Offset + 11, 2))
 									A\Scale#         = RCE_FloatFromStr#(Mid$(Pa$, Offset + 13, 4))
 									A\DefaultFaction = RCE_IntFromStr(Mid$(Pa$, Offset + 17, 1))
+									; DefaultFaction propagates to HomeFaction
+									; on every new ActorInstance. FactionNames$
+									; / FactionDefaultRatings are Dim'd (99).
+									If A\DefaultFaction < 0 Or A\DefaultFaction > 99 Then A\DefaultFaction = 0
 									Offset = Offset + 18
 									For i = 0 To 39
 										A\Attributes\Value[i] = RCE_IntFromStr(Mid$(Pa$, Offset, 2))
@@ -1784,6 +1788,11 @@ Function CharSelect()
 								Me\Level = RCE_IntFromStr(Mid$(M\MessageData$, 9, 2))
 								Me\XP = RCE_IntFromStr(Mid$(M\MessageData$, 11, 4))
 								Me\HomeFaction = RCE_IntFromStr(Mid$(M\MessageData$, 15, 1))
+								; Client-side faction tables are Dim'd (99).
+								; Wire byte can hold 100..255 -- clamp before
+								; any read of FactionRatings[Me\HomeFaction]
+								; or FactionNames$(Me\HomeFaction).
+								If Me\HomeFaction < 0 Or Me\HomeFaction > 99 Then Me\HomeFaction = 0
 								Offset = 16
 								While Offset < Len(M\MessageData$)
 									Me\Attributes\Value[AttributesDone] = RCE_IntFromStr(Mid$(M\MessageData$, Offset, 2))
