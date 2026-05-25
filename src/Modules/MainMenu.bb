@@ -1044,6 +1044,11 @@ Function LogIn()
 									A\InventorySlots = RCE_IntFromStr(Mid$(Pa$, Offset + 7, 2))
 									A\MAnimationSet  = RCE_IntFromStr(Mid$(Pa$, Offset + 9, 2))
 									A\FAnimationSet  = RCE_IntFromStr(Mid$(Pa$, Offset + 11, 2))
+									; AnimList is Dim'd 0..999. The 2-byte wire
+									; field carries 0..65535 -- clamp before any
+									; AnimList(A\MAnimationSet) read.
+									If A\MAnimationSet < 0 Or A\MAnimationSet > 999 Then A\MAnimationSet = 0
+									If A\FAnimationSet < 0 Or A\FAnimationSet > 999 Then A\FAnimationSet = 0
 									A\Scale#         = RCE_FloatFromStr#(Mid$(Pa$, Offset + 13, 4))
 									A\DefaultFaction = RCE_IntFromStr(Mid$(Pa$, Offset + 17, 1))
 									; DefaultFaction propagates to HomeFaction
