@@ -168,6 +168,25 @@ See PRs [#144](https://github.com/RydeTec/rcce2/pull/144) (every-frame `PlayerTa
 
 The same shape applies to `AInstance.AreaInstance = Object.AreaInstance(Actor\ServerArea)` lookups: an actor with a stale `ServerArea` (mid-warp, freed zone, brief window during `SetArea` re-binding) makes the lookup return Null. The standard recovery is to skip the broadcast loop / per-tick update that needed it — the actor's in-memory state (HP, position, attribute changes) has already applied; only the network propagation drops, and the next tick after `SetArea` settles will reach the actor again. PRs [#154](https://github.com/RydeTec/rcce2/pull/154) / [#155](https://github.com/RydeTec/rcce2/pull/155) / [#176](https://github.com/RydeTec/rcce2/pull/176) / [#182](https://github.com/RydeTec/rcce2/pull/182)–[#188](https://github.com/RydeTec/rcce2/pull/188) cover the full sweep across `GameServer.bb` / `ScriptingCommands.bb` / `ServerNet.bb` / `Server.bb`.
 
+### Float sanitisation at the BVM / wire boundary
+
+Script-supplied or wire-supplied floats that flow into actor state and get broadcast to clients have to clamp NaN/Inf at the boundary, not at the downstream readers. The two helpers in [RCEnet.bb](src/Modules/RCEnet.bb):
+
+- `ClampWorldCoord#(v#)` — rejects NaN/Inf and clamps to `±WorldCoordMax#`. Use for X/Y/Z positions and destinations.
+- `ClampSaneFloat#(v#)` — rejects NaN/Inf and clamps to `±1e9`. Use for non-position floats (yaw, animation speed, UI dims, emitter offsets that are actor-relative).
+
+Both work by `If v > -MAX And v < MAX Then Return v` — the comparison rejects NaN because NaN is unordered. **Don't** try to "check for NaN" some other way; Blitz has no `IsNaN` primitive and the comparison trick is the canonical approach.
+
+Pattern (`BVM_MOVEACTOR`):
+
+```basic
+Actor\X# = ClampWorldCoord#(Param2#)
+Actor\Y# = ClampWorldCoord#(Param3#)
+Actor\Z# = ClampWorldCoord#(Param4#)
+```
+
+A single NaN in a broadcast position poisons spatial code (collision, LOD culling, `EntityDistance#`) on every receiving client; NaN yaw poisons rotation matrices; NaN anim speed locks up the animation timer for that actor on every receiver. The BVM sweep (#237–#239) covered `BVM_MOVEACTOR`, `BVM_ROTATEACTOR`, `BVM_SETACTORDESTINATION`, `BVM_SPAWN`, `BVM_SPAWNITEM`, `BVM_ANIMATEACTOR`, `BVM_CREATEEMITTER`. The server's `P_InventoryUpdate "D"` drop-item handler (ServerNet.bb ~1467) is the original template.
+
 ### Strict-mode tests
 
 Test files under [src/Tests/](src/Tests/) use `Strict` + `EnableGC` at the top. They cannot include `Server.bb` or other heavy entry points (would pull in network/world deps). Instead they `Include` the one module under test and *inline-stub* its missing dependencies — see [src/Tests/Modules/ItemsTest.bb:8-49](src/Tests/Modules/ItemsTest.bb#L8) for the canonical pattern. The **rcce2-test-writing** skill walks through this.
