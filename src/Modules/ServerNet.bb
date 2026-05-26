@@ -51,11 +51,11 @@ Function SendChatHelp(AI.ActorInstance, Topic$)
 	; Social
 	RCE_Send(Host, AI\RNID, P_ChatMessage, Chr$(254) + "Social: /ignore /unignore /players /allplayers /trade", True)
 	; Info
-	RCE_Send(Host, AI\RNID, P_ChatMessage, Chr$(254) + "Info: /time /date /season /warp", True)
+	RCE_Send(Host, AI\RNID, P_ChatMessage, Chr$(254) + "Info: /time /date /season", True)
 
 	; DM commands -- only listed for DMs
 	If IsDM = True
-		RCE_Send(Host, AI\RNID, P_ChatMessage, Chr$(254) + "DM-only: /kick /xp /gold /setattribute /setattributemax /script /gm /warpother /ability /give /weather /netdump", True)
+		RCE_Send(Host, AI\RNID, P_ChatMessage, Chr$(254) + "DM-only: /kick /xp /gold /setattribute /setattributemax /script /gm /warp /warpother /ability /give /weather /netdump", True)
 	EndIf
 End Function
 
@@ -66,7 +66,7 @@ Function SendChatHelpDetail(AI.ActorInstance, T$, IsDM%)
 	Local Line$ = ""
 	; Built-in non-DM commands
 	If T = "ME" Then Line = "/me <action> -- emote action in current area"
-	If T = "YELL" Then Line = "/yell <text> -- shout to your entire area"
+	If T = "YELL" Then Line = "/yell <text> -- shout to every online player on the server"
 	If T = "PM" Then Line = "/pm <player>,<text> -- private message"
 	If T = "G" Then Line = "/g <text> -- guild chat"
 	If T = "P" Then Line = "/p <text> -- party chat"
@@ -82,22 +82,25 @@ Function SendChatHelpDetail(AI.ActorInstance, T$, IsDM%)
 	If T = "TIME" Then Line = "/time -- show in-world clock time"
 	If T = "DATE" Then Line = "/date -- show in-world date"
 	If T = "SEASON" Then Line = "/season -- show current season"
-	If T = "WARP" Then Line = "/warp <area>[,<x>,<y>,<z>] -- warp to an area"
 	If T = "HELP" Or T = "?" Then Line = "/help [<command>] -- list commands, or detail on one"
 
-	; DM-only commands -- only describe when caller has DM rights
+	; DM-only commands -- only describe when caller has DM rights.
+	; All "grant" commands target self -- the handlers in this file
+	; uniformly call GiveXP/AddSpell/etc. on AI, never on a Params-named
+	; player. /warpother is the sole exception that takes a target.
 	If IsDM = True
 		If T = "KICK" Then Line = "/kick <player> -- disconnect a player"
-		If T = "XP" Then Line = "/xp <player>,<amount> -- grant XP"
-		If T = "GOLD" Then Line = "/gold <player>,<amount> -- grant gold"
-		If T = "SETATTRIBUTE" Then Line = "/setattribute <player>,<attr>,<value> -- set attribute"
-		If T = "SETATTRIBUTEMAX" Then Line = "/setattributemax <player>,<attr>,<value> -- set max attribute"
+		If T = "XP" Then Line = "/xp <amount> -- grant XP to self"
+		If T = "GOLD" Then Line = "/gold <amount> -- adjust own gold (negative to deduct)"
+		If T = "SETATTRIBUTE" Then Line = "/setattribute <attr>,<value> -- set own attribute"
+		If T = "SETATTRIBUTEMAX" Then Line = "/setattributemax <attr>,<value> -- set own max attribute"
 		If T = "SCRIPT" Then Line = "/script <name>,<func> -- run script's function as self"
-		If T = "GM" Then Line = "/gm <text> -- broadcast as GM to all players"
-		If T = "WARPOTHER" Then Line = "/warpother <player>,<area>[,<x>,<y>,<z>] -- warp another player"
-		If T = "ABILITY" Then Line = "/ability <player>,<ability> -- grant ability"
-		If T = "GIVE" Then Line = "/give <player>,<item>[,<amount>] -- grant item"
-		If T = "WEATHER" Then Line = "/weather <type> -- set weather"
+		If T = "GM" Then Line = "/gm <text> -- broadcast as GM to all DMs"
+		If T = "WARP" Then Line = "/warp <area>[,<instance>] -- warp self to area's first portal"
+		If T = "WARPOTHER" Then Line = "/warpother <player>,<area>[,<instance>] -- warp another player"
+		If T = "ABILITY" Then Line = "/ability <ability>,<level> -- grant own ability at level"
+		If T = "GIVE" Then Line = "/give <item> -- spawn item into own inventory"
+		If T = "WEATHER" Then Line = "/weather <type> -- set weather in current area"
 		If T = "NETDUMP" Then Line = "/netdump -- start a network packet log"
 	EndIf
 

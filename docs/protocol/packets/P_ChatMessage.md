@@ -66,8 +66,8 @@ The dispatch is a single `Select Command$` keyed on `LanguageString$(LS_SC*)` ([
 | `/trade <name>` | none | Player→player trade offer. |
 | `/players` / `/allplayers` | none | Counter — current area vs. server-wide. |
 | `/time` / `/date` / `/season` | none | Game-clock report. |
-| `/warp <area>, <x>, <z>` | DM | Server-side warp. |
-| `/warpother <name>, <area>, <x>, <z>` | DM | Warp another player. |
+| `/warp <area>[,<instance>]` | DM | Self-warp to the area's first defined portal (the `Instance` arg picks the area-instance, not coordinates). |
+| `/warpother <name>, <area>[,<instance>]` | DM | Warp another player to the area's first defined portal. |
 | `/xp <amount>` | DM | `GiveXP(AI, n)`. |
 | `/gold <amount>` | DM | Direct gold adjustment + `P_GoldChange`. |
 | `/setattribute <attr>, <n>` / `/setattributemax <attr>, <n>` | DM | Calls `UpdateAttribute` / `UpdateAttributeMax` for Health/Speed/Energy, otherwise writes through and broadcasts `P_StatUpdate`. |
