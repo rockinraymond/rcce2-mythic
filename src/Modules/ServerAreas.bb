@@ -162,16 +162,21 @@ End Function
 ; Unloads all server data for an area
 Function ServerUnloadArea(A.Area)
 
-	; After-cursor walk: the body Deletes W, which would corrupt
-	; the For-Each cursor on the next iteration. Documented in
-	; CLAUDE.md (#247).
-	Local W.ServerWater = First ServerWater
+	; Walk the per-Area chain instead of the global ServerWater
+	; collection. Capture the next link BEFORE Delete so the
+	; current node's NextWater isn't read post-free. Skipping the
+	; global For-Each here also drops the `If W\Area = A` filter,
+	; turning O(global_waters) into O(this_area_waters). The
+	; per-area chain head + NextWater links go out of scope when
+	; A is Deleted below, so no caller can observe stale links.
+	Local W.ServerWater = A\FirstWater
 	Local WNext.ServerWater = Null
 	While W <> Null
-		WNext = After W
-		If W\Area = A Then Delete(W)
+		WNext = W\NextWater
+		Delete(W)
 		W = WNext
 	Wend
+	A\FirstWater = Null
 	;For j = 0 To 99 {##}
 	;	If A\Instances[j] <> Null
 	;		For i = 0 To 499
@@ -262,12 +267,16 @@ Function ServerLoadArea.Area(Name$)
 			; SafeZone-damage loop (GameServer.bb ~773) indexes
 			; A\Resistances[SW\DamageType].
 			If W\DamageType < 0 Or W\DamageType > 19 Then W\DamageType = 0
-			; Link into A\FirstWater chain so the per-tick underwater
-			; check in GameServer.bb's UpdateActorInstances doesn't have
-			; to filter every global ServerWater by `If SW\Area = A`.
-			; Head-insert is fine -- the chain order doesn't affect
-			; semantics (the underwater check Exits on the first match
-			; and the SaveArea path still walks Each ServerWater).
+			; Link into A\FirstWater chain. With SaveArea +
+			; ServerUnloadArea also using the chain, the global
+			; `For Each ServerWater` collection still owns every
+			; record (creation and Delete are the only sites that
+			; touch the Each iterator), but no per-frame or
+			; per-save code paths have to filter it by Area.
+			; Head-insert is fine -- the underwater check Exits
+			; on first match and SaveArea writes are
+			; order-insensitive (ServerLoadArea just reads N
+			; records).
 			W\NextWater = A\FirstWater
 			A\FirstWater = W
 		Next
@@ -373,23 +382,31 @@ Function ServerSaveArea(A.Area)
 			WriteFloat(F, A\SpawnRange#[i])
 		Next
 
-		; Water areas
+		; Water areas — walk this area's chain twice (count, then
+		; write). Replaces two global For-Each loops that each
+		; filtered by `If W\Area = A`. Chain head-insert order in
+		; ServerLoadArea is the reverse of file order; chain order
+		; doesn't affect read semantics because ServerLoadArea
+		; just reads N records.
+		Local W.ServerWater
 		Count = 0
-		For W.ServerWater = Each ServerWater
-			If W\Area = A Then Count = Count + 1
-		Next
+		W = A\FirstWater
+		While W <> Null
+			Count = Count + 1
+			W = W\NextWater
+		Wend
 		WriteShort(F, Count)
-		For W.ServerWater = Each ServerWater
-			If W\Area = A
-				WriteFloat(F, W\X#)
-				WriteFloat(F, W\Y#)
-				WriteFloat(F, W\Z#)
-				WriteFloat(F, W\Width#)
-				WriteFloat(F, W\Depth#)
-				WriteShort(F, W\Damage)
-				WriteShort(F, W\DamageType)
-			EndIf
-		Next
+		W = A\FirstWater
+		While W <> Null
+			WriteFloat(F, W\X#)
+			WriteFloat(F, W\Y#)
+			WriteFloat(F, W\Z#)
+			WriteFloat(F, W\Width#)
+			WriteFloat(F, W\Depth#)
+			WriteShort(F, W\Damage)
+			WriteShort(F, W\DamageType)
+			W = W\NextWater
+		Wend
 
 	If Not SafeWriteCommit(TempPath$, FinalPath$, F) Then Return False
 
