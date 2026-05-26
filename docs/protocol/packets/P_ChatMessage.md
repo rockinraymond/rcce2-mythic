@@ -43,14 +43,14 @@ Colour-escape semantics ([ClientNet.bb:1215-1227](../../../src/Modules/ClientNet
 | `Chr$(253)` | `255, 50, 50` (red) | Yell, error, ignore confirmation, ability-not-recharged. |
 | `Chr$(252)` | `200, 10, 200` (magenta) | `/me` emote, `/pm` private-message, NPC→player chat ("Player: ..."). |
 | `Chr$(251)` | `20, 220, 50` (green) | Guild chat, party chat. |
-| `Chr$(250)` | (next 3 bytes) | Custom RGB — emitted by `BVM_OUTPUT(actor, text, R, G, B)` at [ScriptingCommands.bb:2793](../../../src/Modules/ScriptingCommands.bb#L2793). |
+| `Chr$(250)` | (next 3 bytes) | Custom RGB. Primary emitter is `BVM_OUTPUT(actor, text, R, G, B)` at [ScriptingCommands.bb:2793](../../../src/Modules/ScriptingCommands.bb#L2793); engine also uses it for the critical-damage notification at three sites in [GameServer.bb](../../../src/Modules/GameServer.bb#L432) (`Chr$(255) + Chr$(225) + Chr$(100)` — peach/orange). |
 | _other_ | (default) | Normal text. If body starts `"<NAME> "` and `UseBubbles > 1`, renders as a 3D chat bubble above the named actor. |
 
 The chat-bubble path ([ClientNet.bb:1231-1254](../../../src/Modules/ClientNet.bb#L1231)) only fires for the no-escape case — coloured lines never get bubbles. Bubble lookup goes through `FindPlayerFromName(...)`; if no actor matches, the line falls back to normal text output.
 
 ## C → S slash-command catalog
 
-The dispatch is a single `Select Command$` keyed on `LanguageString$(LS_SC*)` ([Language.bb](../../../src/Modules/Language.bb)) — every command is localizable. Below uses the English defaults.
+The dispatch is a single `Select Command$` keyed on `LanguageString$(LS_SC*)` ([Language.bb](../../../src/Modules/Language.bb)) — nearly every command is localizable. The two exceptions are `/help` and `/?`, which are hardcoded at [ServerNet.bb:680](../../../src/Modules/ServerNet.bb#L680) (`Case "HELP", "?"`) pending an `LS_SCHelp` entry. Below uses the English defaults.
 
 | Command | Gate | Effect |
 |---|---|---|
@@ -76,7 +76,7 @@ The dispatch is a single `Select Command$` keyed on `LanguageString$(LS_SC*)` ([
 | `/ability` / `/give` / `/weather` / `/netdump` | DM | Misc DM tools. |
 | _other_ | none | Falls through to the `ScriptExists%("In-game Commands")` hook → `ThreadScript("In-game Commands", Command$, ..., Params$)`, otherwise replies `"Unknown command:"` ([ServerNet.bb:688-692](../../../src/Modules/ServerNet.bb#L688)). |
 
-`/help [topic]` ([ServerNet.bb:40-108](../../../src/Modules/ServerNet.bb#L40)) is special: it emits one `P_ChatMessage` per line of help text, all prefixed `Chr$(254)`. The DM-only block at [ServerNet.bb:57-58](../../../src/Modules/ServerNet.bb#L57) is gated by the same `Account\IsDM` check.
+`/help [topic]` is special: it emits one `P_ChatMessage` per line of help text, all prefixed `Chr$(254)`. The entry point `SendChatHelp` lives at [ServerNet.bb:31-60](../../../src/Modules/ServerNet.bb#L31); the per-topic detail dispatcher `SendChatHelpDetail` at [ServerNet.bb:65-109](../../../src/Modules/ServerNet.bb#L65). The DM-only summary block at [ServerNet.bb:57-58](../../../src/Modules/ServerNet.bb#L57) is gated by the same `Account\IsDM` check.
 
 ## Validation requirements
 
@@ -142,4 +142,4 @@ The general-chat fallback at [ServerNet.bb:705-710](../../../src/Modules/ServerN
 - [`../encoding.md`](../encoding.md) — wire-encoding primitives.
 - [`../handler-conventions.md`](../handler-conventions.md) — soft-fail discipline, Account-Null pattern, FirstOnlinePlayer / FirstInZone / FirstSlave chain walks.
 - [`../../modules/scripting.md`](../../modules/scripting.md) — `/script` and the privileged-spawn flag.
-- [`ScriptingCommands.bb`'s `BVM_OUTPUT`](../../../src/Modules/ScriptingCommands.bb#L2785) — the only S→C `Chr$(250)` (custom-RGB) emitter.
+- [`ScriptingCommands.bb`'s `BVM_OUTPUT`](../../../src/Modules/ScriptingCommands.bb#L2785) — the primary S→C `Chr$(250)` (custom-RGB) emitter. The engine itself also uses `Chr$(250)` for critical-damage notifications at three sites in [`GameServer.bb`](../../../src/Modules/GameServer.bb#L432) (lines 432, 469, 507 — one per `CombatFormula` variant).
