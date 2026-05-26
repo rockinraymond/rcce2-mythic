@@ -32,8 +32,8 @@ The dispatcher's first byte is the sub-code; everything after depends on it.
 | `"R"` | **Received** a dropped item I picked up | `1B sub + 4B ServerHandle + 1B SlotI` |
 | `"P"` | A dropped item I see has been **picked up** by another player | `1B sub + 4B Handle(DroppedItem)` |
 | `"D"` | A new item was **dropped** to the floor near me | `1B sub + 2B Amount + 4B X + 4B Y + 4B Z + 4B DroppedHandle + ItemInstanceToString$` |
-| `"O"` | **Offered** an item via give-item dialog | (server-controlled item-offer flow) |
-| `"G"` | Generic **gold/inventory** update tail | (item assignment / quest reward path) |
+| `"O"` | **Equipped-gear visual update** for another actor (so other clients see them with new clothes / armour / weapon) | `1B sub + 2B RuntimeID + 2B WeaponID + 2B ShieldID + 2B ChestID + 2B HatID + 6× 1B GubbinFlags` |
+| `"G"` | **Offered an item via give-item dialog**: server has created an `ItemInstance` with `Assignment > 0` and `AssignTo = recipient`; client receives the offer and replies with C→S `"G"` (`"GY"+slot` to accept or `"GN"` to decline). Emitted by GM `/give`, `P_OpenTrading` mutual-swap, and `BVM_GiveItem`. | `1B sub + 4B Handle(ItemInstance) + 2B ItemID + 2B Amount` |
 
 ## Validation requirements
 
@@ -69,15 +69,23 @@ The matching guard in `InventorySwap` (line 152) was already present — the abs
 
 ### Item-handle assignment match on "G"
 
-ServerNet.bb:1681 — `If II\Assignment > 0 And II\AssignTo = AI`. Without the `AssignTo` check, anyone holding (or guessing) a 4-byte ItemInstance handle could claim items intended for another player. The `P_OpenTrading` buy path uses the same `Assignment` / `AssignTo` pair.
+ServerNet.bb:1681 — `If II\Assignment > 0 And II\AssignTo = AI`. Without the `AssignTo` check, anyone holding (or guessing) a 4-byte ItemInstance handle could claim items intended for another player. The `P_OpenTrading` mutual-swap path uses the same `Assignment` / `AssignTo` pair.
 
 ### Pet/Slave validation on swap/add
 
 ServerNet.bb:1722-1733 — when `RuntimeID` doesn't equal the sender, the handler walks the sender's `For Slave.ActorInstance = Each ActorInstance / If Slave\Leader = AIFrom` to verify the target is one of the sender's pets. Without this gate, anyone could rearrange another player's inventory.
 
-### Float sanitisation on "D" drop position
+### Float sanitisation on the "D" broadcast (defends against upstream-tainted actor state)
 
-ServerNet.bb:1654-1656 — the dropped-item position uses `ClampWorldCoord#(AI\X#)` etc. before being written to `DroppedItem` and broadcast. `AI\X#/Y#/Z#` can carry a NaN/Inf from an upstream unvalidated packet; a NaN dropped-item position poisons spatial code on every receiver.
+The client's C→S `"D"` packet carries only `Slot` + `Amount` — no position bytes. The server uses `AI\X#/Y#/Z#` (the server's actor-state position) when creating the `DroppedItem` and the S→C `"D"` broadcast. ServerNet.bb:1654-1656 clamps those values with `ClampWorldCoord#` before serialising:
+
+```basic
+D\X# = ClampWorldCoord#(AI\X#)
+D\Y# = ClampWorldCoord#(AI\Y#)
+D\Z# = ClampWorldCoord#(AI\Z#)
+```
+
+The defense is against an upstream NaN/Inf that leaked into `AI\X#/Y#/Z#` via an earlier unvalidated packet (`P_StandardUpdate` only clamps Y; X and Z accept anything within magnitude limits but not NaN). A NaN dropped-item position would poison spatial code on every receiver.
 
 ## Historical bugs / PR references
 
@@ -85,7 +93,7 @@ ServerNet.bb:1654-1656 — the dropped-item position uses `ClampWorldCoord#(AI\X
 |---|---|
 | [#242](https://github.com/RydeTec/rcce2/pull/242) | Tightened SlotIndex bound on P_ItemScript / P_EatItem (sibling pattern) |
 | [#276](https://github.com/RydeTec/rcce2/pull/276) | Negative-Amount InventoryAdd duplication; range gates on P_Examine / P_Trade / P_ItemScript |
-| [#283](https://github.com/RydeTec/rcce2/pull/283) | "P" pickup and "D" drop broadcasts now walk FirstOnlinePlayer / FirstInZone chains instead of `Each ActorInstance` |
+| [#283](https://github.com/RydeTec/rcce2/pull/283) | "P" pickup and "D" drop broadcasts walk the per-area `AInstance\FirstInZone` chain (not the engine-wide `FirstOnlinePlayer` chain — that was for 7 other sites covered by #283). Same family of `Each ActorInstance / filter` → `chain walk` conversion. |
 
 ## Related packets
 
