@@ -149,9 +149,16 @@ End Function
 ; Unloads all server data for an area
 Function ServerUnloadArea(A.Area)
 
-	For W.ServerWater = Each ServerWater
+	; After-cursor walk: the body Deletes W, which would corrupt
+	; the For-Each cursor on the next iteration. Documented in
+	; CLAUDE.md (#247).
+	Local W.ServerWater = First ServerWater
+	Local WNext.ServerWater = Null
+	While W <> Null
+		WNext = After W
 		If W\Area = A Then Delete(W)
-	Next
+		W = WNext
+	Wend
 	;For j = 0 To 99 {##}
 	;	If A\Instances[j] <> Null
 	;		For i = 0 To 499
