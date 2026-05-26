@@ -94,18 +94,25 @@ Function UnlockMusic()
 
 End Function
 
-; Creates a new (blank) media database
+; Creates a new (blank) media database.
+;
+; Atomic via SafeWriteOpen / SafeWriteCommit. The 65535-int zero-init
+; produces a ~256KB file; a crash mid-init previously left a truncated
+; index that subsequent OpenFile loads would read past EOF on (Blitz
+; zero-fills past EOF silently, so missing slots became "ID 0" — a
+; class of "Meshes.dat is corrupted" mystery loads). SafeWriteCommit
+; refuses to promote an empty temp and keeps any prior version as .bak.
 Function CreateDatabase(Filename$)
 
-	F = WriteFile(Filename$)
+	Local TempPath$ = SafeWriteOpen$(Filename$)
+	F = WriteFile(TempPath$)
 	If F = 0 Then Return False
 
 	For ID = 0 To 65534
 		WriteInt F, 0
 	Next
 
-	CloseFile(F)
-	Return True
+	Return SafeWriteCommit%(TempPath$, Filename$, F)
 
 End Function
 

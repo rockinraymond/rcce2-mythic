@@ -83,7 +83,12 @@ Const testing=False
     ChangeDir thispath$    
 ;#Region Load Modules
 	Include "Modules\media.bb"
-    
+	; Logging.bb provides SafeWriteOpen / SafeWriteCommit used by Media.bb's
+	; CreateDatabase. Non-Strict tools tolerate the missing MainLog/LogMode
+	; globals via implicit-zero semantics (WriteLog's `If LogHandle <> 0`
+	; and `If LogMode > 0` short-circuit when the implicit globals are 0).
+	Include "Modules\Logging.bb"
+
 ChangeDir thispath$
 ;;;;;;; NEW ADDITIONS VIA SOLSTAR REQUESTw
 ;#Region Load Modules

@@ -213,15 +213,29 @@ Function Save_Radar_Fog(areaname$)
 	Next
 	SetBuffer TextureBuffer(radar_tex2)
 	LockBuffer TextureBuffer(radar_tex2)
-	 sf_radar=WriteFile(radar_thispath$+radarpath$+areaname$+".rdr")
-	  For fx=0 To Radar_TexSize-1
-	   For fy=0 To Radar_TexSize-1
-	     CC=ReadPixelFast(fx,fy)
-	       WriteInt sf_radar, CC
-	    Next
-	    Next
+	; Atomic .rdr save + close the pre-existing CloseFile leak. The
+	; previous code opened sf_radar via WriteFile but never closed it,
+	; leaking one file handle per call. SafeWriteCommit owns the close
+	; and atomic-promotes; previous radar texture is retained as .bak.
+	Local RdrFinalPath$ = radar_thispath$+radarpath$+areaname$+".rdr"
+	Local RdrTempPath$ = SafeWriteOpen$(RdrFinalPath$)
+	sf_radar=WriteFile(RdrTempPath$)
+	If sf_radar = 0
+		UnlockBuffer TextureBuffer(radar_tex2)
+		SetBuffer BackBuffer()
+		Return
+	EndIf
+	For fx=0 To Radar_TexSize-1
+		For fy=0 To Radar_TexSize-1
+			CC=ReadPixelFast(fx,fy)
+			WriteInt sf_radar, CC
+		Next
+	Next
 	UnlockBuffer TextureBuffer(radar_tex2)
-   SetBuffer BackBuffer()
+	SetBuffer BackBuffer()
+	; SafeWriteCommit closes sf_radar; on failure the previous .rdr
+	; survives unchanged.
+	SafeWriteCommit%(RdrTempPath$, RdrFinalPath$, sf_radar)
 End Function
 
 
