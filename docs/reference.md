@@ -143,7 +143,7 @@ workflow in [`start.md`](start.md).
 - [`MySQL`](modules/mysql.md) - MySQL integration points
 - [`Packets`](modules/packets.md) - network packet type constants
 - [`RottNet`](modules/rottnet.md) - low-level networking library
-- [`Scripting`](modules/scripting.md) - gameplay script interpreter
+- [`Scripting`](modules/scripting.md) - gameplay script interpreter (entry-point lifecycle, privilege model, soft-fail / clamp conventions). The per-function BVM API catalog is auto-generated at [`bvm-reference.md`](bvm-reference.md).
 - [`ServerNet`](modules/servernet.md) - server message processing and broadcast
   flows
 - [`UpdatesServer`](modules/updatesserver.md) - update file metadata and update

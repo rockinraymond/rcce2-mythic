@@ -178,6 +178,21 @@ Easy first PRs:
 - [`docs/`](docs) generally needs cross-links: many pages exist but reference each other inconsistently.
 - [`CLAUDE.md`](CLAUDE.md) is the agent-facing source of truth. If you discover a stale claim there, fix it — and consider whether the same point belongs in this file too.
 
+### Generated docs
+
+[`docs/bvm-reference.md`](docs/bvm-reference.md) is generated from
+[`src/Modules/RC_Standard_Invoker.bb`](src/Modules/RC_Standard_Invoker.bb) and
+[`src/Modules/ScriptingCommands.bb`](src/Modules/ScriptingCommands.bb). **Do not edit it by hand.**
+After touching either source file, regenerate the reference:
+
+```bash
+./scripts/gen_bvm_reference.sh
+```
+
+And commit the updated `docs/bvm-reference.md` alongside your source change. The script also accepts
+`--check` mode (exits non-zero if the doc is stale) for use in pre-commit hooks or CI; it is not
+yet wired into the GitHub Actions workflow.
+
 ---
 
 ## Where to ask
