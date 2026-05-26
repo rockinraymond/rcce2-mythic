@@ -684,7 +684,7 @@ Function BVM_GIVEKILLXP(Param1%, Param2%)
 	; "LevelUp") which can advance Level arbitrarily. Without this
 	; gate, any NPC's Examine / Trade / RightClick script could grant
 	; or deny arbitrary progression to the clicker. Match the gate on
-	; BVM_GIVEXP below and on BVM_SETACTORLEVEL at line 1934.
+	; BVM_GIVEXP below and on BVM_SETACTORLEVEL.
 	If Not BVM_RequirePrivileged() Then Return
 	Actor.ActorInstance = Object.ActorInstance(Param1%)
 	Actor2.ActorInstance = Object.ActorInstance(Param2%)
@@ -1927,7 +1927,7 @@ Function BVM_GIVEXP(Param1%, Param2%, Param3%=0)
 	; spawned (privileged) context. A non-priv NPC script calling
 	; BVM_GIVEXP(player, 999999999) drives the clicker's progression
 	; without ever needing the gated SETACTORLEVEL itself. Gate parity
-	; with BVM_SETACTORLEVEL at line 1934.
+	; with BVM_SETACTORLEVEL.
 	If Not BVM_RequirePrivileged() Then Return
 	Actor.ActorInstance = Object.ActorInstance(Param1%)
 	If Actor <> Null
@@ -2195,10 +2195,18 @@ Function BVM_SETATTRIBUTE(Param1%, Param2$, Param3%)
 	; branch below calls KillActor(Actor, Null) whenever Value[Health]
 	; falls to <= 0, so a non-priv NPC's Examine / Trade / RightClick
 	; script could call SetAttribute(player, "Health", 0) and one-shot
-	; the clicker -- defeating the gate on BVM_KILLACTOR at line 434.
-	; Self-or-priv: an actor's own AI script legitimately mutates its
-	; own Energy/Health/etc., matching the BVM_MOVEACTOR posture.
-	If Not BVM_RequireSelfOrPrivileged(Param1%) Then Return
+	; the clicker -- defeating the BVM_KILLACTOR gate.
+	;
+	; Full-priv gate (not self-or-priv): for Examine/Trade/RightClick/
+	; ItemScript spawns, ThreadScript is called with `Handle(clicker)`
+	; as Actor% (see ServerNet.bb P_Examine/Trade/RightClick/ItemScript
+	; spawn sites), so `SI\AI = Handle(clicker)`. A self-or-priv gate
+	; on Param1=clicker_handle would match SI\AI and let the kill
+	; through. Match the BVM_KILLACTOR peer (RequirePrivileged) exactly.
+	; Legitimate NPC self-attribute mutation belongs in privileged
+	; engine-spawned scripts (combat / damage events) rather than
+	; user-authored interaction scripts.
+	If Not BVM_RequirePrivileged() Then Return
 	Actor.ActorInstance = Object.ActorInstance(Param1%)
 	If Actor <> Null
 		Attribute = FindAttribute(Param2$)
@@ -2227,8 +2235,10 @@ Function BVM_CHANGEATTRIBUTE(Param1%, Param2$, Param3%)
 	; Equivalent-effect bypass of gated BVM_KILLACTOR -- same path as
 	; BVM_SETATTRIBUTE above. ChangeAttribute(player, "Health", -big%)
 	; drives Value[Health] negative and the line below calls
-	; KillActor(Actor, Null). Gate parity with BVM_SETATTRIBUTE.
-	If Not BVM_RequireSelfOrPrivileged(Param1%) Then Return
+	; KillActor(Actor, Null). Same full-priv reasoning: clicker-driven
+	; scripts have SI\AI = clicker handle, so self-or-priv on Param1
+	; would not block the documented one-shot exploit.
+	If Not BVM_RequirePrivileged() Then Return
 	Actor.ActorInstance = Object.ActorInstance(Param1%)
 	If Actor <> Null
 		Attribute = FindAttribute(Param2$)
@@ -2414,7 +2424,7 @@ Function BVM_CHANGEGOLD(Param1%, Param2%)
 	; SetGold is meaningless while this path is open. A non-priv NPC's
 	; RightClick / Examine script could call ChangeGold(clicker, -big%)
 	; to drain a player's wallet, or +big% to mint currency. Match the
-	; gate on BVM_SETGOLD at line 2418.
+	; gate on BVM_SETGOLD below.
 	If Not BVM_RequirePrivileged() Then Return
 	Actor.ActorInstance = Object.ActorInstance(Param1%)
 	If Actor <> Null

@@ -13,8 +13,8 @@ EnableGC
 ;   BVM_CHANGEMONEY        BVM_SETMONEY        RequirePrivileged
 ;   BVM_GIVEXP             BVM_SETACTORLEVEL   RequirePrivileged
 ;   BVM_GIVEKILLXP         BVM_SETACTORLEVEL   RequirePrivileged
-;   BVM_SETATTRIBUTE       BVM_KILLACTOR       RequireSelfOrPrivileged
-;   BVM_CHANGEATTRIBUTE    BVM_KILLACTOR       RequireSelfOrPrivileged
+;   BVM_SETATTRIBUTE       BVM_KILLACTOR       RequirePrivileged
+;   BVM_CHANGEATTRIBUTE    BVM_KILLACTOR       RequirePrivileged
 ;   BVM_REMOVEZONEINSTANCE (admin-only)        RequirePrivileged
 ;
 ; ScriptingCommands.bb can't be Included directly into a test build --
@@ -101,12 +101,12 @@ Function MockBVM_GIVEKILLXP(Param1%, Param2%)
 End Function
 
 Function MockBVM_SETATTRIBUTE(Param1%, Param2$, Param3%)
-	If Not BVM_RequireSelfOrPrivileged(Param1%) Then Return
+	If Not BVM_RequirePrivileged() Then Return
 	MutationSetAttr = MutationSetAttr + Param3%
 End Function
 
 Function MockBVM_CHANGEATTRIBUTE(Param1%, Param2$, Param3%)
-	If Not BVM_RequireSelfOrPrivileged(Param1%) Then Return
+	If Not BVM_RequirePrivileged() Then Return
 	MutationChangeAttr = MutationChangeAttr + Param3%
 End Function
 
@@ -265,30 +265,35 @@ Test testGiveKillXPGatePassesForPrivileged()
 End Test
 
 Test testSetAttributeGateBlocksArbitraryTarget()
-	; The exploit shape: a non-priv RightClick script targets the
-	; clicker (handle the script does not own) with Health=0 to invoke
-	; KillActor by side-effect. The self-or-priv gate must refuse.
 	InstallScript(0, 100, 0)
 	ResetMutationCounters()
 	MockBVM_SETATTRIBUTE(999, "Health", 0)
 	Assert(MutationSetAttr = 0)
 End Test
 
-Test testSetAttributeGateAllowsOwnAI()
-	; Legitimate case: NPC AI script mutating its own actor's energy.
-	InstallScript(0, 100, 0)
+; THE EXPLOIT this gate exists to block. For Examine/Trade/RightClick/
+; ItemScript spawns, ThreadScript("...", "Examine", Handle(clicker),
+; Handle(NPC)) makes `SI\AI = Handle(clicker)`. A self-or-priv gate on
+; Param1=clicker_handle would match SI\AI and let SetAttribute(clicker,
+; "Health", 0) reach KillActor(...) on the clicker. The full-priv gate
+; refuses regardless of how the target handle relates to SI\AI.
+Test testSetAttributeGateBlocksKillingOwnAITarget()
+	; Non-priv clicker-driven script: SI\AI = clicker handle (777 here).
+	; The exploit call passes Param1 = 777 == SI\AI, which would defeat
+	; a self-or-priv gate. The full-priv gate must still refuse.
+	InstallScript(0, 777, 200)
 	ResetMutationCounters()
-	MockBVM_SETATTRIBUTE(100, "Energy", 50)
-	Assert(MutationSetAttr = 50)
+	MockBVM_SETATTRIBUTE(777, "Health", 0)
+	Assert(MutationSetAttr = 0)
 End Test
 
-Test testSetAttributeGateAllowsOwnContext()
-	; Legitimate case: script mutating the actor that triggered it
-	; (right-click context).
-	InstallScript(0, 0, 200)
+Test testSetAttributeGateBlocksKillingOwnContextTarget()
+	; Same exploit, but a script spawn shape where the lethal target
+	; happens to be SI\AIContext. The gate must still refuse.
+	InstallScript(0, 100, 500)
 	ResetMutationCounters()
-	MockBVM_SETATTRIBUTE(200, "Health", 100)
-	Assert(MutationSetAttr = 100)
+	MockBVM_SETATTRIBUTE(500, "Health", 0)
+	Assert(MutationSetAttr = 0)
 End Test
 
 Test testSetAttributeGatePassesForPrivileged()
@@ -306,11 +311,12 @@ Test testChangeAttributeGateBlocksArbitraryTarget()
 	Assert(MutationChangeAttr = 0)
 End Test
 
-Test testChangeAttributeGateAllowsOwnAI()
-	InstallScript(0, 100, 0)
+Test testChangeAttributeGateBlocksKillingOwnAITarget()
+	; Mirror of the SetAttribute clicker-bypass test on the Change path.
+	InstallScript(0, 777, 200)
 	ResetMutationCounters()
-	MockBVM_CHANGEATTRIBUTE(100, "Energy", -5)
-	Assert(MutationChangeAttr = -5)
+	MockBVM_CHANGEATTRIBUTE(777, "Health", -1000000)
+	Assert(MutationChangeAttr = 0)
 End Test
 
 Test testChangeAttributeGatePassesForPrivileged()
