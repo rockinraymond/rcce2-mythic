@@ -2170,70 +2170,88 @@ Function UpdateNetwork()
 				Else*/
 
 					; Rate-limit failed verifications. Without this the lack of any
-					; throttle made dictionary / credential-stuffing attacks free,
-					; and the distinct "N/P/B/L" replies advertised whether each
-					; username existed (and whether it was banned or already on).
-					; LoginAttemptOk() returns False once the configured threshold
-					; for this source has been crossed; we send the same "N" reply
-					; as for an unknown account so the response itself doesn't
-					; betray why the attempt failed under attack.
+					; throttle made dictionary / credential-stuffing attacks free.
+					; Below the throttle threshold the rest of this handler now
+					; uses the "auth before disclosure" pattern: the same "P"
+					; reply for nonexistent / wrong-password / banned-without-
+					; correct-password, and the existence-revealing "L" (online)
+					; and "B" (banned) codes are sent ONLY after the password
+					; verifies. That removes the username-enumeration / presence
+					; / ban-status oracles a patient attacker could previously
+					; mine below the throttle. The throttled case keeps the same
+					; collapse (now "P", matching the canonical failure code).
 					If Not LoginAttemptOk(M\FromID)
-						RCE_Send(Host, M\FromID, P_VerifyAccount, "N", True)
+						RCE_Send(Host, M\FromID, P_VerifyAccount, "P", True)
 					Else
-					; Find account
-					Exists = False
+					; Find account (without disclosing the result yet)
+					Local FoundA.Account = Null
 					For A.Account = Each Account
 						If Upper$(A\User$) = Upper$(Username$)
-							; Account is already logged in
-							If A\LoggedOn <> -1
-								LoginAttemptRecord(M\FromID, False)
-								RCE_Send(Host, M\FromID, P_VerifyAccount, "L", True)
-							Else
-								Offset = 2 + UsernameLen
-								PwdLen = RCE_IntFromStr(Mid$(M\MessageData$, Offset, 1))
-								; Reject truncated / empty-password packets. Without
-								; this guard a 1-byte packet leaves PwdLen=0 and Mid$
-								; returns "" -- which matches any account whose Pass$
-								; was ever stored as the empty string (legacy import,
-								; corrupted accounts file tail). Treated the same as
-								; a wrong-password attempt so the response doesn't
-								; betray the cause.
-								If PwdLen < 1
-									LoginAttemptRecord(M\FromID, False)
-									RCE_Send(Host, M\FromID, P_VerifyAccount, "P", True)
-								; If password is correct, send back character list
-								ElseIf A\Pass$ <> "" And VerifyPassword%(A\Pass$, Mid$(M\MessageData$, Offset + 1, PwdLen)) And A\IsBanned = False
-									LoginAttemptRecord(M\FromID, True)
-									; Lazy-migrate to v1 on first successful login.
-									A\Pass$ = UpgradePasswordIfLegacy$(A\Pass$, Mid$(M\MessageData$, Offset + 1, PwdLen))
-									Pa$ = "Y"
-									For i = 0 To 9
-										If A\Character[i] <> Null
-											Pa$ = Pa$ + RCE_StrFromInt$(Len(A\Character[i]\Name$), 1) + A\Character[i]\Name$
-											Pa$ = Pa$ + RCE_StrFromInt$(A\Character[i]\Actor\ID, 2) + RCE_StrFromInt$(A\Character[i]\Gender, 1)
-											Pa$ = Pa$ + RCE_StrFromInt$(A\Character[i]\FaceTex, 1) + RCE_StrFromInt$(A\Character[i]\Hair, 1)
-											Pa$ = Pa$ + RCE_StrFromInt$(A\Character[i]\Beard, 1) + RCE_StrFromInt$(A\Character[i]\BodyTex, 1)
-										EndIf
-									Next
-									RCE_Send(Host, M\FromID, P_VerifyAccount, Pa$, True)
-								; Otherwise return password failure
-								Else
-									LoginAttemptRecord(M\FromID, False)
-									If A\IsBanned = False
-										RCE_Send(Host, M\FromID, P_VerifyAccount, "P", True)
-									Else
-										RCE_Send(Host, M\FromID, P_VerifyAccount, "B", True)
-									EndIf
-								EndIf
-							EndIf
-							Exists = True
+							FoundA = A
 							Exit
 						EndIf
 					Next
-					; If account was not found, return failure
-					If Exists = False
+
+					Offset = 2 + UsernameLen
+					PwdLen = RCE_IntFromStr(Mid$(M\MessageData$, Offset, 1))
+
+					; Reject truncated / empty-password packets. Without this
+					; guard a 1-byte packet leaves PwdLen=0 and Mid$ returns ""
+					; -- which matches any account whose Pass$ was ever stored
+					; as the empty string. Same "P" as wrong-password so the
+					; response doesn't betray the cause.
+					If FoundA = Null Or PwdLen < 1
 						LoginAttemptRecord(M\FromID, False)
-						RCE_Send(Host, M\FromID, P_VerifyAccount, "N", True)
+						RCE_Send(Host, M\FromID, P_VerifyAccount, "P", True)
+					Else
+					; Hoist password verification to a local so we can branch on
+					; it without tripping BlitzForge's parser rejection of
+					; `Or Not <call>` in an ElseIf condition. Also makes the
+					; happy-path branches read straight (no negation).
+					Local PwdOk%
+					If FoundA\Pass$ = ""
+						PwdOk = False
+					Else
+						PwdOk = VerifyPassword%(FoundA\Pass$, Mid$(M\MessageData$, Offset + 1, PwdLen))
+					EndIf
+
+					If PwdOk = False
+						; Wrong password (or stored hash is empty). Collapse to
+						; "P" regardless of banned / online status so a
+						; pre-auth attacker can't probe either.
+						LoginAttemptRecord(M\FromID, False)
+						RCE_Send(Host, M\FromID, P_VerifyAccount, "P", True)
+					ElseIf FoundA\IsBanned <> False
+						; Password verified AND account is banned -- only now
+						; is it safe to tell this caller they're banned, because
+						; only the legitimate owner could have reached this
+						; branch. Count as a failed attempt for rate-limit
+						; bookkeeping so a banned user can't keep the throttle
+						; window open.
+						LoginAttemptRecord(M\FromID, False)
+						RCE_Send(Host, M\FromID, P_VerifyAccount, "B", True)
+					ElseIf FoundA\LoggedOn <> -1
+						; Password verified AND a session is already active --
+						; same "auth before disclosure" reasoning: only the
+						; legitimate owner sees the "already logged in" hint.
+						LoginAttemptRecord(M\FromID, False)
+						RCE_Send(Host, M\FromID, P_VerifyAccount, "L", True)
+					Else
+						; Success: send back character list.
+						LoginAttemptRecord(M\FromID, True)
+						; Lazy-migrate to v1 on first successful login.
+						FoundA\Pass$ = UpgradePasswordIfLegacy$(FoundA\Pass$, Mid$(M\MessageData$, Offset + 1, PwdLen))
+						Pa$ = "Y"
+						For i = 0 To 9
+							If FoundA\Character[i] <> Null
+								Pa$ = Pa$ + RCE_StrFromInt$(Len(FoundA\Character[i]\Name$), 1) + FoundA\Character[i]\Name$
+								Pa$ = Pa$ + RCE_StrFromInt$(FoundA\Character[i]\Actor\ID, 2) + RCE_StrFromInt$(FoundA\Character[i]\Gender, 1)
+								Pa$ = Pa$ + RCE_StrFromInt$(FoundA\Character[i]\FaceTex, 1) + RCE_StrFromInt$(FoundA\Character[i]\Hair, 1)
+								Pa$ = Pa$ + RCE_StrFromInt$(FoundA\Character[i]\Beard, 1) + RCE_StrFromInt$(FoundA\Character[i]\BodyTex, 1)
+							EndIf
+						Next
+						RCE_Send(Host, M\FromID, P_VerifyAccount, Pa$, True)
+					EndIf
 					EndIf
 					EndIf
 				//EndIf
