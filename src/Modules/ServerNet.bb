@@ -1232,8 +1232,30 @@ Function UpdateNetwork()
 				AI.ActorInstance = FindActorInstanceFromRNID(M\FromID)
 				If AI <> Null And (Len(M\MessageData$) = 1 Or Len(M\MessageData$) = 3)
 					SlotIndex = RCE_IntFromStr(Left$(M\MessageData$, 1))
+					Local ItemScriptGateOk% = True
 					If Len(M\MessageData$) = 3
 						A2.ActorInstance = RuntimeIDList(RCE_IntFromStr(Mid$(M\MessageData$, 2)))
+						; Same-area + InteractDist gate when the item
+						; targets another actor. Mirrors P_RightClick
+						; (range) and P_AttackActor (area). Items used
+						; on self (Len = 1, A2 = Null) skip this. On
+						; cross-area or out-of-range A2, the whole
+						; handler is dropped silently (matches
+						; P_Examine / P_Trade reject semantics rather
+						; than degrading to self-cast, which could
+						; misfire an offensive item back on the user).
+						If A2 <> Null
+							AInstance.AreaInstance = Object.AreaInstance(AI\ServerArea)
+							TInstance.AreaInstance = Object.AreaInstance(A2\ServerArea)
+							If AInstance = Null Or AInstance <> TInstance
+								ItemScriptGateOk = False
+							Else
+								XDist# = Abs(AI\X# - A2\X#)
+								ZDist# = Abs(AI\Z# - A2\Z#)
+								Dist# = (XDist# * XDist#) + (ZDist# * ZDist#)
+								If Dist# >= InteractDist Then ItemScriptGateOk = False
+							EndIf
+						EndIf
 					Else
 						A2 = Null
 					EndIf
@@ -1242,7 +1264,7 @@ Function UpdateNetwork()
 					; than Slots_Inventory (45), so a crafted P_ItemScript
 					; with SlotIndex 46..49 read past the Items array
 					; (same shape as the P_EatItem fix at ~1172).
-					If SlotIndex >= 0 And SlotIndex <= Slots_Inventory
+					If ItemScriptGateOk = True And SlotIndex >= 0 And SlotIndex <= Slots_Inventory
 						If AI\Inventory\Items[SlotIndex] <> Null
 							; Bug fix: the ExclusiveClass gate originally
 							; compared Actor\Race$ against ExclusiveClass$
@@ -1335,19 +1357,38 @@ Function UpdateNetwork()
 				If AI <> Null And Len(M\MessageData$) = 2
 					A2.ActorInstance = RuntimeIDList(RCE_IntFromStr(M\MessageData$))
 					If A2 <> Null
-						If A2\Script$ <> ""
-							Running = False
+						; Same-area + InteractDist gate. Mirrors
+						; P_AttackActor (area) and P_RightClick (range).
+						; Without these, a wire-injecting client could
+						; trigger Examine scripts (default disclosure
+						; dialog, vendor inventory, quest state) on
+						; any actor anywhere on the map, defeating the
+						; implicit "you can only examine what you can
+						; see" UX contract and giving the BVM
+						; clicker-handle trap (SI\AI = Handle(clicker))
+						; a cross-area attack surface.
+						AInstance.AreaInstance = Object.AreaInstance(AI\ServerArea)
+						TInstance.AreaInstance = Object.AreaInstance(A2\ServerArea)
+						If AInstance <> Null And AInstance = TInstance
+							XDist# = Abs(AI\X# - A2\X#)
+							ZDist# = Abs(AI\Z# - A2\Z#)
+							Dist# = (XDist# * XDist#) + (ZDist# * ZDist#)
+							If Dist# < InteractDist
+								If A2\Script$ <> ""
+									Running = False
 
-							For Si.ScriptInstance = Each ScriptInstance
-								If Si\Name = A2\Script
-									If Si\AI = Handle(AI) And Si\AIContext = Handle(A2) Then Running = True : Exit
+									For Si.ScriptInstance = Each ScriptInstance
+										If Si\Name = A2\Script
+											If Si\AI = Handle(AI) And Si\AIContext = Handle(A2) Then Running = True : Exit
+										EndIf
+									Next
+									If Running = False
+										ThreadScript(A2\Script$, "Examine", Handle(AI), Handle(A2))
+									EndIf
+								Else
+									ThreadScript("Default", "Examine", Handle(AI), Handle(A2))
 								EndIf
-							Next
-							If Running = False
-								ThreadScript(A2\Script$, "Examine", Handle(AI), Handle(A2))
 							EndIf
-						Else
-							ThreadScript("Default", "Examine", Handle(AI), Handle(A2))
 						EndIf
 					EndIf
 				EndIf
@@ -1357,7 +1398,21 @@ Function UpdateNetwork()
 				If AI <> Null And Len(M\MessageData$) = 2
 					A2.ActorInstance = RuntimeIDList(RCE_IntFromStr(M\MessageData$))
 					If A2 <> Null
-						ThreadScript("Default", "Trade", Handle(AI), Handle(A2))
+						; Same-area + InteractDist gate. Without it, a
+						; wire-injecting client could pin any remote
+						; actor's IsTrading state via the Default Trade
+						; script (BVM_OPENTRADING), or trigger the script
+						; against a target in another area entirely.
+						AInstance.AreaInstance = Object.AreaInstance(AI\ServerArea)
+						TInstance.AreaInstance = Object.AreaInstance(A2\ServerArea)
+						If AInstance <> Null And AInstance = TInstance
+							XDist# = Abs(AI\X# - A2\X#)
+							ZDist# = Abs(AI\Z# - A2\Z#)
+							Dist# = (XDist# * XDist#) + (ZDist# * ZDist#)
+							If Dist# < InteractDist
+								ThreadScript("Default", "Trade", Handle(AI), Handle(A2))
+							EndIf
+						EndIf
 					EndIf
 				EndIf
 
