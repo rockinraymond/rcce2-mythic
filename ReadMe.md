@@ -168,6 +168,8 @@ We welcome contributors at every level — players reporting bugs, scripters pol
 3. Run `test.bat` — tests run automatically on commit; they must pass.
 4. Open a PR targeting `develop`. Releases are PRs from `develop` → `master`.
 
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the full guidelines — build flags, the code conventions reviewers look for (soft-fail / atomic-write / Null discipline / privilege gating), Blitz3D / BlitzForge gotchas, the test-runner flake-retry recipe, and where to ask questions.
+
 To get push access, request to join the [**RCCE Contributors team**](https://github.com/orgs/RydeTec/teams/rcce-contributors).
 
 ## Community
