@@ -46,6 +46,12 @@ Const InteractDist = 400 ; radius of 20
 Const MaxRNID = 5000
 Dim ActorByRNID.ActorInstance(MaxRNID)
 
+; Head of the global online-player linked list (see
+; ActorInstance.NextOnlinePlayer). Walked by every chat-broadcast
+; loop and the per-tick standard-update broadcast in place of the
+; old `For Each ActorInstance / If A2\RNID > 0` filter.
+Global FirstOnlinePlayer.ActorInstance = Null
+
 ; Actor template
 Dim ActorList.Actor(65535)
 Type Actor
@@ -89,6 +95,18 @@ Global LastRuntimeID = 0
 Type ActorInstance
 	Field Actor.Actor
 	Field NextInZone.ActorInstance ; Linked list containing all actors in zone
+	; Linked list containing every CURRENTLY-online player (RNID > 0).
+	; Walked by the 7 broadcast loops in ServerNet.bb (chat: /yell /gm
+	; /g /pm /allplayers /warpother) and the per-tick standard-update
+	; broadcast in GameServer.bb's UpdateActorInstances. Replaces a
+	; `For Each ActorInstance / If A2\RNID > 0` walk that scaled with
+	; total actor count (NPCs + spawned mobs + pets + mounts + offline
+	; characters) -- the per-tick site was the dominant cost. Mirrors
+	; the FirstInZone / NextInZone pattern used per-AreaInstance.
+	; Maintained at the same three lifecycle hooks as ActorByRNID
+	; (login / logout / FreeActorInstance); see Actors.bb's helper
+	; functions and ServerNet.bb's P_StartGame / P_Disconnect handlers.
+	Field NextOnlinePlayer.ActorInstance
 	Field X#, Y#, Z#
 	Field OldX#, OldZ#
 	Field DestX#, DestZ#
@@ -575,6 +593,50 @@ Function CreateActorInstance.ActorInstance(Actor.Actor)
 
 End Function
 
+; Inserts A at the head of the FirstOnlinePlayer chain. Idempotent
+; via a presence check (a double-insert from a buggy caller would
+; create a cycle in the chain). Called at login completion in
+; ServerNet.bb P_StartGame.
+Function OnlinePlayerInsert(A.ActorInstance)
+
+	If A = Null Then Return
+	; Skip if already in the chain. Walking the chain to check is O(n)
+	; in online-player count; for the host's 5000-player cap this is
+	; cheap enough at the login site (which is human-rate, not per-tick).
+	Local Cursor.ActorInstance = FirstOnlinePlayer
+	While Cursor <> Null
+		If Cursor = A Then Return
+		Cursor = Cursor\NextOnlinePlayer
+	Wend
+	A\NextOnlinePlayer = FirstOnlinePlayer
+	FirstOnlinePlayer = A
+
+End Function
+
+; Removes A from the FirstOnlinePlayer chain. Walk-to-find-predecessor
+; pattern (mirrors AreaInstance\FirstInZone removal in GameServer.bb).
+; Safe to call when A isn't in the chain (no-op).
+Function OnlinePlayerRemove(A.ActorInstance)
+
+	If A = Null Then Return
+	If FirstOnlinePlayer = Null Then Return
+	If FirstOnlinePlayer = A
+		FirstOnlinePlayer = A\NextOnlinePlayer
+		A\NextOnlinePlayer = Null
+		Return
+	EndIf
+	Local Prev.ActorInstance = FirstOnlinePlayer
+	While Prev\NextOnlinePlayer <> Null
+		If Prev\NextOnlinePlayer = A
+			Prev\NextOnlinePlayer = A\NextOnlinePlayer
+			A\NextOnlinePlayer = Null
+			Return
+		EndIf
+		Prev = Prev\NextOnlinePlayer
+	Wend
+
+End Function
+
 ; Frees an actor instance
 Function FreeActorInstance(A.ActorInstance)
 
@@ -589,6 +651,9 @@ Function FreeActorInstance(A.ActorInstance)
 	If A\RNID > 0 And A\RNID <= MaxRNID
 		If ActorByRNID(A\RNID) = A Then ActorByRNID(A\RNID) = Null
 	EndIf
+	; FirstOnlinePlayer chain cleanup -- safe no-op when A wasn't an
+	; online player (NPCs, never-logged-in characters).
+	OnlinePlayerRemove(A)
 	If A\Leader <> Null Then A\Leader\NumberOfSlaves = A\Leader\NumberOfSlaves - 1
 	Delete(A)
 

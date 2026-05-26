@@ -1042,8 +1042,13 @@ Function UpdateActorInstances(Broadcast)
 	EndIf;
 				
 	If Broadcast = True
-		For AI.ActorInstance = Each ActorInstance
-			If AI\RNID > 0
+		; Walk the FirstOnlinePlayer chain instead of every
+		; ActorInstance. This is the per-tick standard-update
+		; broadcast -- the dominant per-frame cost on a server with
+		; many NPCs / spawned mobs. The chain only contains RNID > 0
+		; players, so the explicit `If AI\RNID > 0` filter is gone.
+		AI.ActorInstance = FirstOnlinePlayer
+		While AI <> Null
 				AInstance.AreaInstance = Object.AreaInstance(AI\ServerArea)
 				; If the player's area lookup is Null (mid-warp, freed
 				; zone), skip the per-tick broadcast for this player. They'll
@@ -1110,8 +1115,8 @@ Function UpdateActorInstances(Broadcast)
 					A2 = A2\NextInZone
 				Wend
 				EndIf  ; closes the AInstance <> Null guard added above
-			EndIf
-		Next
+			AI = AI\NextOnlinePlayer
+		Wend
 	EndIf
 
 End Function
