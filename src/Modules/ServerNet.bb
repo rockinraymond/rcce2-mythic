@@ -87,7 +87,7 @@ Function SendChatHelpDetail(AI.ActorInstance, T$, IsDM%)
 	; DM-only commands -- only describe when caller has DM rights.
 	; All "grant" commands target self -- the handlers in this file
 	; uniformly call GiveXP/AddSpell/etc. on AI, never on a Params-named
-	; player. /warpother is the sole exception that takes a target.
+	; player. /kick and /warpother are the exceptions that take a target.
 	If IsDM = True
 		If T = "KICK" Then Line = "/kick <player> -- disconnect a player"
 		If T = "XP" Then Line = "/xp <amount> -- grant XP to self"
