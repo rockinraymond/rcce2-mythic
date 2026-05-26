@@ -200,6 +200,13 @@ Repeat
 		Time# = Time# + DeltaBuffer(i)
 	Next
 	Time# = Time# / Float#(DeltaFrames)
+	; Avoid divide-by-zero on the first frame (DeltaTime is Global,
+	; possibly 0 if init code didn't seed DeltaBuffer) and on very fast
+	; sub-millisecond frames (degenerate on idle/menu screens, common
+	; under a debugger breakpoint). 1.0ms is the resolution floor of
+	; MilliSecs(); clamping here caps the reported FPS at 1000 without
+	; touching the legitimate Delta# > 3.5 cap below.
+	If Time# < 1.0 Then Time# = 1.0
 	fps# = 1000.0 / Time#
 	Delta# = BaseFramerate# / fps#
 	DeltaTime = MilliSecs()

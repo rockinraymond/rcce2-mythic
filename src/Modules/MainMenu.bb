@@ -1634,11 +1634,15 @@ Function CharSelect()
 			Time# = Time# + DeltaBuffer(i)
 		Next
 		Time# = Time# / Float#(DeltaFrames)
+		; Divide-by-zero guard -- see Client.bb. MainMenu does not seed
+		; DeltaTime before the loop (unlike Client.bb:188), so a fast
+		; first frame can produce a near-zero Time# average.
+		If Time# < 1.0 Then Time# = 1.0
 		FPS# = 1000.0 / Time#
 		Delta# = BaseFramerate# / FPS#
 		DeltaTime = MilliSecs()
 		If Delta# > 3.5 Then Delta# = 3.5 ; Don't let delta go too OTT
-	
+
 		Local targetTime%
 		Local lastUpdateTime%
 		Local targetEntity%
@@ -2290,11 +2294,15 @@ Function CreateChar()
 			Time# = Time# + DeltaBuffer(i)
 		Next
 		Time# = Time# / Float#(DeltaFrames)
+		; Divide-by-zero guard -- parity with the other MainMenu loop above
+		; and Client.bb. Sub-millisecond average frame time on menu screens
+		; (common on modern hardware) would otherwise produce Inf Delta#.
+		If Time# < 1.0 Then Time# = 1.0
 		FPS# = 1000.0 / Time#
 		Delta# = BaseFramerate# / FPS#
 		DeltaTime = MilliSecs()
 		If Delta# > 3.5 Then Delta# = 3.5 ; Don't let delta go too OTT
-	
+
 		; Escape pressed or cancel pressed
 		If KeyHit(1) Or GY_ButtonHit(BCancel)
 			SafeFreeActorInstance(Preview)

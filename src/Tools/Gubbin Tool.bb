@@ -547,6 +547,9 @@ Repeat
 		Time# = Time# + DeltaBuffer(i)
 	Next
 	Time# = Time# / 6.0
+	; Divide-by-zero guard -- see Client.bb. Sub-millisecond average frame
+	; time would yield Inf or a RuntimeError without this clamp.
+	If Time# < 1.0 Then Time# = 1.0
 	FPS# = 1000.0 / Time#
 	Delta# = BaseFramerate# / FPS#
 	DeltaTime = MilliSecs()
