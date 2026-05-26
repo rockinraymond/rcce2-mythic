@@ -733,23 +733,30 @@ Function UpdateActorInstances(Broadcast)
 				AI\Z# = AI\Rider\Z#
 			EndIf
 
-			; Underwater damage
+			; Underwater damage. Walks the per-Area chain off
+			; AInstance\Area\FirstWater (built in ServerLoadArea above)
+			; rather than the global `For Each ServerWater` + filter on
+			; SW\Area. Old: O(actors * total_water_in_all_loaded_areas)
+			; per tick. New: O(actors * waters_in_this_actor's_area),
+			; typically 5-10 per area vs potentially 50+ across all
+			; loaded zones. Behaviour unchanged -- same hit-test, same
+			; early Exit on first match.
 			If AI\Actor\Environment <> Environment_Swim
 				Underwater = 0
-				For SW.ServerWater = Each ServerWater
-					If SW\Area = AInstance\Area
-						If AI\Y# < SW\Y# + 0.5
-							If AI\X# > SW\X# And AI\X# < SW\X# + SW\Width#
-								If AI\Z# > SW\Z# And AI\Z# < SW\Z# + SW\Depth#
-									If AI\Underwater = 0 Then AI\Underwater = MilliSecs()
-									Underwater = Handle(SW)
-									DistUnder# = SW\Y# - AI\Y#
-									Exit
-								EndIf
+				Local SW.ServerWater = AInstance\Area\FirstWater
+				While SW <> Null
+					If AI\Y# < SW\Y# + 0.5
+						If AI\X# > SW\X# And AI\X# < SW\X# + SW\Width#
+							If AI\Z# > SW\Z# And AI\Z# < SW\Z# + SW\Depth#
+								If AI\Underwater = 0 Then AI\Underwater = MilliSecs()
+								Underwater = Handle(SW)
+								DistUnder# = SW\Y# - AI\Y#
+								Exit
 							EndIf
 						EndIf
 					EndIf
-				Next
+					SW = SW\NextWater
+				Wend
 				If Underwater = 0
 					AI\Underwater = 0
 					; Restore breath
