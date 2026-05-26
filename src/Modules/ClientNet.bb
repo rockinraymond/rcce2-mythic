@@ -43,10 +43,18 @@ Function Connect()
 
 	; Await reply
 	Done = 0
+	; After-cursor walk: trailing Delete M during For-Each would corrupt
+	; the cursor on the next step when multiple messages are queued
+	; (the server fans out P_StartGame plus any chat/disconnect packets
+	; that crossed the wire in the same tick).
+	Local M.RCE_Message = First RCE_Message
+	Local MNext.RCE_Message = Null
 	While Done < 13
 		Delay 10
 		; We get signal!
-		For M.RCE_Message = Each RCE_Message
+		M = First RCE_Message
+		While M <> Null
+			MNext = After M
 			If M\MessageType = P_StartGame
 				; Error message
 				If M\MessageData$ = "N" Then RuntimeError(LanguageString$(LS_AlreadyInGame))
@@ -106,11 +114,12 @@ Function Connect()
 				OnLostConnection()
 				Delete M
 			EndIf
-		Next
-		
+			M = MNext
+		Wend
+
 		RCE_Update()
 		RCE_CreateMessages()
-		
+
 		Cls
 		Flip VSync
 	Wend
@@ -125,7 +134,16 @@ End Function
 Function UpdateNetwork()
 
 	; Incoming messages
-	For M.RCE_Message = Each RCE_Message
+	; After-cursor walk: the trailing Delete M before Next would corrupt
+	; the For-Each cursor on the next step. This dispatcher runs every
+	; frame and processes the full RCE_Message backlog -- a typical tick
+	; carries many packets (per-actor updates, chat, effects, etc.), so
+	; the For-Each + Delete pattern reliably skips messages and risks a
+	; use-after-free on the cursor advance.
+	Local M.RCE_Message = First RCE_Message
+	Local MNext.RCE_Message = Null
+	While M <> Null
+		MNext = After M
 		; What happen?
 		Select M\MessageType
 
@@ -1748,9 +1766,10 @@ Function UpdateNetwork()
 
 		End Select
 		Delete M
-	Next
-	
-	
+		M = MNext
+	Wend
+
+
 	; Send update packet
 	
 	newEntityY#=EntityY#(Me\CollisionEN)
