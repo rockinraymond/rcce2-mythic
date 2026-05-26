@@ -96,7 +96,7 @@ none = void/Bool. Parameter sigils inside the argument list use the same.
 | `SETACTORHAIR` | `SETACTORHAIR(PARAM1%, PARAM2%)` | None |
 | `SETACTORLEVEL` | `SETACTORLEVEL(PARAM1%, PARAM2%)` | Privileged |
 | `SETACTORTARGET` | `SETACTORTARGET(PARAM1%, PARAM2%=0)` | None |
-| `SPAWN` | `SPAWN()` : Int | None |
+| `SPAWN` | `SPAWN(PARAM1%, PARAM2$, PARAM3#, PARAM4#, PARAM5#, PARAM6$ = "", PARAM7$ = "", PARAM8%=0)` : Int | None |
 
 ## Item
 
@@ -195,7 +195,7 @@ none = void/Bool. Parameter sigils inside the argument list use the same.
 | Function | Signature | Gate |
 |---|---|---|
 | `REFRESHSCRIPTS` | `REFRESHSCRIPTS()` | Privileged |
-| `THREADEXECUTE` | `THREADEXECUTE()` | None |
+| `THREADEXECUTE` | `THREADEXECUTE(NAME$, FUNC$, ACTOR%=0, CONTEXTACTOR%=0, PARAM$ = "")` | None |
 
 ## Globals
 
@@ -207,14 +207,14 @@ none = void/Bool. Parameter sigils inside the argument list use the same.
 
 | Function | Signature | Gate |
 |---|---|---|
-| `CREATEUDPSTREAM` | `CREATEUDPSTREAM(Param1%=0)` : Int | None |
-| `RECVUDPMSG` | `RECVUDPMSG(Param1%)` : String | None |
-| `SENDUDPMSG` | `SENDUDPMSG(Param1%, Param2%, Param3%)` | None |
-| `UDPMSGIP` | `UDPMSGIP(Param1%)` : Int | None |
-| `UDPMSGPORT` | `UDPMSGPORT(Param1%)` : Int | None |
-| `UDPSTREAMIP` | `UDPSTREAMIP(Param1%)` : Int | None |
-| `UDPSTREAMPORT` | `UDPSTREAMPORT(Param1%)` : Int | None |
-| `UDPTIMEOUTS` | `UDPTIMEOUTS(Param1%)` | None |
+| `CREATEUDPSTREAM` | `CREATEUDPSTREAM(Param1%=0)` : Int | Privileged |
+| `RECVUDPMSG` | `RECVUDPMSG(Param1%)` : String | Privileged |
+| `SENDUDPMSG` | `SENDUDPMSG(Param1%, Param2%, Param3%)` | Privileged |
+| `UDPMSGIP` | `UDPMSGIP(Param1%)` : Int | Privileged |
+| `UDPMSGPORT` | `UDPMSGPORT(Param1%)` : Int | Privileged |
+| `UDPSTREAMIP` | `UDPSTREAMIP(Param1%)` : Int | Privileged |
+| `UDPSTREAMPORT` | `UDPSTREAMPORT(Param1%)` : Int | Privileged |
+| `UDPTIMEOUTS` | `UDPTIMEOUTS(Param1%)` | Privileged |
 
 ## I/O & Persistence
 
@@ -239,7 +239,7 @@ none = void/Bool. Parameter sigils inside the argument list use the same.
 
 | Function | Signature | Gate |
 |---|---|---|
-| `RUNTIMEERROR` | `RUNTIMEERROR()` | Privileged |
+| `RUNTIMEERROR` | `RUNTIMEERROR(PARAM1$="")` | Privileged |
 
 ## Misc
 
@@ -259,10 +259,10 @@ none = void/Bool. Parameter sigils inside the argument list use the same.
 | `CHANGEFACTIONRATING` | `CHANGEFACTIONRATING(PARAM1%, PARAM2$, PARAM3%)` | Privileged |
 | `CHANGEMAXATTRIBUTE` | `CHANGEMAXATTRIBUTE(PARAM1%, PARAM2$, PARAM3%)` | None |
 | `CLASS` | `CLASS(PARAM1%)` : String | None |
-| `CLOSEUDPSTREAM` | `CLOSEUDPSTREAM(Param1%)` | None |
+| `CLOSEUDPSTREAM` | `CLOSEUDPSTREAM(Param1%)` | Privileged |
 | `COMPLETEQUEST` | `COMPLETEQUEST(PARAM1%, PARAM2$)` | None |
 | `CONTEXTACTOR` | `CONTEXTACTOR()` : Int | None |
-| `COUNTHOSTIPS` | `COUNTHOSTIPS(Param1%)` : Int | None |
+| `COUNTHOSTIPS` | `COUNTHOSTIPS(Param1%)` : Int | Privileged |
 | `COUNTPARTYMEMBERS` | `COUNTPARTYMEMBERS(PARAM%)` : Int | None |
 | `CREATEEMITTER` | `CREATEEMITTER(PARAM1%, PARAM2$, PARAM3%, PARAM4%, PARAM5#=0, PARAM6#=0, PARAM7#=0, PARAM8%=0)` | None |
 | `DAY` | `DAY()` : Int | None |
@@ -271,7 +271,7 @@ none = void/Bool. Parameter sigils inside the argument list use the same.
 | `DELETEACTOREFFECT` | `DELETEACTOREFFECT(PARAM1%, PARAM2$)` | None |
 | `DELETEQUEST` | `DELETEQUEST(PARAM1%, PARAM2$)` | None |
 | `DEQUOTE` | `DEQUOTE(PARAM1$)` : String | None |
-| `DOTTEDIP` | `DOTTEDIP(Param1%)` : String | None |
+| `DOTTEDIP` | `DOTTEDIP(Param1%)` : String | Privileged |
 | `FINDACTOR` | `FINDACTOR(PARAM1$, ACTORTYPE% = 3)` : Int | None |
 | `FIREPROJECTILE` | `FIREPROJECTILE(PARAM1%, PARAM2%, PARAM3$)` | SelfOrPrivileged |
 | `FIRSTACTORINZONE` | `FIRSTACTORINZONE(PARAM1$, PARAM2%=0)` : Int | None |
@@ -285,7 +285,7 @@ none = void/Bool. Parameter sigils inside the argument list use the same.
 | `GOTOIF` | `GOTOIF(PARAM$)` | None |
 | `HASITEM` | `HASITEM(PARAM1%, PARAM2$, PARAM3%=1)` : Int | None |
 | `HOMEFACTION` | `HOMEFACTION(PARAM1%)` : String | None |
-| `HOSTIP` | `HOSTIP(Param1%)` : Int | None |
+| `HOSTIP` | `HOSTIP(Param1%)` : Int | Privileged |
 | `HOUR` | `HOUR()` : Int | None |
 | `KICKPLAYER` | `KICKPLAYER(Param%)` | Privileged |
 | `KILLACTOR` | `KILLACTOR(PARAM1%, PARAM2%=0)` | Privileged |
@@ -309,7 +309,7 @@ none = void/Bool. Parameter sigils inside the argument list use the same.
 | `SAVESTATE` | `SAVESTATE()` | Privileged |
 | `SCENERYOWNER` | `SCENERYOWNER(PARAM1$, PARAM2%, PARAM3%=0)` : Int | None |
 | `SCREENFLASH` | `SCREENFLASH(PARAM1%, PARAM2%, PARAM3%, PARAM4%, PARAM5%, PARAM6%, PARAM7%=0)` | None |
-| `SCRIPTLOG` | `SCRIPTLOG()` | None |
+| `SCRIPTLOG` | `SCRIPTLOG(PARAM1$="")` | None |
 | `SEASON` | `SEASON()` : String | None |
 | `SETABILITYLEVEL` | `SETABILITYLEVEL(PARAM1%, PARAM2$, PARAM3%)` | None |
 | `SETFACTIONRATING` | `SETFACTIONRATING(PARAM1%, PARAM2$, PARAM3%)` | Privileged |
@@ -329,7 +329,7 @@ none = void/Bool. Parameter sigils inside the argument list use the same.
 | `SETWAITSPEAK` | `SETWAITSPEAK(PARAM1%, PARAM2%)` | None |
 | `SETWAITSTART` | `SETWAITSTART(PARAM1%)` | None |
 | `SETWAITTIME` | `SETWAITTIME(PARAM1%)` | None |
-| `SPLIT` | `SPLIT()` : String | None |
+| `SPLIT` | `SPLIT(PARAM1$, PARAM2%, PARAM3$=",")` : String | None |
 | `SQLACCOUNTID` | `SQLACCOUNTID(PARAM1%)` : Int | None |
 | `SQLACTORID` | `SQLACTORID(PARAM1%)` : Int | None |
 | `TAG` | `TAG(PARAM1%)` : String | None |

@@ -45,13 +45,19 @@ if [ ! -f "$COMMANDS" ]; then
 fi
 
 # Step 1: build a privilege-gate index from ScriptingCommands.bb.
-# Output is "BVM_NAME|GATE" lines where GATE is "Privileged",
-# "SelfOrPrivileged", or "None".
+# Output is "BVM_NAME_UPPER|GATE" lines where GATE is "Privileged",
+# "SelfOrPrivileged", or "None". Names are uppercased here so the
+# downstream lookup is case-insensitive: RC_Standard_Invoker.bb uses
+# uppercase <BVM_CREATEUDPSTREAM> declarations but ScriptingCommands.bb
+# defines them as mixed-case Function BVM_CreateUDPStream. A
+# case-sensitive lookup silently mis-labels the entire Networking
+# section as "None" -- a security-relevant disclosure bug because
+# the doc's stated purpose is communicating privilege gates.
 gate_index=$(awk '
     /^Function BVM_/ {
-        # Extract the function name (BVM_XYZ).
+        # Extract the function name (BVM_XYZ) and upper-case it.
         match($0, /Function (BVM_[A-Za-z0-9_]+)/, m)
-        current = m[1]
+        current = toupper(m[1])
         gate[current] = "None"
         next
     }
@@ -85,8 +91,18 @@ declarations=$(awk -v gates="$gate_index" '
         line = $0
         # Strip the prefix
         sub(/^.*s = s \+ "Function /, "", line)
-        # Strip the trailing "+Chr(10) and quote
-        sub(/".*$/, "", line)
+        # Strip the trailing "+Chr(10). Anchor on the +Chr(10) literal
+        # rather than the first `"` -- some declarations embed quotes
+        # via Chr(34)+""+Chr(34) inside default-valued parameters
+        # (e.g. SPAWN, THREADEXECUTE, SCRIPTLOG). Naively cutting at
+        # the first `"` truncates the parameter list and the doc
+        # would render `SPAWN()` instead of `SPAWN(PARAM1%, ...)`.
+        sub(/"\+Chr\(10\).*$/, "", line)
+        # Normalise the embedded `"+Chr(34)+"` (empty-string quote
+        # idiom inside default-arg literals) to a single `"` so the
+        # rendered signature shows `PARAM = ""` rather than the raw
+        # Blitz string-builder shape.
+        gsub(/"\+Chr\(34\)\+"/, "\"", line)
         # line now looks like: NAME<BVM_IMPL>SIGIL(ARGS) or NAME<BVM_IMPL>SIGIL or NAME<BVM_IMPL>(ARGS)
 
         # Extract NAME
@@ -142,9 +158,12 @@ declarations=$(awk -v gates="$gate_index" '
         else if (name ~ /^RUNTIMEERROR/ || name ~ /^DEBUG/ || name ~ /^LOG/) category = "Diagnostic"
         else if (name ~ /^RAND/ || name ~ /^INT$/ || name ~ /^FLOAT$/ || name ~ /^SQR/ || name ~ /^SIN/ || name ~ /^COS/ || name ~ /^TAN/ || name ~ /^ABS/ || name ~ /^STR/ || name ~ /^CHR/ || name ~ /^ASC/ || name ~ /^LEN/ || name ~ /^LEFT/ || name ~ /^RIGHT/ || name ~ /^MID/ || name ~ /^UPPER/ || name ~ /^LOWER/ || name ~ /^TRIM/ || name ~ /^INSTR/) category = "String & Math"
 
-        # Resolve gate
-        g = gate[impl]
-        if (g == "") g = "None"
+        # Resolve gate (case-insensitive lookup; gate index is upper).
+        g = gate[toupper(impl)]
+        if (g == "") {
+            g = "None"
+            print "WARN: no BVM impl found for " impl > "/dev/stderr"
+        }
 
         print category "|" name "|" impl "|" sigil "|" args "|" g
     }
