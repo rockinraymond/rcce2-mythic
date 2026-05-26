@@ -271,6 +271,7 @@ local PMH$ = RootDir$ + "res\Help.txt"
 local SWH$ = RootDir$ + "bin\tools\RC Spell Wizard\RC Spell Wizard Documentation.pdf"
 
 local GUE$ = RootDir$ + "bin\GUE.exe"
+local LOOM$ = RootDir$ + "bin\Loom.exe"
 local CLI$ = RootDir$ + "bin\Client.exe"
 local SER$ = RootDir$ + "bin\Server.exe"
 
@@ -370,8 +371,12 @@ local BOSC = FUI_Button(TProject, 170 + 75.5 + 75.5, 200, 70.5, 25, "Scripts")
 FUI_ImageBox(TEngine, 160, 27, 380, 112, Ptr LogoTex)
 
 ;Editors
-local LED = FUI_GroupBox(TEngine, 5, 20, 150, 80, "Editors")
-local BGUE = FUI_Button(TEngine, 15, 40, 130, 50, "Game Unified Editor") 
+local LED = FUI_GroupBox(TEngine, 5, 20, 150, 115, "Editors")
+local BGUE = FUI_Button(TEngine, 15, 40, 130, 50, "Game Unified Editor")
+;Loom alpha button -- launches the in-progress Loom redesign of GUE. Same
+;data layer, different UI shell. Labelled "Alpha" so users know it's not
+;production-ready.
+local BLOOM = FUI_Button(TEngine, 15, 95, 130, 30, "Loom (Alpha)")
 
 local LTK = FUI_GroupBox(TEngine, 160, 140, 240, 100, "Tool Kit")
 local TOOL1 = FUI_Button(TEngine, 170, 165, 70.5, 25, "Gubbin")
@@ -387,6 +392,12 @@ local BB3D = FUI_Button(TEngine, 410, 165, 125, 25, "BlitzForge")
 
 if FileType(B3D$) = 0
 	FUI_DisableGadget(BB3D)
+EndIf
+
+;Disable the Loom alpha button if Loom.exe has not been built yet (e.g. fresh
+;clone where the user hasn't run compile.bat with the new target).
+if FileType(LOOM$) = 0
+	FUI_DisableGadget(BLOOM)
 EndIf
 
 ;Support Tab
@@ -508,6 +519,8 @@ Repeat
 	;Project Tab
 		Case BGUE
 			ExecFile(GUE$, "", GameDir$ + "Data\")
+		Case BLOOM
+			ExecFile(LOOM$, "", GameDir$ + "Data\")
 		Case BCLI
 			ExecFile(CLI$, "", GameDir$ + "Data\")
 		Case BSER

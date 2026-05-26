@@ -101,6 +101,8 @@ if [[ "${RCCE}" -eq 1 ]]; then
     "${ROOTDIR}/src/Project Manager.bb"
   "${BLITZCC}" -o "${ROOTDIR}/bin/GUE${EXE_SUFFIX}" "${ICON_FLAG[@]}" \
     "${ROOTDIR}/src/GUE.bb"
+  "${BLITZCC}" -o "${ROOTDIR}/bin/Loom${EXE_SUFFIX}" "${ICON_FLAG[@]}" \
+    "${ROOTDIR}/src/Loom.bb"
   "${BLITZCC}" -o "${ROOTDIR}/bin/Client${EXE_SUFFIX}" "${ICON_FLAG[@]}" \
     "${ROOTDIR}/src/Client.bb"
 fi
