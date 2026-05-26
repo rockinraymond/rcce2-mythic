@@ -16,8 +16,10 @@ RCE_IntFromStr(s$)                 ; decode a 1-, 2-, 3-, or 4-byte string into 
 
 * Default length is 4 bytes. Most fields use 1, 2, or 4 byte widths depending
   on the value range.
-* The Bank backing the encoder is **8 bytes wide**. `length > 8` silently
-  truncates — verified in production by past bugs.
+* The Bank backing the encoder is **4 bytes wide** (verified at
+  [`RCEnet.bb:2`](../../src/Modules/RCEnet.bb#L2): `Global RCE_ConvertBank = CreateBank(4)`).
+  `length > 4` writes past the end of the Bank and produces undefined
+  bytes — Blitz3D's `PokeInt` does not bounds-check.
 * Sender and receiver byte counts MUST match. A 2-byte field written as
   `RCE_StrFromInt$(x, 2)` is read back as `Mid$(MessageData$, offset, 2)`;
   passing the wrong count corrupts every downstream field in the same packet
@@ -60,7 +62,8 @@ See PR [#237](https://github.com/RydeTec/rcce2/pull/237) – [#239](https://gith
 for the BVM-side sweep that hardened `BVM_MOVEACTOR`, `BVM_ROTATEACTOR`,
 `BVM_SETACTORDESTINATION`, `BVM_SPAWN`, `BVM_SPAWNITEM`, `BVM_ANIMATEACTOR`,
 `BVM_CREATEEMITTER`. The ServerNet `P_InventoryUpdate "D"` (drop-item) handler
-at ~line 1467 is the original template for the wire-side clamp.
+at [lines 1654-1656](../../src/Modules/ServerNet.bb#L1654) is the original
+template for the wire-side clamp.
 
 ## Strings — length-prefixed
 

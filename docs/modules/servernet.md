@@ -34,7 +34,7 @@ Four handlers spawn user scripts based on client input:
 * `P_Trade` (~line 1523)
 * `P_ItemScript` (~line 1358)
 
-All four pass `Handle(clicker)` as the script's `SI\AI`. This means any `BVM_RequireSelfOrPrivileged(Param1)` gate against the target parameter does **not** block clicker exploits — the clicker IS the "self." Recent hardening sweeps (PRs [#260](https://github.com/RydeTec/rcce2/pull/260), [#276](https://github.com/RydeTec/rcce2/pull/276)) corrected several misuses; see the `feedback_bvm_clicker_handle_trap` memory and the four privilege-gate categories in [CLAUDE.md](../../CLAUDE.md).
+All four pass `Handle(clicker)` as the script's `SI\AI`. This means any `BVM_RequireSelfOrPrivileged(Param1)` gate against the target parameter does **not** block clicker exploits — the clicker IS the "self." Recent hardening sweeps (PRs [#260](https://github.com/RydeTec/rcce2/pull/260), [#276](https://github.com/RydeTec/rcce2/pull/276)) corrected several misuses; see the four privilege-gate categories in [CLAUDE.md](../../CLAUDE.md).
 
 ## Authentication flow
 
@@ -55,8 +55,8 @@ See [`AccountEnumerationTest.bb`](../../src/Tests/Modules/AccountEnumerationTest
 
 Since PR [#282](https://github.com/RydeTec/rcce2/pull/282), `FindActorInstanceFromRNID(M\FromID)` is O(1) bounds-checked array lookup via `Dim ActorByRNID.ActorInstance(MaxRNID)`. The maintenance hooks live at:
 
-* `P_StartGame` login (~line 2099): `ActorByRNID(M\FromID) = A\Character[Number]`
-* `P_Disconnect` logout (~line 1965): clear slot
+* `P_StartGame` login ([line 2122](../../src/Modules/ServerNet.bb#L2122)): `ActorByRNID(M\FromID) = A\Character[Number]`
+* `RCE_PlayerTimedOut/HasLeft/Kicked` disconnect path ([line 1848](../../src/Modules/ServerNet.bb#L1848); clear at [line 1980](../../src/Modules/ServerNet.bb#L1980)): clear slot. Note: there is no `P_Disconnect` packet — the underlying RottNet library raises one of these three connection-loss messages.
 * `FreeActorInstance` (Actors.bb): clear slot defensively
 
 Broadcast loops (7 of them) walk a `FirstOnlinePlayer` linked list maintained at the same lifecycle hooks — PR [#283](https://github.com/RydeTec/rcce2/pull/283).

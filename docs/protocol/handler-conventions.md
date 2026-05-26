@@ -76,9 +76,9 @@ canonical guard `If X <> Null And X\Field > 0` works in production because:
 3. `0 > 0` is False, so the bitwise-And is False, so the If body skips.
 
 The pattern is correct AND has 17+ sibling sites across the codebase. But
-the reasoning is non-obvious and contradicts short-circuit intuition. See
-[`feedback_blitzforge_and_non_short_circuit`](../../../.claude/projects/C--Users-dyanr-Desktop-rcce2/memory/feedback_blitzforge_and_non_short_circuit.md)
-memory for the full discussion.
+the reasoning is non-obvious and contradicts short-circuit intuition. The
+threat shape to look for in audits is **silent zero-sentinel propagation**
+(Null → 0 → wrong arithmetic), not a crash.
 
 ### 4. Float sanitisation at the BVM / wire boundary
 
@@ -133,8 +133,8 @@ When auditing a handler: grep for sibling handlers that take the same
 kind of input and look for guards present on one but missing on others.
 This is the highest-payoff recon signal.
 
-See [`feedback_sibling_protection_asymmetry`](../../../.claude/projects/C--Users-dyanr-Desktop-rcce2/memory/feedback_sibling_protection_asymmetry.md)
-memory for the recurring pattern.
+The recon signal is simple: every guarded primitive's family of related
+sites should be audited for the same guard.
 
 ## Privilege gating (script-spawning handlers only)
 
@@ -151,9 +151,8 @@ These hand off to `ThreadScript(...)` with `SI\AI = Handle(clicker)` — NOT
 where `Param1` is the target-actor parameter does NOT block clicker
 exploits: the clicker IS the "self" and passes the gate trivially.
 
-See [`feedback_bvm_clicker_handle_trap`](../../../.claude/projects/C--Users-dyanr-Desktop-rcce2/memory/feedback_bvm_clicker_handle_trap.md)
-memory and the four privilege-gate categories in
-[`../../CLAUDE.md`](../../CLAUDE.md) for the full threat model.
+See the four privilege-gate categories in [`../../CLAUDE.md`](../../CLAUDE.md)
+for the full threat model.
 
 ## See also
 
