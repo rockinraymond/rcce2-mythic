@@ -623,15 +623,23 @@ End Function
 Function CreateCore()
 ;Consider also generating Core.rcm (Core.bvm)
 filename$ = RCScripts$ + "RC_Core.rcm"
+	; Route through SafeWriteOpen / SafeWriteCommit. The previous
+	; DeleteFile-then-WriteFile sequence opened the exact truncate-
+	; then-crash window Logging.bb's SafeWrite helpers exist to close:
+	; a crash between Delete and CloseFile leaves no RC_Core.rcm, and
+	; the engine fails to compile any script on next launch. Atomic
+	; wrapper demotes the existing copy to .bak first, so even a
+	; promote-failure leaves a recoverable copy.
+	Local TempPath$ = SafeWriteOpen(filename)
 	Restore Core
-	DeleteFile(filename)
-	W = WriteFile(filename)
+	W = WriteFile(TempPath$)
+	If W = 0 Then Return
 	Read count
 	For i = 1 To count
 		Read Dat
 		WriteByte(W, Dat)
 	Next
-	CloseFile(W)
+	SafeWriteCommit(TempPath$, filename, W)
 End Function
 
 
