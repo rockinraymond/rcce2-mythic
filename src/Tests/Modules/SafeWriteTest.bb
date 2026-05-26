@@ -116,6 +116,41 @@ Test testSafeWriteCommitRefusesEmptyTemp()
 	CleanupTestFiles()
 End Test
 
+; Successive commits cycle the .bak: after three saves A -> B -> C,
+; .bak must hold B (the immediately previous version), not A. This pins
+; the behaviour at Logging.bb's `If FileType(Bak$) = 1 Then DeleteFile(Bak$)`
+; line -- without that delete, the second CopyFile into an existing
+; .bak target either fails silently or appends, and the .bak content
+; diverges from the most-recent-pre-save state. The RC Terrain Editor
+; SaveAreaTE migration (and the GUE SaveArea before it) saves on every
+; build-cycle hotkey; an author hitting Save twice in a row must be able
+; to recover the *previous* save, not the original empty area.
+Test testSafeWriteCommitCyclesBakOnSuccessiveSaves()
+	CleanupTestFiles()
+
+	; Save A (no prior file -> no .bak)
+	Local tempA$ = SafeWriteOpen$(ProductionPath$)
+	SeedFile(tempA$, "save A")
+	Assert(SafeWriteCommit%(tempA$, ProductionPath$, 0) = True)
+	Assert(FileType(BakPath$) <> 1)
+
+	; Save B (A demoted to .bak)
+	Local tempB$ = SafeWriteOpen$(ProductionPath$)
+	SeedFile(tempB$, "save B")
+	Assert(SafeWriteCommit%(tempB$, ProductionPath$, 0) = True)
+	Assert(ReadFileString$(ProductionPath$) = "save B")
+	Assert(ReadFileString$(BakPath$) = "save A")
+
+	; Save C (B demoted to .bak, displacing A)
+	Local tempC$ = SafeWriteOpen$(ProductionPath$)
+	SeedFile(tempC$, "save C")
+	Assert(SafeWriteCommit%(tempC$, ProductionPath$, 0) = True)
+	Assert(ReadFileString$(ProductionPath$) = "save C")
+	Assert(ReadFileString$(BakPath$) = "save B")
+
+	CleanupTestFiles()
+End Test
+
 ; SafeWriteAbort cleans up the temp when the caller decides not to commit
 ; (e.g. a serialization error mid-write).
 Test testSafeWriteAbortRemovesTemp()

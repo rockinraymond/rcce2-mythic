@@ -793,9 +793,17 @@ Function LoadAreaTE(Name$)
 End Function
 
 ; Saves the current area back to file
+; Routes through SafeWriteOpen / SafeWriteCommit so a crash mid-flush
+; doesn't leave the previous (good) area dat truncated. RC Terrain
+; Editor authors hand-build areas over hours; without the atomic
+; wrapper a single mistimed crash loses every waypoint, spawn, and
+; portal in the zone. Mirrors the canonical GUE SaveArea migration
+; in ClientAreas.bb (PR audit at line ~817 there).
 Function SaveAreaTE(Name$)
-	
-	F = WriteFile("Data\Areas\" + Name$ + ".dat")
+
+	Local FinalPath$ = "Data\Areas\" + Name$ + ".dat"
+	Local TempPath$ = SafeWriteOpen(FinalPath$)
+	F = WriteFile(TempPath$)
 	If F = 0 Then Return False
 	
 		; Loading screen
@@ -915,17 +923,21 @@ Function SaveAreaTE(Name$)
 		WriteInt F, SZ\RepeatTime
 		WriteByte F, SZ\Volume
 	Next
-	
-	CloseFile(F)
-	Return True
-	
+
+	Return SafeWriteCommit(TempPath$, FinalPath$, F)
+
 End Function
 
 
 ; Saves the current area back to file
+; Atomic-write parity with SaveAreaTE above and the canonical
+; ClientAreas.bb SaveArea. Same threat model: hand-authored area
+; dat lost on a crash mid-write.
 Function SaveArea(Name$)
 
-	F = WriteFile("Data\Areas\" + Name$ + ".dat")
+	Local FinalPath$ = "Data\Areas\" + Name$ + ".dat"
+	Local TempPath$ = SafeWriteOpen(FinalPath$)
+	F = WriteFile(TempPath$)
 	If F = 0 Then Return False
 
 		; Loading screen
@@ -1069,8 +1081,7 @@ Function SaveArea(Name$)
 			WriteByte F, SZ\Volume
 		Next
 
-	CloseFile(F)
-	Return True
+	Return SafeWriteCommit(TempPath$, FinalPath$, F)
 
 End Function
 
