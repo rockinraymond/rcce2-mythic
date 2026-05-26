@@ -400,33 +400,41 @@ Function UpdateNetwork()
 								EndIf
 							Case LanguageString$(LS_SCYell)
 								Pa$ = Chr$(253) + "<" + AI\Name$ + "> " + Params$
-								For A2.ActorInstance = Each ActorInstance
-									If A2\RNID > 0
-										If PlayerIgnoring(A2, AI) = 0
-											RCE_Send(Host, A2\RNID, P_ChatMessage, Pa$, True)
-										EndIf
+								; Walk the FirstOnlinePlayer chain instead of
+								; every ActorInstance. The chain only contains
+								; RNID > 0 players, so the inner RNID filter is
+								; gone.
+								A2.ActorInstance = FirstOnlinePlayer
+								While A2 <> Null
+									If PlayerIgnoring(A2, AI) = 0
+										RCE_Send(Host, A2\RNID, P_ChatMessage, Pa$, True)
 									EndIf
-								Next
+									A2 = A2\NextOnlinePlayer
+								Wend
 								AddListBoxItem(Game\ChatText, Pa$ + Chr$(13))
 							Case LanguageString$(LS_SCGM)
 								A.Account = Object.Account(AI\Account)
 								If A <> Null And A\IsDM = True
 									Pa$ = Chr$(254) + "<GM> <" + AI\Name$ + "> " + Params$
-									For A2.ActorInstance = Each ActorInstance
-										If A2\RNID > 0
-											A.Account = Object.Account(A2\Account)
-											If A <> Null And A\IsDM = True Then RCE_Send(Host, A2\RNID, P_ChatMessage, Pa$, True)
-										EndIf
-									Next
+									; Online-player chain walk; DM filter still
+									; needs the Account lookup.
+									A2.ActorInstance = FirstOnlinePlayer
+									While A2 <> Null
+										A.Account = Object.Account(A2\Account)
+										If A <> Null And A\IsDM = True Then RCE_Send(Host, A2\RNID, P_ChatMessage, Pa$, True)
+										A2 = A2\NextOnlinePlayer
+									Wend
 								EndIf
 							Case LanguageString$(LS_SCGuildSay)
 								If AI\TeamID > 0
 									Pa$ = Chr$(251) + "<G> <" + AI\Name$ + "> " + Params$
-									For A2.ActorInstance = Each ActorInstance
-										If A2\RNID > 0
-											If A2\TeamID = AI\TeamID Then RCE_Send(Host, A2\RNID, P_ChatMessage, Pa$, True)
-										EndIf
-									Next
+									; Online-player chain walk; team filter still
+									; needed.
+									A2.ActorInstance = FirstOnlinePlayer
+									While A2 <> Null
+										If A2\TeamID = AI\TeamID Then RCE_Send(Host, A2\RNID, P_ChatMessage, Pa$, True)
+										A2 = A2\NextOnlinePlayer
+									Wend
 								EndIf
 							Case LanguageString$(LS_SCPartySay)
 								Party.Party = Object.Party(AI\PartyID)
@@ -441,16 +449,17 @@ Function UpdateNetwork()
 							Case LanguageString$(LS_SCPMSay)
 								Name$ = Upper$(Split$(Params$, 1, ","))
 								Params$ = Split$(Params$, 2, ",")
-								For A2.ActorInstance = Each ActorInstance
-									If A2\RNID > 0
-										If Upper$(A2\Name$) = Name$
-											If PlayerIgnoring(A2, AI) = 0
-												RCE_Send(Host, A2\RNID, P_ChatMessage, Chr$(252) + AI\Name$ + ": " + Params$, True)
-											EndIf
-											Exit
+								; Online-player chain walk for /pm target lookup.
+								A2.ActorInstance = FirstOnlinePlayer
+								While A2 <> Null
+									If Upper$(A2\Name$) = Name$
+										If PlayerIgnoring(A2, AI) = 0
+											RCE_Send(Host, A2\RNID, P_ChatMessage, Chr$(252) + AI\Name$ + ": " + Params$, True)
 										EndIf
+										Exit
 									EndIf
-								Next
+									A2 = A2\NextOnlinePlayer
+								Wend
 							Case LanguageString$(LS_SCTrade)
 								; Player has been offered a trade and is accepting
 								If AI\IsTrading = 3
@@ -495,10 +504,15 @@ Function UpdateNetwork()
 									EndIf
 								EndIf
 							Case LanguageString$(LS_SCAllPlayers)
+								; Count via online-player chain walk. The
+								; chain only contains RNID > 0 players, so the
+								; previous `If A2\RNID > 0` filter is redundant.
 								Players = 0
-								For A2.ActorInstance = Each ActorInstance
-									If A2\RNID > 0 Then Players = Players + 1
-								Next
+								A2.ActorInstance = FirstOnlinePlayer
+								While A2 <> Null
+									Players = Players + 1
+									A2 = A2\NextOnlinePlayer
+								Wend
 								RCE_Send(Host, AI\RNID, P_ChatMessage, Chr$(254) + LanguageString$(LS_PlayersInGame) + " " + Str$(Players - 1), True)
 							Case LanguageString$(LS_SCPlayers)
 								Players = 0
@@ -529,29 +543,31 @@ Function UpdateNetwork()
 								A.Account = Object.Account(AI\Account)
 								If A <> Null And A\IsDM = True
 									Name$ = Upper$(Trim$(Split$(Params$, 1, ",")))
-									For A2.ActorInstance = Each ActorInstance
-										If A2\RNID > 0
-											If Upper$(A2\Name$) = Name$
-												Ar.Area = FindArea(Trim$(Split$(Params$, 2, ",")))
-												; Sibling LS_SCWarp branch above
-												; checks `Ar <> Null` before the
-												; portal loop; this one didn't,
-												; so a DM typo (/warpother Alice,
-												; "Bad Name") crashed the entire
-												; server.
-												If Ar <> Null
-													Instance = Split$(Params$, 3, ",")
-													For i = 0 To 99
-														If Ar\PortalName$[i] <> ""
-															SetArea(A2, Ar, Instance, -1, i)
-															Exit
-														EndIf
-													Next
-												EndIf
-												Exit
+									; Online-player chain walk for /warpother
+									; target lookup.
+									A2.ActorInstance = FirstOnlinePlayer
+									While A2 <> Null
+										If Upper$(A2\Name$) = Name$
+											Ar.Area = FindArea(Trim$(Split$(Params$, 2, ",")))
+											; Sibling LS_SCWarp branch above
+											; checks `Ar <> Null` before the
+											; portal loop; this one didn't,
+											; so a DM typo (/warpother Alice,
+											; "Bad Name") crashed the entire
+											; server.
+											If Ar <> Null
+												Instance = Split$(Params$, 3, ",")
+												For i = 0 To 99
+													If Ar\PortalName$[i] <> ""
+														SetArea(A2, Ar, Instance, -1, i)
+														Exit
+													EndIf
+												Next
 											EndIf
+											Exit
 										EndIf
-									Next
+										A2 = A2\NextOnlinePlayer
+									Wend
 								EndIf
 							Case LanguageString$(LS_SCAbility)
 								A.Account = Object.Account(AI\Account)
@@ -1963,6 +1979,10 @@ Function UpdateNetwork()
 					If AI\RNID > 0 And AI\RNID <= MaxRNID
 						If ActorByRNID(AI\RNID) = AI Then ActorByRNID(AI\RNID) = Null
 					EndIf
+					; Remove from the online-player chain. Order independent
+					; of the RNID zero -- OnlinePlayerRemove walks by identity,
+					; not by RNID.
+					OnlinePlayerRemove(AI)
 					AI\RNID = 0
 					If AI\RuntimeID > -1
 						If RuntimeIDList(AI\RuntimeID) = AI Then RuntimeIDList(AI\RuntimeID) = Null
@@ -2101,6 +2121,12 @@ Function UpdateNetwork()
 								If M\FromID > 0 And M\FromID <= MaxRNID
 									ActorByRNID(M\FromID) = A\Character[Number]
 								EndIf
+								; Add to the FirstOnlinePlayer chain so the 7
+								; broadcast loops (chat / per-tick update) can
+								; walk just online players instead of every
+								; ActorInstance. See Actors.bb's
+								; OnlinePlayerInsert / OnlinePlayerRemove.
+								OnlinePlayerInsert(A\Character[Number])
 								AssignRuntimeID(A\Character[Number])
 								SetArea(A\Character[Number], Ar, 0, -1, -1, A\Character[Number]\X#, A\Character[Number]\Y#, A\Character[Number]\Z#)
 								; Run login script
