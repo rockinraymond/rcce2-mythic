@@ -37,11 +37,15 @@ Always run from the repo root.
 .\compile.bat -b           # also rebuild BlitzForge (slow, MSBuild)
 .\compile.bat -e           # skip engine, build tools only
 .\test.bat                 # compile + run every Strict test under src/Tests/
+.\test.bat ItemsTest       # run only files whose basename contains "ItemsTest"
 
 # macOS (Apple Silicon, alpha)
 ./compile.sh
 ./test.sh
+./test.sh ItemsTest        # same single-file substring filter as Windows
 ```
+
+`test.bat` / `test.sh` print a `[RUN ]` / `[PASS]` / `[FAIL]` marker per file and an end-of-run `Ran N files: P passed, F failed.` summary with a bulleted list of any failing files. CI still calls the runner with no args and only checks the exit code, so the default behavior is unchanged. The positional substring filter is the documented way to reproduce the known intermittent `ItemsTest.bb` flake locally without re-running the whole suite — see the **Known intermittent flake** note under [CI](#ci-githubworkflowsciyml) below.
 
 After any change to a `.bb` file under `src/`, run `compile.bat -t` and confirm clean compile before committing. `Local`-shadowing-a-`Global`, missing field, wrong sigil — Strict mode catches all of these at compile time.
 

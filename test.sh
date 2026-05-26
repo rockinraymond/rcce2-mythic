@@ -3,6 +3,12 @@
 # Compiles every test source in src/Tests with `blitzcc -t`. Any failure marks
 # the run as failed but the loop continues so you see every broken test in one
 # pass.
+#
+# Usage:
+#   ./test.sh              run every test file
+#   ./test.sh ItemsTest    run only files whose basename contains "ItemsTest"
+#                          (useful for reproducing the documented intermittent
+#                          ItemsTest stack-overflow flake locally)
 set -uo pipefail
 
 ROOTDIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -30,19 +36,61 @@ else
   exit 1
 fi
 
+FILTER="${1:-}"
+
 cd "${TESTDIR}"
 
-FAILED=0
+# Collect matching files first so we can report TOTAL up front and detect
+# the "no files matched filter" case.
+FILES=()
 while IFS= read -r -d '' f; do
-  if ! "${BLITZCC}" -t -w "${ROOTDIR}/src" "${f}"; then
-    echo "\"${f}\" failed at least one test"
-    FAILED=1
+  if [[ -z "${FILTER}" || "$(basename "${f}")" == *"${FILTER}"* ]]; then
+    FILES+=("${f}")
   fi
 done < <(find "${TESTDIR}" -type f -name '*.bb' -print0)
 
+TOTAL="${#FILES[@]}"
+
+if [[ "${TOTAL}" -eq 0 ]]; then
+  if [[ -n "${FILTER}" ]]; then
+    echo "No test files matched filter \"${FILTER}\"" >&2
+  else
+    echo "No test files found in ${TESTDIR}" >&2
+  fi
+  exit 1
+fi
+
+if [[ -n "${FILTER}" ]]; then
+  echo "Filter: only files matching *${FILTER}*.bb"
+fi
+
+PASSED=0
+FAILED=0
+FAILED_FILES=()
+
+for f in "${FILES[@]}"; do
+  name="$(basename "${f}")"
+  echo "[RUN ] ${name}"
+  if "${BLITZCC}" -t -w "${ROOTDIR}/src" "${f}"; then
+    echo "[PASS] ${name}"
+    PASSED=$((PASSED+1))
+  else
+    echo "[FAIL] ${name}"
+    FAILED=$((FAILED+1))
+    FAILED_FILES+=("${name}")
+  fi
+done
+
 cd "${ROOTDIR}"
 
-if [[ "${FAILED}" -eq 1 ]]; then
+echo
+echo "Ran ${TOTAL} files: ${PASSED} passed, ${FAILED} failed."
+
+if [[ "${FAILED}" -gt 0 ]]; then
+  echo "Failed files:"
+  for f in "${FAILED_FILES[@]}"; do
+    echo "  - ${f}"
+  done
   echo "Tests failed"
   exit 1
 fi
