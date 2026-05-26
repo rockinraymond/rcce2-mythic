@@ -820,9 +820,12 @@ Function LogIn()
 					MNext = After M
 
 					If M\MessageType = P_VerifyAccount
-						If Left$(M\MessageData$, 1) = "N"
-							Result = -2
-						ElseIf Left$(M\MessageData$, 1) = "P"
+						; "N" is no longer emitted by the post-collapse server
+						; (P_VerifyAccount enumeration-leak fix); fold it into
+						; the same "invalid credentials" branch as "P" so the
+						; new client paired with a legacy server still shows
+						; a non-enumerating message.
+						If Left$(M\MessageData$, 1) = "N" Or Left$(M\MessageData$, 1) = "P"
 							Result = -1
 						ElseIf Left$(M\MessageData$, 1) = "B"
 							Result = 0
@@ -1145,12 +1148,19 @@ Function LogIn()
 				If AccountsEnabled = True Then GY_FreeGadget(BNew)
 				Return
 			ElseIf Result = 0
+				; Banned: only reachable after the server has verified the
+				; password (post-collapse P_VerifyAccount), so it's safe to
+				; surface ban status to the legitimate owner here.
 				GY_MessageBox("Attention!", LanguageString$(LS_YouAreBanned)) : Goto Invld
 			ElseIf Result = -1
+				; Catch-all "invalid credentials" -- absorbs no-such-account
+				; (legacy "N"), wrong-password ("P"), and the throttled path.
+				; LS_AccountDoesNotExist is intentionally never shown anymore;
+				; surfacing it would re-open the username-enumeration oracle.
 				GY_MessageBox("Attention!", LanguageString$(LS_InvalidPassword)) : Goto Invld
-			ElseIf Result = -2
-				GY_MessageBox("Attention!", LanguageString$(LS_AccountDoesNotExist)) : Goto Invld
 			Else
+				; Result = -3: already-logged-in. Same auth-before-disclosure
+				; reasoning as the banned branch above.
 				GY_MessageBox("Attention!", LanguageString$(LS_AccountAlreadyConnected)) : Goto Invld
 			EndIf
 		EndIf
