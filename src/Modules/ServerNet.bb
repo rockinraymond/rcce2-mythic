@@ -92,7 +92,7 @@ Function SendChatHelpDetail(AI.ActorInstance, T$, IsDM%)
 		If T = "GOLD" Then Line = "/gold <player>,<amount> -- grant gold"
 		If T = "SETATTRIBUTE" Then Line = "/setattribute <player>,<attr>,<value> -- set attribute"
 		If T = "SETATTRIBUTEMAX" Then Line = "/setattributemax <player>,<attr>,<value> -- set max attribute"
-		If T = "SCRIPT" Then Line = "/script <name>[,<params>] -- run a script as self"
+		If T = "SCRIPT" Then Line = "/script <name>,<func> -- run script's function as self"
 		If T = "GM" Then Line = "/gm <text> -- broadcast as GM to all players"
 		If T = "WARPOTHER" Then Line = "/warpother <player>,<area>[,<x>,<y>,<z>] -- warp another player"
 		If T = "ABILITY" Then Line = "/ability <player>,<ability> -- grant ability"
