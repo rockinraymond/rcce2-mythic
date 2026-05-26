@@ -30,6 +30,22 @@ Const Environment_Walk       = 3
 
 Const InteractDist = 400 ; radius of 20
 
+; Upper bound on RottNet connection IDs (RCE_StartHost cap at
+; Server.bb:309 and 513 -- 5000 simultaneous players). RNID = 0 means
+; "not in game"; RNID = -1 means "AI actor"; positive RNIDs in
+; [1, MaxRNID] are online players. ActorByRNID is the O(1)
+; sender-resolution index for inbound packets -- see FindActorInstanceFromRNID
+; below and the maintenance hooks at:
+;   * P_StartGame login (ServerNet.bb ~line 2088) -- populate slot.
+;   * P_Disconnect logout (ServerNet.bb ~line 1960) -- clear slot.
+;   * FreeActorInstance (below)                    -- clear slot.
+; The pre-index implementation walked the entire global ActorInstance
+; list on every inbound packet; with hundreds of NPCs + spawned mobs
+; per loaded zone in a typical project, that was the dominant per-tick
+; cost on the server.
+Const MaxRNID = 5000
+Dim ActorByRNID.ActorInstance(MaxRNID)
+
 ; Actor template
 Dim ActorList.Actor(65535)
 Type Actor
@@ -199,13 +215,24 @@ End Type
 Dim FactionNames$(99)
 Dim FactionDefaultRatings(99, 99)
 
-; Finds an actor instance based on their RottNet ID
+; Finds an actor instance based on their RottNet ID. O(1) via the
+; ActorByRNID index maintained at the three lifecycle hooks (login,
+; logout, FreeActorInstance). Pre-index implementation walked every
+; ActorInstance on every inbound packet -- the dominant per-tick
+; cost on a server with hundreds of NPCs / spawned mobs across loaded
+; zones.
+;
+; RNID = 0 (not in game) and RNID = -1 (AI actor) are NOT indexed --
+; only positive RNIDs in [1, MaxRNID] are real connection IDs. Out-of-
+; range or non-positive callers get Null, matching the previous walk's
+; behavior for those values (the walk would match a 0 or -1 only if
+; an ActorInstance happened to also be at that RNID, which only
+; happens for never-logged-in player characters and NPCs -- callers
+; that want those use FindActorInstanceFromName instead).
 Function FindActorInstanceFromRNID.ActorInstance(RNID)
 
-	For A.ActorInstance = Each ActorInstance
-		If A\RNID = RNID Then Return A
-	Next
-	Return Null
+	If RNID < 1 Or RNID > MaxRNID Then Return Null
+	Return ActorByRNID(RNID)
 
 End Function
 
@@ -553,6 +580,14 @@ Function FreeActorInstance(A.ActorInstance)
 
 	If A\RuntimeID > -1
 		If RuntimeIDList(A\RuntimeID) = A Then RuntimeIDList(A\RuntimeID) = Null
+	EndIf
+	; ActorByRNID index cleanup. Only positive RNIDs are indexed, and
+	; we only clear if the slot currently points to us -- a defensive
+	; check that matches the RuntimeIDList pattern above and avoids
+	; clobbering a relogin that happened to recycle the same RNID
+	; (RottNet may reuse connection IDs).
+	If A\RNID > 0 And A\RNID <= MaxRNID
+		If ActorByRNID(A\RNID) = A Then ActorByRNID(A\RNID) = Null
 	EndIf
 	If A\Leader <> Null Then A\Leader\NumberOfSlaves = A\Leader\NumberOfSlaves - 1
 	Delete(A)
