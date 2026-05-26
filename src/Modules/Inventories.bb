@@ -100,6 +100,15 @@ Function InventoryAdd(A.ActorInstance, SlotFrom, SlotTo, Amount, TellServer = Tr
 		Return False
 	EndIf
 	If ItemInstancesIdentical(A\Inventory\Items[SlotFrom], A\Inventory\Items[SlotTo]) = False Then Return False
+	; Reject negative / oversized amounts. The server-side wire
+	; bounds-check (ServerNet.bb P_InventoryUpdate "A") used
+	; `Amount <= Amounts[SlotA]`, which passes for ANY negative value
+	; (any negative is <= a non-negative count). InventoryAdd then
+	; did `Amounts[SlotTo] += Amount` and `Amounts[SlotFrom] -= Amount`
+	; unchecked, so a negative Amount inflated SlotFrom and deflated
+	; SlotTo into negative — an unbounded item-duplication path.
+	; Mirrors the partial-amount guard in InventorySwap (~line 152).
+	If Amount < 1 Or Amount > A\Inventory\Amounts[SlotFrom] Then Return False
 
 	; Do it
 	A\Inventory\Amounts[SlotTo] = A\Inventory\Amounts[SlotTo] + Amount
