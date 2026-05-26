@@ -2293,8 +2293,18 @@ Function UpdateNetwork()
 					EndIf
 				Next
 
-				; If account was not found, return failure
-				If Exists = False Then RCE_Send(Host, M\FromID, P_ChangePassword, "N", True)
+				; If account was not found, return failure.
+				; Auth-before-disclosure: emit the same "P" code as the
+				; "found-account-but-fail" path on line ~2289 so the wire
+				; response can't be used to enumerate registered usernames.
+				; Same shape PR #264 closed for P_VerifyAccount; the same
+				; "patient attacker sends throwaway-password probes to map
+				; the account list" oracle exists here. RequesterOwns-
+				; AccountSession() makes the legitimate path session-gated,
+				; but an unauthenticated peer could still send P_Change-
+				; Password with any username + any password and (pre-fix)
+				; observe "N" vs "P" to discriminate existence.
+				If Exists = False Then RCE_Send(Host, M\FromID, P_ChangePassword, "P", True)
 
 			; Request to fetch character data
 			Case P_FetchCharacter ; :)
