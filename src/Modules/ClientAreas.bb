@@ -982,7 +982,15 @@ Function UnloadArea()
 
 	UnloadTrees(False)
 
-	For S.Scenery = Each Scenery
+	; Six After-cursor walks. Each For-Each below Deletes the
+	; current element inside the body -- the original For/Next
+	; shape corrupted the cursor on every multi-element area
+	; unload (which is every legitimate zone transition).
+	; Documented in CLAUDE.md (#247).
+	Local S.Scenery = First Scenery
+	Local SNext.Scenery = Null
+	While S <> Null
+		SNext = After S
 		If S\TextureID < 65535 Then UnloadTexture(S\TextureID)
 		;Dynamic Lights
 		If S\LightID>0 Then FreeEntity(S\LightID)
@@ -990,44 +998,65 @@ Function UnloadArea()
 		UnloadMesh(S\MeshID)
 		FreeEntity(S\EN)
 		Delete(S)
-	Next
+		S = SNext
+	Wend
 
-	For W.Water = Each Water
+	Local W.Water = First Water
+	Local WNext.Water = Null
+	While W <> Null
+		WNext = After W
 		UnloadTexture(W\TexID)
 		FreeTexture(W\TexHandle)
 		FreeEntity(W\EN)
-		
-		;FreeTexture(W\BumpTexA)
-		
-		Delete(W)
-	Next
 
-	For C.ColBox = Each ColBox
+		;FreeTexture(W\BumpTexA)
+
+		Delete(W)
+		W = WNext
+	Wend
+
+	Local C.ColBox = First ColBox
+	Local CNext.ColBox = Null
+	While C <> Null
+		CNext = After C
 		FreeEntity(C\EN)
 		Delete(C)
-	Next
+		C = CNext
+	Wend
 
-	For E.Emitter = Each Emitter
+	Local E.Emitter = First Emitter
+	Local ENext.Emitter = Null
+	While E <> Null
+		ENext = After E
 		RP_FreeEmitter(GetChild(E\EN, 1), True, False)
 		UnloadTexture(E\TexID)
 		FreeEntity(E\EN)
 		Delete(E)
-	Next
+		E = ENext
+	Wend
 
-	For SZ.SoundZone = Each SoundZone
+	Local SZ.SoundZone = First SoundZone
+	Local SZNext.SoundZone = Null
+	While SZ <> Null
+		SZNext = After SZ
 		If SZ\Channel <> 0 Then StopChannel(SZ\Channel)
 		If SZ\SoundID > 0 And SZ\SoundID < 65535 Then UnloadSound(SZ\SoundID)
 		FreeEntity(SZ\EN)
 		Delete(SZ)
-	Next
+		SZ = SZNext
+	Wend
 
-	For T.Terrain = Each Terrain
+	Local T.Terrain = First Terrain
+	Local TNext.Terrain = Null
+	While T <> Null
+		TNext = After T
 		FreeEntity T\EN
 		UnloadTexture(T\BaseTexID)
 		If T\DetailTex <> 0 Then FreeTexture(T\DetailTex)
 		If T\DetailTexID < 65535 Then UnloadTexture(T\DetailTexID)
 		Delete(T)
-	Next
+		T = TNext
+	Wend
 
 	Delete Each CatchPlane
 
