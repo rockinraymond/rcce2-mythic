@@ -345,6 +345,15 @@ Return Result%
 End Function
 
 Function BVM_REMOVEZONEINSTANCE(Param1$, Instance%)
+	; Admin-only: tears down an entire zone instance -- moves every
+	; player out, frees every AI ActorInstance, deletes every dropped
+	; item, removes the on-disk ownership file. Without this gate any
+	; NPC's Examine / Trade / RightClick script could nuke an entire
+	; zone the clicker happens to be in. Equivalent-effect peer:
+	; there is no single gated BVM that does this, but every primitive
+	; this composes (KillActor, FreeActorInstance, file deletion) is
+	; gated or unreachable from a non-priv context. Closes the gap.
+	If Not BVM_RequirePrivileged() Then Return
 	Zone.Area = FindArea(Param1$)
 	If Zone <> Null
 		; Bound the script-supplied Instance index against Dim 0..99.
@@ -670,6 +679,13 @@ Function BVM_SETACTORDESTINATION(Param1%, Param2#, Param3#)
 End Function
 
 Function BVM_GIVEKILLXP(Param1%, Param2%)
+	; Equivalent-effect bypass of gated BVM_SETACTORLEVEL: a flood of
+	; XP triggers the LevelUp script path (GiveXP -> ThreadScript
+	; "LevelUp") which can advance Level arbitrarily. Without this
+	; gate, any NPC's Examine / Trade / RightClick script could grant
+	; or deny arbitrary progression to the clicker. Match the gate on
+	; BVM_GIVEXP below and on BVM_SETACTORLEVEL at line 1934.
+	If Not BVM_RequirePrivileged() Then Return
 	Actor.ActorInstance = Object.ActorInstance(Param1%)
 	Actor2.ActorInstance = Object.ActorInstance(Param2%)
 	If Actor <> Null And Actor2 <> Null
@@ -1905,6 +1921,14 @@ Function BVM_UPDATEXPBAR(Param1%, Param2%)
 End Function
 
 Function BVM_GIVEXP(Param1%, Param2%, Param3%=0)
+	; Equivalent-effect bypass of gated BVM_SETACTORLEVEL. GiveXP
+	; mutates Actor\XP unbounded and fires the LevelUp script via
+	; ThreadScript, which can call BVM_SETACTORLEVEL from a server-
+	; spawned (privileged) context. A non-priv NPC script calling
+	; BVM_GIVEXP(player, 999999999) drives the clicker's progression
+	; without ever needing the gated SETACTORLEVEL itself. Gate parity
+	; with BVM_SETACTORLEVEL at line 1934.
+	If Not BVM_RequirePrivileged() Then Return
 	Actor.ActorInstance = Object.ActorInstance(Param1%)
 	If Actor <> Null
 		GiveXP(Actor, Param2%, Param3%)
@@ -2167,6 +2191,14 @@ Function BVM_RESISTANCE%(Param1%, Param2$)
 End Function
 
 Function BVM_SETATTRIBUTE(Param1%, Param2$, Param3%)
+	; Equivalent-effect bypass of gated BVM_KILLACTOR. The HealthStat
+	; branch below calls KillActor(Actor, Null) whenever Value[Health]
+	; falls to <= 0, so a non-priv NPC's Examine / Trade / RightClick
+	; script could call SetAttribute(player, "Health", 0) and one-shot
+	; the clicker -- defeating the gate on BVM_KILLACTOR at line 434.
+	; Self-or-priv: an actor's own AI script legitimately mutates its
+	; own Energy/Health/etc., matching the BVM_MOVEACTOR posture.
+	If Not BVM_RequireSelfOrPrivileged(Param1%) Then Return
 	Actor.ActorInstance = Object.ActorInstance(Param1%)
 	If Actor <> Null
 		Attribute = FindAttribute(Param2$)
@@ -2192,6 +2224,11 @@ Function BVM_SETATTRIBUTE(Param1%, Param2$, Param3%)
 End Function
 
 Function BVM_CHANGEATTRIBUTE(Param1%, Param2$, Param3%)
+	; Equivalent-effect bypass of gated BVM_KILLACTOR -- same path as
+	; BVM_SETATTRIBUTE above. ChangeAttribute(player, "Health", -big%)
+	; drives Value[Health] negative and the line below calls
+	; KillActor(Actor, Null). Gate parity with BVM_SETATTRIBUTE.
+	If Not BVM_RequireSelfOrPrivileged(Param1%) Then Return
 	Actor.ActorInstance = Object.ActorInstance(Param1%)
 	If Actor <> Null
 		Attribute = FindAttribute(Param2$)
@@ -2371,6 +2408,14 @@ Return Result%
 End Function
 
 Function BVM_CHANGEGOLD(Param1%, Param2%)
+	; Equivalent-effect bypass of gated BVM_SETGOLD / BVM_SETMONEY
+	; below. ChangeGold(player, +N) and ChangeGold(player, -N) yield
+	; exactly the same on-wallet outcome as SetGold; the gate on
+	; SetGold is meaningless while this path is open. A non-priv NPC's
+	; RightClick / Examine script could call ChangeGold(clicker, -big%)
+	; to drain a player's wallet, or +big% to mint currency. Match the
+	; gate on BVM_SETGOLD at line 2418.
+	If Not BVM_RequirePrivileged() Then Return
 	Actor.ActorInstance = Object.ActorInstance(Param1%)
 	If Actor <> Null
 		Change = Param2%
@@ -2388,6 +2433,9 @@ Function BVM_CHANGEGOLD(Param1%, Param2%)
 End Function
 
 Function BVM_CHANGEMONEY(Param1%, Param2%)
+	; Equivalent-effect bypass of gated BVM_SETMONEY -- alias of
+	; BVM_CHANGEGOLD above (identical body). Same gate.
+	If Not BVM_RequirePrivileged() Then Return
 	Actor.ActorInstance = Object.ActorInstance(Param1%)
 	If Actor <> Null
 		Change = Param2%
