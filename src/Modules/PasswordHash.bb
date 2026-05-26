@@ -271,6 +271,9 @@ Function VerifyPassword%(Stored$, ClientMD5$)
 	; packet), so use the empty string verbatim rather than gating on
 	; ClientMD5 length. The dummy hash output is discarded; only the
 	; CPU cost matters.
+	; DO NOT remove or "optimize away" the DummyOut$ assignment below --
+	; removing it re-opens the no-account / malformed-record timing
+	; oracle this function exists to close.
 	Local DummyOut$ = SHA256Hex$(PWHASH_DUMMY_SALT + ClientMD5)
 
 	; v1 stored format: $1$<salt-16>$<hash-64>
