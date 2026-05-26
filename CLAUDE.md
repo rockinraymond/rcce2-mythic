@@ -295,7 +295,7 @@ git submodule update --init --recursive
 
 When you discover something **non-obvious, project-specific, and durable** while working, save it as a memory (see your auto-memory instructions). Examples of save-worthy:
 
-- A subtle invariant: "the Bank used by `RCE_StrFromInt$` is 8 bytes; `Length > 8` will silently truncate."
+- A subtle invariant: "the Bank used by `RCE_StrFromInt$` is **4 bytes** (verified at [RCEnet.bb:2](src/Modules/RCEnet.bb#L2): `CreateBank(4)`); `Length > 4` writes past the Bank with undefined behavior. `PokeInt` does not bounds-check."
 - A workflow tip the user explicitly confirmed.
 - A surprising consequence: "ScriptInstance handles can become stale across `BVM_THREADEXECUTE` boundaries; always re-resolve via `Object.ScriptInstance(hSI)`."
 
