@@ -119,6 +119,11 @@ If FileType(SAVEPATH$)<>2 Then CreateDir(SAVEPATH$)
 
 
 Include "Modules\media.bb"
+; Logging.bb provides SafeWriteOpen / SafeWriteCommit used by Media.bb's
+; CreateDatabase. Non-Strict tools tolerate the missing MainLog/LogMode
+; globals via implicit-zero semantics (WriteLog's `If LogHandle <> 0`
+; and `If LogMode > 0` short-circuit when the implicit globals are 0).
+Include "Modules\Logging.bb"
 Include "modules\B3dFILE.bb"
 Include "modules\Scene_Export.bb"
 Include "modules\Fix_Sandwichtris.bb"

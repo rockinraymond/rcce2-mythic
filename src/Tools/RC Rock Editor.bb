@@ -12,6 +12,11 @@ Global AH_Appb$ = "RCSTD"
 Include "modules\safeloads.bb"
 Include "Modules\f-ui.bb"
 Include "Modules\media.bb"
+; Logging.bb provides SafeWriteOpen / SafeWriteCommit used by Media.bb's
+; CreateDatabase. Non-Strict tools tolerate the missing MainLog/LogMode
+; globals via implicit-zero semantics (WriteLog's `If LogHandle <> 0`
+; and `If LogMode > 0` short-circuit when the implicit globals are 0).
+Include "Modules\Logging.bb"
 Include "modules\B3dfile.bb"
 
 Include "modules\rock_Export.bb"

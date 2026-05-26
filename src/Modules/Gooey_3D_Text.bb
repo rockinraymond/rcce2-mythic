@@ -293,16 +293,25 @@ Function GY_GenerateFont(Name$, Font$, Height, R, G, B, SR = 0, SG = 0, SB = 0, 
 		EndIf
 	Next
 
-	; Save
+	; Save the rasterized atlas + metrics atomically. A crash between
+	; SaveBuffer and the WriteInt loop used to leave a half-written
+	; .dat that downstream font loaders would interpret with bogus
+	; spacing/offset, producing visibly broken text glyphs. SafeWrite
+	; pairs the .dat with its .bmp predecessor — if either fails the
+	; previous font generation survives intact (as .bak).
 	SaveBuffer(ImageBuffer(Image), Name$ + ".bmp")
-	F = WriteFile(Name$ + ".dat")
+	Local FontDatFinal$ = Name$ + ".dat"
+	Local FontDatTemp$ = SafeWriteOpen$(FontDatFinal$)
+	F = WriteFile(FontDatTemp$)
+	If F <> 0
 		WriteShort(F, FH)
 		For i = 1 To 256
 			WriteInt(F, GY_Font_Spacing(i))
 			WriteInt(F, GY_Font_OffsetX(i))
 			WriteInt(F, GY_Font_OffsetY(i))
 		Next
-	CloseFile(F)
+		SafeWriteCommit%(FontDatTemp$, FontDatFinal$, F)
+	EndIf
 
 	; Free temporary stuff
 	SetBuffer(OldBuffer)
