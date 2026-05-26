@@ -939,17 +939,17 @@ Function BVM_SETLEADER(Param1%, Param2%)
 	Actor.ActorInstance = Object.ActorInstance(Param1%)
 	If Actor <> Null
 		If Actor\RNID = -1
-			; Remove current leader
+			; Remove current leader. SlaveUnlink maintains the
+			; FirstSlave chain + NumberOfSlaves on the old leader.
 			If Actor\Leader <> Null
-				Actor\Leader\NumberOfSlaves = Actor\Leader\NumberOfSlaves - 1
-				Actor\Leader = Null
+				SlaveUnlink(Actor)
 				Actor\AIMode = AI_Wait
 			EndIf
-			; Set new one, if any
+			; Set new one, if any. SlaveLink does the symmetric
+			; insert into Leader\FirstSlave + NumberOfSlaves increment.
 			Leader.ActorInstance = Object.ActorInstance(Param2%)
 			If Leader <> Null
-				Actor\Leader = Leader
-				Actor\Leader\NumberOfSlaves = Actor\Leader\NumberOfSlaves + 1
+				SlaveLink(Leader, Actor)
 				; Make sure it no longer belongs to any spawn point.
 				; Skip the spawn-count decrement if the actor's area
 				; lookup is Null (mid-warp / freed zone) -- the counter

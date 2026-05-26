@@ -259,17 +259,18 @@ Function UpdateNetwork()
 									Name$ = Upper$(Trim$(Split$(Params$, 1, ",")))
 									Command$ = Trim$(Split$(Params$, 2, ","))
 									PetParams$ = Trim$(Split$(Params$, 3, ","))
-									Found = 0
-									For AI2.ActorInstance = Each ActorInstance
-										If AI2\Leader = AI
-											Found = Found + 1
-											If Upper$(AI2\Name$) = Name$ Or Name$ = "ALL"
-												CommandPet(AI2, Command$, PetParams$)
-												If Name$ <> "ALL" Then Exit
-											EndIf
-											If Found = AI\NumberOfSlaves Then Exit
+									; Walk AI's FirstSlave chain. The chain
+									; contains only AI's pets, so the explicit
+									; Leader filter and the NumberOfSlaves
+									; early-exit are no longer needed.
+									Local AI2.ActorInstance = AI\FirstSlave
+									While AI2 <> Null
+										If Upper$(AI2\Name$) = Name$ Or Name$ = "ALL"
+											CommandPet(AI2, Command$, PetParams$)
+											If Name$ <> "ALL" Then Exit
 										EndIf
-									Next
+										AI2 = AI2\NextSlave
+									Wend
 								EndIf
 							Case LanguageString$(LS_SCLeave)
 								LeaveParty(AI)
@@ -1720,15 +1721,15 @@ Function UpdateNetwork()
 						AIFrom.ActorInstance = FindActorInstanceFromRNID(M\FromID)
 						; Check that actor instance is valid (e.g. it isn't trying to change someone else's inventory)
 						If AI <> Null And AIFrom <> Null And SlotA >= 0 And SlotB >= 0
+							; Walk AIFrom's FirstSlave chain to check if the
+							; target actor (AI) is one of the sender's pets.
+							; Replaces a global ActorInstance walk filtered
+							; by `Leader = AIFrom`.
 							IsPet = False
-							Slaves = AIFrom\NumberOfSlaves
-							While Slaves > 0
-								For Slave.ActorInstance = Each ActorInstance
-									If Slave\Leader = AIFrom
-										Slaves = Slaves - 1
-										If Slave = AI Then IsPet = True : Exit
-									EndIf
-								Next
+							Local Slave.ActorInstance = AIFrom\FirstSlave
+							While Slave <> Null
+								If Slave = AI Then IsPet = True : Exit
+								Slave = Slave\NextSlave
 							Wend
 							If (AI = AIFrom Or IsPet = True) And (Amount = 0 Or Amount <= AI\Inventory\Amounts[SlotA])
 								If Left$(M\MessageData$, 1) = "S"

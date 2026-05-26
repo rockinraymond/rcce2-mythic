@@ -486,16 +486,14 @@ Function My_SaveActorInstance(A.ActorInstance, Q.QuestLog, C.ActionbarData, IsSl
 		Next
 	End If
 	
-	; Save Slaves
-	Slaves = A\NumberOfSlaves
-	While Slaves > 0
-		For Slave.ActorInstance = Each ActorInstance
-			If Slave\Leader = A
-				;   Saves Slaves | Instance | Quests | Actionbar | isSlave | AccountNumber | Parent
-				My_SaveActorInstance(Slave,    Null,     Null,       True,    AccountID, A\My_ID)
-				Slaves = Slaves -1
-			End If
-		Next
+	; Save Slaves -- walk A's FirstSlave chain instead of every
+	; ActorInstance. Same shape as the flat-file SaveActor path
+	; in Actors.bb.
+	Local Slave.ActorInstance = A\FirstSlave
+	While Slave <> Null
+		;   Saves Slaves | Instance | Quests | Actionbar | isSlave | AccountNumber | Parent
+		My_SaveActorInstance(Slave,    Null,     Null,       True,    AccountID, A\My_ID)
+		Slave = Slave\NextSlave
 	Wend
 	
 End Function
@@ -643,7 +641,16 @@ Function My_LoadActorInstance.ActorInstance(ActID, Q.Questlog, C.ActionBarData, 
 	A\DeathScript$		= ReadSQLField(Row, "dscript")
 	A\Reputation		= ReadSQLField(Row, "rep")
 	A\Gold				= ReadSQLField(Row, "gold")
-	A\NumberOfslaves	= ReadSQLField(Row, "slaves")
+	A\NumberOfSlaves	= ReadSQLField(Row, "slaves")
+	; SlaveLink (called per slave-row in the loop below) increments
+	; NumberOfSlaves on each call, so the saved count would double-
+	; count if left in place. Reset to 0 here and let SlaveLink rebuild
+	; the count from the actual rows that load successfully -- this
+	; also catches the case where a slave row references a missing
+	; actor and My_LoadActorInstance returns Null (the SlaveLink call
+	; is then skipped via the `If Slave <> Null` guard, and the count
+	; correctly reflects only the slaves that actually loaded).
+	A\NumberOfSlaves	= 0
 	A\HomeFaction		= ReadSQLField(Row, "homefaction")
 	; FactionNames$ / FactionDefaultRatings are Dim'd (99) and
 	; FactionRatings is Field[99]. A corrupt SQL row could carry an
@@ -910,10 +917,13 @@ Function My_LoadActorInstance.ActorInstance(ActID, Q.Questlog, C.ActionBarData, 
 		; Get the slaves ID
 		SlavID = ReadSQLField(SlaveRow, "id")
 		
-		; Load the slave
+		; Load the slave. SlaveLink maintains the FirstSlave chain +
+		; NumberOfSlaves count.
 		Slave.ActorInstance = My_LoadActorInstance(SlavID, Null, Null,AccountID)
-		Slave\Leader = A
-		Slave\AIMode = AI_Pet
+		If Slave <> Null
+			SlaveLink(A, Slave)
+			Slave\AIMode = AI_Pet
+		EndIf
 		
 		; Clean up
 		FreeSQLRow(SlaveRow)
