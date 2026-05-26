@@ -364,14 +364,24 @@ Function BVM_REMOVEZONEINSTANCE(Param1$, Instance%)
 				Wend
 				; Delete ownerships for instance from disk
 				DeleteFile("Data\Server Data\Areas\Ownerships\" + Zone\Name$ + " (" + Zone\Instances[Instance]\ID + ") Ownerships.dat")
-			; Delete dropped items
-				For D.DroppedItem = Each DroppedItem
-					AInstance.AreaInstance = Object.AreaInstance(D\ServerHandle)
+			; Delete dropped items. After-cursor walk: the body Deletes
+			; D, which would corrupt the For-Each cursor on the next
+			; iteration. Fires from BVM_REMOVEZONEINSTANCE -- a script
+			; cleanup of a zone with multiple dropped items would
+			; either skip past the corruption point (orphan items
+			; leak) or crash the server on the freed-next-pointer
+			; deref. Documented in CLAUDE.md (#247).
+				Local Drz.DroppedItem = First DroppedItem
+				Local DrzNext.DroppedItem = Null
+				While Drz <> Null
+					DrzNext = After Drz
+					AInstance.AreaInstance = Object.AreaInstance(Drz\ServerHandle)
 					If AInstance = Zone\Instances[Instance]
-						FreeItemInstance(D\Item)
-						Delete(D)
+						FreeItemInstance(Drz\Item)
+						Delete(Drz)
 					EndIf
-				Next
+					Drz = DrzNext
+				Wend
 				; Free Owned Scenery for the instance {##}
 				;For i = 0 To 499
 				;	If Zone\Instances[Instance]\OwnedScenery[i] <> Null
