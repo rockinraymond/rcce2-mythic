@@ -200,12 +200,16 @@ Repeat
 		Time# = Time# + DeltaBuffer(i)
 	Next
 	Time# = Time# / Float#(DeltaFrames)
-	; Avoid divide-by-zero on the first frame (DeltaTime is Global,
-	; possibly 0 if init code didn't seed DeltaBuffer) and on very fast
-	; sub-millisecond frames (degenerate on idle/menu screens, common
-	; under a debugger breakpoint). 1.0ms is the resolution floor of
-	; MilliSecs(); clamping here caps the reported FPS at 1000 without
-	; touching the legitimate Delta# > 3.5 cap below.
+	; Avoid divide-by-zero on very fast sub-millisecond frames (the
+	; 6-frame DeltaBuffer average collapses to 0 when every recent
+	; frame rendered in <1ms -- degenerate on idle/menu screens, also
+	; common under a debugger breakpoint). 1.0ms is the resolution
+	; floor of MilliSecs(); clamping caps reported FPS at 1000 and
+	; leaves the legitimate Delta# > 3.5 upper cap below untouched.
+	; First-frame failure (unseeded DeltaTime / buffer) is mitigated
+	; here too -- see MainMenu.bb's loops for the original
+	; first-frame failure path which is NOT pre-seeded the way
+	; Client.bb line 188 pre-seeds DeltaTime here.
 	If Time# < 1.0 Then Time# = 1.0
 	fps# = 1000.0 / Time#
 	Delta# = BaseFramerate# / fps#
