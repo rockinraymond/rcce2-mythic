@@ -772,6 +772,17 @@ Function UpdateActorInstances(Broadcast)
 				ElseIf MilliSecs() - AI\Underwater >= 1000
 					AI\Underwater = AI\Underwater + 1000
 					SW = Object.ServerWater(Underwater)
+					; Stale-handle Null discipline (CLAUDE.md): the
+					; initial scan above captured `Underwater = Handle(SW)`
+					; for a live ServerWater, but >= 1 second has elapsed
+					; before this branch runs. If the owning Area was
+					; ServerUnloadArea'd or the water was explicitly
+					; Deleted in that window, Object.ServerWater returns
+					; Null, and the unguarded `SW\Damage` deref below was
+					; a one-frame server-crash. Breath-loss only needs
+					; AI state and runs even on stale water (it ticks
+					; per-second-underwater regardless); damage requires
+					; SW field reads and is the part that must skip.
 					; Remove breath, or health if none left
 					If BreathStat > -1 And DistUnder# > 2.0
 						AI\Attributes\Value[BreathStat] = AI\Attributes\Value[BreathStat] - 1
@@ -792,8 +803,12 @@ Function UpdateActorInstances(Broadcast)
 							RCE_Send(Host, AI\RNID, P_StatUpdate, "A" + Pa$, True)
 						EndIf
 					EndIf
-					; Water damage
-					If SW\Damage > 0
+					; Water damage -- requires a live ServerWater. If SW
+					; is Null (water freed during the 1s breath window),
+					; skip this block; breath loss above already ran and
+					; the next tick will either re-pick a new water or
+					; clear AI\Underwater via the no-hit path above.
+					If SW <> Null And SW\Damage > 0
 						Damage = SW\Damage - (AI\Resistances[SW\DamageType] - 100)
 						If Damage < 1 Then Damage = 1
 						UpdateAttribute(AI, HealthStat, AI\Attributes\Value[HealthStat] - Damage)
