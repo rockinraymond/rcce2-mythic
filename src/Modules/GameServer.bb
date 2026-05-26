@@ -585,20 +585,22 @@ Function ActorAttack(A1.ActorInstance, A2.ActorInstance)
 
 	.SkipAttackNet
 
-	; If target was a player with pets, make pets attack too
+	; If target was a player with pets, make pets attack too.
+	; Walk A1's FirstSlave chain instead of every ActorInstance.
+	; Local-name is `PetCur` because A3 is implicit-declared at
+	; function scope by a `For A3.ActorInstance = Each` earlier in
+	; this function (BlitzForge Local + For-Each collision -- see
+	; the feedback_blitz_local_for_each_collision memory).
 	If A1\RNID > 0
 		If A1\NumberOfSlaves > 0
-			Found = 0
-			For A3.ActorInstance = Each ActorInstance
-				If A3\Leader = A1
-					Found = Found + 1
-					If A3\Actor\Aggressiveness < 3 And A3\AITarget = Null
-						A3\AITarget = A2
-						A3\AIMode = AI_PetChase
-					EndIf
-					If Found = A1\NumberOfSlaves Then Exit
+			Local PetCur.ActorInstance = A1\FirstSlave
+			While PetCur <> Null
+				If PetCur\Actor\Aggressiveness < 3 And PetCur\AITarget = Null
+					PetCur\AITarget = A2
+					PetCur\AIMode = AI_PetChase
 				EndIf
-			Next
+				PetCur = PetCur\NextSlave
+			Wend
 		EndIf
 	EndIf
 

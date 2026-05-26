@@ -107,6 +107,18 @@ Type ActorInstance
 	; (login / logout / FreeActorInstance); see Actors.bb's helper
 	; functions and ServerNet.bb's P_StartGame / P_Disconnect handlers.
 	Field NextOnlinePlayer.ActorInstance
+	; Linked list of this actor's slaves (pets / mounts / summons).
+	; Head is FirstSlave; chained via Slave\NextSlave on each slave.
+	; Replaces `For Each ActorInstance / If X\Leader = this` walks
+	; (Actors.bb's WriteActorInstance + FreeActorInstanceSlaves,
+	; GameServer.bb's pet-aggro broadcast, MySQL.bb's My_SaveActorInstance,
+	; ServerNet.bb's /pet command + inventory pet-validation walk).
+	; Maintained by SlaveLink / SlaveUnlink helpers and at the four
+	; sites that mutate \Leader: load-from-stream / load-from-DB /
+	; BVM_BREAKLINK / BVM_SETLEADER. FreeActorInstance unlinks
+	; defensively.
+	Field FirstSlave.ActorInstance
+	Field NextSlave.ActorInstance
 	Field X#, Y#, Z#
 	Field OldX#, OldZ#
 	Field DestX#, DestZ#
@@ -344,15 +356,13 @@ Function WriteActorInstance(Stream, A.ActorInstance)
 	WriteShort Stream, A\LastPortal
 	WriteInt Stream, A\LastPortalTime
 
-	; Data for any slaves
-	Slaves = A\NumberOfSlaves
-	While Slaves > 0
-		For Slave.ActorInstance = Each ActorInstance
-			If Slave\Leader = A
-				WriteActorInstance(Stream, Slave)
-				Slaves = Slaves - 1
-			EndIf
-		Next
+	; Data for any slaves. Walk this leader's FirstSlave chain
+	; instead of the global ActorInstance list. The chain replaces
+	; the previous O(global_actors) walk filtered by `Leader = A`.
+	Local Slave.ActorInstance = A\FirstSlave
+	While Slave <> Null
+		WriteActorInstance(Stream, Slave)
+		Slave = Slave\NextSlave
 	Wend
 
 End Function
@@ -497,10 +507,21 @@ Function ReadActorInstance.ActorInstance(Stream)
 	EndIf
 
 	; Slaves
-	For i = 1 To A\NumberOfSlaves
+	;
+	; SlaveLink maintains the FirstSlave chain + NumberOfSlaves count.
+	; The load loop reads N records from disk where N was the
+	; previously-saved NumberOfSlaves; SlaveLink will INCREMENT
+	; NumberOfSlaves on each call. The post-load count must match the
+	; pre-load count, so reset to 0 before the loop and let SlaveLink
+	; restore it.
+	Local SavedSlaveCount% = A\NumberOfSlaves
+	A\NumberOfSlaves = 0
+	For i = 1 To SavedSlaveCount
 		Slave.ActorInstance = ReadActorInstance(Stream)
-		Slave\Leader = A
-		Slave\AIMode = AI_Pet
+		If Slave <> Null
+			SlaveLink(A, Slave)
+			Slave\AIMode = AI_Pet
+		EndIf
 	Next
 
 	; If actor didn't exist, delete all slaves and return nothing
@@ -593,6 +614,51 @@ Function CreateActorInstance.ActorInstance(Actor.Actor)
 
 End Function
 
+; Links Slave under Leader: sets Slave\Leader, head-inserts into
+; Leader\FirstSlave chain, increments Leader\NumberOfSlaves. The
+; canonical replacement for bare `Slave\Leader = Leader` (which left
+; the chain inconsistent) — every leader-assignment site should call
+; this. Safe no-op on Null Slave or Null Leader.
+;
+; If Slave was already linked to a different leader, unlinks from
+; the old chain first to avoid being in two chains simultaneously.
+Function SlaveLink(Leader.ActorInstance, Slave.ActorInstance)
+
+	If Leader = Null Or Slave = Null Then Return
+	If Slave\Leader = Leader Then Return
+	; Detach from any current leader before re-attaching.
+	If Slave\Leader <> Null Then SlaveUnlink(Slave)
+	Slave\Leader = Leader
+	Slave\NextSlave = Leader\FirstSlave
+	Leader\FirstSlave = Slave
+	Leader\NumberOfSlaves = Leader\NumberOfSlaves + 1
+
+End Function
+
+; Removes Slave from its current Leader's chain, decrements
+; NumberOfSlaves, clears Slave\Leader. Safe no-op when Slave has no
+; leader (NPCs without a master).
+Function SlaveUnlink(Slave.ActorInstance)
+
+	If Slave = Null Then Return
+	Local Leader.ActorInstance = Slave\Leader
+	If Leader = Null Then Return
+	; Walk-to-find-predecessor splice on the leader's chain.
+	If Leader\FirstSlave = Slave
+		Leader\FirstSlave = Slave\NextSlave
+	Else
+		Local Prev.ActorInstance = Leader\FirstSlave
+		While Prev <> Null And Prev\NextSlave <> Slave
+			Prev = Prev\NextSlave
+		Wend
+		If Prev <> Null Then Prev\NextSlave = Slave\NextSlave
+	EndIf
+	Slave\NextSlave = Null
+	Slave\Leader = Null
+	Leader\NumberOfSlaves = Leader\NumberOfSlaves - 1
+
+End Function
+
 ; Inserts A at the head of the FirstOnlinePlayer chain. Idempotent
 ; via a presence check (a double-insert from a buggy caller would
 ; create a cycle in the chain). Called at login completion in
@@ -654,7 +720,25 @@ Function FreeActorInstance(A.ActorInstance)
 	; FirstOnlinePlayer chain cleanup -- safe no-op when A wasn't an
 	; online player (NPCs, never-logged-in characters).
 	OnlinePlayerRemove(A)
-	If A\Leader <> Null Then A\Leader\NumberOfSlaves = A\Leader\NumberOfSlaves - 1
+	; FirstSlave chain cleanup. SlaveUnlink handles the NumberOfSlaves
+	; decrement and clears Slave\Leader; safe no-op when A had no
+	; leader.
+	If A\Leader <> Null Then SlaveUnlink(A)
+	; Also free this actor's own slave chain (defensive — typically
+	; FreeActorInstanceSlaves was called first by the caller, but if
+	; not, leaving dangling NextSlave pointers from this freed actor's
+	; FirstSlave would corrupt the children's traversal). Clear without
+	; recursing into Delete -- the surviving children are simply
+	; orphaned (Leader = Null).
+	Local Child.ActorInstance = A\FirstSlave
+	Local ChildNext.ActorInstance = Null
+	While Child <> Null
+		ChildNext = Child\NextSlave
+		Child\Leader = Null
+		Child\NextSlave = Null
+		Child = ChildNext
+	Wend
+	A\FirstSlave = Null
 	Delete(A)
 
 End Function
@@ -675,21 +759,16 @@ End Function
 ; the search completes without finding any remaining slaves.
 Function FreeActorInstanceSlaves(A.ActorInstance)
 
-	Local Found = True
-	While Found
-		Found = False
-		For A2.ActorInstance = Each ActorInstance
-			If A\NumberOfSlaves = 0 Then Exit
-			If A2\Leader = A
-				Found = True
-				FreeActorInstanceSlaves(A2)
-				FreeActorInstance(A2)
-				; Restart from a fresh iterator next outer pass --
-				; the For-Each cursor is invalid after the Delete
-				; inside FreeActorInstance above.
-				Exit
-			EndIf
-		Next
+	; Walk A's FirstSlave chain. Body recursively frees nested
+	; slaves first (their FirstSlave chains), then calls
+	; FreeActorInstance which SlaveUnlinks from A's chain and
+	; Delete()s the slave. The unlink mutates A\FirstSlave, so capture
+	; the head before each step rather than walking with a cursor that
+	; could point at freed memory.
+	While A\FirstSlave <> Null
+		Local Child.ActorInstance = A\FirstSlave
+		FreeActorInstanceSlaves(Child)
+		FreeActorInstance(Child)
 	Wend
 
 End Function

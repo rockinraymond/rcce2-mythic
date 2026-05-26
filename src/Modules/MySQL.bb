@@ -486,16 +486,14 @@ Function My_SaveActorInstance(A.ActorInstance, Q.QuestLog, C.ActionbarData, IsSl
 		Next
 	End If
 	
-	; Save Slaves
-	Slaves = A\NumberOfSlaves
-	While Slaves > 0
-		For Slave.ActorInstance = Each ActorInstance
-			If Slave\Leader = A
-				;   Saves Slaves | Instance | Quests | Actionbar | isSlave | AccountNumber | Parent
-				My_SaveActorInstance(Slave,    Null,     Null,       True,    AccountID, A\My_ID)
-				Slaves = Slaves -1
-			End If
-		Next
+	; Save Slaves -- walk A's FirstSlave chain instead of every
+	; ActorInstance. Same shape as the flat-file SaveActor path
+	; in Actors.bb.
+	Local Slave.ActorInstance = A\FirstSlave
+	While Slave <> Null
+		;   Saves Slaves | Instance | Quests | Actionbar | isSlave | AccountNumber | Parent
+		My_SaveActorInstance(Slave,    Null,     Null,       True,    AccountID, A\My_ID)
+		Slave = Slave\NextSlave
 	Wend
 	
 End Function
@@ -910,10 +908,13 @@ Function My_LoadActorInstance.ActorInstance(ActID, Q.Questlog, C.ActionBarData, 
 		; Get the slaves ID
 		SlavID = ReadSQLField(SlaveRow, "id")
 		
-		; Load the slave
+		; Load the slave. SlaveLink maintains the FirstSlave chain +
+		; NumberOfSlaves count.
 		Slave.ActorInstance = My_LoadActorInstance(SlavID, Null, Null,AccountID)
-		Slave\Leader = A
-		Slave\AIMode = AI_Pet
+		If Slave <> Null
+			SlaveLink(A, Slave)
+			Slave\AIMode = AI_Pet
+		EndIf
 		
 		; Clean up
 		FreeSQLRow(SlaveRow)

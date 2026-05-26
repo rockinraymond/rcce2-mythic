@@ -1,0 +1,281 @@
+Strict
+; EnableGC intentionally omitted -- per the
+; feedback_blitzforge_test_handle_object_gc memory, Type-heavy chain
+; tests stack-overflow under GC tracing. Strict-only is sufficient
+; for chain-correctness assertions; no Handle/Object round-trip is
+; needed.
+
+; Regression test pinning the per-leader slave chain in Actors.bb
+; (Phase 4 of the ActorByRNID multi-iteration initiative; Phase 1
+; was PR #282, Phase 3 was PR #283).
+;
+; The chain replaces 6 `For Each ActorInstance / If X\Leader = leader`
+; walks across Actors.bb (save / FreeActorInstanceSlaves), GameServer.bb
+; (pet aggro broadcast), MySQL.bb (save), ServerNet.bb (/pet
+; command, inventory pet-validation walk).
+;
+; Actors.bb's SlaveLink / SlaveUnlink can't be exercised directly
+; because ActorInstance pulls the whole network/world graph.
+; Replicated-gate pattern: rebuild the chain logic against a tiny
+; mock Type whose field shape matches ActorInstance's
+; Leader / FirstSlave / NextSlave / NumberOfSlaves layout. Any
+; production change to the helpers MUST update this file.
+
+Type MockActor
+	Field Name$
+	Field Leader.MockActor
+	Field FirstSlave.MockActor
+	Field NextSlave.MockActor
+	Field NumberOfSlaves%
+End Type
+
+; Replicates Actors.bb's SlaveLink: head-insert into Leader's chain,
+; +1 on Leader\NumberOfSlaves. Re-links if Slave already has a
+; different Leader.
+Function MockSlaveLink(Leader.MockActor, Slave.MockActor)
+	If Leader = Null Or Slave = Null Then Return
+	If Slave\Leader = Leader Then Return
+	If Slave\Leader <> Null Then MockSlaveUnlink(Slave)
+	Slave\Leader = Leader
+	Slave\NextSlave = Leader\FirstSlave
+	Leader\FirstSlave = Slave
+	Leader\NumberOfSlaves = Leader\NumberOfSlaves + 1
+End Function
+
+; Replicates Actors.bb's SlaveUnlink: walk-to-find-predecessor splice
+; on the leader's chain, -1 on NumberOfSlaves, clears Slave\Leader.
+Function MockSlaveUnlink(Slave.MockActor)
+	If Slave = Null Then Return
+	Local Leader.MockActor = Slave\Leader
+	If Leader = Null Then Return
+	If Leader\FirstSlave = Slave
+		Leader\FirstSlave = Slave\NextSlave
+	Else
+		Local Prev.MockActor = Leader\FirstSlave
+		While Prev <> Null And Prev\NextSlave <> Slave
+			Prev = Prev\NextSlave
+		Wend
+		If Prev <> Null Then Prev\NextSlave = Slave\NextSlave
+	EndIf
+	Slave\NextSlave = Null
+	Slave\Leader = Null
+	Leader\NumberOfSlaves = Leader\NumberOfSlaves - 1
+End Function
+
+Function ChainLen%(L.MockActor)
+	Local N% = 0
+	Local Cur.MockActor = L\FirstSlave
+	While Cur <> Null
+		N = N + 1
+		Cur = Cur\NextSlave
+	Wend
+	Return N
+End Function
+
+Function ChainContains%(L.MockActor, S.MockActor)
+	Local Cur.MockActor = L\FirstSlave
+	While Cur <> Null
+		If Cur = S Then Return True
+		Cur = Cur\NextSlave
+	Wend
+	Return False
+End Function
+
+; ====================================================================
+; Link: head-insert, NumberOfSlaves bookkeeping, idempotency
+; ====================================================================
+
+Test testLinkOneSlave()
+	Local L.MockActor = New MockActor() : L\Name = "L"
+	Local S.MockActor = New MockActor() : S\Name = "S"
+	MockSlaveLink(L, S)
+	Assert(S\Leader = L)
+	Assert(L\FirstSlave = S)
+	Assert(L\NumberOfSlaves = 1)
+	Assert(ChainLen%(L) = 1)
+End Test
+
+Test testLinkManyHeadInsertOrder()
+	Local L.MockActor = New MockActor() : L\Name = "L"
+	Local A.MockActor = New MockActor() : A\Name = "A"
+	Local B.MockActor = New MockActor() : B\Name = "B"
+	Local C.MockActor = New MockActor() : C\Name = "C"
+	MockSlaveLink(L, A)
+	MockSlaveLink(L, B)
+	MockSlaveLink(L, C)
+	; Head-insert: newest first -- C -> B -> A.
+	Assert(L\FirstSlave = C)
+	Assert(C\NextSlave = B)
+	Assert(B\NextSlave = A)
+	Assert(A\NextSlave = Null)
+	Assert(L\NumberOfSlaves = 3)
+End Test
+
+Test testLinkIdempotentNoDoubleCount()
+	Local L.MockActor = New MockActor() : L\Name = "L"
+	Local S.MockActor = New MockActor() : S\Name = "S"
+	MockSlaveLink(L, S)
+	MockSlaveLink(L, S)
+	MockSlaveLink(L, S)
+	; Production helper short-circuits when Slave\Leader == Leader.
+	; Count must stay at 1.
+	Assert(L\NumberOfSlaves = 1)
+	Assert(ChainLen%(L) = 1)
+End Test
+
+Test testLinkReassignsToNewLeader()
+	Local L1.MockActor = New MockActor() : L1\Name = "L1"
+	Local L2.MockActor = New MockActor() : L2\Name = "L2"
+	Local S.MockActor = New MockActor() : S\Name = "S"
+	MockSlaveLink(L1, S)
+	Assert(L1\NumberOfSlaves = 1)
+	MockSlaveLink(L2, S)
+	; Slave should detach from L1 and attach to L2.
+	Assert(L1\NumberOfSlaves = 0)
+	Assert(L1\FirstSlave = Null)
+	Assert(L2\NumberOfSlaves = 1)
+	Assert(L2\FirstSlave = S)
+	Assert(S\Leader = L2)
+End Test
+
+Test testLinkNullSlaveIsNoOp()
+	Local L.MockActor = New MockActor() : L\Name = "L"
+	MockSlaveLink(L, Null)
+	Assert(L\NumberOfSlaves = 0)
+	Assert(L\FirstSlave = Null)
+End Test
+
+Test testLinkNullLeaderIsNoOp()
+	Local S.MockActor = New MockActor() : S\Name = "S"
+	MockSlaveLink(Null, S)
+	Assert(S\Leader = Null)
+End Test
+
+; ====================================================================
+; Unlink: head / middle / tail removal, NumberOfSlaves bookkeeping
+; ====================================================================
+
+Test testUnlinkHead()
+	Local L.MockActor = New MockActor() : L\Name = "L"
+	Local A.MockActor = New MockActor() : A\Name = "A"
+	Local B.MockActor = New MockActor() : B\Name = "B"
+	Local C.MockActor = New MockActor() : C\Name = "C"
+	MockSlaveLink(L, A) : MockSlaveLink(L, B) : MockSlaveLink(L, C)
+	; Chain: C -> B -> A. Unlink C (head).
+	MockSlaveUnlink(C)
+	Assert(L\FirstSlave = B)
+	Assert(L\NumberOfSlaves = 2)
+	Assert(C\Leader = Null)
+	Assert(C\NextSlave = Null)
+End Test
+
+Test testUnlinkMiddle()
+	Local L.MockActor = New MockActor() : L\Name = "L"
+	Local A.MockActor = New MockActor() : A\Name = "A"
+	Local B.MockActor = New MockActor() : B\Name = "B"
+	Local C.MockActor = New MockActor() : C\Name = "C"
+	MockSlaveLink(L, A) : MockSlaveLink(L, B) : MockSlaveLink(L, C)
+	; Chain: C -> B -> A. Unlink B (middle).
+	MockSlaveUnlink(B)
+	Assert(L\FirstSlave = C)
+	Assert(C\NextSlave = A)
+	Assert(A\NextSlave = Null)
+	Assert(L\NumberOfSlaves = 2)
+	Assert(B\Leader = Null)
+	Assert(B\NextSlave = Null)
+End Test
+
+Test testUnlinkTail()
+	Local L.MockActor = New MockActor() : L\Name = "L"
+	Local A.MockActor = New MockActor() : A\Name = "A"
+	Local B.MockActor = New MockActor() : B\Name = "B"
+	Local C.MockActor = New MockActor() : C\Name = "C"
+	MockSlaveLink(L, A) : MockSlaveLink(L, B) : MockSlaveLink(L, C)
+	; Chain: C -> B -> A. Unlink A (tail).
+	MockSlaveUnlink(A)
+	Assert(L\FirstSlave = C)
+	Assert(C\NextSlave = B)
+	Assert(B\NextSlave = Null)
+	Assert(L\NumberOfSlaves = 2)
+End Test
+
+Test testUnlinkSingleElement()
+	Local L.MockActor = New MockActor() : L\Name = "L"
+	Local S.MockActor = New MockActor() : S\Name = "S"
+	MockSlaveLink(L, S)
+	MockSlaveUnlink(S)
+	Assert(L\FirstSlave = Null)
+	Assert(L\NumberOfSlaves = 0)
+	Assert(S\Leader = Null)
+End Test
+
+Test testUnlinkSlaveWithNoLeaderIsNoOp()
+	Local L.MockActor = New MockActor() : L\Name = "L"
+	Local S.MockActor = New MockActor() : S\Name = "S"
+	; S has no leader.
+	MockSlaveUnlink(S)
+	Assert(S\Leader = Null)
+	Assert(L\NumberOfSlaves = 0)
+End Test
+
+Test testUnlinkNullIsNoOp()
+	MockSlaveUnlink(Null)
+	; No crash, no error.
+End Test
+
+; ====================================================================
+; Multi-leader cases
+; ====================================================================
+
+Test testManyLeadersWithChains()
+	Local L1.MockActor = New MockActor() : L1\Name = "L1"
+	Local L2.MockActor = New MockActor() : L2\Name = "L2"
+	Local L1S1.MockActor = New MockActor() : L1S1\Name = "L1S1"
+	Local L1S2.MockActor = New MockActor() : L1S2\Name = "L1S2"
+	Local L2S1.MockActor = New MockActor() : L2S1\Name = "L2S1"
+	MockSlaveLink(L1, L1S1) : MockSlaveLink(L1, L1S2)
+	MockSlaveLink(L2, L2S1)
+	; L1 chain: L1S2 -> L1S1. L2 chain: L2S1.
+	Assert(L1\NumberOfSlaves = 2)
+	Assert(L2\NumberOfSlaves = 1)
+	Assert(ChainContains%(L1, L1S1) = True)
+	Assert(ChainContains%(L1, L1S2) = True)
+	Assert(ChainContains%(L2, L2S1) = True)
+	; Chains are disjoint.
+	Assert(ChainContains%(L1, L2S1) = False)
+	Assert(ChainContains%(L2, L1S1) = False)
+End Test
+
+Test testUnlinkAllInLeaderChain()
+	Local L.MockActor = New MockActor() : L\Name = "L"
+	Local A.MockActor = New MockActor() : A\Name = "A"
+	Local B.MockActor = New MockActor() : B\Name = "B"
+	Local C.MockActor = New MockActor() : C\Name = "C"
+	MockSlaveLink(L, A) : MockSlaveLink(L, B) : MockSlaveLink(L, C)
+	MockSlaveUnlink(B)
+	MockSlaveUnlink(C)
+	MockSlaveUnlink(A)
+	Assert(L\FirstSlave = Null)
+	Assert(L\NumberOfSlaves = 0)
+End Test
+
+; ====================================================================
+; NumberOfSlaves invariant: must always equal chain length
+; ====================================================================
+
+Test testNumberOfSlavesMatchesChainLengthAfterChurn()
+	Local L.MockActor = New MockActor() : L\Name = "L"
+	Local A.MockActor = New MockActor() : A\Name = "A"
+	Local B.MockActor = New MockActor() : B\Name = "B"
+	Local C.MockActor = New MockActor() : C\Name = "C"
+	Local D.MockActor = New MockActor() : D\Name = "D"
+	MockSlaveLink(L, A) : Assert(L\NumberOfSlaves = ChainLen%(L))
+	MockSlaveLink(L, B) : Assert(L\NumberOfSlaves = ChainLen%(L))
+	MockSlaveLink(L, C) : Assert(L\NumberOfSlaves = ChainLen%(L))
+	MockSlaveUnlink(B) : Assert(L\NumberOfSlaves = ChainLen%(L))
+	MockSlaveLink(L, D) : Assert(L\NumberOfSlaves = ChainLen%(L))
+	MockSlaveUnlink(A) : Assert(L\NumberOfSlaves = ChainLen%(L))
+	MockSlaveUnlink(C) : Assert(L\NumberOfSlaves = ChainLen%(L))
+	MockSlaveUnlink(D) : Assert(L\NumberOfSlaves = ChainLen%(L))
+	Assert(L\NumberOfSlaves = 0)
+End Test
