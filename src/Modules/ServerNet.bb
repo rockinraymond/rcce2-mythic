@@ -2203,7 +2203,19 @@ Function UpdateNetwork()
 					If FoundA = Null Or PwdLen < 1
 						LoginAttemptRecord(M\FromID, False)
 						RCE_Send(Host, M\FromID, P_VerifyAccount, "P", True)
-					ElseIf FoundA\Pass$ = "" Or Not VerifyPassword%(FoundA\Pass$, Mid$(M\MessageData$, Offset + 1, PwdLen))
+					Else
+					; Hoist password verification to a local so we can branch on
+					; it without tripping BlitzForge's parser rejection of
+					; `Or Not <call>` in an ElseIf condition. Also makes the
+					; happy-path branches read straight (no negation).
+					Local PwdOk%
+					If FoundA\Pass$ = ""
+						PwdOk = False
+					Else
+						PwdOk = VerifyPassword%(FoundA\Pass$, Mid$(M\MessageData$, Offset + 1, PwdLen))
+					EndIf
+
+					If PwdOk = False
 						; Wrong password (or stored hash is empty). Collapse to
 						; "P" regardless of banned / online status so a
 						; pre-auth attacker can't probe either.
@@ -2239,6 +2251,7 @@ Function UpdateNetwork()
 							EndIf
 						Next
 						RCE_Send(Host, M\FromID, P_VerifyAccount, Pa$, True)
+					EndIf
 					EndIf
 					EndIf
 				//EndIf

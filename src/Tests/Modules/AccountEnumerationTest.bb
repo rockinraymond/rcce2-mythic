@@ -29,13 +29,17 @@ EnableGC
 
 ; --- Replicated state machine -----------------------------------------
 ; Inputs match the post-collapse server branch order in
-; ServerNet.bb::P_VerifyAccount (around line 2180-2240).
+; ServerNet.bb::P_VerifyAccount (around line 2180-2255). The integer
+; sentinel values mirror production exactly so a future contributor
+; can diff the helper against the handler without translating
+; abstractions:
 ;
 ;   FoundA     : True iff Username matches an Account record
 ;   PwdLen     : the supplied password byte count (0 = truncated packet)
 ;   PwdOk      : True iff stored hash verifies against the supplied bytes
-;   IsBanned   : True iff Account\IsBanned is set
-;   LoggedOn   : True iff Account\LoggedOn <> -1 (an active session exists)
+;   IsBanned   : Account\IsBanned int field (production: <> False -> banned)
+;   LoggedOn   : Account\LoggedOn int field (production: -1 = logged out,
+;                anything else = active session)
 ;
 ; Returns the single-byte wire code the handler would emit.
 
@@ -43,7 +47,7 @@ Function VerifyAccountResponse$(FoundA, PwdLen, PwdOk, IsBanned, LoggedOn)
 	If FoundA = False Or PwdLen < 1 Then Return "P"
 	If PwdOk = False Then Return "P"
 	If IsBanned <> False Then Return "B"
-	If LoggedOn <> False Then Return "L"
+	If LoggedOn <> -1 Then Return "L"
 	Return "Y"
 End Function
 
@@ -57,7 +61,7 @@ Test testResponseUnknownUsernameIsP()
 	; The historical "N" leak. Attacker scans usernames against a
 	; throwaway password; must get "P" indistinguishable from a real
 	; account they happened to guess wrong on.
-	Assert(VerifyAccountResponse$(False, 16, False, False, False) = "P")
+	Assert(VerifyAccountResponse$(False, 16, False, False, -1) = "P")
 End Test
 
 Test testResponseTruncatedPasswordPacketIsP()
@@ -65,29 +69,29 @@ Test testResponseTruncatedPasswordPacketIsP()
 	; string would match any account whose Pass$ was historically
 	; stored empty. Collapse to "P" so the response doesn't betray
 	; this special case.
-	Assert(VerifyAccountResponse$(True, 0, False, False, False) = "P")
+	Assert(VerifyAccountResponse$(True, 0, False, False, -1) = "P")
 End Test
 
 Test testResponseWrongPasswordIsP()
-	Assert(VerifyAccountResponse$(True, 16, False, False, False) = "P")
+	Assert(VerifyAccountResponse$(True, 16, False, False, -1) = "P")
 End Test
 
 Test testResponseWrongPasswordOnBannedAccountIsP()
 	; The historical "B" leak. Attacker discovers ban status without
 	; ever proving they own the account. Must collapse to "P".
-	Assert(VerifyAccountResponse$(True, 16, False, True, False) = "P")
+	Assert(VerifyAccountResponse$(True, 16, False, True, -1) = "P")
 End Test
 
 Test testResponseWrongPasswordOnLoggedInAccountIsP()
 	; The historical "L" leak. Attacker probes for active sessions
 	; ("is this user online right now?") without auth. Must collapse
 	; to "P".
-	Assert(VerifyAccountResponse$(True, 16, False, False, True) = "P")
+	Assert(VerifyAccountResponse$(True, 16, False, False, 0) = "P")
 End Test
 
 Test testResponseWrongPasswordOnBannedAndLoggedInIsP()
 	; Both side-channels at once; collapse to "P" regardless.
-	Assert(VerifyAccountResponse$(True, 16, False, True, True) = "P")
+	Assert(VerifyAccountResponse$(True, 16, False, True, 0) = "P")
 End Test
 
 ; ======================================================================
@@ -99,24 +103,24 @@ Test testResponseCorrectPasswordBannedIsB()
 	; Banned takes precedence over LoggedOn because the engine refuses
 	; the session entirely; no point telling the user "you're already
 	; logged on" when the ban will block the new session anyway.
-	Assert(VerifyAccountResponse$(True, 16, True, True, False) = "B")
+	Assert(VerifyAccountResponse$(True, 16, True, True, -1) = "B")
 End Test
 
 Test testResponseCorrectPasswordBannedAndLoggedInIsB()
 	; Banned still takes precedence even with a stale-looking active
 	; session.
-	Assert(VerifyAccountResponse$(True, 16, True, True, True) = "B")
+	Assert(VerifyAccountResponse$(True, 16, True, True, 0) = "B")
 End Test
 
 Test testResponseCorrectPasswordLoggedInIsL()
 	; Not banned, but a session exists -- legitimate user gets the
 	; "already logged on elsewhere" hint they can act on.
-	Assert(VerifyAccountResponse$(True, 16, True, False, True) = "L")
+	Assert(VerifyAccountResponse$(True, 16, True, False, 0) = "L")
 End Test
 
 Test testResponseCorrectPasswordSuccessIsY()
 	; The happy path.
-	Assert(VerifyAccountResponse$(True, 16, True, False, False) = "Y")
+	Assert(VerifyAccountResponse$(True, 16, True, False, -1) = "Y")
 End Test
 
 ; ======================================================================
@@ -126,13 +130,16 @@ End Test
 ; ======================================================================
 
 Test testResponseNeverEmitsLegacyN()
-	; Brute-force the 32-cell input grid; assert "N" is never the answer.
+	; Brute-force the 32-cell logical input grid (5 inputs x 2 states).
+	; LoggedOn iterates {-1, 0}: -1 = logged out, 0 = active session,
+	; matching the production `<> -1` test (any non-(-1) value branches
+	; the same way). Asserts "N" is never the answer.
 	Local foundA, pwdLen, pwdOk, banned, loggedOn
 	For foundA = 0 To 1
 		For pwdLen = 0 To 1
 			For pwdOk = 0 To 1
 				For banned = 0 To 1
-					For loggedOn = 0 To 1
+					For loggedOn = -1 To 0
 						Local r$ = VerifyAccountResponse$(foundA, pwdLen, pwdOk, banned, loggedOn)
 						Assert(r$ <> "N")
 					Next
@@ -149,7 +156,7 @@ Test testResponseLOnlyOnSuccessfulAuth()
 	For foundA = 0 To 1
 		For pwdLen = 0 To 1
 			For banned = 0 To 1
-				For loggedOn = 0 To 1
+				For loggedOn = -1 To 0
 					Local r$ = VerifyAccountResponse$(foundA, pwdLen, False, banned, loggedOn)
 					Assert(r$ <> "L")
 				Next
@@ -165,7 +172,7 @@ Test testResponseBOnlyOnSuccessfulAuth()
 	For foundA = 0 To 1
 		For pwdLen = 0 To 1
 			For banned = 0 To 1
-				For loggedOn = 0 To 1
+				For loggedOn = -1 To 0
 					Local r$ = VerifyAccountResponse$(foundA, pwdLen, False, banned, loggedOn)
 					Assert(r$ <> "B")
 				Next
@@ -180,7 +187,7 @@ Test testResponseYOnlyOnSuccessfulAuth()
 	For foundA = 0 To 1
 		For pwdLen = 0 To 1
 			For banned = 0 To 1
-				For loggedOn = 0 To 1
+				For loggedOn = -1 To 0
 					Local r$ = VerifyAccountResponse$(foundA, pwdLen, False, banned, loggedOn)
 					Assert(r$ <> "Y")
 				Next
