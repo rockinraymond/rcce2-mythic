@@ -853,11 +853,19 @@ Function LogIn()
 			Wend
 			; If successful, download Actor/Attributes lists and go to character selection
 			If Result = 1
-				; Save username/password
-				F = WriteFile("Data\Last Username.dat")
+				; Save username/password. Atomic via SafeWriteOpen/
+				; SafeWriteCommit -- a WriteFile failure mid-write would
+				; leave the cache file empty, locking the user out of
+				; pre-fill on next login. The previous cache (if any)
+				; is retained as .bak.
+				Local LUFinal$ = "Data\Last Username.dat"
+				Local LUTemp$ = SafeWriteOpen$(LUFinal$)
+				F = WriteFile(LUTemp$)
+				If F <> 0
 					WriteLine F, GY_TextFieldText$(TName)
 					WriteLine F, Encrypt$(GY_TextFieldText$(TPass), -1)
-				CloseFile F
+					SafeWriteCommit%(LUTemp$, LUFinal$, F)
+				EndIf
 				UName$ = GY_TextFieldText$(TName) : PWord$ = MD5$(GY_TextFieldText$(TPass))
 
 				; Request actors list
@@ -1496,12 +1504,20 @@ Function LogIn()
 			; Music update
 			If GY_CheckBoxDown(BUpdateMusic) <> 1 - UpdateMusic
 				UpdateMusic = 1 - GY_CheckBoxDown(BUpdateMusic)
-				; Update file
-				F = WriteFile("Data\Game Data\Misc.dat")
+				; Update file atomically. A crash mid-write would
+				; leave Misc.dat empty, which the next launch would
+				; interpret as "no game name, no version" -- locking
+				; the user out of the project. SafeWriteCommit demotes
+				; the previous Misc.dat to .bak for recovery.
+				Local MMFinal$ = "Data\Game Data\Misc.dat"
+				Local MMTemp$ = SafeWriteOpen$(MMFinal$)
+				F = WriteFile(MMTemp$)
+				If F <> 0
 					WriteLine F, GameName$
 					WriteLine F, UpdateGame$
 					WriteLine F, UpdateMusic
-				CloseFile F
+					SafeWriteCommit%(MMTemp$, MMFinal$, F)
+				EndIf
 			EndIf
 		EndIf
 				
@@ -3690,12 +3706,20 @@ Function GameOptionsMenu()
 			; Music update
 			If GY_CheckBoxDown(BUpdateMusic) <> 1 - UpdateMusic
 				UpdateMusic = 1 - GY_CheckBoxDown(BUpdateMusic)
-				; Update file
-				F = WriteFile("Data\Game Data\Misc.dat")
+				; Update file atomically. A crash mid-write would
+				; leave Misc.dat empty, which the next launch would
+				; interpret as "no game name, no version" -- locking
+				; the user out of the project. SafeWriteCommit demotes
+				; the previous Misc.dat to .bak for recovery.
+				Local MMFinal$ = "Data\Game Data\Misc.dat"
+				Local MMTemp$ = SafeWriteOpen$(MMFinal$)
+				F = WriteFile(MMTemp$)
+				If F <> 0
 					WriteLine F, GameName$
 					WriteLine F, UpdateGame$
 					WriteLine F, UpdateMusic
-				CloseFile F
+					SafeWriteCommit%(MMTemp$, MMFinal$, F)
+				EndIf
 			EndIf
 		EndIf
 
@@ -3843,8 +3867,14 @@ Function DownloadFile(URL$, SaveTo$ = "", GYProgress = 0)
 
 		If BytesToRead = 0 Then CloseTCPStream WWW : Return 0
 
-		; Create new file to write downloaded bytes into
-		Save = WriteFile(SaveTo$)
+		; Create new file to write downloaded bytes into.
+		; Atomic: write to .tmp, only promote to final on completion
+		; (BytesIn = BytesToRead). Mid-download cancellation, EOF
+		; before content-length, or any error path abort the temp
+		; without touching the prior on-disk file (if any). The prior
+		; download is retained as .bak.
+		Local DLTemp$ = SafeWriteOpen$(SaveTo$)
+		Save = WriteFile(DLTemp$)
 		If Save = 0 Then CloseTCPStream(WWW) : Return 0
 
 		; Incredibly complex download-to-file routine...
@@ -3869,8 +3899,16 @@ Function DownloadFile(URL$, SaveTo$ = "", GYProgress = 0)
 			If BytesIn = BytesToRead Then Exit
 		Forever
 
-		; Done
-		CloseFile(Save)
+		; Done. Promote to production only if the full content-length
+		; arrived; partial downloads abort the temp and leave the
+		; previous file (if any) intact. SafeWriteCommit closes Save
+		; internally on success; we close + abort on the partial path.
+		If BytesIn = BytesToRead
+			SafeWriteCommit%(DLTemp$, SaveTo$, Save)
+		Else
+			CloseFile(Save)
+			SafeWriteAbort(DLTemp$)
+		EndIf
 		CloseTCPStream(WWW)
 	EndIf
 
