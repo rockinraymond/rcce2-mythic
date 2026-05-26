@@ -180,18 +180,21 @@ Easy first PRs:
 
 ### Generated docs
 
-[`docs/bvm-reference.md`](docs/bvm-reference.md) is generated from
-[`src/Modules/RC_Standard_Invoker.bb`](src/Modules/RC_Standard_Invoker.bb) and
-[`src/Modules/ScriptingCommands.bb`](src/Modules/ScriptingCommands.bb). **Do not edit it by hand.**
-After touching either source file, regenerate the reference:
+Two doc artifacts are generated from source; do not edit by hand. After touching the corresponding source files, regenerate and commit the result alongside your change.
 
-```bash
-./scripts/gen_bvm_reference.sh
-```
+* **BVM scripting reference** — [`docs/bvm-reference.md`](docs/bvm-reference.md) generated from [`src/Modules/RC_Standard_Invoker.bb`](src/Modules/RC_Standard_Invoker.bb) and [`src/Modules/ScriptingCommands.bb`](src/Modules/ScriptingCommands.bb):
+  ```bash
+  ./scripts/gen_bvm_reference.sh
+  ```
 
-And commit the updated `docs/bvm-reference.md` alongside your source change. The script also accepts
-`--check` mode (exits non-zero if the doc is stale) for use in pre-commit hooks or CI; it is not
-yet wired into the GitHub Actions workflow.
+* **Wire-protocol catalog** — [`docs/protocol/index.md`](docs/protocol/index.md) generated from [`src/Modules/Packets.bb`](src/Modules/Packets.bb), [`src/Modules/ServerNet.bb`](src/Modules/ServerNet.bb), and [`src/Modules/ClientNet.bb`](src/Modules/ClientNet.bb):
+  ```bash
+  ./scripts/gen_packet_index.sh
+  ```
+
+Both scripts accept `--check` mode (exit non-zero if the doc is stale) for use in pre-commit hooks or CI; neither is yet wired into the GitHub Actions workflow.
+
+Per-packet detail pages under [`docs/protocol/packets/`](docs/protocol/packets/) are hand-written and incrementally filled. Adding one is a good first PR — pick an under-documented packet from the index table where the "Detail" column shows `—`.
 
 ---
 
