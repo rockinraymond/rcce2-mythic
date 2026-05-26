@@ -237,13 +237,22 @@ End Function
 ; Updates the whole environment
 Function UpdateEnvironment3D()
 
-	; Scripted emitters
-	For SEm.ScriptedEmitter = Each ScriptedEmitter
+	; Scripted emitters.
+	; After-cursor walk: the body Deletes SEm when its lifetime
+	; expires. The original For-Each form intermittently skipped
+	; emitters or crashed on bursts of simultaneous expirations
+	; (multiple emitters scheduled for the same Length will all
+	; trigger on the same tick). Documented in CLAUDE.md (#247).
+	Local SEm.ScriptedEmitter = First ScriptedEmitter
+	Local SEmNext.ScriptedEmitter = Null
+	While SEm <> Null
+		SEmNext = After SEm
 		If MilliSecs() - SEm\StartTime >= SEm\Length
 			RP_KillEmitter(SEm\EN, True, False)
 			Delete SEm
 		EndIf
-	Next
+		SEm = SEmNext
+	Wend
 
 ;Add Animated water to options menu Cysis145
 		; Options are loaded once at startup by LoadGame() in ClientLoaders.bb
