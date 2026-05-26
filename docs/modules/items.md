@@ -82,7 +82,7 @@ The template for one entry in the item catalog. Immutable after `LoadItems`. Fie
 *   `Value`, `Mass` — monetary worth and per-unit weight.
 *   `ThumbnailTexID` — UI icon for the inventory grid.
 *   `MMeshID`, `FMeshID` — gendered mesh IDs (male / female model variants).
-*   `Gubbins[5]` — six per-actor "gubbin" flags activated when this item is equipped (see [Gubbin Tool](gubbintool.md)).
+*   `Gubbins[5]` — six per-actor "gubbin" flags activated when this item is equipped (set via the Gubbin Tool under [src/Tools/](../../src/Tools/)).
 *   `Attributes.Attributes` — default attribute deltas applied when equipped; cloned into each `ItemInstance` on create.
 *   `TakesDamage` — True if using this item decrements `ItemInstance\ItemHealth`; False = indestructible.
 *   `SlotType` — one of the `Slot_*` constants from [Inventories.bb](inventories.md); the equip slot this item lives in.
@@ -198,7 +198,7 @@ Used by [InventoryAdd](inventories.md#FInventoryAdd) to decide whether two stack
 
 **CreateItem.Item()** <a id="FCreateItem"></a>
 
-Return value: A new `Item` template with `ID` assigned to the next free `ItemList` slot, or undefined behaviour if the catalog is full (no out-of-room handling).
+Return value: A new `Item` template with `ID` assigned to the next free `ItemList` slot, or `Null` if `ItemList` is full.
 
 Parameters: None.
 
@@ -324,7 +324,7 @@ Parameters:
 
 *   [Inventories.bb](inventories.md) — slot conventions and item-transfer primitives.
 *   [Logging.bb](logging.md) — `SafeWriteOpen / SafeWriteCommit / ReadBoundedString$` used throughout the load and save paths.
-*   [RCEnet.bb](rcenet.md) — `RCE_StrFromInt$` / `RCE_IntFromStr` wire-encoding helpers used by the `ItemInstance` string format.
+*   [RCEnet.bb](../../src/Modules/RCEnet.bb) — `RCE_StrFromInt$` / `RCE_IntFromStr` wire-encoding helpers used by the `ItemInstance` string format.
 *   [ServerNet.bb](servernet.md) — `P_InventoryUpdate` / `P_ItemScript` handlers that read and write `ItemInstance` records on the wire.
 *   [Actors.bb](actors.md) — `Attributes` type referenced by `Item\Attributes` and `ItemInstance\Attributes`.
 *   [src/Tests/Modules/ItemsTest.bb](../../src/Tests/Modules/ItemsTest.bb) — round-trip serialisation tests and the canonical inline-stub pattern for testing modules that include `Items.bb`.
