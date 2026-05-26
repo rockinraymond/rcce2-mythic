@@ -1944,8 +1944,16 @@ Function UpdateNetwork()
 						Exit
 					EndIf
 				Next
-		        ; If account was not found or was already logged on, return failure
-		        If Exists = False Then RCE_Send(Host, M\FromID, P_StartGame, "N", True)
+		        ; If account was not found or was already logged on, return failure.
+		        ; Pay SHA-256 cost so the no-account / already-logged-on path
+		        ; is timing-indistinguishable from the wrong-password path inside
+		        ; the For loop above (which calls VerifyPassword).
+		        If Exists = False
+		            Offset = 2 + UsernameLen
+		            PwdLen = RCE_IntFromStr(Mid$(M\MessageData$, Offset, 1))
+		            VerifyPassword%("", Mid$(M\MessageData$, Offset + 1, PwdLen))
+		            RCE_Send(Host, M\FromID, P_StartGame, "N", True)
+		        EndIf
 				; (removed) `If (M\FromID = 2) Stop` — a leftover debug trap that
 				; halted the entire server process the first time the peer whose
 				; RakNet connection ID is 2 sent P_StartGame. Trivial remote DoS
@@ -2201,6 +2209,13 @@ Function UpdateNetwork()
 					; as the empty string. Same "P" as wrong-password so the
 					; response doesn't betray the cause.
 					If FoundA = Null Or PwdLen < 1
+						; Pay SHA-256 cost so the no-account / truncated-packet
+						; path is timing-indistinguishable from the wrong-password
+						; path below (which calls VerifyPassword on the real
+						; stored hash). VerifyPassword runs a dummy hash on
+						; empty Stored. Closes the timing oracle PR #264
+						; deferred as a follow-up.
+						VerifyPassword%("", Mid$(M\MessageData$, Offset + 1, PwdLen))
 						LoginAttemptRecord(M\FromID, False)
 						RCE_Send(Host, M\FromID, P_VerifyAccount, "P", True)
 					Else
@@ -2304,7 +2319,14 @@ Function UpdateNetwork()
 				; but an unauthenticated peer could still send P_Change-
 				; Password with any username + any password and (pre-fix)
 				; observe "N" vs "P" to discriminate existence.
-				If Exists = False Then RCE_Send(Host, M\FromID, P_ChangePassword, "P", True)
+				; Also pay SHA-256 cost so timing matches the wrong-password
+				; path in the For loop (closes the no-account timing oracle).
+				If Exists = False
+					Offset = 2 + UsernameLen
+					PwdLen = RCE_IntFromStr(Mid$(M\MessageData$, Offset, 1))
+					VerifyPassword%("", Mid$(M\MessageData$, Offset + 1, PwdLen))
+					RCE_Send(Host, M\FromID, P_ChangePassword, "P", True)
+				EndIf
 
 			; Request to fetch character data
 			Case P_FetchCharacter ; :)
@@ -2411,8 +2433,15 @@ Function UpdateNetwork()
 						Exit
 					EndIf
 				Next
-		        ; If account was not found, return failure
-		        If Exists = False Then RCE_Send(Host, M\FromID, P_FetchCharacter, "N", True)
+		        ; If account was not found, return failure.
+		        ; Pay SHA-256 cost so timing matches the wrong-password path
+		        ; in the For loop (closes the no-account timing oracle).
+		        If Exists = False
+		            Offset = 2 + UsernameLen
+		            PwdLen = RCE_IntFromStr(Mid$(M\MessageData$, Offset, 1))
+		            VerifyPassword%("", Mid$(M\MessageData$, Offset + 1, PwdLen))
+		            RCE_Send(Host, M\FromID, P_FetchCharacter, "N", True)
+		        EndIf
 
 			; New charater creation request
 			Case P_CreateCharacter ; :)
@@ -2601,7 +2630,14 @@ Function UpdateNetwork()
 					EndIf
 				Next
 		        ; If account was not found, return failure
-		        If Exists = False Then RCE_Send(Host, M\FromID, P_CreateCharacter, "N", True)
+		        ; Pay SHA-256 cost on no-account path so timing matches the
+		        ; wrong-password path in the For loop (closes the timing oracle).
+		        If Exists = False
+		            Offset = 2 + UsernameLen
+		            PwdLen = RCE_IntFromStr(Mid$(M\MessageData$, Offset, 1))
+		            VerifyPassword%("", Mid$(M\MessageData$, Offset + 1, PwdLen))
+		            RCE_Send(Host, M\FromID, P_CreateCharacter, "N", True)
+		        EndIf
 				
 			; Request to delete an existing character
 			Case P_DeleteCharacter ; :)
@@ -2664,7 +2700,14 @@ Function UpdateNetwork()
 					EndIf
 				Next
 		        ; If account was not found, return failure
-		        If Exists = False Then RCE_Send(Host, M\FromID, P_DeleteCharacter, "N", True)
+		        ; Pay SHA-256 cost on no-account path so timing matches the
+		        ; wrong-password path in the For loop (closes the timing oracle).
+		        If Exists = False
+		            Offset = 2 + UsernameLen
+		            PwdLen = RCE_IntFromStr(Mid$(M\MessageData$, Offset, 1))
+		            VerifyPassword%("", Mid$(M\MessageData$, Offset + 1, PwdLen))
+		            RCE_Send(Host, M\FromID, P_DeleteCharacter, "N", True)
+		        EndIf
 
 		End Select
 		Delete M

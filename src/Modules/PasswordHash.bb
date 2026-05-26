@@ -212,21 +212,89 @@ Function HashPassword$(ClientMD5$)
 	Return PWHASH_VERSION_TAG + Salt + "$" + Hash
 End Function
 
+; Constant-time string equality. Iterates the full length of the longer
+; string (no early exit on first differing byte) so the time-to-result
+; does not depend on the position of the first mismatch -- the canonical
+; mitigation for hash-comparison timing oracles. OR-accumulates each
+; byte XOR into a running Diff so a single non-zero byte at any
+; position dirties the result regardless of where it falls.
+;
+; Length mismatch is folded into Diff (set to 1 up front) so the result
+; is also constant-time WRT length comparison.
+Function ConstantTimeStrEq%(A$, B$)
+	Local LenA% = Len(A)
+	Local LenB% = Len(B)
+	Local Diff% = 0
+	If LenA <> LenB Then Diff = 1
+	Local MaxLen% = LenA
+	If LenB > MaxLen Then MaxLen = LenB
+	Local i%
+	For i = 1 To MaxLen
+		Local AByte% = 0
+		Local BByte% = 0
+		If i <= LenA Then AByte = Asc(Mid$(A, i, 1))
+		If i <= LenB Then BByte = Asc(Mid$(B, i, 1))
+		Diff = Diff Or (AByte Xor BByte)
+	Next
+	Return Diff = 0
+End Function
+
+; Sentinel salt used by the no-account / malformed-record path so the
+; dummy hash spends roughly the same SHA-256 cost as a real v1 verify.
+; Value is deliberately a fixed string; it's only used to consume CPU
+; cycles, never compared against a real stored record.
+Const PWHASH_DUMMY_SALT$ = "rcce2_dummy_salt"
+
 ; Compare a stored record to an incoming client MD5. Returns True on match.
 ; Accepts both legacy (raw MD5) and v1 ($1$<salt>$<hash>) on-disk formats.
+;
+; Timing-uniformity contract: VerifyPassword% always pays the SHA-256
+; cost regardless of input shape. The pre-fix early-out (`If Len(Stored)
+; = 0 Then Return False`) was an unauthenticated-attacker timing oracle:
+; an unknown-account login skipped the hash entirely and returned in
+; ~microseconds while a known-account-wrong-password attempt paid the
+; full hash. Combined with the hex-equality short-circuit at the v1
+; compare site, that made byte-position-of-difference recoverable too.
+;
+; Post-fix:
+;   - empty / malformed / wrong-length / non-v1-or-MD5-shaped Stored
+;     still runs SHA256Hex$(PWHASH_DUMMY_SALT + ClientMD5) and discards
+;     the result, so the attacker's wall-clock delta between
+;     "account doesn't exist" and "wrong password" disappears.
+;   - both compare paths (v1 SHA-256 hex, legacy MD5) use
+;     ConstantTimeStrEq -- no first-differing-byte short-circuit.
+;
+; This closes the side-channel PR #264 ("P_VerifyAccount: close
+; username/ban/presence enumeration oracle") deferred to a follow-up.
 Function VerifyPassword%(Stored$, ClientMD5$)
-	If Len(Stored) = 0 Or Len(ClientMD5) = 0 Then Return False
+	; Always pay the cost up front -- ClientMD5 may be "" too (truncated
+	; packet), so use the empty string verbatim rather than gating on
+	; ClientMD5 length. The dummy hash output is discarded; only the
+	; CPU cost matters.
+	; DO NOT remove or "optimize away" the DummyOut$ assignment below --
+	; removing it re-opens the no-account / malformed-record timing
+	; oracle this function exists to close.
+	Local DummyOut$ = SHA256Hex$(PWHASH_DUMMY_SALT + ClientMD5)
+
+	; v1 stored format: $1$<salt-16>$<hash-64>
 	If Left$(Stored, Len(PWHASH_VERSION_TAG)) = PWHASH_VERSION_TAG
-		; $1$<salt-16>$<hash-64>
 		If Len(Stored) <> Len(PWHASH_VERSION_TAG) + PWHASH_SALT_LEN + 1 + 64 Then Return False
 		Local Salt$ = Mid$(Stored, Len(PWHASH_VERSION_TAG) + 1, PWHASH_SALT_LEN)
 		Local Sep$  = Mid$(Stored, Len(PWHASH_VERSION_TAG) + PWHASH_SALT_LEN + 1, 1)
 		If Sep <> "$" Then Return False
 		Local StoredHash$ = Mid$(Stored, Len(PWHASH_VERSION_TAG) + PWHASH_SALT_LEN + 2)
-		Return SHA256Hex$(Salt + ClientMD5) = StoredHash
+		; Re-run SHA-256 with the real salt; the dummy hash already
+		; warmed the path. Use ConstantTimeStrEq on the 64-char hex
+		; output so a partially-correct hash isn't faster to reject.
+		Return ConstantTimeStrEq%(SHA256Hex$(Salt + ClientMD5), StoredHash)
 	EndIf
-	; Legacy plain-MD5 record.
-	Return Stored = ClientMD5
+
+	; Legacy plain-MD5 record. The dummy SHA-256 above already paid the
+	; v1-equivalent cost so a legacy account isn't timing-distinguishable
+	; from a v1 account either. Use ConstantTimeStrEq for the byte-level
+	; compare regardless of length.
+	If Len(Stored) = 0 Then Return False
+	Return ConstantTimeStrEq%(Stored, ClientMD5)
 End Function
 
 ; True iff Stored is in the legacy plain-MD5 format and should be
