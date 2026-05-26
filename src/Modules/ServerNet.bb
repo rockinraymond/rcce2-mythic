@@ -1871,6 +1871,16 @@ Function UpdateNetwork()
 
 			; Start game request
 			Case P_StartGame ; :)
+				; Throttle: extends the LoginAttemptOk gate from
+				; P_VerifyAccount to this sibling auth handler. Without it,
+				; an attacker can pump the SHA-256 dummy-hash cost added in
+				; PR #267 at line-rate by sending bogus P_StartGame packets,
+				; dodging the per-FromID throttle. Same canonical "N"
+				; failure code on the throttled path so the throttle isn't
+				; itself an oracle for "is this username registered".
+				If Not LoginAttemptOk(M\FromID)
+					RCE_Send(Host, M\FromID, P_StartGame, "N", True)
+				Else
 				UsernameLen = RCE_IntFromStr(Left$(M\MessageData$, 1))
 				Username$ = Mid$(M\MessageData$, 2, UsernameLen)
 				; Find account
@@ -1903,6 +1913,7 @@ Function UpdateNetwork()
 								Ar.Area = FindArea(A\Character[Number]\Area$)
 								If Ar = Null
 									WriteLog(MainLog, "P_StartGame: character '" + A\Character[Number]\Name$ + "' saved area '" + A\Character[Number]\Area$ + "' not found, refusing login")
+									LoginAttemptRecord(M\FromID, False)
 									RCE_Send(Host, M\FromID, P_StartGame, "N", True)
 									Exists = True : Exit
 								EndIf
@@ -1922,6 +1933,7 @@ Function UpdateNetwork()
 										Pa$ = ""
 									EndIf
 								Next
+								LoginAttemptRecord(M\FromID, True)
 								RCE_Send(Host, M\FromID, P_StartGame, RCE_StrFromInt$(A\Character[Number]\RuntimeID, 2), True)
 								RCE_Send(Host, M\FromID, P_ChatMessage, Chr$(254) + LoginMessage$, True)
 								RCE_Send(Host, M\FromID, P_XPUpdate, "B" + RCE_StrFromInt$(A\Character[Number]\XPBarLevel, 1), True)
@@ -1934,10 +1946,12 @@ Function UpdateNetwork()
 									EndIf
 								Next
 							Else
+						        LoginAttemptRecord(M\FromID, False)
 						        RCE_Send(Host, M\FromID, P_StartGame, "N", True)
 							EndIf
 						; Otherwise return failure
 						Else
+					        LoginAttemptRecord(M\FromID, False)
 					        RCE_Send(Host, M\FromID, P_StartGame, "N", True)
 						EndIf
 						Exists = True
@@ -1952,8 +1966,10 @@ Function UpdateNetwork()
 		            Offset = 2 + UsernameLen
 		            PwdLen = RCE_IntFromStr(Mid$(M\MessageData$, Offset, 1))
 		            VerifyPassword%("", Mid$(M\MessageData$, Offset + 1, PwdLen))
+		            LoginAttemptRecord(M\FromID, False)
 		            RCE_Send(Host, M\FromID, P_StartGame, "N", True)
 		        EndIf
+				EndIf  ; close LoginAttemptOk Else
 				; (removed) `If (M\FromID = 2) Stop` — a leftover debug trap that
 				; halted the entire server process the first time the peer whose
 				; RakNet connection ID is 2 sent P_StartGame. Trivial remote DoS
@@ -2330,6 +2346,10 @@ Function UpdateNetwork()
 
 			; Request to fetch character data
 			Case P_FetchCharacter ; :)
+				; Throttle (see P_StartGame above for rationale).
+				If Not LoginAttemptOk(M\FromID)
+					RCE_Send(Host, M\FromID, P_FetchCharacter, "N", True)
+				Else
 				UsernameLen = RCE_IntFromStr(Left$(M\MessageData$, 1))
 				Username$ = Mid$(M\MessageData$, 2, UsernameLen)
 				; Find account
@@ -2422,11 +2442,14 @@ Function UpdateNetwork()
 								Next
 								If Len(Pa$) > 0 Then SendQueued(Host, M\FromID, P_FetchCharacter, "Q" + Pa$, True)
 								SendQueued(Host, M\FromID, P_FetchCharacter, "F" + RCE_StrFromInt$(Num, 2) + RCE_StrFromInt$(SpellsDone, 2), True)
+								LoginAttemptRecord(M\FromID, True)
 							Else
+						        LoginAttemptRecord(M\FromID, False)
 						        RCE_Send(Host, M\FromID, P_FetchCharacter, "N", True)
 							EndIf
 						; Otherwise return failure
 						Else
+							LoginAttemptRecord(M\FromID, False)
 							RCE_Send(Host, M\FromID, P_FetchCharacter, "N", True)
 						EndIf
 						Exists = True
@@ -2440,11 +2463,17 @@ Function UpdateNetwork()
 		            Offset = 2 + UsernameLen
 		            PwdLen = RCE_IntFromStr(Mid$(M\MessageData$, Offset, 1))
 		            VerifyPassword%("", Mid$(M\MessageData$, Offset + 1, PwdLen))
+		            LoginAttemptRecord(M\FromID, False)
 		            RCE_Send(Host, M\FromID, P_FetchCharacter, "N", True)
 		        EndIf
+				EndIf  ; close LoginAttemptOk Else
 
 			; New charater creation request
 			Case P_CreateCharacter ; :)
+				; Throttle (see P_StartGame above for rationale).
+				If Not LoginAttemptOk(M\FromID)
+					RCE_Send(Host, M\FromID, P_CreateCharacter, "N", True)
+				Else
 				UsernameLen = RCE_IntFromStr(Left$(M\MessageData$, 1))
 				Username$ = Mid$(M\MessageData$, 2, UsernameLen)
 				; Find account
@@ -2612,6 +2641,7 @@ Function UpdateNetwork()
 									Else
 										SaveAccounts()
 							        EndIf
+							        LoginAttemptRecord(M\FromID, True)
 							        RCE_Send(Host, M\FromID, P_CreateCharacter, "Y", True)
 								; If there are no free slots, reply with failure
 								Else
@@ -2623,6 +2653,7 @@ Function UpdateNetwork()
 							EndIf
 						; If password is incorrect, reply with failure
 						Else
+					        LoginAttemptRecord(M\FromID, False)
 					        RCE_Send(Host, M\FromID, P_CreateCharacter, "N", True)
 						EndIf
 						Exists = True
@@ -2636,11 +2667,17 @@ Function UpdateNetwork()
 		            Offset = 2 + UsernameLen
 		            PwdLen = RCE_IntFromStr(Mid$(M\MessageData$, Offset, 1))
 		            VerifyPassword%("", Mid$(M\MessageData$, Offset + 1, PwdLen))
+		            LoginAttemptRecord(M\FromID, False)
 		            RCE_Send(Host, M\FromID, P_CreateCharacter, "N", True)
 		        EndIf
-				
+				EndIf  ; close LoginAttemptOk Else
+
 			; Request to delete an existing character
 			Case P_DeleteCharacter ; :)
+				; Throttle (see P_StartGame above for rationale).
+				If Not LoginAttemptOk(M\FromID)
+					RCE_Send(Host, M\FromID, P_DeleteCharacter, "N", True)
+				Else
 				UsernameLen = RCE_IntFromStr(Left$(M\MessageData$, 1))
 				Username$ = Mid$(M\MessageData$, 2, UsernameLen)
 				; Find account
@@ -2687,12 +2724,14 @@ Function UpdateNetwork()
 										Pa$ = Pa$ + RCE_StrFromInt$(A\Character[i]\BodyTex, 1)
 									EndIf
 								Next
+								LoginAttemptRecord(M\FromID, True)
 								RCE_Send(Host, M\FromID, P_DeleteCharacter, Pa$, True)
 							Else
 						        RCE_Send(Host, M\FromID, P_DeleteCharacter, "N", True)
 							EndIf
 						; Otherwise return failure
 						Else
+					        LoginAttemptRecord(M\FromID, False)
 					        RCE_Send(Host, M\FromID, P_DeleteCharacter, "N", True)
 						EndIf
 						Exists = True
@@ -2706,8 +2745,10 @@ Function UpdateNetwork()
 		            Offset = 2 + UsernameLen
 		            PwdLen = RCE_IntFromStr(Mid$(M\MessageData$, Offset, 1))
 		            VerifyPassword%("", Mid$(M\MessageData$, Offset + 1, PwdLen))
+		            LoginAttemptRecord(M\FromID, False)
 		            RCE_Send(Host, M\FromID, P_DeleteCharacter, "N", True)
 		        EndIf
+				EndIf  ; close LoginAttemptOk Else
 
 		End Select
 		Delete M
