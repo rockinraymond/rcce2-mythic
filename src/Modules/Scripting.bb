@@ -131,6 +131,20 @@ End Function
 ; ever bump the ceiling.
 Const ScriptPendingMax = 2048
 
+; Returns True iff a ScriptSource with this name is registered.
+; Used by the chat-command Default branch to detect whether to hand off
+; an unknown command to the project's "In-game Commands" user script,
+; or surface a "Unknown command" message to the player. ThreadScript
+; itself logs and silently returns on a missing source, so callers
+; that want to fall back to a different response must check first.
+Function ScriptExists%(Name$)
+	Local NameU$ = Upper(Name$)
+	For SS.ScriptSource = Each ScriptSource
+		If Upper(SS\Name$) = NameU Then Return True
+	Next
+	Return False
+End Function
+
 Function ThreadScript(Name$, Func$, Actor%, CActor%, Param$ = "", Privileged% = 0)
 	; This function only adds the scripts to the ScriptInstance type and maps the module
 	Local Found = False

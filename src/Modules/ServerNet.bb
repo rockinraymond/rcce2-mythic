@@ -14,6 +14,100 @@ Type QueuedPacket
 	Field PreviousSentTime
 End Type
 
+; Sends the in-game /help output to the requesting player. Groups the
+; 30 built-in slash commands by category (Chat, Party, Social, Info,
+; DM-only) and filters DM-only entries when the caller isn't a DM.
+;
+; The Description text is hard-coded English for the moment -- the
+; existing LanguageString$ table is line-indexed and adding new IDs
+; for help-text strings requires touching Language.txt. Localising
+; the help payload is a follow-up; the layout below is designed so
+; a single InitChatHelpStrings() call can replace the literals when
+; the localization slots exist.
+;
+; Each line is sent as a separate P_ChatMessage with the Chr$(254)
+; "system message" prefix the rest of the dispatcher uses for
+; server-originated chat (matches /time, /season, etc.).
+Function SendChatHelp(AI.ActorInstance, Topic$)
+	Local IsDM% = False
+	A.Account = Object.Account(AI\Account)
+	If A <> Null And A\IsDM = True Then IsDM = True
+
+	; Detail mode: /help <command>
+	Local T$ = Upper$(Trim$(Topic$))
+	If Len(T) > 0
+		SendChatHelpDetail(AI, T, IsDM)
+		Return
+	EndIf
+
+	; Header
+	RCE_Send(Host, AI\RNID, P_ChatMessage, Chr$(254) + "--- Available slash commands ---", True)
+	RCE_Send(Host, AI\RNID, P_ChatMessage, Chr$(254) + "Use /help <command> for details on a specific command.", True)
+
+	; Chat
+	RCE_Send(Host, AI\RNID, P_ChatMessage, Chr$(254) + "Chat: /me /yell /pm /g /p", True)
+	; Party
+	RCE_Send(Host, AI\RNID, P_ChatMessage, Chr$(254) + "Party: /invite /accept /leave /pet", True)
+	; Social
+	RCE_Send(Host, AI\RNID, P_ChatMessage, Chr$(254) + "Social: /ignore /unignore /players /allplayers /trade", True)
+	; Info
+	RCE_Send(Host, AI\RNID, P_ChatMessage, Chr$(254) + "Info: /time /date /season /warp", True)
+
+	; DM commands -- only listed for DMs
+	If IsDM = True
+		RCE_Send(Host, AI\RNID, P_ChatMessage, Chr$(254) + "DM-only: /kick /xp /gold /setattribute /setattributemax /script /gm /warpother /ability /give /weather /netdump", True)
+	EndIf
+End Function
+
+; Per-command detail for /help <command>. Centralised here so the
+; command-name registry is the only thing that needs touching when a
+; command is added.
+Function SendChatHelpDetail(AI.ActorInstance, T$, IsDM%)
+	Local Line$ = ""
+	; Built-in non-DM commands
+	If T = "ME" Then Line = "/me <action> -- emote action in current area"
+	If T = "YELL" Then Line = "/yell <text> -- shout to your entire area"
+	If T = "PM" Then Line = "/pm <player>,<text> -- private message"
+	If T = "G" Then Line = "/g <text> -- guild chat"
+	If T = "P" Then Line = "/p <text> -- party chat"
+	If T = "INVITE" Then Line = "/invite <player> -- invite player to party"
+	If T = "ACCEPT" Then Line = "/accept -- accept a pending party invite"
+	If T = "LEAVE" Then Line = "/leave -- leave current party"
+	If T = "PET" Then Line = "/pet <name>,<command>[,<params>] -- command a pet (or 'all')"
+	If T = "IGNORE" Then Line = "/ignore <player> -- silence a player's chat"
+	If T = "UNIGNORE" Then Line = "/unignore <player> -- re-enable a player's chat"
+	If T = "PLAYERS" Then Line = "/players -- list players in your area"
+	If T = "ALLPLAYERS" Then Line = "/allplayers -- list all online players"
+	If T = "TRADE" Then Line = "/trade <player> -- open trade with player"
+	If T = "TIME" Then Line = "/time -- show in-world clock time"
+	If T = "DATE" Then Line = "/date -- show in-world date"
+	If T = "SEASON" Then Line = "/season -- show current season"
+	If T = "WARP" Then Line = "/warp <area>[,<x>,<y>,<z>] -- warp to an area"
+	If T = "HELP" Or T = "?" Then Line = "/help [<command>] -- list commands, or detail on one"
+
+	; DM-only commands -- only describe when caller has DM rights
+	If IsDM = True
+		If T = "KICK" Then Line = "/kick <player> -- disconnect a player"
+		If T = "XP" Then Line = "/xp <player>,<amount> -- grant XP"
+		If T = "GOLD" Then Line = "/gold <player>,<amount> -- grant gold"
+		If T = "SETATTRIBUTE" Then Line = "/setattribute <player>,<attr>,<value> -- set attribute"
+		If T = "SETATTRIBUTEMAX" Then Line = "/setattributemax <player>,<attr>,<value> -- set max attribute"
+		If T = "SCRIPT" Then Line = "/script <name>[,<params>] -- run a script as self"
+		If T = "GM" Then Line = "/gm <text> -- broadcast as GM to all players"
+		If T = "WARPOTHER" Then Line = "/warpother <player>,<area>[,<x>,<y>,<z>] -- warp another player"
+		If T = "ABILITY" Then Line = "/ability <player>,<ability> -- grant ability"
+		If T = "GIVE" Then Line = "/give <player>,<item>[,<amount>] -- grant item"
+		If T = "WEATHER" Then Line = "/weather <type> -- set weather"
+		If T = "NETDUMP" Then Line = "/netdump -- start a network packet log"
+	EndIf
+
+	If Len(Line) = 0
+		RCE_Send(Host, AI\RNID, P_ChatMessage, Chr$(254) + "No help available for /" + Lower$(T) + ".  Type /help for a list.", True)
+	Else
+		RCE_Send(Host, AI\RNID, P_ChatMessage, Chr$(254) + Line, True)
+	EndIf
+End Function
+
 ; Queues a packet (queued packets are delayed so that for each destination, only one is sent per 12 milliseconds)
 Function SendQueued(Connection, Destination, PacketType, Pa$, ReliableFlag = False, PlayerFrom = 0)
 
@@ -560,8 +654,25 @@ Function UpdateNetwork()
 							Case LanguageString$(LS_SCSeason)
 								ml = Len(Chr$(254) + LanguageString$(LS_Season) + " " + SeasonName$(GetSeason()))
 								RCE_Send(Host, AI\RNID, P_ChatMessage, Chr$(254) + LanguageString$(LS_Season) + " " + SeasonName$(GetSeason()), True)
+							; In-game discoverability for the 30-command slash
+							; system. English literals ("HELP" and "?") are
+							; intentional pending the LS_SCHelp localization
+							; entry -- the existing LanguageString$ table is
+							; line-numbered and adding a new ID requires
+							; touching Language.txt; deferred to a follow-up.
+							Case "HELP", "?"
+								SendChatHelp(AI, Params$)
 							Default
-								ThreadScript("In-game Commands", Command$, Handle(AI), 0, Params$)
+								; Unknown command. Hand off to the project's
+								; "In-game Commands" user script if it exists;
+								; otherwise tell the player the command isn't
+								; recognised. Without this, an unknown command
+								; silently no-op'd and players had no signal.
+								If ScriptExists%("In-game Commands") = True
+									ThreadScript("In-game Commands", Command$, Handle(AI), 0, Params$)
+								Else
+									RCE_Send(Host, AI\RNID, P_ChatMessage, Chr$(254) + "Unknown command: /" + Lower$(Command$) + ".  Type /help for a list.", True)
+								EndIf
 						End Select
 					; General chat - forward to other people in same area
 					Else
