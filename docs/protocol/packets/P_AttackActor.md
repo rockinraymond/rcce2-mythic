@@ -28,7 +28,7 @@ A fixed 2-byte payload, no sub-code. The client tags the target by `RuntimeID`; 
 |---|---|---|---|
 | `"H"` | Attacker (`A1\RNID`) | `1B sub + 2B Victim\RuntimeID + 2B Damage+1 + 1B DamageType` | "I hit them" — for the attacker's HUD (damage numbers, attack animation). |
 | `"Y"` | Victim (`A2\RNID`) | `1B sub + 2B Attacker\RuntimeID + 2B Damage+1 + 1B DamageType` | "They hit me" — for the victim's HUD (incoming damage, parry/hit animation). |
-| `"O"` | All other players in the same area | `1B sub + 2B Attacker\RuntimeID + 2B Victim\RuntimeID` (no damage payload) | Observer swing animation. Observers re-sync HP via the next `P_StatUpdate`, so the damage isn't replicated on this channel. |
+| `"O"` | All other players in the same area | `1B sub + 2B Attacker\RuntimeID + 2B Victim\RuntimeID` (no damage payload) | Observer swing animation. Observers re-sync HP via the next `P_StatUpdate`, so the damage isn't replicated on this channel. Subtle: the ClientNet "Else" branch doesn't decode a fresh `Damage` from the wire — in non-Strict `UpdateNetwork()`, `Damage` is an implicit function-scope variable that persists across `Select Case` iterations within one call, so it reads whatever the prior `H`/`Y` packet (or zero, on the first call) left there. Current behaviour is benign because `P_StatUpdate` re-syncs HP authoritatively. |
 
 **Damage+1 encoding:** The 2-byte `Damage` field carries `Damage + 1` so a value of 0 on the wire means "miss" (rendered as a parry animation). The wire field can be negative (signed 2-byte = -32768..32767), which lets the server signal a miss explicitly. Client subtracts 1 to recover the actual damage at [ClientNet.bb:1117](../../../src/Modules/ClientNet.bb#L1117) / [:1145](../../../src/Modules/ClientNet.bb#L1145).
 
@@ -38,7 +38,7 @@ A fixed 2-byte payload, no sub-code. The client tags the target by `RuntimeID`; 
 
 ### C → S handler ([ServerNet.bb:1548-1571](../../../src/Modules/ServerNet.bb#L1548))
 
-Five gates, all required to fire:
+Six gates, all required to fire:
 
 1. **Sender validity**: `AI <> Null` (FindActorInstanceFromRNID resolves the sender).
 2. **Packet shape**: `Len(M\MessageData$) = 2`.
