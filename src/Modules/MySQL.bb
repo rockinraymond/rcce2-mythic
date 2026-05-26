@@ -641,7 +641,16 @@ Function My_LoadActorInstance.ActorInstance(ActID, Q.Questlog, C.ActionBarData, 
 	A\DeathScript$		= ReadSQLField(Row, "dscript")
 	A\Reputation		= ReadSQLField(Row, "rep")
 	A\Gold				= ReadSQLField(Row, "gold")
-	A\NumberOfslaves	= ReadSQLField(Row, "slaves")
+	A\NumberOfSlaves	= ReadSQLField(Row, "slaves")
+	; SlaveLink (called per slave-row in the loop below) increments
+	; NumberOfSlaves on each call, so the saved count would double-
+	; count if left in place. Reset to 0 here and let SlaveLink rebuild
+	; the count from the actual rows that load successfully -- this
+	; also catches the case where a slave row references a missing
+	; actor and My_LoadActorInstance returns Null (the SlaveLink call
+	; is then skipped via the `If Slave <> Null` guard, and the count
+	; correctly reflects only the slaves that actually loaded).
+	A\NumberOfSlaves	= 0
 	A\HomeFaction		= ReadSQLField(Row, "homefaction")
 	; FactionNames$ / FactionDefaultRatings are Dim'd (99) and
 	; FactionRatings is Field[99]. A corrupt SQL row could carry an

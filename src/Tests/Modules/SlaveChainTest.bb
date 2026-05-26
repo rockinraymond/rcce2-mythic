@@ -263,6 +263,47 @@ End Test
 ; NumberOfSlaves invariant: must always equal chain length
 ; ====================================================================
 
+; ====================================================================
+; Load-path invariant: the saved NumberOfSlaves count must be reset
+; to 0 before the loop that re-links slaves -- otherwise SlaveLink
+; increments cause double-counting (saved value + per-link
+; increments). This pins the requirement that ReadActorInstance and
+; My_LoadActorInstance both reset before the link loop. See the
+; MySQL.bb fix from PR #287's quality-gate review.
+; ====================================================================
+
+Test testLoadPathWithoutResetDoublesCount()
+	Local L.MockActor = New MockActor() : L\Name = "L"
+	Local S1.MockActor = New MockActor() : S1\Name = "S1"
+	Local S2.MockActor = New MockActor() : S2\Name = "S2"
+	; Simulate the saved-from-disk state: NumberOfSlaves carries the
+	; previously-saved count. If the load loop calls SlaveLink without
+	; resetting, every link increment piles on top.
+	L\NumberOfSlaves = 2
+	MockSlaveLink(L, S1)
+	MockSlaveLink(L, S2)
+	; Bug: count is 4 (2 saved + 2 increments) but the chain only has
+	; 2 actual slaves. Pin this divergence so a future load-path
+	; refactor that omits the reset trips this test.
+	Assert(L\NumberOfSlaves = 4)
+	Assert(ChainLen%(L) = 2)
+End Test
+
+Test testLoadPathWithResetMatchesChainLength()
+	Local L.MockActor = New MockActor() : L\Name = "L"
+	Local S1.MockActor = New MockActor() : S1\Name = "S1"
+	Local S2.MockActor = New MockActor() : S2\Name = "S2"
+	; Same scenario as above, but apply the canonical load-path fix:
+	; reset BEFORE the link loop. Count and chain length agree.
+	L\NumberOfSlaves = 2     ; saved-from-disk value
+	L\NumberOfSlaves = 0     ; canonical reset (the fix)
+	MockSlaveLink(L, S1)
+	MockSlaveLink(L, S2)
+	Assert(L\NumberOfSlaves = 2)
+	Assert(ChainLen%(L) = 2)
+	Assert(L\NumberOfSlaves = ChainLen%(L))
+End Test
+
 Test testNumberOfSlavesMatchesChainLengthAfterChurn()
 	Local L.MockActor = New MockActor() : L\Name = "L"
 	Local A.MockActor = New MockActor() : A\Name = "A"

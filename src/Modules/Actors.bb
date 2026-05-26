@@ -113,10 +113,11 @@ Type ActorInstance
 	; (Actors.bb's WriteActorInstance + FreeActorInstanceSlaves,
 	; GameServer.bb's pet-aggro broadcast, MySQL.bb's My_SaveActorInstance,
 	; ServerNet.bb's /pet command + inventory pet-validation walk).
-	; Maintained by SlaveLink / SlaveUnlink helpers and at the four
-	; sites that mutate \Leader: load-from-stream / load-from-DB /
-	; BVM_BREAKLINK / BVM_SETLEADER. FreeActorInstance unlinks
-	; defensively.
+	; Maintained by SlaveLink / SlaveUnlink helpers and at the three
+	; sites that mutate \Leader: load-from-stream (Actors.bb's
+	; ReadActorInstance), load-from-DB (MySQL.bb's
+	; My_LoadActorInstance), and BVM_SETLEADER (handles both
+	; assignment and clearing). FreeActorInstance unlinks defensively.
 	Field FirstSlave.ActorInstance
 	Field NextSlave.ActorInstance
 	Field X#, Y#, Z#
@@ -745,18 +746,17 @@ End Function
 
 ; Frees all the slaves of an actor instance (RECURSIVE)
 ;
-; Restart-on-Delete cursor pattern: Blitz3D's `For X = Each Type`
-; iterator advances via the deleted element's "next" pointer on
-; each Next, so calling FreeActorInstance(A2) inside the loop body
-; corrupts the cursor for the next iteration. The recursion makes
-; the After-cursor walk used in PausedScript cleanup insufficient
-; (a recursive call can free an actor that's after the outer
-; cursor's captured A2Next).
+; Head-capture pattern: each iteration reads A\FirstSlave fresh,
+; recursively frees the child's slaves, then calls FreeActorInstance
+; which SlaveUnlinks the child from A's chain (mutating A\FirstSlave).
+; The next iteration's read picks up the new head. Safe because slave
+; chains are per-leader and disjoint: the recursive call into Child's
+; own FreeActorInstanceSlaves can only mutate Child's chain, never A's.
 ;
-; Restart the For loop after every free instead. O(n*slaves) but
-; the iteration cost is small (Leader comparison) and slaves are
-; usually 1-10 per leader. The outer loop terminates as soon as
-; the search completes without finding any remaining slaves.
+; Replaces the earlier For-Each + Restart-on-Delete pattern, which was
+; needed when the walk was over the global ActorInstance list filtered
+; by Leader; the chain walk doesn't need restart because the chain
+; mutation is the natural termination condition.
 Function FreeActorInstanceSlaves(A.ActorInstance)
 
 	; Walk A's FirstSlave chain. Body recursively frees nested
