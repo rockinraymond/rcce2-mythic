@@ -1957,6 +1957,12 @@ Function UpdateNetwork()
 						EndIf
 					Next
 					LeaveParty(AI)
+					; Clear the ActorByRNID index BEFORE zeroing AI\RNID so
+					; we can still read the slot we need to clear. Same
+					; defensive `= AI` check FreeActorInstance uses.
+					If AI\RNID > 0 And AI\RNID <= MaxRNID
+						If ActorByRNID(AI\RNID) = AI Then ActorByRNID(AI\RNID) = Null
+					EndIf
 					AI\RNID = 0
 					If AI\RuntimeID > -1
 						If RuntimeIDList(AI\RuntimeID) = AI Then RuntimeIDList(AI\RuntimeID) = Null
@@ -2086,6 +2092,15 @@ Function UpdateNetwork()
 								; Set his status to in game and put him in his area
 								SetLoginStatus(A, Number)
 								A\Character[Number]\RNID = M\FromID
+								; Populate the O(1) sender-resolution index.
+								; Bounds-checked because M\FromID came off the
+								; wire (technically already validated by
+								; RCE_StartHost's 5000-player cap, but defensive
+								; here too -- belt and suspenders for a
+								; long-lived global array).
+								If M\FromID > 0 And M\FromID <= MaxRNID
+									ActorByRNID(M\FromID) = A\Character[Number]
+								EndIf
 								AssignRuntimeID(A\Character[Number])
 								SetArea(A\Character[Number], Ar, 0, -1, -1, A\Character[Number]\X#, A\Character[Number]\Y#, A\Character[Number]\Z#)
 								; Run login script
