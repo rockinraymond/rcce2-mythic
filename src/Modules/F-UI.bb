@@ -3562,14 +3562,28 @@ Function FUI_SendMessage$( ID, Message, Param1$="", Param2$="" )
 					EndIf
 				Next
 			Case M_RESET
-				For lsti.ListBoxItem = Each ListBoxItem
-					If lsti\Owner = lst
-						FreeEntity lsti\IconMesh
-						FreeEntity lsti\Mesh
-						Delete lsti
-;						FUI_DeleteGadget Handle( lsti )
+				; After-cursor walk: the body Deletes the iter, which
+				; would corrupt the For-Each cursor on the next
+				; iteration. A listbox with multiple items would Delete
+				; the first match and either skip the rest (orphan
+				; ListBoxItems leak) or crash on freed-next-pointer
+				; deref. Documented in CLAUDE.md (#247).
+				; Local renamed to lstiR / lstiRNext to avoid collision
+				; with the implicitly-declared lsti from sibling
+				; `For lsti.ListBoxItem = Each ListBoxItem` loops at
+				; the function scope above.
+				Local lstiR.ListBoxItem = First ListBoxItem
+				Local lstiRNext.ListBoxItem = Null
+				While lstiR <> Null
+					lstiRNext = After lstiR
+					If lstiR\Owner = lst
+						FreeEntity lstiR\IconMesh
+						FreeEntity lstiR\Mesh
+						Delete lstiR
+;						FUI_DeleteGadget Handle( lstiR )
 					EndIf
-				Next
+					lstiR = lstiRNext
+				Wend
 				lst\CY = 0
 			Case M_ENABLE
 				FUI_EnableGadget Handle( lst )
