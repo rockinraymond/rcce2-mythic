@@ -185,7 +185,14 @@ Function UpdateFiles()
 	While Done = False
 		Delay 10
 		If KeyHit(1) Then RCE_Disconnect() : End
-		For M.RCE_Message = Each RCE_Message
+		; After-cursor walk: the trailing Delete M (and the inner
+		; Done = True : Exit branch) would corrupt a For-Each cursor when
+		; multiple RCE_Messages are queued; the next Next would step from
+		; the freed M's next pointer. Walk explicitly via First/After.
+		Local M.RCE_Message = First RCE_Message
+		Local MNext.RCE_Message = Null
+		While M <> Null
+			MNext = After M
 			If M\MessageType = P_FetchUpdateFiles
 				Pa$ = M\MessageData$
 				Offset = 1
@@ -233,10 +240,11 @@ Function UpdateFiles()
 				OnLostConnection()
 			EndIf
 			Delete M
-		Next
+			M = MNext
+		Wend
 		RCE_Update()
 		RCE_CreateMessages()
-		
+
 		GY_Update()
 		UpdateWorld()
 		RenderWorld()
@@ -803,7 +811,13 @@ Function LogIn()
 			While Done = False
 				Delay 10
 				If KeyHit(1) Then RCE_Disconnect() : End
-				For M.RCE_Message = Each RCE_Message
+				; After-cursor walk: trailing Delete M during For-Each would
+				; corrupt the cursor on the next step when multiple messages
+				; are queued (RCE_CreateMessages fans out everything pending).
+				Local M.RCE_Message = First RCE_Message
+				Local MNext.RCE_Message = Null
+				While M <> Null
+					MNext = After M
 
 					If M\MessageType = P_VerifyAccount
 						If Left$(M\MessageData$, 1) = "N"
@@ -822,7 +836,8 @@ Function LogIn()
 						OnLostConnection()
 					EndIf
 					Delete M
-				Next
+					M = MNext
+				Wend
 				
 			
 				RCE_Update()
@@ -854,7 +869,13 @@ Function LogIn()
 				While Done = False
 					Delay 10
 					If KeyHit(1) Then RCE_Disconnect() : End
-					For M.RCE_Message = Each RCE_Message
+					; After-cursor walk (M / MNext declared above at first site).
+					; P_FetchActors streams many actor/item blocks per tick; each
+					; internal Delete M without an Exit would otherwise corrupt
+					; the For-Each cursor and silently skip subsequent blocks.
+					M = First RCE_Message
+					While M <> Null
+						MNext = After M
 						If M\MessageType = P_FetchActors
 							Pa$ = M\MessageData$
 							; Attributes block
@@ -1098,18 +1119,19 @@ Function LogIn()
 						ElseIf M\MessageType = RN_HostHasLeft Or M\MessageType = RN_Disconnected
 							OnLostConnection()
 						EndIf
-					Next
-					
+						M = MNext
+					Wend
+
 					RCE_Update()
 					RCE_CreateMessages()
-					
+
 					GY_Update()
 					UpdateWorld()
 					RenderWorld()
 					Flip(VSync)
 				Wend
-	
-	
+
+
 				; Clear window and exit
 				
 				FreeEntity(Background)
@@ -1162,7 +1184,10 @@ Function LogIn()
 			While Done = False
 				Delay 10
 				If KeyHit(1) Then RCE_Disconnect() : End
-				For M.RCE_Message = Each RCE_Message
+				; After-cursor walk (M / MNext declared above at first site).
+				M = First RCE_Message
+				While M <> Null
+					MNext = After M
 					If M\MessageType = P_CreateAccount
 						If M\MessageData$ = "Y" Then Result = True Else Result = False
 						Delete M : Done = True : Exit
@@ -1170,7 +1195,8 @@ Function LogIn()
 						OnLostConnection()
 					EndIf
 					Delete M
-				Next
+					M = MNext
+				Wend
 				
 				RCE_Update()
 				RCE_CreateMessages()
@@ -1191,14 +1217,18 @@ Function LogIn()
 		EndIf
 
 		; Check connection is still alive
-		For M.RCE_Message = Each RCE_Message
+		; After-cursor walk (M / MNext declared above at first site).
+		M = First RCE_Message
+		While M <> Null
+			MNext = After M
 			Select M\MessageType
 				Case RN_Disconnected, RN_HostHasLeft
 					OnLostConnection()
 			End Select
 			Delete M
-		Next
-		
+			M = MNext
+		Wend
+
 
 ;-------------------------------
 ;OPTIONS
@@ -1714,7 +1744,13 @@ Function CharSelect()
 				Done = False
 				While Done = False
 				;	Delay 10
-					For M.RCE_Message = Each RCE_Message
+					; After-cursor walk: the trailing Delete M (and the
+					; Goto-out branch) would corrupt the For-Each cursor on
+					; the next step when multiple messages are queued.
+					Local M.RCE_Message = First RCE_Message
+					Local MNext.RCE_Message = Null
+					While M <> Null
+						MNext = After M
 						If M\MessageType = P_DeleteCharacter
 							CharList$ = M\MessageData$
 							Delete M
@@ -1726,15 +1762,16 @@ Function CharSelect()
 							If PreviewA <> Null Then SafeFreeActorInstance(PreviewA)
 							PreviewA = Null
 							setup = False
-							
-							
-							
+
+
+
 							Goto RestartCharSelection
 						ElseIf M\MessageType = RN_HostHasLeft Or M\MessageType = RN_Disconnected
 							OnLostConnection()
 						EndIf
 						Delete M
-					Next
+						M = MNext
+					Wend
 										
 					RCE_Update()
 					RCE_CreateMessages()
@@ -1802,7 +1839,12 @@ Function CharSelect()
 			Done = False
 			While Done = False
 				Delay 10
-				For M.RCE_Message = Each RCE_Message
+				; After-cursor walk (M / MNext declared above at first site).
+				; P_FetchCharacter streams many blocks in one tick -- iterator
+				; corruption here would silently skip character data on login.
+				M = First RCE_Message
+				While M <> Null
+					MNext = After M
 					If M\MessageType = P_FetchCharacter
 						; Character information
 						If Left$(M\MessageData$, 1) = "C"
@@ -1918,11 +1960,12 @@ Function CharSelect()
 						OnLostConnection()
 						Delete M
 					EndIf
-				Next
-				
+					M = MNext
+				Wend
+
 				RCE_Update()
 				RCE_CreateMessages()
-				
+
 				GY_Update()
 				UpdateWorld(Delta#)
 				RenderWorld()
@@ -2014,18 +2057,22 @@ Function CharSelect()
 		EndIf		
 
 		; Check connection is still alive
-		For M.RCE_Message = Each RCE_Message
+		; After-cursor walk (M / MNext declared above at first site).
+		M = First RCE_Message
+		While M <> Null
+			MNext = After M
 			Select M\MessageType
 				Case RN_Disconnected, RN_HostHasLeft
 					OnLostConnection()
 			End Select
 			Delete M
-		Next
+			M = MNext
+		Wend
 
 		; Update everything
 		RCE_Update()
 		RCE_CreateMessages()
-		
+
 		GY_Update()
 		RP_Update()
 		UpdateWorld(delta#)
@@ -2313,7 +2360,13 @@ Function CreateChar()
 					Done = False : Result = 0
 					While Done = False
 						Delay 10
-						For M.RCE_Message = Each RCE_Message
+						; After-cursor walk: trailing Delete M during For-Each
+						; would corrupt the cursor on the next step when
+						; multiple messages are queued.
+						Local M.RCE_Message = First RCE_Message
+						Local MNext.RCE_Message = Null
+						While M <> Null
+							MNext = After M
 							If M\MessageType = P_CreateCharacter
 								If M\MessageData$ = "Y"
 									Result = 2
@@ -2325,7 +2378,8 @@ Function CreateChar()
 								OnLostConnection()
 							EndIf
 							Delete(M)
-						Next
+							M = MNext
+						Wend
 
 						RCE_Update()
 						RCE_CreateMessages()
@@ -2678,14 +2732,18 @@ Function CreateChar()
        PointEntity Cam, GPP 
        MoveEntity Cam, 10.0, 0.0, 0.0 
 
-       ; Check connection is still alive 
-       For M.RCE_Message = Each RCE_Message 
-          Select M\MessageType 
-             Case RN_Disconnected, RN_HostHasLeft 
-                OnLostConnection() 
-          End Select 
-          Delete M 
-       Next
+       ; Check connection is still alive
+       ; After-cursor walk (M / MNext declared above at first site).
+       M = First RCE_Message
+       While M <> Null
+          MNext = After M
+          Select M\MessageType
+             Case RN_Disconnected, RN_HostHasLeft
+                OnLostConnection()
+          End Select
+          Delete M
+          M = MNext
+       Wend
 
 		; Update everything
 		RCE_Update()
