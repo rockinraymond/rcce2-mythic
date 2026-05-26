@@ -26,6 +26,13 @@ Type Area
 	Field Gravity
 	; Track instances
 	Field Instances.AreaInstance[99]
+	; Head of this area's per-Area ServerWater chain. The global
+	; `For Each ServerWater` collection still owns every water record
+	; (creation / Delete go through Each); this field is an O(1)-lookup
+	; index into the subset belonging to this Area, used by the
+	; per-tick underwater-damage check in GameServer.bb to avoid
+	; walking the entire global list once per actor.
+	Field FirstWater.ServerWater
 End Type
 
 ; Water areas for damaging things
@@ -34,6 +41,12 @@ Type ServerWater
 	Field X#, Y#, Z#
 	Field Width#, Depth#
 	Field Damage, DamageType
+	; Next link in Area\FirstWater chain. Maintained at allocation
+	; (ServerLoadArea below). Becomes dangling when the owning Area
+	; is deleted (ServerUnloadArea Deletes both the chain heads and
+	; every linked ServerWater in a single call, so no caller can
+	; observe a stale NextWater pointer).
+	Field NextWater.ServerWater
 End Type
 
 ; Each area instance may have up to 500 player owned items of scenery (e.g. chests, doors, etc.) {##}
@@ -249,6 +262,14 @@ Function ServerLoadArea.Area(Name$)
 			; SafeZone-damage loop (GameServer.bb ~773) indexes
 			; A\Resistances[SW\DamageType].
 			If W\DamageType < 0 Or W\DamageType > 19 Then W\DamageType = 0
+			; Link into A\FirstWater chain so the per-tick underwater
+			; check in GameServer.bb's UpdateActorInstances doesn't have
+			; to filter every global ServerWater by `If SW\Area = A`.
+			; Head-insert is fine -- the chain order doesn't affect
+			; semantics (the underwater check Exits on the first match
+			; and the SaveArea path still walks Each ServerWater).
+			W\NextWater = A\FirstWater
+			A\FirstWater = W
 		Next
 
 	CloseFile(F)
