@@ -152,8 +152,18 @@ End Function
 ; Closes a log file
 Function StopLog(LogHandle)
 
+	; Exit immediately after the matching Delete -- For-Each
+	; iteration with a Delete in the body corrupts the cursor
+	; (documented in CLAUDE.md, #247). Each LogHandle has at
+	; most one matching LogFile, so the loop should never need
+	; to continue after the Delete; the original `Next` was a
+	; latent crash waiting for a future caller that might
+	; re-enter the loop body before the Delete settled.
 	For L.LogFile = Each LogFile
-		If L\File = LogHandle Then Delete L
+		If L\File = LogHandle
+			Delete L
+			Exit
+		EndIf
 	Next
 	CloseFile(LogHandle)
 
