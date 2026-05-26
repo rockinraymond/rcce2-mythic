@@ -1653,16 +1653,30 @@ Function UpdateNetwork()
 					If OldAreaName$ <> "" Then Save_Radar_Fog(RadarPath$ + Me\Name$ + "-" + OldAreaName$ + ".rdr")
 
 					; Remove old actor instances
-					For A.ActorInstance = Each ActorInstance
-						If A <> Me Then SafeFreeActorInstance(A)
-					Next
+					; After-cursor walk: SafeFreeActorInstance Deletes A
+					; via FreeActorInstance. The original For-Each form
+					; corrupted the cursor for any zone with multiple
+					; remote actors (which is every populated zone).
+					; Documented in CLAUDE.md (#247).
+					Local Acac.ActorInstance = First ActorInstance
+					Local AcacNext.ActorInstance = Null
+					While Acac <> Null
+						AcacNext = After Acac
+						If Acac <> Me Then SafeFreeActorInstance(Acac)
+						Acac = AcacNext
+					Wend
 				EndIf
 
-				; Remove dropped loot
-				For DItem.DroppedItem = Each DroppedItem
-					FreeEntity DItem\EN
-					Delete DItem
-				Next
+				; Remove dropped loot -- After-cursor walk for the same
+				; reason as above.
+				Local DItemR.DroppedItem = First DroppedItem
+				Local DItemRNext.DroppedItem = Null
+				While DItemR <> Null
+					DItemRNext = After DItemR
+					FreeEntity DItemR\EN
+					Delete DItemR
+					DItemR = DItemRNext
+				Wend
 
 				; Unload old and load new zone if necessary
 				If AreaName$ <> OldAreaName$
