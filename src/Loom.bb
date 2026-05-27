@@ -109,6 +109,7 @@ Include "Modules\Loom\Threads.bb"
 Include "Modules\Loom\Browser.bb"
 Include "Modules\Loom\Composer.bb"
 Include "Modules\Loom\Palette.bb"
+Include "Modules\Loom\WorldCache.bb"
 Include "Modules\Loom\BrokenRefs.bb"
 Include "Modules\Loom\Ribbon.bb"
 Include "Modules\Loom\Atlas.bb"
@@ -135,6 +136,7 @@ Type Loom
     Field timeline.Timeline
     Field brokenRefs.BrokenRefs
     Field recents.Recents
+    Field worldCache.WorldCache
 
 
     Method create.Loom(windowWidth%, windowHeight%, projectName$)
@@ -144,6 +146,15 @@ Type Loom
 
         // Shared focus + back stack
         self\threads = New Threads()
+
+        // World-state cache must exist before any surface that reads it
+        // (Ribbon::recomputeCache, BrokenRefs::rebuild). Wired to the
+        // global so mutation sites (Composer::commitEdit, EntityFactory
+        // create/delete, Palette picker commit) can WorldCache_Invalidate
+        // without an instance ref. Mirrors the Timeline / Recents
+        // recorder facade pattern (ADR 005).
+        self\worldCache = New WorldCache()
+        LoomWorldCache = self\worldCache
 
         // Browser, Composer, Palette all hold a reference to the same Threads
         // instance; card clicks call Threads::focus, chip + palette-result

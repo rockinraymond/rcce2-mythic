@@ -329,6 +329,7 @@ Type Composer
             Composer::writeField(self, kind, refID, fieldId, Str(newVal))
             Composer::markDirtyForKind(self, kind)
             Timeline_RecordToggle(kind, refID, fieldId, Str(storedValue), Str(newVal), Threads::lookupName(self\threads, kind, refID))
+            WorldCache_Invalidate()
             WriteLog(LoomLog, "Composer: toggled " + kind + "#" + Str(refID) + " " + fieldId + " -> " + Str(newVal))
         EndIf
 
@@ -435,6 +436,11 @@ Type Composer
         // the timeline with no-op commits from click-away-without-typing).
         If val <> oldVal
             Timeline_RecordEdit(k, id, fid, oldVal, val, Threads::lookupName(self\threads, k, id))
+            // Reference-field edits + faction renames can change the
+            // broken-ref count, and any edit changes "what to show in
+            // the recents label" etc. Conservatively invalidate the
+            // shared cache; the next ribbon paint recomputes.
+            WorldCache_Invalidate()
         EndIf
 
         WriteLog(LoomLog, "Composer: commit " + k + "#" + Str(id) + " " + fid + " <- " + Chr(34) + val + Chr(34))
@@ -866,6 +872,11 @@ Type Composer
     // handle becomes stale; close the composer first.
     // -------------------------------------------------------------------------
     Method discardKind(kind$)
+        // Any discard reloads the whole kind from disk -- the cache
+        // can't possibly be accurate after that. Invalidate up front so
+        // every branch below benefits without per-branch repeats.
+        WorldCache_Invalidate()
+
         If kind = "spell"
             Composer::freeAllSpells(self)
             LoadSpells("Data\Server Data\Spells.dat")

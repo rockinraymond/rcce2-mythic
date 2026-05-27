@@ -659,6 +659,7 @@ Type Palette
             Composer::writeField(self\composer, tKind, tID, tField, val)
             Composer::markDirtyForKind(self\composer, tKind)
             Timeline_RecordEdit(tKind, tID, tField, oldVal, val, Threads::lookupName(self\threads, tKind, tID))
+            WorldCache_Invalidate()
             WriteLog(LoomLog, "Palette: picked " + k + "#" + Str(id) + " (" + nm + ") -> " + tKind + "#" + Str(tID) + "." + tField)
             Return
         EndIf

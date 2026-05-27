@@ -70,6 +70,7 @@ Function EntityFactory_CreateActor%(threads.Threads)
     Threads::focus(threads, "actor", A\ID)
     ActorsSaved = False
     Timeline_RecordCreate("actor", A\ID, A\Race$ + " [" + A\Class$ + "]")
+    WorldCache_Invalidate()
     WriteLog(LoomLog, "EntityFactory: created actor #" + Str(A\ID))
     Return True
 End Function
@@ -85,6 +86,7 @@ Function EntityFactory_CreateItem%(threads.Threads)
     Threads::focus(threads, "item", I\ID)
     ItemsSaved = False
     Timeline_RecordCreate("item", I\ID, I\Name$)
+    WorldCache_Invalidate()
     WriteLog(LoomLog, "EntityFactory: created item #" + Str(I\ID))
     Return True
 End Function
@@ -101,6 +103,7 @@ Function EntityFactory_CreateSpell%(threads.Threads)
     Threads::focus(threads, "spell", S\ID)
     SpellsSaved = False
     Timeline_RecordCreate("spell", S\ID, S\Name$)
+    WorldCache_Invalidate()
     WriteLog(LoomLog, "EntityFactory: created spell #" + Str(S\ID))
     Return True
 End Function
@@ -116,6 +119,7 @@ Function EntityFactory_CreateZone%(threads.Threads)
     Threads::focus(threads, "zone", Handle(A))
     ZoneSaved = False
     Timeline_RecordCreate("zone", Handle(A), A\Name$)
+    WorldCache_Invalidate()
     WriteLog(LoomLog, "EntityFactory: created zone " + A\Name$)
     Return True
 End Function
@@ -143,6 +147,7 @@ Function EntityFactory_CreateFaction%(threads.Threads)
     Threads::focus(threads, "faction", slot)
     FactionsSaved = False
     Timeline_RecordCreate("faction", slot, "New Faction")
+    WorldCache_Invalidate()
     WriteLog(LoomLog, "EntityFactory: created faction slot " + Str(slot))
     Return True
 End Function
@@ -159,6 +164,7 @@ Function EntityFactory_CreateAnimSet%(threads.Threads)
     Threads::focus(threads, "animset", newID)
     AnimsSaved = False
     Timeline_RecordCreate("animset", newID, "New Animation Set")
+    WorldCache_Invalidate()
     WriteLog(LoomLog, "EntityFactory: created animset #" + Str(newID))
     Return True
 End Function
@@ -226,6 +232,7 @@ Function EntityFactory_DeleteActor%(refID%, threads.Threads)
     EndIf
     ActorsSaved = False
     Timeline_RecordDelete("actor", refID, label)
+    WorldCache_Invalidate()
     Threads::focus(threads, "", 0)
     Threads::clearStack(threads)
     WriteLog(LoomLog, "EntityFactory: deleted actor #" + Str(refID))
@@ -241,6 +248,7 @@ Function EntityFactory_DeleteItem%(refID%, threads.Threads)
     EndIf
     ItemsSaved = False
     Timeline_RecordDelete("item", refID, label)
+    WorldCache_Invalidate()
     Threads::focus(threads, "", 0)
     Threads::clearStack(threads)
     WriteLog(LoomLog, "EntityFactory: deleted item #" + Str(refID))
@@ -256,6 +264,7 @@ Function EntityFactory_DeleteSpell%(refID%, threads.Threads)
     EndIf
     SpellsSaved = False
     Timeline_RecordDelete("spell", refID, label)
+    WorldCache_Invalidate()
     Threads::focus(threads, "", 0)
     Threads::clearStack(threads)
     WriteLog(LoomLog, "EntityFactory: deleted spell #" + Str(refID))
@@ -271,6 +280,7 @@ Function EntityFactory_DeleteAnimSet%(refID%, threads.Threads)
     EndIf
     AnimsSaved = False
     Timeline_RecordDelete("animset", refID, label)
+    WorldCache_Invalidate()
     Threads::focus(threads, "", 0)
     Threads::clearStack(threads)
     WriteLog(LoomLog, "EntityFactory: deleted animset #" + Str(refID))
@@ -285,6 +295,7 @@ Function EntityFactory_DeleteFaction%(refID%, threads.Threads)
     SetFactionName(refID, "")     // empty string = vacant slot per LoadFactions semantics
     FactionsSaved = False
     Timeline_RecordDelete("faction", refID, label)
+    WorldCache_Invalidate()
     Threads::focus(threads, "", 0)
     Threads::clearStack(threads)
     WriteLog(LoomLog, "EntityFactory: deleted faction slot " + Str(refID))
@@ -311,6 +322,7 @@ Function EntityFactory_DeleteZone%(refID%, threads.Threads)
     ServerUnloadArea(A)            // frees the Area + per-area ServerWater chain
     ZoneSaved = True               // no other-zone changes pending purely from this op
     Timeline_RecordDelete("zone", refID, zoneName)
+    WorldCache_Invalidate()
     Threads::focus(threads, "", 0)
     Threads::clearStack(threads)
     WriteLog(LoomLog, "EntityFactory: deleted zone " + zoneName)
