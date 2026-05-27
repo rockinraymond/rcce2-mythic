@@ -244,24 +244,19 @@ End Test
 ; ====================================================================
 ; Order property: byte-order of the produced string.
 ;
-; RCE_StrFromInt$ writes the Bank then reads bytes from
-; (Length-1, Length-2, ..., 0) and prepends each to the output
-; (Dat$ = Chr$(PeekByte) + Dat$). Net effect: the high byte
-; (index Length-1) ends up as the LAST character of the string;
-; the low byte (index 0) ends up as the FIRST character of the
-; string. This is little-endian byte-order seen as a *string*
-; (low byte first when scanning left-to-right).
+; RCE_StrFromInt$ writes the Bank then loops i = Length-1 down to 0,
+; prepending each byte to Dat$:
+;   i=3: Dat$ = Chr$(byte3) + ""        = "byte3"
+;   i=2: Dat$ = Chr$(byte2) + "byte3"   = "byte2,byte3"
+;   i=1: Dat$ = Chr$(byte1) + ...       = "byte1,byte2,byte3"
+;   i=0: Dat$ = Chr$(byte0) + ...       = "byte0,byte1,byte2,byte3"
 ;
-; Wait -- actually trace more carefully:
-;   Length=4, loop i=3,2,1,0.
-;     i=3: Dat$ = Chr$(byte3) + "" = "byte3"
-;     i=2: Dat$ = Chr$(byte2) + "byte3" = "byte2,byte3"
-;     i=1: Dat$ = Chr$(byte1) + "byte2,byte3" = "byte1,byte2,byte3"
-;     i=0: Dat$ = Chr$(byte0) + "byte1,byte2,byte3" = "byte0,byte1,byte2,byte3"
-;
-; So the output string has byte0 (low byte) at position 1 (Mid$
-; index 1) and byte3 (high byte) at position 4. Pin this directly
-; with a known integer.
+; So Bank-index 0 (the low byte of the int, since PokeInt is
+; little-endian) ends up at string position 1; Bank-index Length-1
+; (the high byte) ends up at position Length. The string scans
+; left-to-right as low-to-high, matching the on-disk / on-wire
+; little-endian convention. Pin this directly with known bit
+; patterns so a swap of the loop direction breaks at least one test.
 ; ====================================================================
 
 Test testByteOrderIsLittleEndianInString()
