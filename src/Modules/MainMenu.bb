@@ -2558,10 +2558,17 @@ Function CreateChar()
 		If GY_ButtonHit(BNextClass) = True
 			Gender = Preview\Gender
 			A.Actor = Preview\Actor
+			; Hoist the loop's target-race comparison value above the
+			; Repeat. The original code re-read Preview\Actor\Race$ on
+			; every iteration; combined with the soft-fail Preview =
+			; Null below, that would Null-deref or (in release builds,
+			; per BlitzForge zero-sentinel semantics) silently empty-
+			; string and never re-match a real race -- infinite spin.
+			Local TargetRaceN$ = Upper$(Preview\Actor\Race$)
 			Repeat
 				A = After A
 				If A = Null Then A = First Actor
-				If Upper$(A\Race$) = Upper$(Preview\Actor\Race$) And A\Playable = True
+				If Upper$(A\Race$) = TargetRaceN$ And A\Playable = True
 					SafeFreeActorInstance(Preview)
 					Preview.ActorInstance = CreateActorInstance(A)
 					If (Gender = 0 And A\Genders <> 2) Or (Gender = 1 And A\Genders <> 1 And A\Genders <> 3)
@@ -2572,9 +2579,12 @@ Function CreateChar()
 					; the client on any class-with-broken-mesh button press).
 					; Free the half-loaded preview, log, and continue
 					; searching -- another playable Actor variant may have
-					; a working mesh. If the loop wraps without finding one,
-					; the pre-existing infinite-loop trap fires (separate
-					; concern; see project memory).
+					; a working mesh. Loop comparison uses the hoisted
+					; TargetRaceN$ above so Preview = Null is safe across
+					; iterations. If every Playable variant of the race
+					; fails to load, the loop spins (pre-existing
+					; Repeat/Forever-without-counter risk; not introduced
+					; by this fix).
 					If Result = False
 						WriteLog(MainLog, "CharCreation BNextClass: mesh load failed for race '" + A\Race$ + "'; freeing preview, continuing search")
 						SafeFreeActorInstance(Preview)
@@ -2604,10 +2614,14 @@ Function CreateChar()
 		ElseIf GY_ButtonHit(BPrevClass) = True
 			Gender = Preview\Gender
 			A.Actor = Preview\Actor
+			; Same hoisting rationale as BNextClass above -- Preview =
+			; Null in the soft-fail branch makes per-iteration
+			; Preview\Actor\Race$ reads unsafe.
+			Local TargetRaceP$ = Upper$(Preview\Actor\Race$)
 			Repeat
 				A = Before A
 				If A = Null Then A = Last Actor
-				If Upper$(A\Race$) = Upper$(Preview\Actor\Race$) And A\Playable = True
+				If Upper$(A\Race$) = TargetRaceP$ And A\Playable = True
 					SafeFreeActorInstance(Preview)
 					Preview.ActorInstance = CreateActorInstance(A)
 					If (Gender = 0 And A\Genders <> 2) Or (Gender = 1 And A\Genders <> 1 And A\Genders <> 3)
