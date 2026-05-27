@@ -113,6 +113,7 @@ Include "Modules\Loom\BrokenRefs.bb"
 Include "Modules\Loom\Ribbon.bb"
 Include "Modules\Loom\Atlas.bb"
 Include "Modules\Loom\Timeline.bb"
+Include "Modules\Loom\Tools.bb"
 Include "Modules\Loom\EntityFactory.bb"
 
 
@@ -298,6 +299,7 @@ WriteLog(LoomLog, "Project root: " + cwd$)
 WriteLog(LoomLog, "Project name: " + projectName$)
 
 LoomTheme_Init()
+Tools_Init()
 
 
 // -----------------------------------------------------------------------------
