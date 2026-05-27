@@ -1567,7 +1567,18 @@ Function UpdateNetwork()
 						; Free actor instance
 						SafeFreeActorInstance(A)
 					Else
-						RuntimeError("Serious error: player object was deleted")
+						; Soft-fail (was a RuntimeError that took down the
+						; client whenever the server sent P_ActorGone for
+						; Me's own RuntimeID). The server should never
+						; send this -- if Me genuinely needs to leave the
+						; current area, the canonical packet is a warp /
+						; disconnect. P_ActorGone for Me is an indicator
+						; of server-side inconsistency or a malicious
+						; server. Log and ignore: the next consistent
+						; state update will resync. (No cleanup work to
+						; do for Me anyway -- projectiles, shadows, etc.
+						; live elsewhere for the local player.)
+						WriteLog(MainLog, "P_ActorGone: server announced Me's own RuntimeID " + RuntimeID + " left the area; ignoring (server-side inconsistency)")
 					EndIf
 				EndIf
 
