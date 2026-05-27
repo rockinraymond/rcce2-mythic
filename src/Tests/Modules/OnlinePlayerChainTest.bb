@@ -285,3 +285,52 @@ Test testRemoveAllOneByOne()
 	Assert(MockHead = Null)
 	Assert(ChainLen%() = 0)
 End Test
+
+; ====================================================================
+; Trailing pool sweep -- Phase 2 of the CI flake fix.
+; ====================================================================
+;
+; PR #313 added ResetChain() at the START of every Test. That capped
+; the live MockActor count per-test but left the LAST test's
+; instances pinned in the type pool through process exit --
+; testRemoveAllOneByOne above allocates 3 MockActors and the per-test
+; ResetChain pattern cannot sweep the suite's tail. BlitzCC's
+; process-exit pool walk is recursive in some shapes; 3 trailing
+; instances are enough to trip `Error: Stack overflow! [FAIL]
+; OnlinePlayerChainTest.bb` non-deterministically under CI scheduling
+; (~10-15% post-PR#313 rate; close+reopen retry was the workaround).
+;
+; This Test runs LAST because BlitzForge's test runner walks `Test`
+; declarations in source order (verified by reading
+; compiler/BlitzForge/src/parser.cpp `case TEST`). Its body sweeps
+; everything testRemoveAllOneByOne left behind, bringing the
+; MockActor count to zero before BlitzCC's exit-time pool walker
+; fires.
+;
+; **Residual flake rate: ~5-7%** (50-run reviewer sample on PR
+; #322). Draining the MockActor pool is a contributor but not the
+; sole driver of the exit-time stack-overflow -- the remaining
+; failures occur with `Active objects: 0` after this sweep. Full
+; elimination requires the BlitzCC runtime pool-walker recursion
+; fix (compiler submodule work, out of scope here). The documented
+; `gh pr close N && reopen` retry remains the workaround for the
+; residual.
+;
+; Belt-and-suspenders against future additions: any new Test inserted
+; between testRemoveAllOneByOne and this teardown still gets swept
+; because its own start-of-test ResetChain catches its predecessor's
+; leftovers, and this teardown remains the file's last source
+; position.
+Test zzz_TeardownPoolSweep()
+	ResetChain()
+	; Verify the sweep actually drained the pool. If a future change
+	; ever leaves entries behind here, the assert fires and points at
+	; the new leak rather than letting it accumulate into a stack
+	; overflow at process exit.
+	Local entry.MockActor
+	Local count% = 0
+	For entry = Each MockActor
+		count = count + 1
+	Next
+	Assert(count = 0)
+End Test
