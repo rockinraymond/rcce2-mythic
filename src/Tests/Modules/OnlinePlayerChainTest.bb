@@ -301,9 +301,20 @@ End Test
 ; (~10-15% post-PR#313 rate; close+reopen retry was the workaround).
 ;
 ; This Test runs LAST because BlitzForge's test runner walks `Test`
-; declarations in source order. Its body sweeps everything
-; testRemoveAllOneByOne left behind, bringing the live count to zero
-; before BlitzCC's exit-time pool walker fires.
+; declarations in source order (verified by reading
+; compiler/BlitzForge/src/parser.cpp `case TEST`). Its body sweeps
+; everything testRemoveAllOneByOne left behind, bringing the
+; MockActor count to zero before BlitzCC's exit-time pool walker
+; fires.
+;
+; **Residual flake rate: ~5-7%** (50-run reviewer sample on PR
+; #322). Draining the MockActor pool is a contributor but not the
+; sole driver of the exit-time stack-overflow -- the remaining
+; failures occur with `Active objects: 0` after this sweep. Full
+; elimination requires the BlitzCC runtime pool-walker recursion
+; fix (compiler submodule work, out of scope here). The documented
+; `gh pr close N && reopen` retry remains the workaround for the
+; residual.
 ;
 ; Belt-and-suspenders against future additions: any new Test inserted
 ; between testRemoveAllOneByOne and this teardown still gets swept
