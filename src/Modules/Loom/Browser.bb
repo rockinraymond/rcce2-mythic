@@ -51,30 +51,13 @@ Global Browser_Category$ = "actor"
 
 
 // Category descriptors -- title shown in the tab bar + the kind id used
-// across the rest of the Loom code.
+// across the rest of the Loom code. Iterated via `Each BrowserCategory`
+// in insertion order (Blitz3D's global type pool is FIFO), which is also
+// the tab-bar order.
 Type BrowserCategory
     Field Kind$
     Field Title$
 End Type
-Global Browser_FirstCategory.BrowserCategory = Null
-
-
-// Tab-rect bookkeeping (mutated each frame as a side-effect of rendering
-// the tab bar; the per-frame mouse hit-test reads it).
-Type BrowserTabRect
-    Field Kind$
-    Field X, Y, W, H
-End Type
-Global Browser_FirstTabRect.BrowserTabRect = Null
-
-
-// Card-rect bookkeeping (same pattern)
-Type BrowserCardRect
-    Field Kind$
-    Field RefID
-    Field X, Y, W, H
-End Type
-Global Browser_FirstCardRect.BrowserCardRect = Null
 
 
 // =============================================================================
@@ -95,7 +78,6 @@ Function Browser_AddCategory(kind$, title$)
     Local c.BrowserCategory = New BrowserCategory
     c\Kind$ = kind$
     c\Title$ = title$
-    If Browser_FirstCategory = Null Then Browser_FirstCategory = c
 End Function
 
 
@@ -139,17 +121,9 @@ End Function
 
 // -----------------------------------------------------------------------------
 // Category tab bar -- one tab per kind, active tab gets a brass underline.
-//
-// Mutates Browser_FirstTabRect side-table for the hit-test. Re-allocates
-// the list each frame to keep the API stateless from the caller's POV.
+// Hit-test is inline -- no side-table needed.
 // -----------------------------------------------------------------------------
 Function Browser_DrawTabBar(sw, mx, my, clicked)
-    // Clear last frame's tab rects
-    For old.BrowserTabRect = Each BrowserTabRect
-        Delete old
-    Next
-    Browser_FirstTabRect = Null
-
     Local y = BR_TOP_RIBBON
     Local h = BR_TAB_BAR_H
     LoomFill(0, y, sw, h, LOOM_STONE_800_R, LOOM_STONE_800_G, LOOM_STONE_800_B)
@@ -176,12 +150,6 @@ Function Browser_DrawTabBar(sw, mx, my, clicked)
             LoomText(x + 20, y + 11, c\Title$, LOOM_STONE_200_R, LOOM_STONE_200_G, LOOM_STONE_200_B)
         EndIf
 
-        // Stash the rect for hit-testing
-        Local tr.BrowserTabRect = New BrowserTabRect
-        tr\Kind$ = c\Kind$
-        tr\X = x : tr\Y = y : tr\W = w : tr\H = h
-        If Browser_FirstTabRect = Null Then Browser_FirstTabRect = tr
-
         // Hit-test
         If hovered And clicked
             Browser_Category$ = c\Kind$
@@ -194,17 +162,11 @@ End Function
 
 
 // -----------------------------------------------------------------------------
-// Card grid -- one card per entity in the current category. Mutates
-// Browser_FirstCardRect for the hit-test. Returns True if a card was
-// clicked this frame (and as a side effect Threads_Focus has been called).
+// Card grid -- one card per entity in the current category. Hit-test is
+// inline in Browser_DrawCardChrome; returns True if a card was clicked
+// this frame (and as a side effect Threads_Focus has been called).
 // -----------------------------------------------------------------------------
 Function Browser_DrawCardGrid(sw, sh, mx, my, clicked)
-    // Clear last frame's card rects
-    For old.BrowserCardRect = Each BrowserCardRect
-        Delete old
-    Next
-    Browser_FirstCardRect = Null
-
     Local gridX = BR_SECTION_PAD
     Local gridY = BR_TOP_RIBBON + BR_TAB_BAR_H + BR_SECTION_PAD
     Local gridW = sw - (BR_SECTION_PAD * 2)
@@ -307,7 +269,7 @@ End Function
 
 
 // Draws the shared card chrome (background, hover border, kind eyebrow)
-// and registers the rect for hit-testing. Returns True if this card was
+// and performs the hit-test inline. Returns True if this card was
 // clicked this frame (and calls Threads_Focus as a side effect).
 Function Browser_DrawCardChrome(kind$, refID, x, y, mx, my, clicked)
     Local hovered = (mx >= x And mx < x + BR_CARD_W And my >= y And my < y + BR_CARD_H)
@@ -323,12 +285,6 @@ Function Browser_DrawCardChrome(kind$, refID, x, y, mx, my, clicked)
 
     // Top brass accent
     LoomHRule(x + 12, y + 8, BR_CARD_W - 24, LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
-
-    // Stash for hit-test history
-    Local cr.BrowserCardRect = New BrowserCardRect
-    cr\Kind$ = kind$ : cr\RefID = refID
-    cr\X = x : cr\Y = y : cr\W = BR_CARD_W : cr\H = BR_CARD_H
-    If Browser_FirstCardRect = Null Then Browser_FirstCardRect = cr
 
     If hovered And clicked
         Threads_Focus(kind$, refID)
