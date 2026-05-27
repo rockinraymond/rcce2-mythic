@@ -354,3 +354,23 @@ Test testNumberOfSlavesMatchesChainLengthAfterChurn()
 	MockSlaveUnlink(D) : Assert(L\NumberOfSlaves = ChainLen%(L))
 	Assert(L\NumberOfSlaves = 0)
 End Test
+
+; ====================================================================
+; Trailing pool sweep -- Phase 2 of the CI flake fix. Mirrors
+; OnlinePlayerChainTest's same-named teardown. See PR #313's
+; ResetPool sweep + the Phase 2 fix PR for rationale.
+; ====================================================================
+;
+; The last test above allocates 5 MockActors (L + A/B/C/D) and the
+; per-test ResetPool pattern cannot sweep the suite's tail. Without
+; this teardown those 5 instances persist into process exit where
+; BlitzCC's pool-walker can stack-overflow.
+Test zzz_TeardownPoolSweep()
+	ResetPool()
+	Local entry.MockActor
+	Local count% = 0
+	For entry = Each MockActor
+		count = count + 1
+	Next
+	Assert(count = 0)
+End Test
