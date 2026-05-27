@@ -20,11 +20,42 @@ src/
 
 ### One-line module summaries
 
-- **`Loom.bb`** — Bootstrap globals, data-loader sequence (mirrors `GUE.bb`'s order), main loop. The main loop is two lines: `Browser_RenderAndUpdate` then `Composer_RenderAndUpdate`. Esc handling drives the back stack and exit.
-- **`Theme.bb`** — Color tokens as `LOOM_STONE_900_R/G/B`-style constants (the design's full palette). Drawing primitives wrap Blitz's `Color/Rect/Line/Text` so callers paint through `LoomFill / LoomGradientV / LoomHRule / LoomText / LoomTextCentered`. Every Loom surface paints through this layer.
-- **`Threads.bb`** — The centerpiece module. Owns `Loom_FocusKind$ / Loom_FocusID` (what's currently focused) and `Loom_BackStack` (a `BBList` of `LoomFocusEntry`). Exports `Threads_Focus` (direct set), `Threads_Jump` (set + push back stack), `Threads_Back` (pop), and `Threads_RenderChip` (the clickable rounded-rect that every reference field in the composer uses).
-- **`Browser.bb`** — The boot surface. Six categories (`Actors / Items / Spells / Zones / Factions / Animation Sets`). Per-frame: paint top brand strip, category tab bar with brass-underlined active tab, paginated card grid, footer. Click a card → `Threads_Focus(kind, refID)`.
-- **`Composer.bb`** — Right-side panel that appears when something's focused. Per-kind body renderers (`Composer_RenderActor` / `…RenderItem` / etc.) lay out rows of `label : value` and rows of `label : [thread chip]`. Reads from the data modules' globals (`ActorList`, `ItemList`, `FactionNames$`, `Each AnimSet`, `Each Area`). Owns `Composer_Width()` which returns 0 when nothing is focused so the browser knows whether to reserve right-edge space.
+- **`Loom.bb`** — Bootstrap globals + data-loader sequence (mirrors `GUE.bb`'s order) + defines `Type Loom` and constructs an instance. The main loop is `While Loom::renderFrame(app) Wend` — `renderFrame` returns False when Esc exits from an empty state.
+- **`Theme.bb`** — Color tokens as `LOOM_STONE_900_R/G/B`-style constants (the design's full palette). Drawing primitives wrap Blitz's `Color/Rect/Line/Text` so callers paint through `LoomFill / LoomGradientV / LoomHRule / LoomText / LoomTextCentered`. Stateless helpers; kept as free functions per the rule of thumb in the BlitzForge skill (no state → free functions are fine).
+- **`Threads.bb`** — The centerpiece module. `Type Threads` owns `focusKind$`, `focusID%`, and a `backStack.BBList` of `LoomFocusEntry`. Methods: `create.Threads`, `focus(kind, refID)` (direct set), `jump(kind, refID)` (set + push back stack), `back%()` (pop), `clearStack()`, `lookupName$(kind, refID)`, `renderChip%(...)` (the clickable rounded-rect every reference field uses).
+- **`Browser.bb`** — The boot surface. `Type Browser` holds a reference to the shared `Threads` instance + the current `category$`. Six categories (`Actors / Items / Spells / Zones / Factions / Animation Sets`); each has its own per-kind grid method (`drawActorGrid`, `drawItemGrid`, etc.) dispatched from `drawCardGrid`. Click a card → `Threads::focus(self\threads, kind, refID)`.
+- **`Composer.bb`** — Right-side panel that appears when something's focused. `Type Composer` holds a reference to the same `Threads` instance. Per-kind body renderer methods (`renderActor`, `renderItem`, …) lay out rows of `label : value` and rows of `label : [thread chip]`. Reads from the data modules' globals (`ActorList`, `ItemList`, `FactionNames$`, `Each AnimSet`, `Each Area`). `width%()` returns 0 when nothing is focused so the Browser knows whether to reserve right-edge space.
+
+### Why Types with Methods (not prefixed free functions)
+
+Loom's UI modules each own state — `Browser` owns the current category, `Composer` owns layout latches, `Threads` owns focus + back stack. The project's canonical OO convention (`Project Manager.bb`, `Framework/RCCEApp.bb`, `Framework/Project/Project.bb`) is **`Type` with `Method`s called via `TypeName::method(self, args)`** for stateful modules; Loom follows that pattern. See [`.claude/skills/blitzforge-language/SKILL.md`](../../.claude/skills/blitzforge-language/SKILL.md) "Module architecture" section for the rule + canonical examples.
+
+The top-level `Type Loom` holds the three sub-instances:
+
+```basic
+Type Loom
+    Field threads.Threads
+    Field browser.Browser
+    Field composer.Composer
+    Field projectName$
+    Field windowWidth%, windowHeight%
+
+    Method create.Loom(w%, h%, name$)
+        self\threads = New Threads()
+        self\browser = New Browser(self\threads)     // shares Threads
+        self\composer = New Composer(self\threads)   // shares Threads
+        ...
+    End Method
+
+    Method renderFrame%()
+        Browser::renderAndUpdate(self\browser, self\windowWidth, self\windowHeight, self\projectName)
+        Composer::renderAndUpdate(self\composer, self\windowWidth, self\windowHeight)
+        ...
+    End Method
+End Type
+```
+
+The Browser and Composer both receive the same Threads reference at construction, so card clicks (Browser → `Threads::focus`) and chip clicks (Composer → `Threads::jump` via `Threads::renderChip`) write to the same back stack without globals.
 
 ## Data flow
 
@@ -59,15 +90,15 @@ src/
 
 **Key invariant:** Loom reads through the exact same `LoadX` functions GUE uses, so the two editors cannot drift in how they parse the file format. The cost is dragging in GUE's data modules wholesale; the benefit is correctness by construction.
 
-## State globals (the shared vocabulary)
+## Shared state (the vocabulary)
 
-All in `Threads.bb`, accessible to Browser and Composer:
+Lives as fields on the `Threads` instance, which is the source of truth shared between Browser and Composer (both hold a reference set at construction time — no globals):
 
-| Global | Type | Meaning |
+| Field | Type | Meaning |
 |---|---|---|
-| `Loom_FocusKind$` | string | `"" \| "actor" \| "item" \| "spell" \| "zone" \| "faction" \| "animset"` |
-| `Loom_FocusID` | int | interpretation depends on `Loom_FocusKind$` — see below |
-| `Loom_BackStack` | `BBList` of `LoomFocusEntry` | navigation trail; popped by Esc |
+| `threads\focusKind$` | string | `"" \| "actor" \| "item" \| "spell" \| "zone" \| "faction" \| "animset"` |
+| `threads\focusID%` | int | interpretation depends on `focusKind` — see below |
+| `threads\backStack.BBList` | `BBList` of `LoomFocusEntry` | navigation trail; popped by Esc |
 
 **`refID` payload per kind** — every Loom module uses these conventions; never deviate:
 
@@ -82,26 +113,41 @@ All in `Threads.bb`, accessible to Browser and Composer:
 
 ## The render loop
 
-`Loom.bb` main loop, simplified:
+`Loom.bb` main loop, simplified — `Loom::renderFrame` returns False when Loom should exit:
 
 ```basic
-Repeat
-    Cls
-    Browser_RenderAndUpdate(sw, sh, projectName$)   // always painted
-    Composer_RenderAndUpdate(sw, sh)                // no-op when focus = ""
-    If KeyHit(1)
-        If Threads_Back() = False
-            If Loom_FocusKind$ <> "" Then [close composer]
-            Else [Exit Loom]
-        EndIf
-    EndIf
-    Flip
-Until False
+Local app.Loom = New Loom(boot_width, boot_height, projectName)
+While Loom::renderFrame(app) = True
+Wend
 ```
 
-The two render calls are **idempotent and stateless from the caller's POV** — every frame re-reads the data, re-runs hit-tests, re-paints. There's no "switch to a different mode" dispatch; the composer's visibility is purely a function of `Loom_FocusKind$`.
+Inside `renderFrame`:
 
-The Browser exposes `Composer_Width()` so it can (in a future PR) shrink its card grid by that many pixels on the right when a composer is visible. Today the composer just overlays.
+```basic
+Method renderFrame%()
+    Cls
+    Browser::renderAndUpdate(self\browser, self\windowWidth, self\windowHeight, self\projectName)
+    Composer::renderAndUpdate(self\composer, self\windowWidth, self\windowHeight)  // no-op when focus = ""
+
+    If KeyHit(1)   // Esc
+        If Threads::back(self\threads) = False
+            If self\threads\focusKind <> ""
+                Threads::focus(self\threads, "", 0)        // close composer
+                Threads::clearStack(self\threads)
+            Else
+                Return False                                // exit Loom
+            EndIf
+        EndIf
+    EndIf
+
+    Flip
+    Return True
+End Method
+```
+
+The two render calls are **idempotent and stateless from the caller's POV** — every frame re-reads the data, re-runs hit-tests, re-paints. There's no "switch to a different mode" dispatch; the composer's visibility is purely a function of `self\threads\focusKind`.
+
+`Composer::width(composer)` returns 0 when nothing is focused (else `CMP_W`); the Browser reads this so a future PR can shrink the grid by that many pixels on the right when the composer is visible. Today the composer just overlays.
 
 ## Why custom-draw + not F-UI
 
@@ -147,5 +193,6 @@ Documented here so the next agent doesn't re-discover them:
 - **`data` is reserved** (the `Data/Read/Restore` family). Don't use as a variable name.
 - **Single-line `For ... : If ... Then ... : Next` doesn't compose.** The `If ... Then ...` on the same line swallows the rest of the line up to the implicit `EndIf`, so the `: Next` becomes part of the IF body and the For has no Next. Always multi-line the body.
 - **`New TypeName()` parens are required** in BlitzForge even with no args; bare `New TypeName` errors. (Holdover from the BlitzForge skill — if you forget, the parser complains.)
-- **Type instances leak without `EnableGC`.** None of the Loom files use `EnableGC`. `BBList`'s `ListClear` and `ListRemove` only drop the list's references; the underlying instances stay on the heap. `Threads.bb` explicitly `Delete`s `LoomFocusEntry` instances in `Threads_Back` and `Threads_ClearStack` to avoid leaking N entries per N back/forward navigations.
+- **Type instances leak without `EnableGC`.** None of the Loom files use `EnableGC` (matches the project's canonical OO files — `Project Manager.bb` doesn't either). `BBList`'s `ListClear` and `ListRemove` only drop the list's references; the underlying instances stay on the heap. `Threads.bb` explicitly `Delete`s `LoomFocusEntry` instances in `back()` and `clearStack()` to avoid leaking N entries per N back/forward navigations.
+- **`Strict` + reassigning a Method-scope `Local` from inside nested `If`/`For` blocks doesn't compile.** Error: `<varname> assignment should start with local, global or const modifier`. Reassigning at the same nesting level as the `Local` declaration is fine; reassigning from a deeper nested block (or from a sibling `Else If` branch after using it in an earlier branch) errors. Workaround: write to a **Field on the Type** instead (`self\latch = True` works at any depth). Loom hit this in `Browser::drawCardGrid`'s six-branch `If/Else If` chain and ended up refactoring to per-kind grid methods (`drawActorGrid`, `drawItemGrid`, …) — which turned out to be cleaner OO design anyway.
 - **Tab gadget `M_SETINDEX` has a nested-iterator bug in F-UI.** Calling `FUI_SendMessage(TabMain, M_SETINDEX, 9)` doesn't reliably switch the visible tab when called from outside F-UI's own click path. The previous retrofit round documented this; Loom sidesteps it entirely by not using F-UI's Tab gadget.

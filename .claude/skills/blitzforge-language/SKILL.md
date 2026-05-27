@@ -261,6 +261,8 @@ Sigils: `%` int (default), `#` float, `$` string, `.TypeName` typed reference. T
 
 `Local`-shadowing-a-`Global` of the same name compiles but produces confusing behavior; pick distinct names.
 
+**Strict-mode gotcha: reassigning a Method-scope `Local` from inside nested `If`/`For` blocks doesn't compile.** Error: `<varname> assignment should start with local, global or const modifier`. Reassigning at the same nesting level as the `Local` declaration is fine; reassigning from a deeper nested block (or from a sibling `Else If` branch after the variable was used in an earlier branch) errors. Workaround: write to a **`Field` on the enclosing Type** instead — `self\latch = True` works at any depth. If you're not inside a `Type` and need cross-block state, hoist the variable to a `Global` or refactor the deep block into its own `Function` / `Method` with its own scope.
+
 ## Loops
 
 ```basic
