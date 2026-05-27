@@ -2,7 +2,7 @@
 
 **RottParticles.bb**
 
-The particle emitter substrate. Owns the three core Types (`RP_Emitter` — live emitter, `RP_Particle` — one 4-vertex billboard sprite, `RP_EmitterConfig` — template), the per-frame `RP_Update` mover that advances every live particle in lockstep, the file-backed `.rpc` config format with its 38-field positional schema, and ~40 `RP_Config*` setters covering every tweakable parameter (velocity, force, color, alpha, scale, lifespan, texture animation, shape, blend mode).
+The particle emitter substrate. Owns the three core Types (`RP_Emitter` — live emitter, `RP_Particle` — one 4-vertex billboard sprite, `RP_EmitterConfig` — template), the per-frame `RP_Update` mover that advances every live particle in lockstep, the file-backed `.rpc` config format with its 40-field positional schema, and ~40 `RP_Config*` setters covering every tweakable parameter (velocity, force, color, alpha, scale, lifespan, texture animation, shape, blend mode).
 
 Every visual effect in the game that flickers, sparkles, smokes, or trails — projectile contrails, spell impacts, environmental fog patches, fire/torch/torch-flame, etc. — is one or more `RP_Emitter` instances driven by a config that the content authoring tool (RC Architect) saved to `Data\Emitter Configs\<name>.rpc`. The runtime loads those `.rpc` files lazily as the scene demands.
 
@@ -14,9 +14,9 @@ The "Rott" prefix is a project-history artifact (the emitter system predates the
 
 | Type | Allocated by | Lifetime | Purpose |
 |---|---|---|---|
-| `RP_EmitterConfig` | `RP_CreateEmitterConfig` (in-memory) or `RP_LoadEmitterConfig` (from disk) | Reusable template — one config can drive many emitters | Holds ~38 fields: spawn rate, particle lifetime, initial velocity (with random spread), constant force, scale animation, color start + per-frame delta, alpha start + delta, texture handle + tiling + animation speed, blend mode, shape (Sphere/Cylinder/Box) + dimensions, FaceEntity (camera handle for billboarding). The full schema is the [`RP_EmitterConfig` Type definition](../../src/Modules/RottParticles.bb#L50). |
+| `RP_EmitterConfig` | `RP_CreateEmitterConfig` (in-memory) or `RP_LoadEmitterConfig` (from disk) | Reusable template — one config can drive many emitters | Holds ~40 fields: spawn rate, particle lifetime, initial velocity (with random spread), constant force, scale animation, color start + per-frame delta, alpha start + delta, texture handle + tiling + animation speed, blend mode, shape (Sphere/Cylinder/Box) + dimensions, FaceEntity (camera handle for billboarding). The full schema is the [`RP_EmitterConfig` Type definition](../../src/Modules/RottParticles.bb#L50). |
 | `RP_Emitter` | `RP_CreateEmitter(Configuration, Scale=1.0)` | One per active in-world emitter | Holds `MeshEN` (the dynamic mesh that holds particle quads), `EmitterEN` (the parent pivot for position/rotation), `Config` (pointer to a `RP_EmitterConfig`), `Enabled` (gating the spawn loop), `KillMode` (0 = normal, 1..4 = pending-free states), `ToSpawn` (per-frame spawn debt), `ActiveParticles` (count for fast iteration shortcut), `Scale#`. |
-| `RP_Particle` | `RP_CreateParticle` (called from `RP_Update` to allocate spare slots) | Recycled via `InUse` flag — never `Delete`d during normal operation | Per-particle physics state: `FirstVertex` (the first of 4 quad verts on the parent mesh's surface), position `X/Y/Z`, velocity `VX/VY/VZ`, force `FX/FY/FZ`, color `R/G/B`, alpha `A`, scale, time-to-live, texture frame + per-frame change rate. |
+| `RP_Particle` | Pre-allocated by `RP_CreateParticle` (called in a loop from `RP_CreateEmitter` up to `MaxParticles`) | Recycled via `InUse` flag during normal per-frame operation; `Delete`d only at emitter teardown by `RP_FreeEmitter` | Per-particle physics state: `FirstVertex` (the first of 4 quad verts on the parent mesh's surface), position `X/Y/Z`, velocity `VX/VY/VZ`, force `FX/FY/FZ`, color `R/G/B`, alpha `A`, scale, time-to-live, texture frame + per-frame change rate. |
 
 ### Three constant families
 
@@ -51,7 +51,7 @@ This is unusual. The reason is that callers (projectile code, spell rendering, e
 
 ### `.rpc` config file format (positional)
 
-[`RP_SaveEmitterConfig`](#rp_saveemitterconfig) and [`RP_LoadEmitterConfig`](#rp_loademitterconfig) read/write 38 fields in a fixed positional order. The schema is:
+[`RP_SaveEmitterConfig`](#rp_saveemitterconfig) and [`RP_LoadEmitterConfig`](#rp_loademitterconfig) read/write 40 fields in a fixed positional order. The schema is:
 
 ```
 Int    MaxParticles, ParticlesPerFrame
@@ -100,14 +100,14 @@ Three shape-specific setters (`RP_ConfigShapeSphere`, `RP_ConfigShapeCylinder`, 
 
 ### Per-particle UV math + `/0` guard
 
-`RP_SetParticleFrame(P, Frame)` computes UV coords for the particle's atlas tile via `1.0 / TexAcross` / `1.0 / TexDown`. A misconfigured (or wire-tampered) `.rpc` with `TexAcross = 0` or `TexDown = 0` would crash on `Frame Mod 0` and the float divides. The guard at [`RottParticles.bb:411-417`](../../src/Modules/RottParticles.bb#L411) bails to full-texture UV space (0,0 frame, full UV range) instead — particle still renders but does no atlas math. Part of the broader `/0` sweep documented in CLAUDE.md.
+`RP_SetParticleFrame(P, Frame)` computes UV coords for the particle's atlas tile via `1.0 / TexAcross` / `1.0 / TexDown`. A misconfigured (or wire-tampered) `.rpc` with `TexAcross = 0` or `TexDown = 0` would crash on `Frame Mod 0` and the float divides. The guard at [`RottParticles.bb:411-417`](../../src/Modules/RottParticles.bb#L411) bails to full-texture UV space (0,0 frame, full UV range) instead — particle still renders but does no atlas math. Same family of boundary-input defenses as CLAUDE.md → "Float sanitisation at the BVM / wire boundary" (here applied to file-supplied rather than wire-supplied data).
 
 ## Conventions for new code touching this module
 
 - **Use `RP_KillEmitter` over `RP_FreeEmitter` for player-visible effects** — particles in flight should complete their lifetimes for visual continuity. Hard-free is for hard-cut transitions (zone change, disconnect).
 - **`Object.RP_Emitter(EntityName$(ID))` is the lookup for runtime emitter handles**; `Object.RP_EmitterConfig(ID)` is the lookup for config handles. Don't accidentally use `Object.RP_Emitter(ID)` directly with a config ID — it will return Null because the EntityName$ indirection is the contract.
-- **The 38-field `.rpc` schema is positional.** Adding a new field requires updating `RP_SaveEmitterConfig`, `RP_LoadEmitterConfig`, *and* the `RP_CopyEmitterConfig` deep-copy at [`RottParticles.bb:1045-1098`](../../src/Modules/RottParticles.bb#L1045). Missing any one drops the field on save / round-trip.
-- **`RP_Particle` instances are recycled, not freed.** The `InUse = False` flag is the canonical "dead" state. New per-particle fields that need a reset on respawn should be reset in `RP_SpawnParticle` ([`RottParticles.bb:241`](../../src/Modules/RottParticles.bb#L241)), not in `RP_CreateParticle` (which runs once at slot allocation).
+- **The 40-field `.rpc` schema is positional.** Adding a new field requires updating `RP_SaveEmitterConfig`, `RP_LoadEmitterConfig`, *and* the `RP_CopyEmitterConfig` deep-copy at [`RottParticles.bb:1045-1098`](../../src/Modules/RottParticles.bb#L1045). Missing any one drops the field on save / round-trip.
+- **`RP_Particle` instances are recycled during normal per-frame operation, not freed.** The `InUse = False` flag is the "dead" state, and `RP_SpawnParticle` flips it back to `True` for a respawn. The exception is emitter teardown — `RP_FreeEmitter` ([`RottParticles.bb:1390-1392`](../../src/Modules/RottParticles.bb#L1390)) walks `For P = Each RP_Particle / If P\E = E Then Delete P`, deleting every particle owned by the dying emitter. New per-particle fields that need a reset on respawn should be reset in `RP_SpawnParticle` ([`RottParticles.bb:241`](../../src/Modules/RottParticles.bb#L241)), not in `RP_CreateParticle` (which runs once at slot pre-allocation in `RP_CreateEmitter`).
 - **Both `RP_Update`'s emitter walk and `RP_Clear` use the after-cursor pattern.** Any new function that walks `For Each RP_Emitter` AND can free emitters mid-walk must do the same `First / After / While <> Null` shape.
 - **The texture-share defensive walk** in `RP_FreeEmitterConfig` and `RP_FreeEmitter(..., FreeTex=True)` is the canonical pattern for "free a resource that might be shared across siblings." Replicate it if you add another shared-resource field.
 - **`RP_SaveEmitterConfig` is a SafeWrite migration candidate.** Direct `WriteFile` to production path is the legacy shape; adopting `SafeWriteOpen` / `SafeWriteCommit` would close the truncated-on-crash failure mode. Follow the memory template.
@@ -132,7 +132,7 @@ Three shape-specific setters (`RP_ConfigShapeSphere`, `RP_ConfigShapeCylinder`, 
 
 The legacy function-by-function reference for this module has not been generated. The conceptual overview above is the primary reference; consult the source at [`src/Modules/RottParticles.bb`](../../src/Modules/RottParticles.bb) for full signatures.
 
-The module exports 55 functions across the families: 1 update loop (`RP_Update`); 3 particle internals (`RP_CreateParticle`, `RP_SpawnParticle`, `RP_SetParticleFrame`, `RP_UpdateParticleVertices`); ~40 `RP_Config*` setters covering every emitter parameter; 4 config-lifecycle functions (`RP_CreateEmitterConfig`, `RP_CopyEmitterConfig`, `RP_FreeEmitterConfig`, `RP_SaveEmitterConfig` / `RP_LoadEmitterConfig`); 8 emitter-lifecycle functions (`RP_CreateEmitter`, `RP_EnableEmitter`, `RP_DisableEmitter`, `RP_HideEmitter`, `RP_ShowEmitter`, `RP_ScaleEmitter`, `RP_KillEmitter`, `RP_FreeEmitter`); 1 query (`RP_EmitterActiveParticles`); 1 sweep (`RP_Clear`).
+The module exports 55 functions across the families: 1 update loop (`RP_Update`); 4 particle internals (`RP_CreateParticle`, `RP_SpawnParticle`, `RP_SetParticleFrame`, `RP_UpdateParticleVertices`); ~40 `RP_Config*` setters covering every emitter parameter; 5 config-lifecycle functions (`RP_CreateEmitterConfig`, `RP_CopyEmitterConfig`, `RP_FreeEmitterConfig`, `RP_SaveEmitterConfig`, `RP_LoadEmitterConfig`); 8 emitter-lifecycle functions (`RP_CreateEmitter`, `RP_EnableEmitter`, `RP_DisableEmitter`, `RP_HideEmitter`, `RP_ShowEmitter`, `RP_ScaleEmitter`, `RP_KillEmitter`, `RP_FreeEmitter`); 1 query (`RP_EmitterActiveParticles`); 1 sweep (`RP_Clear`).
 
 ### <a id="rp_saveemitterconfig"></a>`RP_SaveEmitterConfig(ID, File$)`
 
