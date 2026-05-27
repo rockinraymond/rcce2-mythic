@@ -26,7 +26,7 @@ Strict
 
 
 Const CMP_W           = 380
-Const CMP_TOP         = 56     // matches BR_TOP_RIBBON
+Const CMP_TOP         = LOOM_TOP_RIBBON_H + 56   // matches BR_TOP_RIBBON (84)
 Const CMP_BOT_PAD     = 36     // matches BR_BOT_RIBBON
 Const CMP_PAD         = 16
 Const CMP_ROW_H       = 22
@@ -35,6 +35,21 @@ Const CMP_CHIP_H      = 26
 // Save button (top-right of the composer title block).
 Const CMP_SAVE_BTN_W  = 70
 Const CMP_SAVE_BTN_H  = 22
+
+// Delete button (top-right, immediately left of Save). Two-click arm/confirm
+// pattern -- first click arms (button turns red, footer hint changes),
+// second click within CMP_DELETE_ARM_MS commits the delete. Click anywhere
+// else (or wait out the window) cancels.
+Const CMP_DELETE_BTN_W  = 24
+Const CMP_DELETE_BTN_H  = 22
+Const CMP_DELETE_ARM_MS = 4000
+
+// Discard button (top-right, immediately left of Delete). Reverts the
+// current kind's in-memory state by re-running its loader against the
+// on-disk file. Same shape as the Delete arm/confirm so accidents are
+// avoided when there's unsaved work.
+Const CMP_DISCARD_BTN_W  = 60
+Const CMP_DISCARD_BTN_H  = 22
 
 // Edit-buffer cursor blink rate (ms). MilliSecs() Mod CMP_CURSOR_PERIOD < half = visible.
 Const CMP_CURSOR_PERIOD = 1000
@@ -61,6 +76,18 @@ Type Composer
     Field editFieldId$
     Field editBuffer$
 
+    // Delete-arm state. When the user clicks Delete, we record the kind/
+    // refID and a timestamp. A second click within CMP_DELETE_ARM_MS on
+    // the same (kind, refID) commits; clicking anywhere else cancels.
+    Field deleteArmKind$
+    Field deleteArmRefID%
+    Field deleteArmAt%
+
+    // Discard-arm state -- same shape as delete-arm. Only the kind matters
+    // (discard reloads the whole kind from disk, not a single entity).
+    Field discardArmKind$
+    Field discardArmAt%
+
 
     Method create.Composer(threads.Threads)
         self\threads = threads
@@ -69,6 +96,11 @@ Type Composer
         self\editRefID = 0
         self\editFieldId = ""
         self\editBuffer = ""
+        self\deleteArmKind = ""
+        self\deleteArmRefID = 0
+        self\deleteArmAt = 0
+        self\discardArmKind = ""
+        self\discardArmAt = 0
         Return self
     End Method
 
@@ -146,10 +178,21 @@ Type Composer
         LoomText(x + CMP_PAD, y + CMP_PAD, kindLabel, LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
         LoomText(x + CMP_PAD, y + CMP_PAD + 16, entityName, LOOM_PARCHMENT_100_R, LOOM_PARCHMENT_100_G, LOOM_PARCHMENT_100_B)
 
-        // Save button on the right of the title block, only shown when dirty.
+        // Top-right action cluster (right-to-left): Save / Discard / Delete.
+        // Save + Discard only render when there's pending dirty state for
+        // this kind. Delete always renders (any focused entity can be
+        // deleted; arm/confirm guards against accidents).
+        Local btnY% = y + CMP_PAD - 2
+        Local btnX% = x + w - CMP_SAVE_BTN_W - CMP_PAD
         If dirty = True
-            Composer::drawSaveButton(self, x + w - CMP_SAVE_BTN_W - CMP_PAD, y + CMP_PAD - 2, mx, my, clicked, kind)
+            Composer::drawSaveButton(self, btnX, btnY, mx, my, clicked, kind)
+            btnX = btnX - CMP_DISCARD_BTN_W - 6
+            Composer::drawDiscardButton(self, btnX, btnY, mx, my, clicked, kind)
+            btnX = btnX - CMP_DELETE_BTN_W - 6
+        Else
+            btnX = btnX + CMP_SAVE_BTN_W - CMP_DELETE_BTN_W
         EndIf
+        Composer::drawDeleteButton(self, btnX, btnY, mx, my, clicked, kind, refID)
 
         LoomHRule(x + CMP_PAD, y + CMP_PAD + 38, w - CMP_PAD * 2, LOOM_BRASS_700_R, LOOM_BRASS_700_G, LOOM_BRASS_700_B)
 
@@ -663,6 +706,229 @@ Type Composer
         EndIf
 
         WriteLog(LoomLog, "Composer: commitSaveForKind -- no handler for " + kind)
+    End Method
+
+
+    // -------------------------------------------------------------------------
+    // drawDeleteButton -- destructive action with arm/confirm. First click
+    // arms (button turns red, footer hint updates); second click on the
+    // same focus within CMP_DELETE_ARM_MS commits via EntityFactory_Delete.
+    // Focus change / other-button click / timeout cancels.
+    // -------------------------------------------------------------------------
+    Method drawDeleteButton(btnX%, btnY%, mx%, my%, clicked%, kind$, refID%)
+        Local hovered% = (mx >= btnX And mx < btnX + CMP_DELETE_BTN_W And my >= btnY And my < btnY + CMP_DELETE_BTN_H)
+
+        // Has the arm window expired? If so, drop it.
+        If self\deleteArmKind <> "" And (MilliSecs() - self\deleteArmAt) > CMP_DELETE_ARM_MS
+            self\deleteArmKind = ""
+            self\deleteArmRefID = 0
+            self\deleteArmAt = 0
+        EndIf
+
+        Local armed% = (self\deleteArmKind = kind And self\deleteArmRefID = refID)
+
+        If armed = True
+            LoomFill(btnX, btnY, CMP_DELETE_BTN_W, CMP_DELETE_BTN_H, LOOM_DANGER_R, LOOM_DANGER_G, LOOM_DANGER_B)
+            LoomBorder(btnX, btnY, CMP_DELETE_BTN_W, CMP_DELETE_BTN_H, LOOM_PARCHMENT_100_R, LOOM_PARCHMENT_100_G, LOOM_PARCHMENT_100_B)
+            LoomText(btnX + 7, btnY + 4, "X", LOOM_PARCHMENT_100_R, LOOM_PARCHMENT_100_G, LOOM_PARCHMENT_100_B)
+        Else If hovered = True
+            LoomFill(btnX, btnY, CMP_DELETE_BTN_W, CMP_DELETE_BTN_H, LOOM_DANGER_R, LOOM_DANGER_G, LOOM_DANGER_B)
+            LoomBorder(btnX, btnY, CMP_DELETE_BTN_W, CMP_DELETE_BTN_H, LOOM_PARCHMENT_100_R, LOOM_PARCHMENT_100_G, LOOM_PARCHMENT_100_B)
+            LoomText(btnX + 8, btnY + 4, "X", LOOM_PARCHMENT_100_R, LOOM_PARCHMENT_100_G, LOOM_PARCHMENT_100_B)
+        Else
+            LoomFill(btnX, btnY, CMP_DELETE_BTN_W, CMP_DELETE_BTN_H, LOOM_STONE_800_R, LOOM_STONE_800_G, LOOM_STONE_800_B)
+            LoomBorder(btnX, btnY, CMP_DELETE_BTN_W, CMP_DELETE_BTN_H, LOOM_DANGER_R, LOOM_DANGER_G, LOOM_DANGER_B)
+            LoomText(btnX + 8, btnY + 4, "X", LOOM_DANGER_R, LOOM_DANGER_G, LOOM_DANGER_B)
+        EndIf
+
+        If hovered And clicked
+            If armed = True
+                // Commit
+                EntityFactory_Delete(kind, refID, self\threads)
+                self\deleteArmKind = ""
+                self\deleteArmRefID = 0
+                self\deleteArmAt = 0
+            Else
+                // Arm
+                self\deleteArmKind = kind
+                self\deleteArmRefID = refID
+                self\deleteArmAt = MilliSecs()
+                WriteLog(LoomLog, "Composer: delete armed for " + kind + "#" + Str(refID))
+            EndIf
+        EndIf
+    End Method
+
+
+    // -------------------------------------------------------------------------
+    // drawDiscardButton -- reverts the current kind's in-memory state by
+    // re-running its loader. Two-click arm/confirm like Delete. Only
+    // rendered when the kind is dirty.
+    // -------------------------------------------------------------------------
+    Method drawDiscardButton(btnX%, btnY%, mx%, my%, clicked%, kind$)
+        Local hovered% = (mx >= btnX And mx < btnX + CMP_DISCARD_BTN_W And my >= btnY And my < btnY + CMP_DISCARD_BTN_H)
+
+        If self\discardArmKind <> "" And (MilliSecs() - self\discardArmAt) > CMP_DELETE_ARM_MS
+            self\discardArmKind = ""
+            self\discardArmAt = 0
+        EndIf
+
+        Local armed% = (self\discardArmKind = kind)
+
+        If armed = True
+            LoomFill(btnX, btnY, CMP_DISCARD_BTN_W, CMP_DISCARD_BTN_H, LOOM_WARNING_R, LOOM_WARNING_G, LOOM_WARNING_B)
+            LoomBorder(btnX, btnY, CMP_DISCARD_BTN_W, CMP_DISCARD_BTN_H, LOOM_PARCHMENT_100_R, LOOM_PARCHMENT_100_G, LOOM_PARCHMENT_100_B)
+            LoomText(btnX + 6, btnY + 4, "Confirm?", LOOM_INK_900_R, LOOM_INK_900_G, LOOM_INK_900_B)
+        Else If hovered = True
+            LoomFill(btnX, btnY, CMP_DISCARD_BTN_W, CMP_DISCARD_BTN_H, LOOM_STONE_700_R, LOOM_STONE_700_G, LOOM_STONE_700_B)
+            LoomBorder(btnX, btnY, CMP_DISCARD_BTN_W, CMP_DISCARD_BTN_H, LOOM_WARNING_R, LOOM_WARNING_G, LOOM_WARNING_B)
+            LoomText(btnX + 8, btnY + 4, "Discard", LOOM_PARCHMENT_100_R, LOOM_PARCHMENT_100_G, LOOM_PARCHMENT_100_B)
+        Else
+            LoomFill(btnX, btnY, CMP_DISCARD_BTN_W, CMP_DISCARD_BTN_H, LOOM_STONE_800_R, LOOM_STONE_800_G, LOOM_STONE_800_B)
+            LoomBorder(btnX, btnY, CMP_DISCARD_BTN_W, CMP_DISCARD_BTN_H, LOOM_STONE_300_R, LOOM_STONE_300_G, LOOM_STONE_300_B)
+            LoomText(btnX + 8, btnY + 4, "Discard", LOOM_STONE_200_R, LOOM_STONE_200_G, LOOM_STONE_200_B)
+        EndIf
+
+        If hovered And clicked
+            If armed = True
+                Composer::discardKind(self, kind)
+                self\discardArmKind = ""
+                self\discardArmAt = 0
+            Else
+                self\discardArmKind = kind
+                self\discardArmAt = MilliSecs()
+                WriteLog(LoomLog, "Composer: discard armed for " + kind)
+            EndIf
+        EndIf
+    End Method
+
+
+    // -------------------------------------------------------------------------
+    // discardKind -- reload the kind's in-memory state from disk, drop any
+    // dirty flag. Uses GUE's existing Load* functions; because Load* New's
+    // fresh Type instances and the in-memory state already has stale ones,
+    // we have to free the old instances first.
+    //
+    // For Spell/Item/Actor: walk the *List arrays, Delete every non-Null
+    // slot, then re-run LoadX which re-populates.
+    // For AnimSet: walk AnimList[0..999], Delete each, re-run LoadAnimSets.
+    // For Factions: just re-run LoadFactions -- it overwrites FactionNames$
+    // in place.
+    // For Zone (the focused one only -- per-zone .dat): re-run
+    // ServerLoadArea on the original name. Tricky because the focused
+    // handle becomes stale; close the composer first.
+    // -------------------------------------------------------------------------
+    Method discardKind(kind$)
+        If kind = "spell"
+            Composer::freeAllSpells(self)
+            LoadSpells("Data\Server Data\Spells.dat")
+            SpellsSaved = True
+            WriteLog(LoomLog, "Composer: discarded -- reloaded Spells.dat")
+            Composer::reFocusOrClose(self, kind)
+            Return
+        EndIf
+        If kind = "item"
+            Composer::freeAllItems(self)
+            LoadItems("Data\Server Data\Items.dat")
+            ItemsSaved = True
+            WriteLog(LoomLog, "Composer: discarded -- reloaded Items.dat")
+            Composer::reFocusOrClose(self, kind)
+            Return
+        EndIf
+        If kind = "actor"
+            Composer::freeAllActors(self)
+            LoadActors("Data\Server Data\Actors.dat")
+            ActorsSaved = True
+            WriteLog(LoomLog, "Composer: discarded -- reloaded Actors.dat")
+            Composer::reFocusOrClose(self, kind)
+            Return
+        EndIf
+        If kind = "animset"
+            Composer::freeAllAnimSets(self)
+            LoadAnimSets("Data\Game Data\Animations.dat")
+            AnimsSaved = True
+            WriteLog(LoomLog, "Composer: discarded -- reloaded Animations.dat")
+            Composer::reFocusOrClose(self, kind)
+            Return
+        EndIf
+        If kind = "faction"
+            // LoadFactions overwrites FactionNames$ in-place; no free needed.
+            LoadFactions("Data\Server Data\Factions.dat")
+            FactionsSaved = True
+            WriteLog(LoomLog, "Composer: discarded -- reloaded Factions.dat")
+            Composer::reFocusOrClose(self, kind)
+            Return
+        EndIf
+        If kind = "zone"
+            // Reload only the focused zone's .dat. Its handle becomes
+            // stale after ServerUnloadArea, so we capture the name first,
+            // close the composer, free, and reload.
+            Local Ar.Area = Object.Area(self\threads\focusID)
+            If Ar = Null
+                WriteLog(LoomLog, "Composer: discard zone -- stale handle, no-op")
+                Return
+            EndIf
+            Local zoneName$ = Ar\Name$
+            Threads::focus(self\threads, "", 0)
+            Threads::clearStack(self\threads)
+            ServerUnloadArea(Ar)
+            ServerLoadArea(zoneName)
+            ZoneSaved = True
+            WriteLog(LoomLog, "Composer: discarded -- reloaded zone " + zoneName)
+            Return
+        EndIf
+        WriteLog(LoomLog, "Composer: discardKind -- no handler for " + kind)
+    End Method
+
+
+    // -------------------------------------------------------------------------
+    // Free-all helpers -- pre-discard cleanup. The Load* functions assume
+    // they're populating a clean slate; not freeing first would leak the
+    // current set into the type pool. Delegate to non-Strict helpers in
+    // the data modules where possible (Dim-write trap means Loom can't
+    // null array slots from Strict).
+    // -------------------------------------------------------------------------
+    Method freeAllSpells()
+        Local id% = 0
+        For id = 0 To 65534
+            DeleteSpellTemplate(id)
+        Next
+    End Method
+
+    Method freeAllItems()
+        Local id% = 0
+        For id = 0 To 65534
+            DeleteItemTemplate(id)
+        Next
+    End Method
+
+    Method freeAllActors()
+        Local id% = 0
+        For id = 0 To 65535
+            DeleteActorTemplate(id)
+        Next
+    End Method
+
+    Method freeAllAnimSets()
+        Local id% = 0
+        For id = 0 To 999
+            DeleteAnimSetTemplate(id)
+        Next
+    End Method
+
+
+    // -------------------------------------------------------------------------
+    // reFocusOrClose -- after a discard reload, the focused refID may no
+    // longer exist (e.g. you deleted a spell, then discarded -- the spell
+    // is back but the ID may match a different newly-loaded spell, or none).
+    // Safe behavior: if the focused entity still resolves, keep focus; else
+    // close the composer back to the browser.
+    // -------------------------------------------------------------------------
+    Method reFocusOrClose(kind$)
+        Local nm$ = Threads::lookupName(self\threads, kind, self\threads\focusID)
+        If nm = ""
+            Threads::focus(self\threads, "", 0)
+            Threads::clearStack(self\threads)
+        EndIf
     End Method
 
 

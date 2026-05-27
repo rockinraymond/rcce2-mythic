@@ -213,6 +213,22 @@ Function CreateItem.Item()
 
 End Function
 
+; Delete an Item template. Used by Loom's entity-delete path. Strict
+; callers can't write to ItemList directly per the Dim-inside-Method trap,
+; so this lives here in the non-Strict module.
+Function DeleteItemTemplate(ID)
+	If ID < 0 Or ID > 65534 Then Return False
+	I.Item = ItemList(ID)
+	If I = Null Then Return False
+	If I\Attributes <> Null
+		Delete I\Attributes
+		I\Attributes = Null
+	EndIf
+	ItemList(ID) = Null
+	Delete I
+	Return True
+End Function
+
 ; Finds an item by name
 Function FindItem.Item(Name$)
 

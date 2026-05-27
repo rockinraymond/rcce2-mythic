@@ -99,12 +99,17 @@ Include "Modules\ServerAreas.bb"
 Include "Modules\Packets.bb"
 Include "Modules\Logging.bb"
 
-// Loom UI layer.
+// Loom UI layer. Order: Theme (constants) -> Threads (focus state) ->
+// Browser / Composer (the two surfaces both depend on Threads) -> Palette
+// (depends on Threads only) -> Ribbon (depends on Threads + Composer for
+// its dirty-badge save dispatch) -> EntityFactory (free functions, last
+// since it calls Threads::focus + reads the *Saved globals).
 Include "Modules\Loom\Theme.bb"
 Include "Modules\Loom\Threads.bb"
 Include "Modules\Loom\Browser.bb"
 Include "Modules\Loom\Composer.bb"
 Include "Modules\Loom\Palette.bb"
+Include "Modules\Loom\Ribbon.bb"
 Include "Modules\Loom\EntityFactory.bb"
 
 
@@ -120,6 +125,7 @@ Type Loom
     Field browser.Browser
     Field composer.Composer
     Field palette.Palette
+    Field ribbon.Ribbon
 
 
     Method create.Loom(windowWidth%, windowHeight%, projectName$)
@@ -136,6 +142,11 @@ Type Loom
         self\browser = New Browser(self\threads)
         self\composer = New Composer(self\threads)
         self\palette = New Palette(self\threads)
+
+        // Ribbon holds Threads (for future broken-ref-finder jumps) +
+        // Composer (so a dirty-badge click can dispatch to the same
+        // commitSaveForKind path the composer's Save button uses).
+        self\ribbon = New Ribbon(self\threads, self\composer)
 
         Return self
     End Method
@@ -177,6 +188,13 @@ Type Loom
 
         Browser::renderAndUpdate(self\browser, self\windowWidth, self\windowHeight, self\projectName, browserInput)
         Composer::renderAndUpdate(self\composer, self\windowWidth, self\windowHeight)
+
+        // Conscience Ribbon last among the on-canvas surfaces -- it
+        // overlays the top LOOM_TOP_RIBBON_H pixels of whatever Browser /
+        // Composer painted there (which is just the top of the brand
+        // strip, harmless to overwrite). Sits BELOW the Palette so the
+        // modal still dims it when open.
+        Ribbon::renderAndUpdate(self\ribbon, self\windowWidth)
 
         // Palette consumes its own keys (including Esc) when open and
         // returns True to signal that.

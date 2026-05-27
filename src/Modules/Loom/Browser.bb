@@ -23,15 +23,18 @@ Strict
 // so card clicks can dispatch the focus change without globals.
 
 
-// Layout constants
-Const BR_TOP_RIBBON   = 56
-Const BR_TAB_BAR_H    = 36
-Const BR_FILTER_BAR_H = 30
-Const BR_BOT_RIBBON   = 36
-Const BR_SECTION_PAD  = 28
-Const BR_CARD_W       = 300
-Const BR_CARD_H       = 96
-Const BR_CARD_GAP     = 14
+// Layout constants. BR_TOP_RIBBON is the Y where the tab bar starts (i.e.
+// the conscience ribbon + the brand strip both fit above it). The brand
+// strip height is BR_BRAND_STRIP_H and starts at y = LOOM_TOP_RIBBON_H.
+Const BR_BRAND_STRIP_H = 56
+Const BR_TOP_RIBBON    = LOOM_TOP_RIBBON_H + BR_BRAND_STRIP_H    // 28 + 56 = 84
+Const BR_TAB_BAR_H     = 36
+Const BR_FILTER_BAR_H  = 30
+Const BR_BOT_RIBBON    = 36
+Const BR_SECTION_PAD   = 28
+Const BR_CARD_W        = 300
+Const BR_CARD_H        = 96
+Const BR_CARD_GAP      = 14
 
 // Filter input cursor blink rate (ms). Matches Composer's edit cursor cadence
 // so the two surfaces feel like one input system.
@@ -290,18 +293,21 @@ Type Browser
 
 
     // -------------------------------------------------------------------------
-    // Top brand strip
+    // Top brand strip -- sits between the Validation Conscience Ribbon
+    // (top LOOM_TOP_RIBBON_H pixels) and the category tab bar. The brass
+    // hairline at the bottom of the strip separates it from the tab bar.
     // -------------------------------------------------------------------------
     Method drawTopRibbon(sw%, project$)
-        LoomFill(0, 0, sw, BR_TOP_RIBBON, LOOM_STONE_850_R, LOOM_STONE_850_G, LOOM_STONE_850_B)
+        Local stripY% = LOOM_TOP_RIBBON_H
+        LoomFill(0, stripY, sw, BR_BRAND_STRIP_H, LOOM_STONE_850_R, LOOM_STONE_850_G, LOOM_STONE_850_B)
         LoomHRule(0, BR_TOP_RIBBON - 1, sw, LOOM_BRASS_700_R, LOOM_BRASS_700_G, LOOM_BRASS_700_B)
         LoomHRule(0, BR_TOP_RIBBON,     sw, LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
         LoomHRule(0, BR_TOP_RIBBON + 1, sw, LOOM_BRASS_700_R, LOOM_BRASS_700_G, LOOM_BRASS_700_B)
 
-        LoomText(20, 18, "LOOM",    LOOM_PARCHMENT_100_R, LOOM_PARCHMENT_100_G, LOOM_PARCHMENT_100_B)
-        LoomText(20, 32, "Browser", LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
+        LoomText(20, stripY + 18, "LOOM",    LOOM_PARCHMENT_100_R, LOOM_PARCHMENT_100_G, LOOM_PARCHMENT_100_B)
+        LoomText(20, stripY + 32, "Browser", LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
 
-        LoomTextCentered(sw / 2, 22, project$, LOOM_PARCHMENT_100_R, LOOM_PARCHMENT_100_G, LOOM_PARCHMENT_100_B)
+        LoomTextCentered(sw / 2, stripY + 22, project$, LOOM_PARCHMENT_100_R, LOOM_PARCHMENT_100_G, LOOM_PARCHMENT_100_B)
     End Method
 
 
