@@ -539,6 +539,14 @@ Function BVM_SPAWNITEM(Param1$, Param2%, Param3$, Param4#, Param5#, Param6#, Par
 End Function
 
 Function BVM_SETACTORGENDER(Param1%, Param2%)
+	; Cosmetic appearance setter -- broadcasts P_AppearanceUpdate to
+	; every player in the area. Non-priv clicker exploit:
+	; SetActorGender(anotherPlayer, ...) forces an appearance flip
+	; on a victim, which is griefing rather than mechanical brick,
+	; but still unwanted. Same threat shape as the SET-name/tag pair.
+	; Quest reward scripts (race/gender change tokens) already run
+	; privileged. Per-Actor body/head clamping below is unchanged.
+	If Not BVM_RequirePrivileged() Then Return
 	Actor.ActorInstance = Object.ActorInstance(Param1%)
 	If Actor <> Null
 		; Param2% is 1-based on the script side (1=male, 2=female).
@@ -571,6 +579,10 @@ Return Result%
 End Function
 
 Function BVM_SETACTORBEARD(Param1%, Param2%)
+	; Cosmetic appearance setter -- same threat shape as
+	; SETACTORGENDER. Clicker-griefing only, but consistent gating
+	; across the appearance cluster.
+	If Not BVM_RequirePrivileged() Then Return
 	Actor.ActorInstance = Object.ActorInstance(Param1%)
 	If Actor <> Null
 		If Actor\Gender = 0
@@ -601,6 +613,9 @@ Return Result%
 End Function
 
 Function BVM_SETACTORHAIR(Param1%, Param2%)
+	; Cosmetic appearance setter -- same gating rationale as
+	; SETACTORGENDER / SETACTORBEARD.
+	If Not BVM_RequirePrivileged() Then Return
 	Actor.ActorInstance = Object.ActorInstance(Param1%)
 	If Actor <> Null
 		If Actor\Gender = 0
@@ -628,6 +643,13 @@ Function BVM_ACTORCALLFORHELP(Param1%)
 End Function
 
 Function BVM_SETACTORAISTATE(Param1%, Param2%)
+	; AIMode drives NPC AI behavior selection. Legitimate use is from
+	; Idle/Death/LevelUp/etc. scripts that already spawn privileged.
+	; Non-priv clicker exploit: SetActorAIState(SomeGuard, AI_Wait)
+	; disables a hostile guard's AI -- the clicker can then walk past
+	; or attack without retaliation. Same shape as the SETLEADER pet-
+	; recruitment exploit from PR #301.
+	If Not BVM_RequirePrivileged() Then Return
 	Actor.ActorInstance = Object.ActorInstance(Param1%)
 	If Actor <> Null
 		Actor\AIMode = Param2%
@@ -653,6 +675,16 @@ Return Result%
 End Function
 
 Function BVM_SETACTORTARGET(Param1%, Param2%=0)
+	; Sets an NPC's AI target. Has partial safety (Aggressiveness=3
+	; non-combatants and friendly-faction targets rejected) but a
+	; non-priv clicker can still call SetActorTarget(SomeGuard,
+	; anotherPlayer) to weaponize a hostile NPC against a chosen
+	; victim. Full-priv gate (not self-or-priv) for the same
+	; clicker-handle reason as the SET/CHANGE attribute cluster:
+	; SI\AI = Handle(clicker) for Examine / Trade / RightClick /
+	; ItemScript spawns, so self-or-priv on Param1 would let the
+	; clicker target THEMSELVES with an arbitrary Param2.
+	If Not BVM_RequirePrivileged() Then Return
 	Actor.ActorInstance = Object.ActorInstance(Param1%)
 	Actor2.ActorInstance = Object.ActorInstance(Param2%)
 	If Actor <> Null
@@ -1157,6 +1189,9 @@ Return Result%
 End Function
 
 Function BVM_SETACTORCLOTHES(Param1%, Param2%)
+	; Cosmetic appearance setter -- same gating rationale as the
+	; rest of the SET_ACTOR_(GENDER|BEARD|HAIR|FACE|CLOTHES) cluster.
+	If Not BVM_RequirePrivileged() Then Return
 	Actor.ActorInstance = Object.ActorInstance(Param1%)
 	If Actor <> Null
 		; Bound Param2% to the 5-slot Body-IDs arrays. 1-based -> 0-based clamp.
@@ -1182,6 +1217,9 @@ Return Result%
 End Function
 
 Function BVM_SETACTORFACE(Param1%, Param2%)
+	; Cosmetic appearance setter -- same gating rationale as the
+	; rest of the SET_ACTOR_(GENDER|BEARD|HAIR|FACE|CLOTHES) cluster.
+	If Not BVM_RequirePrivileged() Then Return
 	Actor.ActorInstance = Object.ActorInstance(Param1%)
 	If Actor <> Null
 		; Bound Param2% to the 5-slot Face-IDs arrays. 1-based -> 0-based clamp.
@@ -2435,6 +2473,14 @@ Return Result$
 End Function
 
 Function BVM_SETNAME(Param1%, Param2$)
+	; Renames an actor and broadcasts P_NameChange to every player in
+	; the area. Non-priv clicker exploit: SetName(anotherPlayer,
+	; "<slur>") griefs by renaming a third party; even self-grief
+	; (renaming oneself to an inappropriate string from a clicker
+	; script) is unwanted -- the name was server-validated at
+	; character-create time. Quest reward scripts that legitimately
+	; rename (title bestowal etc.) already run privileged.
+	If Not BVM_RequirePrivileged() Then Return
 	Actor.ActorInstance = Object.ActorInstance(Param1%)
 	If Actor <> Null
 		Actor\Name$ = BVM_DEQUOTE(Param2$)
@@ -2461,6 +2507,10 @@ Return Result$
 End Function
 
 Function BVM_SETTAG(Param1%, Param2$)
+	; Same shape as SETNAME -- mutates the "tag" string (e.g. guild
+	; label, title) and broadcasts P_NameChange. Same clicker-griefing
+	; vector and same gate.
+	If Not BVM_RequirePrivileged() Then Return
 	Actor.ActorInstance = Object.ActorInstance(Param1%)
 	If Actor <> Null
 		Actor\Tag$ = Param2$

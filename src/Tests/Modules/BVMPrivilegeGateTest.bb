@@ -4,8 +4,8 @@ EnableGC
 ; Regression tests pinning the BVM privilege-gate contract for the
 ; "equivalent-effect bypass" cluster in ScriptingCommands.bb.
 ;
-; Fourteen BVM functions had effects identical to already-gated peers
-; but lacked the gate themselves, defeating the privilege model:
+; Twenty-three BVM functions had effects identical to already-gated
+; peers but lacked the gate themselves, defeating the privilege model:
 ;
 ;   Newly-gated function    Bypass of           Gate chosen
 ;   -------------------------------------------------------------------
@@ -22,6 +22,15 @@ EnableGC
 ;   BVM_SETABILITYLEVEL     BVM_SETATTRIBUTE    RequirePrivileged
 ;   BVM_SETITEMHEALTH       (item brick)        RequirePrivileged
 ;   BVM_SETRESISTANCE       BVM_SETFACTIONRATING RequirePrivileged
+;   BVM_SETACTORAISTATE     (NPC AI disable)    RequirePrivileged
+;   BVM_SETACTORTARGET      (NPC weaponize)     RequirePrivileged
+;   BVM_SETNAME             (clicker griefing)  RequirePrivileged
+;   BVM_SETTAG              (clicker griefing)  RequirePrivileged
+;   BVM_SETACTORGENDER      (cosmetic griefing) RequirePrivileged
+;   BVM_SETACTORBEARD       (cosmetic griefing) RequirePrivileged
+;   BVM_SETACTORHAIR        (cosmetic griefing) RequirePrivileged
+;   BVM_SETACTORFACE        (cosmetic griefing) RequirePrivileged
+;   BVM_SETACTORCLOTHES     (cosmetic griefing) RequirePrivileged
 ;   BVM_REMOVEZONEINSTANCE  (admin-only)        RequirePrivileged
 ;
 ; ScriptingCommands.bb can't be Included directly into a test build --
@@ -92,6 +101,11 @@ Global MutationSetLeader = 0
 Global MutationSetAbilityLevel = 0
 Global MutationSetItemHealth = 0
 Global MutationSetResistance = 0
+Global MutationSetActorAIState = 0
+Global MutationSetActorTarget = 0
+Global MutationSetName = 0
+Global MutationSetTag = 0
+Global MutationSetActorAppearance = 0  ; shared counter for the 5 appearance setters
 Global MutationRemoveZone = 0
 
 Function MockBVM_CHANGEGOLD(Param1%, Param2%)
@@ -159,6 +173,37 @@ Function MockBVM_SETRESISTANCE(Param1%, Param2$, Param3%)
 	MutationSetResistance = MutationSetResistance + Param3%
 End Function
 
+Function MockBVM_SETACTORAISTATE(Param1%, Param2%)
+	If Not BVM_RequirePrivileged() Then Return
+	MutationSetActorAIState = MutationSetActorAIState + 1
+End Function
+
+Function MockBVM_SETACTORTARGET(Param1%, Param2%)
+	If Not BVM_RequirePrivileged() Then Return
+	MutationSetActorTarget = MutationSetActorTarget + 1
+End Function
+
+Function MockBVM_SETNAME(Param1%, Param2$)
+	If Not BVM_RequirePrivileged() Then Return
+	MutationSetName = MutationSetName + 1
+End Function
+
+Function MockBVM_SETTAG(Param1%, Param2$)
+	If Not BVM_RequirePrivileged() Then Return
+	MutationSetTag = MutationSetTag + 1
+End Function
+
+; Shared appearance-setter mock -- threat model + gate shape are
+; identical across GENDER / BEARD / HAIR / FACE / CLOTHES, so a single
+; mock covers the contract. The production functions are 5 separate
+; bodies (each writing a distinct field + broadcasting a distinct
+; sub-code) and each gets its own gate; the test just proves the
+; gate is wired.
+Function MockBVM_SETACTORAPPEARANCE(Param1%, Param2%)
+	If Not BVM_RequirePrivileged() Then Return
+	MutationSetActorAppearance = MutationSetActorAppearance + 1
+End Function
+
 Function MockBVM_REMOVEZONEINSTANCE(Param1$, Instance%)
 	If Not BVM_RequirePrivileged() Then Return
 	MutationRemoveZone = MutationRemoveZone + 1
@@ -179,6 +224,11 @@ Function ResetMutationCounters()
 	MutationSetAbilityLevel = 0
 	MutationSetItemHealth = 0
 	MutationSetResistance = 0
+	MutationSetActorAIState = 0
+	MutationSetActorTarget = 0
+	MutationSetName = 0
+	MutationSetTag = 0
+	MutationSetActorAppearance = 0
 	MutationRemoveZone = 0
 	LastScriptLog$ = ""
 End Function
@@ -581,6 +631,112 @@ Test testSetResistanceGatePassesForPrivileged()
 	ResetMutationCounters()
 	MockBVM_SETRESISTANCE(999, "Fire", 50)
 	Assert(MutationSetResistance = 50)
+End Test
+
+; ======================================================================
+; Cosmetic-tier brick / griefing cluster -- the last sweep flagged by
+; PR #301's reviewer. SETACTORAISTATE / SETACTORTARGET disable or
+; weaponize NPC AI (real exploit). SETNAME / SETTAG / SETACTORGENDER /
+; SETACTORBEARD / SETACTORHAIR / SETACTORFACE / SETACTORCLOTHES are
+; cosmetic griefing -- consistent gating across the cluster.
+; ======================================================================
+
+Test testSetActorAIStateGateBlocksArbitrary()
+	; Clicker exploit: SetActorAIState(SomeGuard, AI_Wait) disables a
+	; hostile guard's AI so the clicker can walk past or attack
+	; without retaliation.
+	InstallScript(0, 100, 0)
+	ResetMutationCounters()
+	MockBVM_SETACTORAISTATE(999, 0)
+	Assert(MutationSetActorAIState = 0)
+End Test
+
+Test testSetActorAIStateGatePassesForPrivileged()
+	InstallScript(1, 0, 0)
+	ResetMutationCounters()
+	MockBVM_SETACTORAISTATE(999, 2)
+	Assert(MutationSetActorAIState = 1)
+End Test
+
+Test testSetActorTargetGateBlocksArbitrary()
+	; Clicker exploit: SetActorTarget(SomeGuard, anotherPlayer)
+	; weaponizes a hostile NPC against a third party.
+	InstallScript(0, 100, 0)
+	ResetMutationCounters()
+	MockBVM_SETACTORTARGET(999, 777)
+	Assert(MutationSetActorTarget = 0)
+End Test
+
+Test testSetActorTargetGateBlocksTargetingFromOwnAI()
+	; Clicker shape: SI\AI = clicker (777), Param1 = clicker. Full-
+	; priv must refuse to prevent self-or-priv defeats.
+	InstallScript(0, 777, 200)
+	ResetMutationCounters()
+	MockBVM_SETACTORTARGET(777, 500)
+	Assert(MutationSetActorTarget = 0)
+End Test
+
+Test testSetActorTargetGatePassesForPrivileged()
+	InstallScript(1, 0, 0)
+	ResetMutationCounters()
+	MockBVM_SETACTORTARGET(999, 777)
+	Assert(MutationSetActorTarget = 1)
+End Test
+
+Test testSetNameGateBlocksArbitrary()
+	; Clicker griefing: SetName(anotherPlayer, "<slur>") forces a
+	; rename + broadcasts to area.
+	InstallScript(0, 100, 0)
+	ResetMutationCounters()
+	MockBVM_SETNAME(999, "Griefed")
+	Assert(MutationSetName = 0)
+End Test
+
+Test testSetNameGatePassesForPrivileged()
+	InstallScript(1, 0, 0)
+	ResetMutationCounters()
+	MockBVM_SETNAME(999, "QuestTitle")
+	Assert(MutationSetName = 1)
+End Test
+
+Test testSetTagGateBlocksArbitrary()
+	InstallScript(0, 100, 0)
+	ResetMutationCounters()
+	MockBVM_SETTAG(999, "Griefed")
+	Assert(MutationSetTag = 0)
+End Test
+
+Test testSetTagGatePassesForPrivileged()
+	InstallScript(1, 0, 0)
+	ResetMutationCounters()
+	MockBVM_SETTAG(999, "GuildTag")
+	Assert(MutationSetTag = 1)
+End Test
+
+; Shared appearance-cluster contract: 5 production functions
+; (SETACTORGENDER / BEARD / HAIR / FACE / CLOTHES) all use the same
+; gate shape. Test once via the shared mock; each production gate is
+; verified by inspection (audit-comment template is identical).
+Test testSetActorAppearanceGateBlocksArbitrary()
+	InstallScript(0, 100, 0)
+	ResetMutationCounters()
+	MockBVM_SETACTORAPPEARANCE(999, 2)
+	Assert(MutationSetActorAppearance = 0)
+End Test
+
+Test testSetActorAppearanceGateBlocksOwnAITarget()
+	; Clicker self-grief shape: SI\AI = clicker, Param1 = clicker.
+	InstallScript(0, 777, 200)
+	ResetMutationCounters()
+	MockBVM_SETACTORAPPEARANCE(777, 2)
+	Assert(MutationSetActorAppearance = 0)
+End Test
+
+Test testSetActorAppearanceGatePassesForPrivileged()
+	InstallScript(1, 0, 0)
+	ResetMutationCounters()
+	MockBVM_SETACTORAPPEARANCE(999, 3)
+	Assert(MutationSetActorAppearance = 1)
 End Test
 
 Test testRemoveZoneInstanceGateBlocksNonPrivileged()
