@@ -182,3 +182,120 @@ Function EntityFactory_ZoneNameExists%(name$)
     Next
     Return False
 End Function
+
+
+// =============================================================================
+// EntityFactory_Delete -- dispatch on kind, free the entity from in-memory
+// state, mark the kind dirty, clear focus. Returns True on success.
+//
+// The delete-from-disk is INDEPENDENT of the in-memory free: the bulk
+// serializers (SaveActors / SaveItems / ...) write the full list every
+// time, so a freed slot stops getting written on the next Save. Only zones
+// need an explicit file delete since each zone has its own .dat.
+//
+// Reference cleanup: stale references (an Actor pointing at a deleted
+// Faction, a Zone portal pointing at a deleted Zone) become broken-ref
+// chips in the Composer (red border, "(broken ...)" text). The Validation
+// Ribbon surfaces the total broken-ref count so dangling references stay
+// visible without forcing a sweep at delete-time -- some deletions are
+// intentional and the cleanup is a separate user decision.
+// =============================================================================
+Function EntityFactory_Delete%(kind$, refID%, threads.Threads)
+    If kind = "actor"   Then Return EntityFactory_DeleteActor(refID, threads)
+    If kind = "item"    Then Return EntityFactory_DeleteItem(refID, threads)
+    If kind = "spell"   Then Return EntityFactory_DeleteSpell(refID, threads)
+    If kind = "zone"    Then Return EntityFactory_DeleteZone(refID, threads)
+    If kind = "faction" Then Return EntityFactory_DeleteFaction(refID, threads)
+    If kind = "animset" Then Return EntityFactory_DeleteAnimSet(refID, threads)
+    WriteLog(LoomLog, "EntityFactory: delete unknown kind '" + kind + "'")
+    Return False
+End Function
+
+
+Function EntityFactory_DeleteActor%(refID%, threads.Threads)
+    If DeleteActorTemplate(refID) = False
+        WriteLog(LoomLog, "EntityFactory: delete actor #" + Str(refID) + " -- not found")
+        Return False
+    EndIf
+    ActorsSaved = False
+    Threads::focus(threads, "", 0)
+    Threads::clearStack(threads)
+    WriteLog(LoomLog, "EntityFactory: deleted actor #" + Str(refID))
+    Return True
+End Function
+
+
+Function EntityFactory_DeleteItem%(refID%, threads.Threads)
+    If DeleteItemTemplate(refID) = False
+        WriteLog(LoomLog, "EntityFactory: delete item #" + Str(refID) + " -- not found")
+        Return False
+    EndIf
+    ItemsSaved = False
+    Threads::focus(threads, "", 0)
+    Threads::clearStack(threads)
+    WriteLog(LoomLog, "EntityFactory: deleted item #" + Str(refID))
+    Return True
+End Function
+
+
+Function EntityFactory_DeleteSpell%(refID%, threads.Threads)
+    If DeleteSpellTemplate(refID) = False
+        WriteLog(LoomLog, "EntityFactory: delete spell #" + Str(refID) + " -- not found")
+        Return False
+    EndIf
+    SpellsSaved = False
+    Threads::focus(threads, "", 0)
+    Threads::clearStack(threads)
+    WriteLog(LoomLog, "EntityFactory: deleted spell #" + Str(refID))
+    Return True
+End Function
+
+
+Function EntityFactory_DeleteAnimSet%(refID%, threads.Threads)
+    If DeleteAnimSetTemplate(refID) = False
+        WriteLog(LoomLog, "EntityFactory: delete animset #" + Str(refID) + " -- not found")
+        Return False
+    EndIf
+    AnimsSaved = False
+    Threads::focus(threads, "", 0)
+    Threads::clearStack(threads)
+    WriteLog(LoomLog, "EntityFactory: deleted animset #" + Str(refID))
+    Return True
+End Function
+
+
+Function EntityFactory_DeleteFaction%(refID%, threads.Threads)
+    If refID < 0 Or refID > 99 Then Return False
+    If FactionNames$(refID) = "" Then Return False
+    SetFactionName(refID, "")     // empty string = vacant slot per LoadFactions semantics
+    FactionsSaved = False
+    Threads::focus(threads, "", 0)
+    Threads::clearStack(threads)
+    WriteLog(LoomLog, "EntityFactory: deleted faction slot " + Str(refID))
+    Return True
+End Function
+
+
+Function EntityFactory_DeleteZone%(refID%, threads.Threads)
+    Local A.Area = Object.Area(refID)
+    If A = Null
+        WriteLog(LoomLog, "EntityFactory: delete zone -- stale handle")
+        Return False
+    EndIf
+
+    // Delete the on-disk .dat first (the in-memory Free will null the
+    // handle and we can't get the Name$ after that).
+    Local zoneName$ = A\Name$
+    Local datPath$ = "Data\Server Data\Areas\" + zoneName + ".dat"
+    If FileType(datPath) = 1
+        DeleteFile datPath
+        WriteLog(LoomLog, "EntityFactory: deleted zone .dat at " + datPath)
+    EndIf
+
+    ServerUnloadArea(A)            // frees the Area + per-area ServerWater chain
+    ZoneSaved = True               // no other-zone changes pending purely from this op
+    Threads::focus(threads, "", 0)
+    Threads::clearStack(threads)
+    WriteLog(LoomLog, "EntityFactory: deleted zone " + zoneName)
+    Return True
+End Function

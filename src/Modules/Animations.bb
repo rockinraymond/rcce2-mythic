@@ -151,6 +151,18 @@ Function LoadAnimSets(Filename$)
 
 End Function
 
+; Delete an AnimSet template. Used by Loom's entity-delete path. Walks
+; AnimList for the matching slot and clears it; Strict callers can't write
+; the Dim'd AnimList directly per the Dim-inside-Method trap.
+Function DeleteAnimSetTemplate(ID)
+	If ID < 0 Or ID > 999 Then Return False
+	A.AnimSet = AnimList(ID)
+	If A = Null Then Return False
+	AnimList(ID) = Null
+	Delete A
+	Return True
+End Function
+
 ; Saves all animation sets via SafeWriteOpen/Commit (atomic).
 Function SaveAnimSets(Filename$)
 

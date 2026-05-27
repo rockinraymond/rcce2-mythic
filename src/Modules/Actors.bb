@@ -1256,6 +1256,24 @@ Function SetFactionName(Index, Name$)
 	FactionNames$(Index) = Name$
 End Function
 
+; Delete an Actor template (NOT an ActorInstance). Used by Loom's entity-
+; delete path. Frees the Type instance and clears the ActorList slot so a
+; subsequent CreateActor can reuse the ID. Strict callers can't write to
+; ActorList directly per the Dim-inside-Method trap.
+Function DeleteActorTemplate(ID)
+	If ID < 0 Or ID > 65535 Then Return False
+	A.Actor = ActorList(ID)
+	If A = Null Then Return False
+	; Drop the Attributes side-instance if any -- otherwise it leaks.
+	If A\Attributes <> Null
+		Delete A\Attributes
+		A\Attributes = Null
+	EndIf
+	ActorList(ID) = Null
+	Delete A
+	Return True
+End Function
+
 ; Gives a known spell (ability) to an actor instance (SERVER ONLY!)
 Function AddSpell(AI.ActorInstance, SpellID, Lvl = 1)
 	If Lvl < 1 Then Return

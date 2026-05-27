@@ -87,6 +87,18 @@ Const LOOM_DANGER_R  = 184 : Const LOOM_DANGER_G  = 48  : Const LOOM_DANGER_B  =
 
 
 // -----------------------------------------------------------------------------
+// Cross-surface layout constants. Lives here (not in any single surface's
+// module) because multiple surfaces need to share the values to stay aligned:
+//   - LOOM_TOP_RIBBON_H: vertical space the Validation Conscience Ribbon
+//     (Ribbon.bb) reserves at y=0. Browser top ribbon starts at this y,
+//     Composer top starts at this y + its own brand strip, Palette modal
+//     centers below it (the ribbon stays visible when the palette is open
+//     so the dirty count and broken-ref count remain available).
+// -----------------------------------------------------------------------------
+Const LOOM_TOP_RIBBON_H = 28
+
+
+// -----------------------------------------------------------------------------
 // State: fonts loaded by LoomTheme_Init. For the alpha skeleton we just use
 // the Blitz default font; later phases will load MedievalSharp / Cinzel /
 // Cormorant Garamond ttf files from Data/Loom/Fonts/ when those are added.

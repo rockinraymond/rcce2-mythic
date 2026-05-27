@@ -38,6 +38,18 @@ Function CreateSpell.Spell()
 
 End Function
 
+; Delete a Spell template. Used by Loom's entity-delete path. Strict
+; callers can't write to SpellsList directly per the Dim-inside-Method trap,
+; so this lives here in the non-Strict module.
+Function DeleteSpellTemplate(ID)
+	If ID < 0 Or ID > 65534 Then Return False
+	S.Spell = SpellsList(ID)
+	If S = Null Then Return False
+	SpellsList(ID) = Null
+	Delete S
+	Return True
+End Function
+
 ; Loads all spells from file
 Function LoadSpells(Filename$)
 
