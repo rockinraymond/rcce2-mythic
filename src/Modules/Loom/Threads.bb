@@ -110,7 +110,7 @@ Function Threads_Jump(kind$, refID)
 
     // Push current focus (if any) onto the back stack
     If Loom_FocusKind$ <> ""
-        Local prev.LoomFocusEntry = New LoomFocusEntry
+        Local prev.LoomFocusEntry = New LoomFocusEntry()
         prev\Kind$ = Loom_FocusKind$
         prev\RefID = Loom_FocusID
         ListAdd(Loom_BackStack, prev)
@@ -130,12 +130,18 @@ Function Threads_Back()
     Local n = ListSize(Loom_BackStack)
     If n = 0 Then Return False
 
-    // Pop the last entry
+    // Pop the last entry. The LoomFocusEntry instance lives on the heap;
+    // ListRemove only drops the list's reference to it, leaving the instance
+    // itself leaked. Without `EnableGC` at the top of this file, Blitz3D has
+    // no reference counting -- a long Loom session with N back/forward
+    // navigations leaks N LoomFocusEntry instances. Capture the fields we
+    // need, drop from list, then `Delete` the instance explicitly.
     Local prev.LoomFocusEntry = ListAt(Loom_BackStack, n - 1)
     If prev = Null Then Return False
     Local kind$ = prev\Kind$
     Local refID = prev\RefID
     ListRemove(Loom_BackStack, n - 1)
+    Delete prev
 
     Loom_FocusKind$ = kind$
     Loom_FocusID = refID
@@ -149,7 +155,15 @@ End Function
 // Threads_ClearStack
 // =============================================================================
 Function Threads_ClearStack()
-    If Loom_BackStack <> Null Then ListClear(Loom_BackStack)
+    If Loom_BackStack = Null Then Return
+    // Same leak rationale as Threads_Back: ListClear only drops the list's
+    // references; the LoomFocusEntry instances must be Deleted explicitly
+    // (no EnableGC at file top, no auto-collection).
+    Local entry.LoomFocusEntry
+    For entry = Each LoomFocusEntry
+        Delete entry
+    Next
+    ListClear(Loom_BackStack)
 End Function
 
 
