@@ -76,3 +76,23 @@ jobs:
       - name: Run test suite
         shell: cmd
         run: test.bat
+
+      # Two reference docs (the wire-protocol packet catalog and the BVM
+      # scripting-API catalog) are produced by generator scripts that read
+      # line numbers + signatures out of the source. Their `--check` mode
+      # exits non-zero when the committed doc no longer matches a fresh
+      # regeneration. Without this gate, every PR that shifts a packet
+      # handler or BVM function silently leaves stale `:LINE` references
+      # in the docs -- and the line numbers look authoritative because the
+      # docs carry a "Do not edit by hand -- rerun the generator" banner.
+      # Contributors who touch ServerNet.bb / ClientNet.bb / Packets.bb /
+      # RC_Standard_Invoker.bb / ScriptingCommands.bb must rerun the two
+      # generators (`bash scripts/gen_packet_index.sh` +
+      # `bash scripts/gen_bvm_reference.sh`) and commit the regenerated
+      # output, or this step fails the PR with a diff message pointing at
+      # the regeneration command.
+      - name: Verify generated docs are up to date
+        shell: bash
+        run: |
+          bash scripts/gen_packet_index.sh --check
+          bash scripts/gen_bvm_reference.sh --check
