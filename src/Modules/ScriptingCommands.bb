@@ -2293,6 +2293,23 @@ Return Result%
 End Function
 
 Function BVM_SETMAXATTRIBUTE(Param1%, Param2$, Param3%)
+	; Sibling-asymmetry security gap fixed: BVM_SETATTRIBUTE /
+	; BVM_CHANGEATTRIBUTE were gated full-priv because their HealthStat
+	; branch falls through to KillActor and a clicker exploit could
+	; one-shot the player. The MAX-counterparts were left ungated --
+	; that's still a one-shot-brick vector: a non-priv NPC's
+	; Examine/Trade/RightClick/ItemScript can call
+	; SetMaxAttribute(player, "Health", 1) to permanently nerf the
+	; player's max HP to 1, after which the next damage tick kills
+	; them. SetMaxAttribute(player, "Speed", 0) locks them in place;
+	; SetMaxAttribute(player, "Energy", 0) disables spells.
+	;
+	; Full-priv gate (not self-or-priv): clicker-driven scripts
+	; have SI\AI = clicker handle, so self-or-priv on Param1 would
+	; let the clicker brick themselves -- and more importantly, any
+	; *other* player the script names via FindActor. CLAUDE.md "BVM
+	; clicker-handle trap" + memory feedback_sibling_protection_asymmetry.
+	If Not BVM_RequirePrivileged() Then Return
 	Actor.ActorInstance = Object.ActorInstance(Param1%)
 	If Actor <> Null
 		Attribute = FindAttribute(Param2$)
@@ -2313,6 +2330,12 @@ Function BVM_SETMAXATTRIBUTE(Param1%, Param2$, Param3%)
 End Function
 
 Function BVM_CHANGEMAXATTRIBUTE(Param1%, Param2$, Param3%)
+	; Sibling-asymmetry gate -- same shape as BVM_SETMAXATTRIBUTE
+	; above. ChangeMaxAttribute(player, "Health", -big%) drives
+	; Maximum[Health] toward zero, brick vector identical to the
+	; absolute-set form. Full-priv (not self-or-priv) -- clicker-
+	; driven scripts have SI\AI = clicker handle.
+	If Not BVM_RequirePrivileged() Then Return
 	Actor.ActorInstance = Object.ActorInstance(Param1%)
 	If Actor <> Null
 		Attribute = FindAttribute(Param2$)

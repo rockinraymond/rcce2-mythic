@@ -4,18 +4,20 @@ EnableGC
 ; Regression tests pinning the BVM privilege-gate contract for the
 ; "equivalent-effect bypass" cluster in ScriptingCommands.bb.
 ;
-; Seven BVM functions had effects identical to already-gated peers but
+; Nine BVM functions had effects identical to already-gated peers but
 ; lacked the gate themselves, defeating the privilege model:
 ;
-;   Newly-gated function   Bypass of           Gate chosen
+;   Newly-gated function    Bypass of           Gate chosen
 ;   -------------------------------------------------------------------
-;   BVM_CHANGEGOLD         BVM_SETGOLD         RequirePrivileged
-;   BVM_CHANGEMONEY        BVM_SETMONEY        RequirePrivileged
-;   BVM_GIVEXP             BVM_SETACTORLEVEL   RequirePrivileged
-;   BVM_GIVEKILLXP         BVM_SETACTORLEVEL   RequirePrivileged
-;   BVM_SETATTRIBUTE       BVM_KILLACTOR       RequirePrivileged
-;   BVM_CHANGEATTRIBUTE    BVM_KILLACTOR       RequirePrivileged
-;   BVM_REMOVEZONEINSTANCE (admin-only)        RequirePrivileged
+;   BVM_CHANGEGOLD          BVM_SETGOLD         RequirePrivileged
+;   BVM_CHANGEMONEY         BVM_SETMONEY        RequirePrivileged
+;   BVM_GIVEXP              BVM_SETACTORLEVEL   RequirePrivileged
+;   BVM_GIVEKILLXP          BVM_SETACTORLEVEL   RequirePrivileged
+;   BVM_SETATTRIBUTE        BVM_KILLACTOR       RequirePrivileged
+;   BVM_CHANGEATTRIBUTE     BVM_KILLACTOR       RequirePrivileged
+;   BVM_SETMAXATTRIBUTE     BVM_SETATTRIBUTE    RequirePrivileged
+;   BVM_CHANGEMAXATTRIBUTE  BVM_SETATTRIBUTE    RequirePrivileged
+;   BVM_REMOVEZONEINSTANCE  (admin-only)        RequirePrivileged
 ;
 ; ScriptingCommands.bb can't be Included directly into a test build --
 ; it pulls in the entire actor / item / wire / scripting graph. Following
@@ -78,6 +80,8 @@ Global MutationXP = 0
 Global MutationKillXP = 0
 Global MutationSetAttr = 0
 Global MutationChangeAttr = 0
+Global MutationSetMaxAttr = 0
+Global MutationChangeMaxAttr = 0
 Global MutationRemoveZone = 0
 
 Function MockBVM_CHANGEGOLD(Param1%, Param2%)
@@ -110,6 +114,16 @@ Function MockBVM_CHANGEATTRIBUTE(Param1%, Param2$, Param3%)
 	MutationChangeAttr = MutationChangeAttr + Param3%
 End Function
 
+Function MockBVM_SETMAXATTRIBUTE(Param1%, Param2$, Param3%)
+	If Not BVM_RequirePrivileged() Then Return
+	MutationSetMaxAttr = MutationSetMaxAttr + Param3%
+End Function
+
+Function MockBVM_CHANGEMAXATTRIBUTE(Param1%, Param2$, Param3%)
+	If Not BVM_RequirePrivileged() Then Return
+	MutationChangeMaxAttr = MutationChangeMaxAttr + Param3%
+End Function
+
 Function MockBVM_REMOVEZONEINSTANCE(Param1$, Instance%)
 	If Not BVM_RequirePrivileged() Then Return
 	MutationRemoveZone = MutationRemoveZone + 1
@@ -123,6 +137,8 @@ Function ResetMutationCounters()
 	MutationKillXP = 0
 	MutationSetAttr = 0
 	MutationChangeAttr = 0
+	MutationSetMaxAttr = 0
+	MutationChangeMaxAttr = 0
 	MutationRemoveZone = 0
 	LastScriptLog$ = ""
 End Function
@@ -324,6 +340,78 @@ Test testChangeAttributeGatePassesForPrivileged()
 	ResetMutationCounters()
 	MockBVM_CHANGEATTRIBUTE(999, "Health", -7)
 	Assert(MutationChangeAttr = -7)
+End Test
+
+; ======================================================================
+; SetMaxAttribute / ChangeMaxAttribute sibling-asymmetry gates.
+;
+; The SET/CHANGE pair above is gated because their HealthStat branch
+; falls through to KillActor(...) -- a clicker one-shot kill exploit.
+; The SET/CHANGE-MAX pair sits next door and was left ungated, but it's
+; still a brick vector:
+;
+;   SetMaxAttribute(player, "Health", 1)  -> max HP = 1 forever, next
+;                                            damage tick kills them
+;   SetMaxAttribute(player, "Speed",  0)  -> player can't move
+;   SetMaxAttribute(player, "Energy", 0)  -> player can't cast spells
+;
+; Same clicker-bypass mechanics as SET/CHANGE: ThreadScript spawn for
+; Examine/Trade/RightClick/ItemScript makes SI\AI = Handle(clicker), so
+; the gate has to be RequirePrivileged (not SelfOrPrivileged).
+; ======================================================================
+
+Test testSetMaxAttributeGateBlocksArbitraryTarget()
+	InstallScript(0, 100, 0)
+	ResetMutationCounters()
+	MockBVM_SETMAXATTRIBUTE(999, "Health", 1)
+	Assert(MutationSetMaxAttr = 0)
+End Test
+
+Test testSetMaxAttributeGateBlocksBrickingOwnAITarget()
+	; The SI\AI = clicker shape -- a self-or-priv gate would incorrectly
+	; match Param1 = 777 against SI\AI = 777 and let the brick through.
+	; Full-priv must refuse.
+	InstallScript(0, 777, 200)
+	ResetMutationCounters()
+	MockBVM_SETMAXATTRIBUTE(777, "Health", 1)
+	Assert(MutationSetMaxAttr = 0)
+End Test
+
+Test testSetMaxAttributeGateBlocksBrickingOwnContextTarget()
+	InstallScript(0, 100, 500)
+	ResetMutationCounters()
+	MockBVM_SETMAXATTRIBUTE(500, "Speed", 0)
+	Assert(MutationSetMaxAttr = 0)
+End Test
+
+Test testSetMaxAttributeGatePassesForPrivileged()
+	InstallScript(1, 0, 0)
+	ResetMutationCounters()
+	MockBVM_SETMAXATTRIBUTE(999, "Health", 200)
+	Assert(MutationSetMaxAttr = 200)
+End Test
+
+Test testChangeMaxAttributeGateBlocksArbitraryTarget()
+	; ChangeMaxAttribute(target, "Health", -big%) drives Maximum[Health]
+	; toward zero -- same brick vector via the relative-mutation path.
+	InstallScript(0, 100, 0)
+	ResetMutationCounters()
+	MockBVM_CHANGEMAXATTRIBUTE(999, "Health", -1000000)
+	Assert(MutationChangeMaxAttr = 0)
+End Test
+
+Test testChangeMaxAttributeGateBlocksBrickingOwnAITarget()
+	InstallScript(0, 777, 200)
+	ResetMutationCounters()
+	MockBVM_CHANGEMAXATTRIBUTE(777, "Health", -1000000)
+	Assert(MutationChangeMaxAttr = 0)
+End Test
+
+Test testChangeMaxAttributeGatePassesForPrivileged()
+	InstallScript(1, 0, 0)
+	ResetMutationCounters()
+	MockBVM_CHANGEMAXATTRIBUTE(999, "Health", 50)
+	Assert(MutationChangeMaxAttr = 50)
 End Test
 
 Test testRemoveZoneInstanceGateBlocksNonPrivileged()
