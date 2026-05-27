@@ -1352,6 +1352,19 @@ Return Result%
 End Function
 
 Function BVM_SETACTORGROUP(Param1%, Param2%)
+	; TeamID is the team / party / faction identifier consumed by chat
+	; routing (`/g` guild chat at ServerNet.bb's chat dispatch keys off
+	; `A2\TeamID = AI\TeamID`) and combat friendly-fire / aggression
+	; gating. Flipping TeamID via a clicker script lets a non-priv NPC
+	; reassign the clicker's team -- friendly-fire flip, faction griefing,
+	; guild-chat exfiltration vector ("listen in on this team's chat by
+	; flipping a target into it"). The fix path was deferred at PR #311
+	; pending an audit of shipped content scripts in `data/Server Data/
+	; Scripts/`; PR #325's recon confirmed ZERO callers (no grep hits in
+	; data/), so a full RequirePrivileged gate is safe to land without
+	; content rewrites. Sibling-asymmetry with the 12 already-gated
+	; mutators in this file; see CLAUDE.md "Pairs to keep in lockstep".
+	If Not BVM_RequirePrivileged() Then Return
 	Actor.ActorInstance = Object.ActorInstance(Param1%)
 	If Actor <> Null Then Actor\TeamID = Param2%
 End Function

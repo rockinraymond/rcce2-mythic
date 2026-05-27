@@ -105,6 +105,7 @@ Global MutationSetAbilityLevel = 0
 Global MutationSetItemHealth = 0
 Global MutationSetResistance = 0
 Global MutationSetActorAppearance = 0  ; shared counter for the 5 appearance setters
+Global MutationSetActorGroup = 0
 Global MutationRemoveZone = 0
 
 Function MockBVM_CHANGEGOLD(Param1%, Param2%)
@@ -188,6 +189,18 @@ Function MockBVM_REMOVEZONEINSTANCE(Param1$, Instance%)
 	MutationRemoveZone = MutationRemoveZone + 1
 End Function
 
+; SetActorGroup gate (PR #325). TeamID is the team / party / faction
+; identifier consumed by chat routing and combat friendly-fire gating;
+; flipping it via a clicker script lets a non-priv NPC reassign the
+; clicker's team. Zero shipped content-script callers (verified via
+; `grep -rni SetActorGroup data/`), so RequirePrivileged was clean to
+; land without content rewrites. Same threat model + gate shape as the
+; appearance cluster.
+Function MockBVM_SETACTORGROUP(Param1%, Param2%)
+	If Not BVM_RequirePrivileged() Then Return
+	MutationSetActorGroup = MutationSetActorGroup + 1
+End Function
+
 ; --- Test fixture helpers ----------------------------------------------
 Function ResetMutationCounters()
 	MutationGold = 0
@@ -204,6 +217,7 @@ Function ResetMutationCounters()
 	MutationSetItemHealth = 0
 	MutationSetResistance = 0
 	MutationSetActorAppearance = 0
+	MutationSetActorGroup = 0
 	MutationRemoveZone = 0
 	LastScriptLog$ = ""
 End Function
@@ -653,4 +667,39 @@ Test testRemoveZoneInstanceGatePassesForPrivileged()
 	ResetMutationCounters()
 	MockBVM_REMOVEZONEINSTANCE("MainZone", 5)
 	Assert(MutationRemoveZone = 1)
+End Test
+
+; ======================================================================
+; SetActorGroup gate (PR #325). TeamID drives chat-routing (/g guild
+; chat keys on `A2\TeamID = AI\TeamID`) and friendly-fire / aggression
+; gating. Flipping TeamID via a non-priv clicker script lets an NPC
+; reassign the clicker's team -- griefing + chat-exfiltration vector.
+; Zero shipped content-script callers (verified at recon time), so
+; RequirePrivileged was clean to land. Sibling-asymmetry with the 12
+; already-gated mutators in this file.
+; ======================================================================
+
+Test testSetActorGroupGateBlocksNonPrivileged()
+	InstallScript(0, 0, 0)
+	ResetMutationCounters()
+	MockBVM_SETACTORGROUP(999, 5)
+	Assert(MutationSetActorGroup = 0)
+End Test
+
+Test testSetActorGroupGateBlocksOwnAITarget()
+	; The clicker shape: Examine/Trade/RightClick/ItemScript spawn
+	; sets SI\AI = Handle(clicker). A self-or-priv gate would
+	; incorrectly let Param1 = clicker_handle through; this test
+	; confirms full RequirePrivileged blocks even that case.
+	InstallScript(0, 777, 0)
+	ResetMutationCounters()
+	MockBVM_SETACTORGROUP(777, 5)
+	Assert(MutationSetActorGroup = 0)
+End Test
+
+Test testSetActorGroupGatePassesForPrivileged()
+	InstallScript(1, 0, 0)
+	ResetMutationCounters()
+	MockBVM_SETACTORGROUP(999, 5)
+	Assert(MutationSetActorGroup = 1)
 End Test
