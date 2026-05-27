@@ -12,30 +12,19 @@ Shipped, next, and deferred. Read this when picking what to build next.
 - **Thread chips + back stack** — reference fields render as clickable chips; click jumps + pushes; Esc walks back.
 - **Faction and animset back-references** — composer computes "members" / "used by" rosters from `Each Actor` walks. ([#296](https://github.com/RydeTec/rcce2/pull/296))
 - **Editing phase 1 (free-form text)** — Spell name editable; per-tab dirty flags shared with GUE; Save button + serializer dispatch. ([#334](https://github.com/RydeTec/rcce2/pull/334))
-- **Command palette (Ctrl+K)** — modal find-anywhere across all entity kinds with prefix/substring scoring, arrow-key navigation, click-or-Enter to jump.
-- **Search-within-category** — live filter input above the card grid; case-insensitive substring match against the current category's name field. Esc clears the filter (priority above the back-stack pop).
+- **Command palette (Ctrl+K)** — modal find-anywhere across all entity kinds with prefix/substring scoring, arrow-key navigation, click-or-Enter to jump. ([#335](https://github.com/RydeTec/rcce2/pull/335))
+- **Search-within-category** — live filter input above the card grid; case-insensitive substring match against the current category's name field. Esc clears the filter (priority above the back-stack pop). ([#335](https://github.com/RydeTec/rcce2/pull/335))
+- **Editing phase 1 (broaden)** — int / float / bool field types; ~40 editable fields across every entity kind (Actor / Item / Spell / Zone / Faction / AnimSet); Save dispatch for every kind (`SaveActors`, `SaveItems`, `SaveFactions`, `SaveAnimSets`, `ServerSaveArea`); `SetFactionName` helper added to `Actors.bb` to work around the Strict-mode global-array-write trap.
 
 ## Next up (in rough order of leverage)
 
-### 1. Editing — phase 1: free-form text + numbers (extend)
-
-Click a composer row's value → it becomes editable. Esc cancels, Enter (or click-away) commits to the in-memory instance and sets a dirty flag. Save button persists to disk via the existing `SaveActors / SaveItems / …` functions GUE already exports.
-
-Needs:
-- A dirty-flag mechanism (per-kind, like GUE's `ItemsSaved` / `ActorsSaved` globals — Loom should write to those same globals so GUE notices Loom's edits)
-- F-UI text input pulled in (the one place F-UI earns its keep — see [decisions/001-custom-draw-not-fui.md](decisions/001-custom-draw-not-fui.md))
-- Per-field validators (some fields are bounded ints, some are required, some have format constraints)
-- A "Save" affordance in the chrome — probably top-right, mirroring the brass-rule placement
-
-Estimated scope: 600-800 LOC. The big one. Likely needs to split across 2-3 PRs.
-
-### 2. Editing — phase 2: reference-field editing
+### 1. Editing — phase 2: reference-field editing
 
 Once free-form fields edit, reference-typed fields (faction, anim set, zone target) need pickers. The chip becomes click-to-jump-OR-shift-click-to-edit (or some affordance — UX decision). Reuses the palette as the picker.
 
-Estimated scope: 200-300 LOC. Builds on #1 (editing extension) and the shipped palette.
+Estimated scope: 200-300 LOC. Builds on the shipped palette as picker.
 
-### 3. World atlas (spatial zone view)
+### 2. World atlas (spatial zone view)
 
 Today the Zones tab in the browser is a card grid. The design called for a spatial atlas: zones laid out by position with portals drawn as lines between them. Worth shipping once there are enough zones in a project for the spatial layout to communicate something the grid doesn't (probably >10 zones).
 
@@ -43,13 +32,11 @@ Open question: zones in rcce2 don't have a stored "world position" — they're j
 
 Estimated scope: 400-500 LOC including layout heuristic. Skip if no project pressure for it.
 
-### 4. Session timeline scrubber
+### 3. Session timeline scrubber
 
-Visible history of the session's edits (entity X changed field Y from A to B at time T). Click an entry → revert. Drag the handle → preview a past state. Needs an undo log that today's read-only alpha has no use for.
+Visible history of the session's edits (entity X changed field Y from A to B at time T). Click an entry → revert. Drag the handle → preview a past state. Needs an undo log layered on top of the existing in-memory dirty tracking.
 
-Builds naturally on #3 once dirty tracking exists. Pre-#3 there's nothing to scrub.
-
-Estimated scope: 300-400 LOC. Don't start before #3.
+Estimated scope: 300-400 LOC.
 
 ## Deferred (with reasons — read before reopening)
 

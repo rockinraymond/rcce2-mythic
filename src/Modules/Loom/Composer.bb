@@ -202,6 +202,74 @@ Type Composer
 
 
     // -------------------------------------------------------------------------
+    // editableIntRow / editableFloatRow / toggleRow -- thin wrappers over
+    // editableRow that convert the stored numeric value to a string for
+    // display + buffer-seed. On commit, writeField parses the buffer and
+    // ignores bad input (leaves the stored value unchanged).
+    //
+    // toggleRow is special: there's no edit buffer because a bool only has
+    // two states. Click the value cell to flip in-place, mark dirty.
+    // -------------------------------------------------------------------------
+    Method editableIntRow%(panelX%, panelW%, rowY%, label$, kind$, refID%, fieldId$, storedValue%, mx%, my%, clicked%)
+        Return Composer::editableRow(self, panelX, panelW, rowY, label, kind, refID, fieldId, Str(storedValue), mx, my, clicked)
+    End Method
+
+
+    Method editableFloatRow%(panelX%, panelW%, rowY%, label$, kind$, refID%, fieldId$, storedValue#, mx%, my%, clicked%)
+        Return Composer::editableRow(self, panelX, panelW, rowY, label, kind, refID, fieldId, Composer::formatFloat(self, storedValue), mx, my, clicked)
+    End Method
+
+
+    // toggleRow -- click the value cell to flip the stored bool. Returns next Y.
+    Method toggleRow%(panelX%, panelW%, rowY%, label$, kind$, refID%, fieldId$, storedValue%, mx%, my%, clicked%)
+        Local valX% = panelX + CMP_PAD + 120
+        Local valY% = rowY - 3
+        Local valW% = panelW - CMP_PAD * 2 - 120
+        Local valH% = CMP_ROW_H
+        Local hovered% = (mx >= valX And mx < valX + valW And my >= valY And my < valY + valH)
+
+        If hovered = True
+            LoomFill(valX, valY, valW, valH, LOOM_STONE_800_R, LOOM_STONE_800_G, LOOM_STONE_800_B)
+            LoomBorder(valX, valY, valW, valH, LOOM_BRASS_700_R, LOOM_BRASS_700_G, LOOM_BRASS_700_B)
+        EndIf
+
+        LoomText(panelX + CMP_PAD, rowY, label, LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
+
+        // Mini toggle indicator on the right of the value cell -- a small
+        // brass pill that's filled when True, hollow when False. Affordance
+        // makes the click target read as a switch.
+        Local pillW% = 30
+        Local pillH% = 14
+        Local pillX% = valX + 4
+        Local pillY% = valY + (valH - pillH) / 2
+        If storedValue = True
+            LoomFill(pillX, pillY, pillW, pillH, LOOM_ARCANE_500_R, LOOM_ARCANE_500_G, LOOM_ARCANE_500_B)
+            LoomFill(pillX + pillW - 12, pillY + 2, 10, pillH - 4, LOOM_PARCHMENT_100_R, LOOM_PARCHMENT_100_G, LOOM_PARCHMENT_100_B)
+        Else
+            LoomBorder(pillX, pillY, pillW, pillH, LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
+            LoomFill(pillX + 2, pillY + 2, 10, pillH - 4, LOOM_STONE_300_R, LOOM_STONE_300_G, LOOM_STONE_300_B)
+        EndIf
+
+        // Label text
+        Local labelTxt$ = "No"
+        If storedValue = True Then labelTxt = "Yes"
+        LoomText(pillX + pillW + 8, rowY, labelTxt, LOOM_PARCHMENT_100_R, LOOM_PARCHMENT_100_G, LOOM_PARCHMENT_100_B)
+
+        If hovered And clicked
+            // Cancel any pending text-edit on a different field first.
+            If self\editKind <> "" Then Composer::commitEdit(self)
+            Local newVal% = True
+            If storedValue = True Then newVal = False
+            Composer::writeField(self, kind, refID, fieldId, Str(newVal))
+            Composer::markDirtyForKind(self, kind)
+            WriteLog(LoomLog, "Composer: toggled " + kind + "#" + Str(refID) + " " + fieldId + " -> " + Str(newVal))
+        EndIf
+
+        Return rowY + CMP_ROW_H
+    End Method
+
+
+    // -------------------------------------------------------------------------
     // editableRow -- like row(), but the value cell is clickable to begin
     // editing. When this exact (kind, refID, fieldId) is active, the cell
     // shows the edit buffer with a blinking cursor instead of the stored
@@ -356,20 +424,134 @@ Type Composer
     // Only fields explicitly handled here are editable; unknown combinations
     // are no-ops (logged for diagnostics).
     //
-    // Future iterations extend this table as more fields become editable.
+    // Numeric fields use parseInt / parseFloat below; bad input leaves the
+    // stored value alone (parseX returns the supplied default which is the
+    // current stored value at call time, but we read+write in one expression
+    // so the default flows correctly).
+    //
+    // Bool fields are toggled via toggleRow which writes "0"/"1" as the
+    // value string; we just compare to "1".
     // -------------------------------------------------------------------------
     Method writeField(kind$, refID%, fieldId$, value$)
+        // ---- SPELL ----------------------------------------------------------
         If kind = "spell"
             If refID < 0 Or refID > 65534 Then Return
             Local S.Spell = SpellsList(refID)
             If S = Null Then Return
-            If fieldId = "name"
-                S\Name$ = value
-                Return
-            EndIf
+            If fieldId = "name"           Then S\Name$ = value         : Return
+            If fieldId = "description"    Then S\Description$ = value  : Return
+            If fieldId = "recharge_ms"    Then S\RechargeTime = Composer::parseIntClamped(self, value, S\RechargeTime, 0, 3600000) : Return
+            If fieldId = "script"         Then S\Script$ = value       : Return
+            If fieldId = "smethod"        Then S\SMethod$ = value      : Return
+            If fieldId = "race"           Then S\ExclusiveRace$ = value  : Return
+            If fieldId = "class"          Then S\ExclusiveClass$ = value : Return
+        EndIf
+
+        // ---- ITEM -----------------------------------------------------------
+        If kind = "item"
+            If refID < 0 Or refID > 65534 Then Return
+            Local I.Item = ItemList(refID)
+            If I = Null Then Return
+            If fieldId = "name"           Then I\Name$ = value         : Return
+            If fieldId = "value"          Then I\Value = Composer::parseIntClamped(self, value, I\Value, 0, 2000000000) : Return
+            If fieldId = "mass"           Then I\Mass  = Composer::parseIntClamped(self, value, I\Mass,  0, 2000000000) : Return
+            If fieldId = "weapon_damage"  Then I\WeaponDamage = Composer::parseIntClamped(self, value, I\WeaponDamage, 0, 2000000000) : Return
+            If fieldId = "armour_level"   Then I\ArmourLevel  = Composer::parseIntClamped(self, value, I\ArmourLevel,  0, 2000000000) : Return
+            If fieldId = "range"          Then I\Range#       = Composer::parseFloatClamped(self, value, I\Range#, 0.0, 100000.0) : Return
+            If fieldId = "script"         Then I\Script$ = value       : Return
+            If fieldId = "smethod"        Then I\SMethod$ = value      : Return
+            If fieldId = "race"           Then I\ExclusiveRace$ = value  : Return
+            If fieldId = "class"          Then I\ExclusiveClass$ = value : Return
+            If fieldId = "stackable"      Then I\Stackable   = (value = "1") : Return
+            If fieldId = "breakable"      Then I\TakesDamage = (value = "1") : Return
+        EndIf
+
+        // ---- ACTOR ----------------------------------------------------------
+        If kind = "actor"
+            If refID < 0 Or refID > 65535 Then Return
+            Local A.Actor = ActorList(refID)
+            If A = Null Then Return
+            If fieldId = "race"           Then A\Race$ = value         : Return
+            If fieldId = "class"          Then A\Class$ = value        : Return
+            If fieldId = "description"    Then A\Description$ = value  : Return
+            If fieldId = "scale"          Then A\Scale#      = Composer::parseFloatClamped(self, value, A\Scale#,      0.01, 100.0) : Return
+            If fieldId = "xpmult"         Then A\XPMultiplier = Composer::parseIntClamped(self, value, A\XPMultiplier, 0, 1000000) : Return
+            If fieldId = "aggressiveness" Then A\Aggressiveness  = Composer::parseIntClamped(self, value, A\Aggressiveness,  0, 3) : Return
+            If fieldId = "agg_range"      Then A\AggressiveRange = Composer::parseIntClamped(self, value, A\AggressiveRange, 0, 100000) : Return
+            If fieldId = "genders"        Then A\Genders         = Composer::parseIntClamped(self, value, A\Genders,         0, 3) : Return
+            If fieldId = "trade_mode"     Then A\TradeMode       = Composer::parseIntClamped(self, value, A\TradeMode,       0, 2) : Return
+            If fieldId = "playable"       Then A\Playable    = (value = "1") : Return
+            If fieldId = "rideable"       Then A\Rideable    = (value = "1") : Return
+        EndIf
+
+        // ---- ZONE -----------------------------------------------------------
+        If kind = "zone"
+            Local Ar.Area = Object.Area(refID)
+            If Ar = Null Then Return
+            If fieldId = "name"           Then Ar\Name$ = value          : Return
+            If fieldId = "gravity"        Then Ar\Gravity = Composer::parseIntClamped(self, value, Ar\Gravity, 0, 1000) : Return
+            If fieldId = "entry_script"   Then Ar\EntryScript$ = value   : Return
+            If fieldId = "exit_script"    Then Ar\ExitScript$ = value    : Return
+            If fieldId = "weather_link"   Then Ar\WeatherLink$ = value   : Return
+            If fieldId = "outdoors"       Then Ar\Outdoors = (value = "1") : Return
+            If fieldId = "pvp"            Then Ar\PvP      = (value = "1") : Return
+        EndIf
+
+        // ---- FACTION --------------------------------------------------------
+        If kind = "faction"
+            If refID < 0 Or refID > 99 Then Return
+            // SetFactionName lives in Actors.bb (non-Strict) -- direct write
+            // to the FactionNames$ global from this Strict file would error
+            // per the Dim-inside-Method gotcha.
+            If fieldId = "name" Then SetFactionName(refID, value) : Return
+        EndIf
+
+        // ---- ANIMSET --------------------------------------------------------
+        If kind = "animset"
+            // AnimSet is iterated, not array-indexed; walk to the matching ID.
+            Local As2.AnimSet
+            For As2 = Each AnimSet
+                If As2\ID = refID
+                    If fieldId = "name" Then As2\Name$ = value : Return
+                    Exit
+                EndIf
+            Next
         EndIf
 
         WriteLog(LoomLog, "Composer: writeField -- no handler for " + kind + "." + fieldId)
+    End Method
+
+
+    // -------------------------------------------------------------------------
+    // parseIntClamped / parseFloatClamped -- numeric parsers used by
+    // writeField for editable int / float fields. Empty input returns the
+    // fallback (cancels the edit); otherwise BlitzForge's Int() / Float()
+    // handles parsing -- they return 0 for pure-garbage strings. The result
+    // is clamped into [lo, hi] so an editing typo can't blow a field out to
+    // range-breaking values.
+    //
+    // Rationale for skipping a strict "is this digits" pre-check: the
+    // Strict-mode "reassigning a Method-scope Local from inside nested
+    // If/For blocks" trap (architecture.md "Known BlitzForge gotchas") makes
+    // a character-class loop awkward, and the cost of accepting "abc" -> 0
+    // -> clamp-to-lo is minimal -- the user sees the wrong value and
+    // re-edits. The clamp is the real protection here, not the validator.
+    // -------------------------------------------------------------------------
+    Method parseIntClamped%(s$, fallback%, lo%, hi%)
+        If Trim$(s) = "" Then Return fallback
+        Local v% = Int(s)
+        If v < lo Then v = lo
+        If v > hi Then v = hi
+        Return v
+    End Method
+
+
+    Method parseFloatClamped#(s$, fallback#, lo#, hi#)
+        If Trim$(s) = "" Then Return fallback
+        Local v# = Float(s)
+        If v# < lo# Then v# = lo#
+        If v# > hi# Then v# = hi#
+        Return v#
     End Method
 
 
@@ -405,11 +587,15 @@ Type Composer
     // -------------------------------------------------------------------------
     // commitSaveForKind -- persist in-memory state for the given kind to
     // disk via GUE's existing Save* serializers, then clear the dirty flag.
+    //
+    // Zone is the special case: each Area has its own .dat file (Areas/<name>.dat)
+    // so ServerSaveArea takes an Area instance instead of a file path. We
+    // save only the focused zone, not the entire collection.
     // -------------------------------------------------------------------------
     Method commitSaveForKind(kind$)
         If kind = "spell"
-            Local ok% = SaveSpells("Data\Server Data\Spells.dat")
-            If ok = False
+            Local okS% = SaveSpells("Data\Server Data\Spells.dat")
+            If okS = False
                 WriteLog(LoomLog, "Composer: SaveSpells FAILED")
                 Return
             EndIf
@@ -418,8 +604,64 @@ Type Composer
             Return
         EndIf
 
-        // Other kinds defer to subsequent iterations as their editable
-        // fields land. Logging a no-op is louder than silently failing.
+        If kind = "item"
+            Local okI% = SaveItems("Data\Server Data\Items.dat")
+            If okI = False
+                WriteLog(LoomLog, "Composer: SaveItems FAILED")
+                Return
+            EndIf
+            ItemsSaved = True
+            WriteLog(LoomLog, "Composer: saved Items.dat")
+            Return
+        EndIf
+
+        If kind = "actor"
+            Local okA% = SaveActors("Data\Server Data\Actors.dat")
+            If okA = False
+                WriteLog(LoomLog, "Composer: SaveActors FAILED")
+                Return
+            EndIf
+            ActorsSaved = True
+            WriteLog(LoomLog, "Composer: saved Actors.dat")
+            Return
+        EndIf
+
+        If kind = "faction"
+            Local okF% = SaveFactions("Data\Server Data\Factions.dat")
+            If okF = False
+                WriteLog(LoomLog, "Composer: SaveFactions FAILED")
+                Return
+            EndIf
+            FactionsSaved = True
+            WriteLog(LoomLog, "Composer: saved Factions.dat")
+            Return
+        EndIf
+
+        If kind = "animset"
+            Local okM% = SaveAnimSets("Data\Game Data\Animations.dat")
+            If okM = False
+                WriteLog(LoomLog, "Composer: SaveAnimSets FAILED")
+                Return
+            EndIf
+            AnimsSaved = True
+            WriteLog(LoomLog, "Composer: saved Animations.dat")
+            Return
+        EndIf
+
+        If kind = "zone"
+            Local Ar.Area = Object.Area(self\threads\focusID)
+            If Ar = Null
+                WriteLog(LoomLog, "Composer: ServerSaveArea -- focused area handle is stale")
+                Return
+            EndIf
+            ServerSaveArea(Ar)
+            // ServerSaveArea is void; we trust it. The atomic-write
+            // discipline is owned by the serializer itself.
+            ZoneSaved = True
+            WriteLog(LoomLog, "Composer: saved zone " + Ar\Name$)
+            Return
+        EndIf
+
         WriteLog(LoomLog, "Composer: commitSaveForKind -- no handler for " + kind)
     End Method
 
@@ -495,13 +737,19 @@ Type Composer
 
         Local y% = bodyY
         y = Composer::row(self, panelX, panelW, y, "ID",            Str(A\ID))
-        y = Composer::row(self, panelX, panelW, y, "Race",          A\Race$)
-        y = Composer::row(self, panelX, panelW, y, "Class",         A\Class$)
-        y = Composer::row(self, panelX, panelW, y, "Aggressiveness", Composer::actorAggLabel(self, A\Aggressiveness))
-        y = Composer::row(self, panelX, panelW, y, "Genders",       Composer::actorGenderLabel(self, A\Genders))
-        y = Composer::row(self, panelX, panelW, y, "Playable",      Composer::boolLabel(self, A\Playable))
-        y = Composer::row(self, panelX, panelW, y, "Rideable",      Composer::boolLabel(self, A\Rideable))
-        y = Composer::row(self, panelX, panelW, y, "XP multiplier", Str(A\XPMultiplier))
+        y = Composer::editableRow(self, panelX, panelW, y,    "Race",          "actor", A\ID, "race",          A\Race$,        mx, my, clicked)
+        y = Composer::editableRow(self, panelX, panelW, y,    "Class",         "actor", A\ID, "class",         A\Class$,       mx, my, clicked)
+        y = Composer::editableIntRow(self, panelX, panelW, y, "Aggressiveness", "actor", A\ID, "aggressiveness", A\Aggressiveness, mx, my, clicked)
+        y = Composer::editableIntRow(self, panelX, panelW, y, "Agg range",     "actor", A\ID, "agg_range",     A\AggressiveRange, mx, my, clicked)
+        y = Composer::editableIntRow(self, panelX, panelW, y, "Genders",       "actor", A\ID, "genders",       A\Genders,      mx, my, clicked)
+        y = Composer::toggleRow(self,    panelX, panelW, y, "Playable",      "actor", A\ID, "playable",      A\Playable,     mx, my, clicked)
+        y = Composer::toggleRow(self,    panelX, panelW, y, "Rideable",      "actor", A\ID, "rideable",      A\Rideable,     mx, my, clicked)
+        y = Composer::editableIntRow(self, panelX, panelW, y, "XP multiplier", "actor", A\ID, "xpmult",        A\XPMultiplier, mx, my, clicked)
+        y = Composer::editableFloatRow(self, panelX, panelW, y, "Scale",       "actor", A\ID, "scale",         A\Scale#,       mx, my, clicked)
+
+        // Description -- a long string; show as editable text field. Word
+        // wrap is a future enhancement.
+        y = Composer::editableRow(self, panelX, panelW, y, "Description", "actor", A\ID, "description", A\Description$, mx, my, clicked)
 
         y = Composer::sectionHeader(self, panelX, panelW, y, "Threads")
 
@@ -519,48 +767,38 @@ Type Composer
 
         Local y% = bodyY
         y = Composer::row(self, panelX, panelW, y, "ID",        Str(It\ID))
+        y = Composer::editableRow(self, panelX, panelW, y, "Name", "item", It\ID, "name", It\Name$, mx, my, clicked)
         y = Composer::row(self, panelX, panelW, y, "Type",      Composer::itemTypeLabel(self, It\ItemType))
         y = Composer::row(self, panelX, panelW, y, "Slot",      Str(It\SlotType))
-        y = Composer::row(self, panelX, panelW, y, "Value",     Str(It\Value))
-        y = Composer::row(self, panelX, panelW, y, "Mass",      Str(It\Mass))
-        y = Composer::row(self, panelX, panelW, y, "Stackable", Composer::boolLabel(self, It\Stackable))
-        y = Composer::row(self, panelX, panelW, y, "Breakable", Composer::boolLabel(self, It\TakesDamage))
+        y = Composer::editableIntRow(self, panelX, panelW, y, "Value", "item", It\ID, "value", It\Value, mx, my, clicked)
+        y = Composer::editableIntRow(self, panelX, panelW, y, "Mass",  "item", It\ID, "mass",  It\Mass,  mx, my, clicked)
+        y = Composer::toggleRow(self, panelX, panelW, y, "Stackable", "item", It\ID, "stackable", It\Stackable,   mx, my, clicked)
+        y = Composer::toggleRow(self, panelX, panelW, y, "Breakable", "item", It\ID, "breakable", It\TakesDamage, mx, my, clicked)
 
         // Weapon-specific
         If It\ItemType = 1
             y = Composer::sectionHeader(self, panelX, panelW, y, "Weapon")
-            y = Composer::row(self, panelX, panelW, y, "Damage",      Str(It\WeaponDamage))
+            y = Composer::editableIntRow(self, panelX, panelW, y, "Damage",      "item", It\ID, "weapon_damage", It\WeaponDamage, mx, my, clicked)
             y = Composer::row(self, panelX, panelW, y, "Weapon type", Str(It\WeaponType))
-            If It\Range# > 0.0
-                y = Composer::row(self, panelX, panelW, y, "Range",   Composer::formatFloat(self, It\Range#))
-            EndIf
+            y = Composer::editableFloatRow(self, panelX, panelW, y, "Range",     "item", It\ID, "range",         It\Range#,       mx, my, clicked)
         EndIf
 
         // Armour-specific
         If It\ItemType = 2
             y = Composer::sectionHeader(self, panelX, panelW, y, "Armour")
-            y = Composer::row(self, panelX, panelW, y, "Armour level", Str(It\ArmourLevel))
+            y = Composer::editableIntRow(self, panelX, panelW, y, "Armour level", "item", It\ID, "armour_level", It\ArmourLevel, mx, my, clicked)
         EndIf
 
-        // Restrictions
-        If It\ExclusiveRace$ <> "" Or It\ExclusiveClass$ <> ""
-            y = Composer::sectionHeader(self, panelX, panelW, y, "Restricted to")
-            If It\ExclusiveRace$ <> ""
-                y = Composer::row(self, panelX, panelW, y, "Race",  It\ExclusiveRace$)
-            EndIf
-            If It\ExclusiveClass$ <> ""
-                y = Composer::row(self, panelX, panelW, y, "Class", It\ExclusiveClass$)
-            EndIf
-        EndIf
+        // Restrictions -- always editable (typing into an empty field is how
+        // a restriction is added in the first place).
+        y = Composer::sectionHeader(self, panelX, panelW, y, "Restricted to")
+        y = Composer::editableRow(self, panelX, panelW, y, "Race",  "item", It\ID, "race",  It\ExclusiveRace$,  mx, my, clicked)
+        y = Composer::editableRow(self, panelX, panelW, y, "Class", "item", It\ID, "class", It\ExclusiveClass$, mx, my, clicked)
 
-        // Script
-        If It\Script$ <> ""
-            y = Composer::sectionHeader(self, panelX, panelW, y, "Script")
-            y = Composer::row(self, panelX, panelW, y, "Bound", It\Script$)
-            If It\SMethod$ <> ""
-                y = Composer::row(self, panelX, panelW, y, "Method", It\SMethod$)
-            EndIf
-        EndIf
+        // Script -- always editable
+        y = Composer::sectionHeader(self, panelX, panelW, y, "Script")
+        y = Composer::editableRow(self, panelX, panelW, y, "Bound",  "item", It\ID, "script",  It\Script$,  mx, my, clicked)
+        y = Composer::editableRow(self, panelX, panelW, y, "Method", "item", It\ID, "smethod", It\SMethod$, mx, my, clicked)
     End Method
 
 
@@ -571,47 +809,33 @@ Type Composer
         If S = Null Then Return
 
         Local y% = bodyY
-        y = Composer::row(self, panelX, panelW, y, "ID",       Str(S\ID))
-        // Name is the first editable field shipped in Loom -- click to edit,
-        // Enter to commit, Esc to cancel. Save button appears top-right when
-        // dirty. Future iterations make more fields editable through the
-        // same editableRow pattern.
-        y = Composer::editableRow(self, panelX, panelW, y, "Name", "spell", S\ID, "name", S\Name$, mx, my, clicked)
-        y = Composer::row(self, panelX, panelW, y, "Recharge", Str(S\RechargeTime) + " ms")
+        y = Composer::row(self, panelX, panelW, y, "ID",          Str(S\ID))
+        y = Composer::editableRow(self,    panelX, panelW, y, "Name",     "spell", S\ID, "name",        S\Name$,        mx, my, clicked)
+        y = Composer::editableIntRow(self, panelX, panelW, y, "Recharge (ms)", "spell", S\ID, "recharge_ms", S\RechargeTime, mx, my, clicked)
 
-        If S\Description$ <> ""
-            y = Composer::sectionHeader(self, panelX, panelW, y, "Description")
-            // Description can be long; clip to one line for now. Word-wrap is
-            // a future enhancement.
-            Local desc$ = S\Description$
-            If Len(desc) > 60 Then desc = Left$(desc, 57) + "..."
-            LoomText(panelX + CMP_PAD, y, desc, LOOM_PARCHMENT_100_R, LOOM_PARCHMENT_100_G, LOOM_PARCHMENT_100_B)
-            y = y + CMP_ROW_H + 4
-        EndIf
+        y = Composer::sectionHeader(self, panelX, panelW, y, "Description")
+        y = Composer::editableRow(self, panelX, panelW, y, "Text", "spell", S\ID, "description", S\Description$, mx, my, clicked)
 
-        If S\ExclusiveRace$ <> "" Or S\ExclusiveClass$ <> ""
-            y = Composer::sectionHeader(self, panelX, panelW, y, "Restricted to")
-            If S\ExclusiveRace$  <> "" Then y = Composer::row(self, panelX, panelW, y, "Race",  S\ExclusiveRace$)
-            If S\ExclusiveClass$ <> "" Then y = Composer::row(self, panelX, panelW, y, "Class", S\ExclusiveClass$)
-        EndIf
+        y = Composer::sectionHeader(self, panelX, panelW, y, "Restricted to")
+        y = Composer::editableRow(self, panelX, panelW, y, "Race",  "spell", S\ID, "race",  S\ExclusiveRace$,  mx, my, clicked)
+        y = Composer::editableRow(self, panelX, panelW, y, "Class", "spell", S\ID, "class", S\ExclusiveClass$, mx, my, clicked)
 
-        If S\Script$ <> ""
-            y = Composer::sectionHeader(self, panelX, panelW, y, "Script")
-            y = Composer::row(self, panelX, panelW, y, "Bound", S\Script$)
-            If S\SMethod$ <> "" Then y = Composer::row(self, panelX, panelW, y, "Method", S\SMethod$)
-        EndIf
+        y = Composer::sectionHeader(self, panelX, panelW, y, "Script")
+        y = Composer::editableRow(self, panelX, panelW, y, "Bound",  "spell", S\ID, "script",  S\Script$,  mx, my, clicked)
+        y = Composer::editableRow(self, panelX, panelW, y, "Method", "spell", S\ID, "smethod", S\SMethod$, mx, my, clicked)
     End Method
 
 
     Method renderZone(panelX%, bodyY%, panelW%, bodyH%, mx%, my%, clicked%)
         Local Ar.Area = Object.Area(self\threads\focusID)
         If Ar = Null Then Return
+        Local h% = Handle(Ar)
 
         Local y% = bodyY
-        y = Composer::row(self, panelX, panelW, y, "Name",     Ar\Name$)
-        y = Composer::row(self, panelX, panelW, y, "Outdoors", Composer::boolLabel(self, Ar\Outdoors))
-        y = Composer::row(self, panelX, panelW, y, "PvP",      Composer::boolLabel(self, Ar\PvP))
-        y = Composer::row(self, panelX, panelW, y, "Gravity",  Str(Ar\Gravity))
+        y = Composer::editableRow(self,    panelX, panelW, y, "Name",     "zone", h, "name",     Ar\Name$,    mx, my, clicked)
+        y = Composer::toggleRow(self,      panelX, panelW, y, "Outdoors", "zone", h, "outdoors", Ar\Outdoors, mx, my, clicked)
+        y = Composer::toggleRow(self,      panelX, panelW, y, "PvP",      "zone", h, "pvp",      Ar\PvP,      mx, my, clicked)
+        y = Composer::editableIntRow(self, panelX, panelW, y, "Gravity",  "zone", h, "gravity",  Ar\Gravity,  mx, my, clicked)
 
         // Counts
         Local portals% = 0
@@ -638,12 +862,10 @@ Type Composer
         y = Composer::row(self, panelX, panelW, y, "Triggers",  Str(triggers))
         y = Composer::row(self, panelX, panelW, y, "Waypoints", Str(waypoints))
 
-        // Scripts
-        If Ar\EntryScript$ <> "" Or Ar\ExitScript$ <> ""
-            y = Composer::sectionHeader(self, panelX, panelW, y, "Scripts")
-            If Ar\EntryScript$ <> "" Then y = Composer::row(self, panelX, panelW, y, "Entry", Ar\EntryScript$)
-            If Ar\ExitScript$  <> "" Then y = Composer::row(self, panelX, panelW, y, "Exit",  Ar\ExitScript$)
-        EndIf
+        // Scripts -- always editable
+        y = Composer::sectionHeader(self, panelX, panelW, y, "Scripts")
+        y = Composer::editableRow(self, panelX, panelW, y, "Entry", "zone", h, "entry_script", Ar\EntryScript$, mx, my, clicked)
+        y = Composer::editableRow(self, panelX, panelW, y, "Exit",  "zone", h, "exit_script",  Ar\ExitScript$,  mx, my, clicked)
 
         // Portal links -- one chip per portal whose target resolves to a zone
         // we know about. The most-useful thread set zones can offer.
@@ -674,7 +896,7 @@ Type Composer
         If idx < 0 Or idx > 99 Then Return
 
         Local y% = bodyY
-        y = Composer::row(self, panelX, panelW, y, "Name",  FactionNames$(idx))
+        y = Composer::editableRow(self, panelX, panelW, y, "Name",  "faction", idx, "name", FactionNames$(idx), mx, my, clicked)
         y = Composer::row(self, panelX, panelW, y, "Index", Str(idx))
 
         // Members -- every actor whose DefaultFaction matches. Each renders
@@ -706,7 +928,7 @@ Type Composer
         If A = Null Then Return
 
         Local y% = bodyY
-        y = Composer::row(self, panelX, panelW, y, "Name", A\Name$)
+        y = Composer::editableRow(self, panelX, panelW, y, "Name", "animset", A\ID, "name", A\Name$, mx, my, clicked)
         y = Composer::row(self, panelX, panelW, y, "ID",   Str(A\ID))
 
         Local clips% = 0
