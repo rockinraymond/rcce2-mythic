@@ -14,7 +14,7 @@ Original credit per the source-file header (line 2): **created and coded by Jeff
 
 | Type | Purpose | Field summary |
 |---|---|---|
-| `Tree` | One animated tree | `MainEnt` / `MainSurf` / `MainBrush` / `MainTex` (trunk), `MaxBranches`, `Branchent[400]` / `Branchsurf[400]` / `Branchbrush[400]` / `BranchTex[400]` (branch sub-meshes), 3-axis `SwayDir / SwayValue# / SwayPower#` per-branch arrays for the oscillator state, `distance#`, `inview`, `Evergreen` (gate season recolor), `swingstyle` (1=center-anchored, 2=top-anchored, 4=base-anchored — actual mapping via `centermesh` / `hangmesh` / `standmesh`). The `Maxbranches = 400` `Const` is the per-tree branch cap. |
+| `Tree` | One animated tree | `MainEnt` / `MainSurf` / `MainBrush` / `MainTex` (trunk), `MaxBranches`, `Branchent[400]` / `Branchsurf[400]` / `Branchbrush[400]` / `BranchTex[400]` (branch sub-meshes), 3-axis `SwayDir / SwayValue# / SwayPower#` per-branch arrays for the oscillator state, `distance#`, `inview`, `Evergreen` (gate season recolor), `swingstyle` (stored as `1` if the caller passed `0`, else `4` — see "Source quirk" below; the anchor is selected separately from the input arg). The `Maxbranches = 400` `Const` is the per-tree branch cap. |
 | `RcGrass` | One grass mesh | `ent`, `surface`, `brush`, `tex`, `texname$`, `evergreen`. Lighter than `Tree` — no per-vertex animation; grass animates via texture-rotation in `updategrass`. |
 | `GrassTextures` | Texture-share cache built by `clumpgrass` | `Brush`, `Texname$`, `tex`. Deduplicates `RcGrass` brushes so all grass entries with the same texture name share one `Brush` handle — major draw-call win when a zone has many of the same grass tile. |
 
@@ -39,7 +39,7 @@ Dim weather_wind_swaymax#(7, 3)     ; per-weather × per-axis amplitude
 Dim weather_wind_swayspeed#(7, 3)   ; per-weather × per-axis speed
 ```
 
-The 8 weather slots are indexed by `W_SUN`, `W_RAIN`, `W_SNOW`, `W_FOG`, `W_STORM`, `W_WIND` constants (defined in the broader engine; this module reads them at `tree_setvalues` time). `Dim X(7, 3)` allocates `8 × 4` slots — the per-axis dimension is `0..3` even though only `1..3` are used. CLAUDE.md "Gotchas" → "Blitz3D array semantics".
+`Dim X(7, 3)` allocates `8 × 4` slots — but only `(0..5, 1..3)` are populated. The six used weather indices are the `W_Sun = 0` through `W_Wind = 5` `Const`s declared in [`Environment.bb:2-7`](../../src/Modules/Environment.bb#L2); slots 6 and 7 of the first dimension and slot 0 of the second dimension are unused (Blitz3D `Dim X(N)` is inclusive — see CLAUDE.md → "Gotchas" → "Blitz3D array semantics").
 
 `tree_setvalues()` ([RCTrees.bb:583-657](../../src/Modules/RCTrees.bb#L583)) populates the 2D table with hard-coded per-weather wind profiles. Some samples:
 
