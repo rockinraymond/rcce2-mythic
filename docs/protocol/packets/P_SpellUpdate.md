@@ -3,7 +3,7 @@
 **Direction:** C → S only (no server-emitted form)
 **Numeric ID:** 27
 **Server handler:** [ServerNet.bb:1121](../../../src/Modules/ServerNet.bb#L1121)
-**Client emit sites:** [Interface3D.bb:1097](../../../src/Modules/Interface3D.bb#L1097), [:1227](../../../src/Modules/Interface3D.bb#L1227), [:1341](../../../src/Modules/Interface3D.bb#L1341), [:1452](../../../src/Modules/Interface3D.bb#L1452), [:1514](../../../src/Modules/Interface3D.bb#L1514)
+**Client emit sites:** F (fire) at [Interface3D.bb:1097](../../../src/Modules/Interface3D.bb#L1097) (action-bar, no stale-target guard — see below) / [:1227](../../../src/Modules/Interface3D.bb#L1227) (action-bar with guard) / [:1514](../../../src/Modules/Interface3D.bb#L1514) (spell-book hotkey); U (unmemorise) at [:1341](../../../src/Modules/Interface3D.bb#L1341); M (memorise) at [:1452](../../../src/Modules/Interface3D.bb#L1452)
 
 ## Purpose
 
@@ -51,7 +51,7 @@ The F handler at [ServerNet.bb:1143-1253](../../../src/Modules/ServerNet.bb#L114
 
 ### Privilege / restriction gates
 
-11. **ExclusiveRace / ExclusiveClass**: `If Len(Sp\ExclusiveRace$) > 0 Then Sp\ExclusiveRace$ = Upper$(AI\Actor\Race$)`. Same shape for `ExclusiveClass$`. Editor-exposed in GUE, persisted by `SaveSpells` / `LoadSpells`, but the cast path never enforced them pre-fix — a paladin-only Smite taught to a thief via script or recovered from a stale save would fire normally. PR [04dd8ac](https://github.com/RydeTec/rcce2/commit/04dd8ac) (Tier 1 silent-defects sweep). The check mirrors the item-eat gate in [`P_EatItem`](../index.md).
+11. **ExclusiveRace / ExclusiveClass**: when `Len(Sp\ExclusiveRace$) > 0`, the gate compares `If Upper$(AI\Actor\Race$) <> Upper$(Sp\ExclusiveRace$) Then SpellAllowed = False` (read-only compare against the spell's authored field; no mutation). Same shape for `ExclusiveClass$`. Editor-exposed in GUE, persisted by `SaveSpells` / `LoadSpells`, but the cast path never enforced them pre-fix — a paladin-only Smite taught to a thief via script or recovered from a stale save would fire normally. PR [04dd8ac](https://github.com/RydeTec/rcce2/commit/04dd8ac) (Tier 1 silent-defects sweep). The check mirrors the item-eat gate in [`P_EatItem`](../index.md). **Source smell**: on failure, the handler at [ServerNet.bb:1243](../../../src/Modules/ServerNet.bb#L1243) emits `LS_AbilityNotRecharged` — the same string the cooldown gate uses, so the player sees \"ability not recharged\" when the real reason is the race/class mismatch. Worth a follow-up (separate LS string or silent drop).
 
 On all 11 gates passing, the handler calls `ThreadScript(Sp\Script$, Sp\SMethod$, Handle(AI), Handle(Context), AI\SpellLevels[Num])` to spawn the spell's behaviour script, then sets the per-spell + per-actor cooldown timestamps.
 
@@ -91,7 +91,7 @@ The handler does **NOT** privilege-gate via `BVM_RequirePrivileged` — casting 
 | [d5c36e8](https://github.com/RydeTec/rcce2/commit/d5c36e8) | Unified SpellCharge keying on SpellID (was dual-cooldown-space bug); added per-actor 100ms LastSpellFireMs floor. |
 | [#166](https://github.com/RydeTec/rcce2/pull/166) (aa8abbf) | Null-guard `SpellsList(SpellID)` at cast site + prune stale slot. |
 | [04dd8ac](https://github.com/RydeTec/rcce2/commit/04dd8ac) (Tier 1 silent-defects) | ExclusiveRace / ExclusiveClass enforced at cast (was authored-but-not-enforced). |
-| Audit comments | Five inline audit comment clusters at lines [1147](../../../src/Modules/ServerNet.bb#L1147) / [1157](../../../src/Modules/ServerNet.bb#L1157) / [1180](../../../src/Modules/ServerNet.bb#L1180) / [1190](../../../src/Modules/ServerNet.bb#L1190) / [1212](../../../src/Modules/ServerNet.bb#L1212) / [1226](../../../src/Modules/ServerNet.bb#L1226) capture the threat model for each gate so future contributors don't undo them. |
+| Audit comments | Six inline audit comment clusters at lines [1147](../../../src/Modules/ServerNet.bb#L1147) / [1157](../../../src/Modules/ServerNet.bb#L1157) / [1180](../../../src/Modules/ServerNet.bb#L1180) / [1190](../../../src/Modules/ServerNet.bb#L1190) / [1212](../../../src/Modules/ServerNet.bb#L1212) / [1226](../../../src/Modules/ServerNet.bb#L1226) capture the threat model for each gate so future contributors don't undo them. |
 
 ## Related packets
 
