@@ -643,17 +643,20 @@ Function BVM_ACTORCALLFORHELP(Param1%)
 End Function
 
 Function BVM_SETACTORAISTATE(Param1%, Param2%)
-	; NOT gated. Shipped content (AOE Damage Spell Template.rsl at
-	; data/Server Data/Scripts/) uses this from non-priv spell-cast
-	; spawns to make targeted NPCs become aggressive (AIMode = 3) on
-	; spell impact. A full-priv gate would silently no-op the spell's
-	; aggro-pull effect.
+	; Gated. Clicker brick risk: SetActorAIState(SomeGuard, AI_Wait)
+	; from a non-priv NPC right-click script disables a hostile guard's
+	; AI -- the player who clicks the NPC walks away with a free
+	; sandbag. Pre-PR-#329 this stayed ungated because shipped content
+	; (AOE Damage Spell Template.rsl) called it from a non-priv
+	; spell-cast spawn to make targets aggressive on impact -- gating
+	; would have no-op'd the spell.
 	;
-	; The clicker brick risk (SetActorAIState(SomeGuard, AI_Wait)
-	; disables a hostile guard's AI) is real but addressing it would
-	; require either (a) rewriting the shipped AOE template to spawn
-	; privileged, or (b) carving a chat-command / spell-cast privilege
-	; path. Tracked as a follow-up.
+	; Closed by the privileged-script allowlist (Scripting.bb's
+	; LoadPrivilegedScripts + the elevation point in ThreadScript). The
+	; AOE template's name is in Data\Server Data\Privileged Scripts.dat;
+	; spell-cast spawns that target it now get the elevation. Other
+	; non-priv callers still refuse, closing the brick vector.
+	If Not BVM_RequirePrivileged() Then Return
 	Actor.ActorInstance = Object.ActorInstance(Param1%)
 	If Actor <> Null
 		Actor\AIMode = Param2%
@@ -679,16 +682,24 @@ Return Result%
 End Function
 
 Function BVM_SETACTORTARGET(Param1%, Param2%=0)
-	; NOT gated. Shipped content uses this from non-priv spawns:
-	;   - /Assist chat command (In-game Commands.rsl:37) targets the
+	; Gated. Clicker-brick risk: SetActorTarget(SomeGuard,
+	; anotherPlayer) from a non-priv NPC right-click script weaponizes
+	; the guard against an arbitrary victim. Pre-PR-#329 this stayed
+	; ungated because shipped content needed it from non-priv spawns:
+	;   - /Assist chat command (In-game Commands.rsl) targets the
 	;     assisted player's current target.
-	;   - AOE Damage Spell Template.rsl:41,48 targets the player on
-	;     spell impact (aggro-pull).
-	; The function already has partial safety (Aggressiveness=3
-	; non-combatants and friendly-faction targets rejected). The
-	; remaining clicker-brick risk (SetActorTarget(SomeGuard,
-	; anotherPlayer) weaponizing a hostile NPC) requires the chat-
-	; command / spell-cast privilege carve-out (tracked).
+	;   - AOE Damage Spell Template.rsl targets the player on spell
+	;     impact (aggro-pull).
+	;
+	; Closed by the privileged-script allowlist. Both script names are
+	; in Data\Server Data\Privileged Scripts.dat; their ThreadScript
+	; spawns now get the elevation. Other non-priv callers refuse,
+	; closing the weaponization vector.
+	;
+	; The existing partial safety (Aggressiveness=3 non-combatants and
+	; friendly-faction targets rejected) is preserved as defense-in-
+	; depth -- privileged callers still hit those checks.
+	If Not BVM_RequirePrivileged() Then Return
 	Actor.ActorInstance = Object.ActorInstance(Param1%)
 	Actor2.ActorInstance = Object.ActorInstance(Param2%)
 	If Actor <> Null
@@ -2490,12 +2501,18 @@ Return Result$
 End Function
 
 Function BVM_SETNAME(Param1%, Param2$)
-	; NOT gated. Shipped content uses this from non-priv RightClick
-	; spawns: marriage.rsl + Click_marriage.rsl append a surname to
-	; both players on marriage. Spawn_Test.rsl labels test NPCs.
-	; The clicker griefing risk (SetName(target, "<slur>") + broadcast)
-	; is real but a full-priv gate would silently break marriage.
-	; Tracked as a follow-up alongside the AOE / Assist cluster.
+	; Gated. Clicker-griefing risk: SetName(target, "<slur>") from a
+	; non-priv NPC right-click rebrands the clicker with broadcast.
+	; Pre-PR-#329 this stayed ungated because shipped content needed it
+	; from non-priv RightClick spawns:
+	;   - marriage.rsl + Click_marriage.rsl append a surname to both
+	;     players on marriage.
+	;   - Spawn_Test.rsl labels test NPCs.
+	;
+	; Closed by the privileged-script allowlist. All three script names
+	; are in Data\Server Data\Privileged Scripts.dat; their ThreadScript
+	; spawns get the elevation. Other non-priv callers refuse.
+	If Not BVM_RequirePrivileged() Then Return
 	Actor.ActorInstance = Object.ActorInstance(Param1%)
 	If Actor <> Null
 		Actor\Name$ = BVM_DEQUOTE(Param2$)
@@ -2522,9 +2539,14 @@ Return Result$
 End Function
 
 Function BVM_SETTAG(Param1%, Param2$)
-	; NOT gated -- same shape and same content-script-callers as
-	; SETNAME above (Spawn_Test.rsl uses it to label test NPCs).
-	; Same clicker-griefing risk; same follow-up.
+	; Gated. Same shape + clicker-griefing risk as SETNAME above
+	; (SetTag(target, "<slur>") rebrands the clicker's nameplate
+	; suffix). Pre-PR-#329 this stayed ungated because Spawn_Test.rsl
+	; uses it from a non-priv NPC-spawn script to label test NPCs.
+	; Closed by the privileged-script allowlist (Spawn_Test is in
+	; Data\Server Data\Privileged Scripts.dat). Other non-priv callers
+	; refuse.
+	If Not BVM_RequirePrivileged() Then Return
 	Actor.ActorInstance = Object.ActorInstance(Param1%)
 	If Actor <> Null
 		Actor\Tag$ = Param2$

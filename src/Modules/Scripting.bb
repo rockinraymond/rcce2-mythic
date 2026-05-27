@@ -145,6 +145,87 @@ Function ScriptExists%(Name$)
 	Return False
 End Function
 
+; -Privileged-script allowlist ----------------------------------------------------
+;
+; Some shipped content scripts (Spawn_Test.rsl, marriage.rsl,
+; AOE Damage Spell Template.rsl, In-game Commands.rsl, Click_marriage.rsl)
+; need to call privileged BVMs (ChangeMoney, WriteFile, SetName,
+; SetActorTarget, SetActorAIState, SetTag, GiveItem, SetAttribute, ...)
+; to do their actual job, but they're invoked from non-privileged spawn
+; paths (chat-command fallback for `/Assist`, spell-cast for the AOE
+; template, right-click for marriage, NPC spawn-init for Spawn_Test).
+;
+; Pre-PR the affected calls silently refused, leaving each script in a
+; partially-applied state (e.g. marriage debited 10k gold but never
+; renamed the players). The fix path documented in CLAUDE.md "Known
+; ungated brick / griefing surface" was to introduce a privilege
+; carve-out at the spawn boundary rather than at each BVM gate. This is
+; that carve-out.
+;
+; **Trust model:** the allowlist is keyed by script Name$ (the file
+; basename without extension, as registered in ScriptSource). The data
+; file lives in server-controlled `Data\Server Data\` — only the
+; project owner can edit it. A custom NPC's `Script$` field can name
+; any script, but only allowlisted names get the privilege elevation.
+;
+; **Elevation only, never demote.** ThreadScript's existing Privileged%
+; arg is the caller-provided baseline; the allowlist can only raise it
+; to True. A caller that explicitly passes Privileged=1 keeps that
+; privilege regardless of allowlist membership (engine-tick spawns
+; like LoginScript / DeathScript / `/script` DM command still work as
+; before).
+;
+; **Closes the deferred BVMs** SETACTORAISTATE, SETACTORTARGET, SETNAME,
+; SETTAG. With the allowlist in place those four can be gated to
+; RequirePrivileged without breaking the shipped scripts.
+
+Const PrivilegedScriptListMax% = 64
+Dim PrivilegedScriptList$(PrivilegedScriptListMax% - 1)
+Global PrivilegedScriptCount% = 0
+
+; Loads the allowlist from Data\Server Data\Privileged Scripts.dat.
+; One script Name per line; comments (lines starting with `;`) and
+; blank lines are ignored. Tolerates a missing file (zero entries =
+; preserves pre-allowlist behavior). Called once at server boot;
+; idempotent so a later /reloadscripts could rerun it.
+Function LoadPrivilegedScripts()
+	Local Path$ = "Data\Server Data\Privileged Scripts.dat"
+	PrivilegedScriptCount = 0
+	Local F = ReadFile(Path)
+	If F = 0
+		WriteLog(MainLog, "LoadPrivilegedScripts: " + Path + " not found; allowlist is empty")
+		Return
+	EndIf
+	While Eof(F) = False
+		Local Line$ = Trim(ReadLine(F))
+		If Len(Line) > 0
+			If Left(Line, 1) <> ";"
+				If PrivilegedScriptCount < PrivilegedScriptListMax
+					PrivilegedScriptList(PrivilegedScriptCount) = Line
+					PrivilegedScriptCount = PrivilegedScriptCount + 1
+				Else
+					WriteLog(MainLog, "LoadPrivilegedScripts: list full at " + PrivilegedScriptListMax + " entries; dropping `" + Line + "`")
+				EndIf
+			EndIf
+		EndIf
+	Wend
+	CloseFile(F)
+	WriteLog(MainLog, "LoadPrivilegedScripts: loaded " + PrivilegedScriptCount + " entries from " + Path)
+End Function
+
+; Case-insensitive lookup against the loaded allowlist. Returns True
+; iff Name$ matches an entry (exact match after Upper). Empty list
+; always returns False (= safe default).
+Function IsPrivilegedScript%(Name$)
+	If PrivilegedScriptCount = 0 Then Return False
+	Local NameU$ = Upper(Name$)
+	Local i%
+	For i = 0 To PrivilegedScriptCount - 1
+		If Upper(PrivilegedScriptList(i)) = NameU Then Return True
+	Next
+	Return False
+End Function
+
 Function ThreadScript(Name$, Func$, Actor%, CActor%, Param$ = "", Privileged% = 0)
 	; This function only adds the scripts to the ScriptInstance type and maps the module
 	Local Found = False
@@ -168,6 +249,16 @@ Function ThreadScript(Name$, Func$, Actor%, CActor%, Param$ = "", Privileged% = 
 		EndIf
 	Next
 	If Found = True
+		; Elevate privilege if the script name is on the allowlist. Elevation
+		; only -- the caller's explicit Privileged% baseline is preserved if
+		; it was already True. See LoadPrivilegedScripts() above for the
+		; trust-model and rationale. The deferred BVMs (SETACTORAISTATE /
+		; SETACTORTARGET / SETNAME / SETTAG) gate on RequirePrivileged() and
+		; rely on this carve-out to keep working from shipped content.
+		Local EffectivePriv% = Privileged%
+		If EffectivePriv = 0
+			If IsPrivilegedScript(Name$) Then EffectivePriv = 1
+		EndIf
 		TS.ThreadScript = New ThreadScript
 		TS\Name$ = Name$
 		TS\Func$ = Func$
@@ -175,7 +266,7 @@ Function ThreadScript(Name$, Func$, Actor%, CActor%, Param$ = "", Privileged% = 
 		TS\AI.ActorInstance = AI.ActorInstance
 		TS\AIContext.ActorInstance = AIContext.ActorInstance
 		TS\Param$ = Param$
-		TS\Privileged = Privileged%
+		TS\Privileged = EffectivePriv
 	Else
 		 WriteLog(Mainlog, "Script " + Name$ + " does not exist.")
 	EndIf
