@@ -200,10 +200,10 @@ Type Browser
 
 
     // -------------------------------------------------------------------------
-    // drawFilterBar -- thin row above the card grid with a search input on
-    // the right and a help glyph on the left. The input shows the live
-    // filter buffer with a blinking cursor; typing anywhere on the browser
-    // surface lands here.
+    // drawFilterBar -- thin row above the card grid with a "+ New" button on
+    // the left, a search input on the right, and a help hint between them.
+    // The input shows the live filter buffer with a blinking cursor; typing
+    // anywhere on the browser surface lands here.
     // -------------------------------------------------------------------------
     Method drawFilterBar(sw%, mx%, my%, clicked%)
         Local y% = BR_TOP_RIBBON + BR_TAB_BAR_H
@@ -212,8 +212,32 @@ Type Browser
         LoomFill(0, y, sw, h, LOOM_STONE_850_R, LOOM_STONE_850_G, LOOM_STONE_850_B)
         LoomHRule(0, y + h, sw, LOOM_BRASS_700_R, LOOM_BRASS_700_G, LOOM_BRASS_700_B)
 
-        // Hint on the left
-        LoomText(20, y + 8, "TYPE TO FILTER  ·  CTRL+K SEARCH ALL", LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
+        // "+ New" button on the left -- creates a fresh entity of the
+        // current category and focuses it. Dispatches to EntityFactory.
+        Local nbX% = 20
+        Local nbY% = y + 4
+        Local nbW% = 96
+        Local nbH% = 22
+        Local nbHover% = (mx >= nbX And mx < nbX + nbW And my >= nbY And my < nbY + nbH)
+
+        If nbHover = True
+            LoomFill(nbX, nbY, nbW, nbH, LOOM_ARCANE_700_R, LOOM_ARCANE_700_G, LOOM_ARCANE_700_B)
+            LoomBorder(nbX, nbY, nbW, nbH, LOOM_ARCANE_500_R, LOOM_ARCANE_500_G, LOOM_ARCANE_500_B)
+        Else
+            LoomFill(nbX, nbY, nbW, nbH, LOOM_STONE_800_R, LOOM_STONE_800_G, LOOM_STONE_800_B)
+            LoomBorder(nbX, nbY, nbW, nbH, LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
+        EndIf
+        LoomText(nbX + 10, nbY + 4, "+ New " + Browser::categoryLabel(self, self\category), LOOM_PARCHMENT_100_R, LOOM_PARCHMENT_100_G, LOOM_PARCHMENT_100_B)
+
+        If nbHover And clicked
+            EntityFactory_Create(self\category, self\threads)
+            // EntityFactory focuses the new entity on success; we don't
+            // need to do anything else here. Leave cardClickLatch alone
+            // (the Composer takes over from here).
+        EndIf
+
+        // Hint between the button and the input
+        LoomText(nbX + nbW + 16, y + 8, "TYPE TO FILTER  ·  CTRL+K SEARCH ALL", LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
 
         // Input on the right -- 280px wide
         Local iw% = 280
@@ -246,6 +270,22 @@ Type Browser
                 LoomFill(cursorX, iy + 3, 2, 14, LOOM_PARCHMENT_100_R, LOOM_PARCHMENT_100_G, LOOM_PARCHMENT_100_B)
             EndIf
         EndIf
+    End Method
+
+
+    // -------------------------------------------------------------------------
+    // categoryLabel -- short singular form for the "+ New X" button label.
+    // Could read from BrowserCategory\Title but those are plural ("Actors");
+    // we want "Actor" for the button.
+    // -------------------------------------------------------------------------
+    Method categoryLabel$(kind$)
+        If kind = "actor"   Then Return "Actor"
+        If kind = "item"    Then Return "Item"
+        If kind = "spell"   Then Return "Spell"
+        If kind = "zone"    Then Return "Zone"
+        If kind = "faction" Then Return "Faction"
+        If kind = "animset" Then Return "Anim Set"
+        Return kind
     End Method
 
 

@@ -105,6 +105,7 @@ Include "Modules\Loom\Threads.bb"
 Include "Modules\Loom\Browser.bb"
 Include "Modules\Loom\Composer.bb"
 Include "Modules\Loom\Palette.bb"
+Include "Modules\Loom\EntityFactory.bb"
 
 
 // =============================================================================
