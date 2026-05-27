@@ -76,6 +76,7 @@ if %RCCE%==1 (
     "%BLITZPATH%\bin\blitzcc.exe" -o "%ROOTDIR%\bin\Server.exe" "%ROOTDIR%\src\Server.bb" || (cd /d "%ROOTDIR%" & endlocal & exit /b 1)
     "%BLITZPATH%\bin\blitzcc.exe" -o "%ROOTDIR%\Project Manager.exe" -n "%ROOTDIR%\res\Icon.ico" "%ROOTDIR%\src\Project Manager.bb" || (cd /d "%ROOTDIR%" & endlocal & exit /b 1)
     "%BLITZPATH%\bin\blitzcc.exe" -o "%ROOTDIR%\bin\GUE.exe" -n "%ROOTDIR%\res\Icon.ico" "%ROOTDIR%\src\GUE.bb" || (cd /d "%ROOTDIR%" & endlocal & exit /b 1)
+    "%BLITZPATH%\bin\blitzcc.exe" -o "%ROOTDIR%\bin\Loom.exe" -n "%ROOTDIR%\res\Icon.ico" "%ROOTDIR%\src\Loom.bb" || (cd /d "%ROOTDIR%" & endlocal & exit /b 1)
     "%BLITZPATH%\bin\blitzcc.exe" -o "%ROOTDIR%\bin\Client.exe" -n "%ROOTDIR%\res\Icon.ico" "%ROOTDIR%\src\Client.bb" || (cd /d "%ROOTDIR%" & endlocal & exit /b 1)
 )
 
