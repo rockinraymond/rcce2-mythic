@@ -520,11 +520,14 @@ Function LoadArea(Name$, CameraEN, DisplayItems = False, UpdateRottNet = False)
 				EndIf
 			; Mesh has been deleted or removed from the database!
 			Else
-				If DisplayItems = True
-					Delete(S)
-				Else
-					RuntimeError("Could not find model with ID " + S\MeshID)
-				EndIf
+				; Soft-fail (matching ClientAreas_FE.bb fix): log + drop.
+				; In GUE this previously took the Delete-only branch
+				; silently; in any caller that passes DisplayItems=False
+				; it RuntimeError'd. Unified to log + drop so neither
+				; admin nor live player gets a crash from missing world
+				; meshes.
+				WriteLog(MainLog, "LoadArea: scenery MeshID " + S\MeshID + " not found in model database; dropping scenery (zone: " + Name$ + ")")
+				Delete(S)
 			EndIf
 			.CancelScenery
 
@@ -666,9 +669,9 @@ Function LoadArea(Name$, CameraEN, DisplayItems = False, UpdateRottNet = False)
 				; Position/rotation
 				PositionEntity E\EN, X#, Y#, Z#
 				RotateEntity E\EN, Pitch#, Yaw#, Roll# 
-			; Failed to load config, remove the emitter and display an error message if running on client
+			; Failed to load config -- soft-fail matching the FE variant.
 			Else
-				If DisplayItems = False Then RuntimeError("Could not load emitter: " + E\ConfigName$)
+				WriteLog(MainLog, "LoadArea: emitter config '" + E\ConfigName$ + "' could not load; dropping emitter (zone: " + Name$ + ")")
 				HideEntity(E\EN)
 				FreeEntity(E\EN)
 				Delete(E)
