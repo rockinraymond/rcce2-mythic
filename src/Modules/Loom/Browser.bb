@@ -24,13 +24,18 @@ Strict
 
 
 // Layout constants
-Const BR_TOP_RIBBON  = 56
-Const BR_TAB_BAR_H   = 36
-Const BR_BOT_RIBBON  = 36
-Const BR_SECTION_PAD = 28
-Const BR_CARD_W      = 300
-Const BR_CARD_H      = 96
-Const BR_CARD_GAP    = 14
+Const BR_TOP_RIBBON   = 56
+Const BR_TAB_BAR_H    = 36
+Const BR_FILTER_BAR_H = 30
+Const BR_BOT_RIBBON   = 36
+Const BR_SECTION_PAD  = 28
+Const BR_CARD_W       = 300
+Const BR_CARD_H       = 96
+Const BR_CARD_GAP     = 14
+
+// Filter input cursor blink rate (ms). Matches Composer's edit cursor cadence
+// so the two surfaces feel like one input system.
+Const BR_FILTER_CURSOR_PERIOD = 1000
 
 
 // -----------------------------------------------------------------------------
@@ -59,11 +64,24 @@ Type Browser
     // writes through `self\` work at any nesting depth.
     Field cardClickLatch%
 
+    // Per-category search filter. Empty = no filter; non-empty = case-
+    // insensitive substring match against each card's primary display name
+    // (Race+Class for actors, Name for items/spells/zones, etc.). The same
+    // string applies to whatever category is active -- intentional, so the
+    // filter persists when tabbing across categories ("looking for goblin
+    // across actors AND items").
+    //
+    // Edit-buffer state: keyboard pumping is unconditional while the browser
+    // surface is foreground (no palette / composer-edit-mode in front), so
+    // typing into the browser feels immediate without a click-into-input.
+    Field filterQuery$
+
 
     Method create.Browser(threads.Threads)
         self\threads = threads
         self\category = "actor"     // richest content; most useful starting point
         self\cardClickLatch = False
+        self\filterQuery = ""
 
         // Build the ordered category list. Iterated via `Each BrowserCategory`
         // in insertion order (Blitz3D's global type pool is FIFO) -- also the
@@ -88,11 +106,23 @@ Type Browser
 
     // -------------------------------------------------------------------------
     // renderAndUpdate -- per-frame paint + hit-test.
+    //
+    // inputEnabled gates keyboard pumping into the filter buffer -- when the
+    // palette is open or the composer is in field-edit mode, those surfaces
+    // own the keystrokes and the browser must stay quiet.
     // -------------------------------------------------------------------------
-    Method renderAndUpdate%(sw%, sh%, project$)
+    Method renderAndUpdate%(sw%, sh%, project$, inputEnabled%)
         Local mx% = MouseX()
         Local my% = MouseY()
         Local clicked% = MouseHit(1)
+
+        // Drain keyboard into the per-category filter buffer (printable chars
+        // + Backspace). Esc is owned by the outer Loom frame -- when the
+        // filter is non-empty, the outer Esc handler clears it first via
+        // Browser::clearFilter (called from Loom.bb).
+        If inputEnabled = True
+            Browser::pumpFilterKeyboard(self)
+        EndIf
 
         // Background gradient
         LoomGradientV(0, 0, sw, sh, LOOM_STONE_900_R, LOOM_STONE_900_G, LOOM_STONE_900_B, LOOM_STONE_950_R, LOOM_STONE_950_G, LOOM_STONE_950_B)
@@ -100,11 +130,122 @@ Type Browser
         // Chrome
         Browser::drawTopRibbon(self, sw, project$)
         Browser::drawTabBar(self, sw, mx, my, clicked)
+        Browser::drawFilterBar(self, sw, mx, my, clicked)
         Browser::drawFooter(self, sw, sh)
 
         // Card grid
         Browser::drawCardGrid(self, sw, sh, mx, my, clicked)
         Return self\cardClickLatch
+    End Method
+
+
+    // -------------------------------------------------------------------------
+    // hasFilter / clearFilter -- public surface for the outer Loom frame so
+    // Esc on a non-empty filter clears the filter instead of falling through
+    // to composer/exit handling. Keeps the priority chain explicit:
+    //   palette > composer-edit > filter clear > back-stack pop > exit
+    // -------------------------------------------------------------------------
+    Method hasFilter%()
+        If self\filterQuery <> "" Then Return True
+        Return False
+    End Method
+
+    Method clearFilter()
+        self\filterQuery = ""
+        WriteLog(LoomLog, "Browser: filter cleared")
+    End Method
+
+
+    // -------------------------------------------------------------------------
+    // pumpFilterKeyboard -- drain printable chars + Backspace into filterQuery.
+    // Does NOT consume Esc (outer frame handles that). Does NOT consume Enter
+    // (no commit semantics -- the filter is always live).
+    //
+    // Ctrl-anything is skipped so Ctrl+K opening the palette doesn't dribble
+    // a "k" into the filter buffer before the palette claims keys.
+    // -------------------------------------------------------------------------
+    Method pumpFilterKeyboard()
+        // Skip drain when any control modifier is held -- prevents Ctrl+K
+        // (palette open) from depositing characters; also Ctrl+L, Ctrl+S
+        // (future Save shortcut), etc.
+        If KeyDown(29) Or KeyDown(157) Then Return
+
+        // Backspace (scan code 14)
+        If KeyHit(14) And Len(self\filterQuery) > 0
+            self\filterQuery = Left$(self\filterQuery, Len(self\filterQuery) - 1)
+        EndIf
+
+        // Drain GetKey queue for printable ASCII
+        Local k% = GetKey()
+        While k > 0
+            If k >= 32 And k <= 126
+                self\filterQuery = self\filterQuery + Chr(k)
+            EndIf
+            k = GetKey()
+        Wend
+    End Method
+
+
+    // -------------------------------------------------------------------------
+    // matchesFilter -- case-insensitive substring check used by every per-
+    // kind grid renderer to skip cards that don't match the active filter.
+    // -------------------------------------------------------------------------
+    Method matchesFilter%(name$)
+        If self\filterQuery = "" Then Return True
+        Local nm$ = Lower$(name)
+        Local q$  = Lower$(self\filterQuery)
+        If Instr(nm, q) > 0 Then Return True
+        Return False
+    End Method
+
+
+    // -------------------------------------------------------------------------
+    // drawFilterBar -- thin row above the card grid with a search input on
+    // the right and a help glyph on the left. The input shows the live
+    // filter buffer with a blinking cursor; typing anywhere on the browser
+    // surface lands here.
+    // -------------------------------------------------------------------------
+    Method drawFilterBar(sw%, mx%, my%, clicked%)
+        Local y% = BR_TOP_RIBBON + BR_TAB_BAR_H
+        Local h% = BR_FILTER_BAR_H
+
+        LoomFill(0, y, sw, h, LOOM_STONE_850_R, LOOM_STONE_850_G, LOOM_STONE_850_B)
+        LoomHRule(0, y + h, sw, LOOM_BRASS_700_R, LOOM_BRASS_700_G, LOOM_BRASS_700_B)
+
+        // Hint on the left
+        LoomText(20, y + 8, "TYPE TO FILTER  ·  CTRL+K SEARCH ALL", LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
+
+        // Input on the right -- 280px wide
+        Local iw% = 280
+        Local ix% = sw - iw - 20
+        Local iy% = y + 4
+        Local ih% = 22
+
+        // Background -- darker when empty, arcane-tinted when active
+        If self\filterQuery <> ""
+            LoomFill(ix, iy, iw, ih, LOOM_ARCANE_900_R, LOOM_ARCANE_900_G, LOOM_ARCANE_900_B)
+            LoomBorder(ix, iy, iw, ih, LOOM_ARCANE_500_R, LOOM_ARCANE_500_G, LOOM_ARCANE_500_B)
+        Else
+            LoomFill(ix, iy, iw, ih, LOOM_STONE_800_R, LOOM_STONE_800_G, LOOM_STONE_800_B)
+            LoomBorder(ix, iy, iw, ih, LOOM_BRASS_700_R, LOOM_BRASS_700_G, LOOM_BRASS_700_B)
+        EndIf
+
+        // Prompt glyph
+        LoomText(ix + 8, iy + 4, ">", LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
+
+        // Query string (or placeholder)
+        If self\filterQuery = ""
+            LoomText(ix + 22, iy + 4, "filter " + self\category + "s...", LOOM_STONE_300_R, LOOM_STONE_300_G, LOOM_STONE_300_B)
+        Else
+            LoomText(ix + 22, iy + 4, self\filterQuery, LOOM_PARCHMENT_100_R, LOOM_PARCHMENT_100_G, LOOM_PARCHMENT_100_B)
+
+            // Blinking cursor at end -- only when filter is active so an
+            // empty input doesn't blink at the user.
+            If (MilliSecs() Mod BR_FILTER_CURSOR_PERIOD) < (BR_FILTER_CURSOR_PERIOD / 2)
+                Local cursorX% = ix + 22 + StringWidth(self\filterQuery)
+                LoomFill(cursorX, iy + 3, 2, 14, LOOM_PARCHMENT_100_R, LOOM_PARCHMENT_100_G, LOOM_PARCHMENT_100_B)
+            EndIf
+        EndIf
     End Method
 
 
@@ -169,7 +310,7 @@ Type Browser
     // -------------------------------------------------------------------------
     Method drawCardGrid%(sw%, sh%, mx%, my%, clicked%)
         Local gridX% = BR_SECTION_PAD
-        Local gridY% = BR_TOP_RIBBON + BR_TAB_BAR_H + BR_SECTION_PAD
+        Local gridY% = BR_TOP_RIBBON + BR_TAB_BAR_H + BR_FILTER_BAR_H + BR_SECTION_PAD
         Local gridW% = sw - (BR_SECTION_PAD * 2)
         Local cols% = (gridW + BR_CARD_GAP) / (BR_CARD_W + BR_CARD_GAP)
         If cols < 1 Then cols = 1
@@ -198,9 +339,16 @@ Type Browser
             count = Browser::drawAnimSetGrid(self, sw, sh, mx, my, clicked, gridX, gridY, cols)
         EndIf
 
-        // Empty-state copy
+        // Empty-state copy -- different message when the project HAS entities
+        // of this kind but the filter excluded them all.
         If count = 0
-            LoomTextCentered(sw / 2, sh / 2, "No " + cat + "s in this project yet.", LOOM_STONE_200_R, LOOM_STONE_200_G, LOOM_STONE_200_B)
+            Local emptyMsg$
+            If self\filterQuery <> ""
+                emptyMsg = "No " + cat + "s match " + Chr(34) + self\filterQuery + Chr(34) + "  ·  Esc to clear filter"
+            Else
+                emptyMsg = "No " + cat + "s in this project yet."
+            EndIf
+            LoomTextCentered(sw / 2, sh / 2, emptyMsg, LOOM_STONE_200_R, LOOM_STONE_200_G, LOOM_STONE_200_B)
         EndIf
 
         Return self\cardClickLatch
@@ -218,15 +366,18 @@ Type Browser
         Local row% = 0
         Local count% = 0
         For Ac.Actor = Each Actor
-            Local cx% = gridX + col * (BR_CARD_W + BR_CARD_GAP)
-            Local cy% = gridY + row * (BR_CARD_H + BR_CARD_GAP)
-            If cy + BR_CARD_H < sh - BR_BOT_RIBBON
-                Browser::drawCardChrome(self, "actor", Ac\ID, cx, cy, mx, my, clicked)
-                Browser::drawActorCardBody(self, Ac, cx, cy)
+            Local aName$ = Ac\Race$ + " [" + Ac\Class$ + "]"
+            If Browser::matchesFilter(self, aName) = True
+                Local cx% = gridX + col * (BR_CARD_W + BR_CARD_GAP)
+                Local cy% = gridY + row * (BR_CARD_H + BR_CARD_GAP)
+                If cy + BR_CARD_H < sh - BR_BOT_RIBBON
+                    Browser::drawCardChrome(self, "actor", Ac\ID, cx, cy, mx, my, clicked)
+                    Browser::drawActorCardBody(self, Ac, cx, cy)
+                EndIf
+                count = count + 1
+                col = col + 1
+                If col >= cols Then col = 0 : row = row + 1
             EndIf
-            count = count + 1
-            col = col + 1
-            If col >= cols Then col = 0 : row = row + 1
         Next
         Return count
     End Method
@@ -237,15 +388,17 @@ Type Browser
         Local row% = 0
         Local count% = 0
         For It.Item = Each Item
-            Local cx% = gridX + col * (BR_CARD_W + BR_CARD_GAP)
-            Local cy% = gridY + row * (BR_CARD_H + BR_CARD_GAP)
-            If cy + BR_CARD_H < sh - BR_BOT_RIBBON
-                Browser::drawCardChrome(self, "item", It\ID, cx, cy, mx, my, clicked)
-                Browser::drawItemCardBody(self, It, cx, cy)
+            If Browser::matchesFilter(self, It\Name$) = True
+                Local cx% = gridX + col * (BR_CARD_W + BR_CARD_GAP)
+                Local cy% = gridY + row * (BR_CARD_H + BR_CARD_GAP)
+                If cy + BR_CARD_H < sh - BR_BOT_RIBBON
+                    Browser::drawCardChrome(self, "item", It\ID, cx, cy, mx, my, clicked)
+                    Browser::drawItemCardBody(self, It, cx, cy)
+                EndIf
+                count = count + 1
+                col = col + 1
+                If col >= cols Then col = 0 : row = row + 1
             EndIf
-            count = count + 1
-            col = col + 1
-            If col >= cols Then col = 0 : row = row + 1
         Next
         Return count
     End Method
@@ -256,15 +409,17 @@ Type Browser
         Local row% = 0
         Local count% = 0
         For Sp.Spell = Each Spell
-            Local cx% = gridX + col * (BR_CARD_W + BR_CARD_GAP)
-            Local cy% = gridY + row * (BR_CARD_H + BR_CARD_GAP)
-            If cy + BR_CARD_H < sh - BR_BOT_RIBBON
-                Browser::drawCardChrome(self, "spell", Sp\ID, cx, cy, mx, my, clicked)
-                Browser::drawSpellCardBody(self, Sp, cx, cy)
+            If Browser::matchesFilter(self, Sp\Name$) = True
+                Local cx% = gridX + col * (BR_CARD_W + BR_CARD_GAP)
+                Local cy% = gridY + row * (BR_CARD_H + BR_CARD_GAP)
+                If cy + BR_CARD_H < sh - BR_BOT_RIBBON
+                    Browser::drawCardChrome(self, "spell", Sp\ID, cx, cy, mx, my, clicked)
+                    Browser::drawSpellCardBody(self, Sp, cx, cy)
+                EndIf
+                count = count + 1
+                col = col + 1
+                If col >= cols Then col = 0 : row = row + 1
             EndIf
-            count = count + 1
-            col = col + 1
-            If col >= cols Then col = 0 : row = row + 1
         Next
         Return count
     End Method
@@ -275,15 +430,17 @@ Type Browser
         Local row% = 0
         Local count% = 0
         For Ar.Area = Each Area
-            Local cx% = gridX + col * (BR_CARD_W + BR_CARD_GAP)
-            Local cy% = gridY + row * (BR_CARD_H + BR_CARD_GAP)
-            If cy + BR_CARD_H < sh - BR_BOT_RIBBON
-                Browser::drawCardChrome(self, "zone", Handle(Ar), cx, cy, mx, my, clicked)
-                Browser::drawZoneCardBody(self, Ar, cx, cy)
+            If Browser::matchesFilter(self, Ar\Name$) = True
+                Local cx% = gridX + col * (BR_CARD_W + BR_CARD_GAP)
+                Local cy% = gridY + row * (BR_CARD_H + BR_CARD_GAP)
+                If cy + BR_CARD_H < sh - BR_BOT_RIBBON
+                    Browser::drawCardChrome(self, "zone", Handle(Ar), cx, cy, mx, my, clicked)
+                    Browser::drawZoneCardBody(self, Ar, cx, cy)
+                EndIf
+                count = count + 1
+                col = col + 1
+                If col >= cols Then col = 0 : row = row + 1
             EndIf
-            count = count + 1
-            col = col + 1
-            If col >= cols Then col = 0 : row = row + 1
         Next
         Return count
     End Method
@@ -296,15 +453,17 @@ Type Browser
         Local i% = 0
         For i = 0 To 99
             If FactionNames$(i) <> ""
-                Local cx% = gridX + col * (BR_CARD_W + BR_CARD_GAP)
-                Local cy% = gridY + row * (BR_CARD_H + BR_CARD_GAP)
-                If cy + BR_CARD_H < sh - BR_BOT_RIBBON
-                    Browser::drawCardChrome(self, "faction", i, cx, cy, mx, my, clicked)
-                    Browser::drawFactionCardBody(self, i, cx, cy)
+                If Browser::matchesFilter(self, FactionNames$(i)) = True
+                    Local cx% = gridX + col * (BR_CARD_W + BR_CARD_GAP)
+                    Local cy% = gridY + row * (BR_CARD_H + BR_CARD_GAP)
+                    If cy + BR_CARD_H < sh - BR_BOT_RIBBON
+                        Browser::drawCardChrome(self, "faction", i, cx, cy, mx, my, clicked)
+                        Browser::drawFactionCardBody(self, i, cx, cy)
+                    EndIf
+                    count = count + 1
+                    col = col + 1
+                    If col >= cols Then col = 0 : row = row + 1
                 EndIf
-                count = count + 1
-                col = col + 1
-                If col >= cols Then col = 0 : row = row + 1
             EndIf
         Next
         Return count
@@ -316,15 +475,17 @@ Type Browser
         Local row% = 0
         Local count% = 0
         For As.AnimSet = Each AnimSet
-            Local cx% = gridX + col * (BR_CARD_W + BR_CARD_GAP)
-            Local cy% = gridY + row * (BR_CARD_H + BR_CARD_GAP)
-            If cy + BR_CARD_H < sh - BR_BOT_RIBBON
-                Browser::drawCardChrome(self, "animset", As\ID, cx, cy, mx, my, clicked)
-                Browser::drawAnimSetCardBody(self, As, cx, cy)
+            If Browser::matchesFilter(self, As\Name$) = True
+                Local cx% = gridX + col * (BR_CARD_W + BR_CARD_GAP)
+                Local cy% = gridY + row * (BR_CARD_H + BR_CARD_GAP)
+                If cy + BR_CARD_H < sh - BR_BOT_RIBBON
+                    Browser::drawCardChrome(self, "animset", As\ID, cx, cy, mx, my, clicked)
+                    Browser::drawAnimSetCardBody(self, As, cx, cy)
+                EndIf
+                count = count + 1
+                col = col + 1
+                If col >= cols Then col = 0 : row = row + 1
             EndIf
-            count = count + 1
-            col = col + 1
-            If col >= cols Then col = 0 : row = row + 1
         Next
         Return count
     End Method
