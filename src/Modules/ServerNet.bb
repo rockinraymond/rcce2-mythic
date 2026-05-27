@@ -1240,7 +1240,29 @@ Function UpdateNetwork()
 												If Upper$(AI\Actor\Class$) <> Upper$(Sp\ExclusiveClass$) Then SpellAllowed = False
 											EndIf
 											If SpellAllowed = False
-												RCE_Send(Host, AI\RNID, P_ChatMessage, Chr$(253) + LanguageString$(LS_AbilityNotRecharged), True)
+												; Race / class restriction failed -- emit a
+												; reason-specific message rather than the
+												; misleading LS_AbilityNotRecharged the pre-fix
+												; code used at this same site. Reuses the
+												; existing LS_RaceOnly / LS_ClassOnly tooltip
+												; strings (already used by item tooltips at
+												; Interface3D.bb:1938+) so no new LS index is
+												; needed. The earlier `SpellAllowed` evaluation
+												; sets the flag False on the FIRST failed check
+												; (race first, then class), so the branch order
+												; here mirrors that priority.
+												Local ReasonMsg$
+												If Len(Sp\ExclusiveRace$) > 0 And Upper$(AI\Actor\Race$) <> Upper$(Sp\ExclusiveRace$)
+													ReasonMsg$ = Sp\ExclusiveRace$ + " " + LanguageString$(LS_RaceOnly)
+												ElseIf Len(Sp\ExclusiveClass$) > 0 And Upper$(AI\Actor\Class$) <> Upper$(Sp\ExclusiveClass$)
+													ReasonMsg$ = Sp\ExclusiveClass$ + " " + LanguageString$(LS_ClassOnly)
+												Else
+													; Defensive fallback -- shouldn't reach here
+													; since SpellAllowed=False implies one of the
+													; above mismatched.
+													ReasonMsg$ = LanguageString$(LS_AbilityNotRecharged)
+												EndIf
+												RCE_Send(Host, AI\RNID, P_ChatMessage, Chr$(253) + ReasonMsg$, True)
 											Else
 												ThreadScript(Sp\Script$, Sp\SMethod$, Handle(AI), Handle(Context), AI\SpellLevels[Num])
 												AI\SpellCharge[SpellID] = Sp\RechargeTime
