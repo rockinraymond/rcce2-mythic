@@ -539,6 +539,14 @@ Function BVM_SPAWNITEM(Param1$, Param2%, Param3$, Param4#, Param5#, Param6#, Par
 End Function
 
 Function BVM_SETACTORGENDER(Param1%, Param2%)
+	; Cosmetic appearance setter -- broadcasts P_AppearanceUpdate to
+	; every player in the area. Non-priv clicker exploit:
+	; SetActorGender(anotherPlayer, ...) forces an appearance flip
+	; on a victim, which is griefing rather than mechanical brick,
+	; but still unwanted. Same threat shape as the SET-name/tag pair.
+	; Quest reward scripts (race/gender change tokens) already run
+	; privileged. Per-Actor body/head clamping below is unchanged.
+	If Not BVM_RequirePrivileged() Then Return
 	Actor.ActorInstance = Object.ActorInstance(Param1%)
 	If Actor <> Null
 		; Param2% is 1-based on the script side (1=male, 2=female).
@@ -571,6 +579,10 @@ Return Result%
 End Function
 
 Function BVM_SETACTORBEARD(Param1%, Param2%)
+	; Cosmetic appearance setter -- same threat shape as
+	; SETACTORGENDER. Clicker-griefing only, but consistent gating
+	; across the appearance cluster.
+	If Not BVM_RequirePrivileged() Then Return
 	Actor.ActorInstance = Object.ActorInstance(Param1%)
 	If Actor <> Null
 		If Actor\Gender = 0
@@ -601,6 +613,9 @@ Return Result%
 End Function
 
 Function BVM_SETACTORHAIR(Param1%, Param2%)
+	; Cosmetic appearance setter -- same gating rationale as
+	; SETACTORGENDER / SETACTORBEARD.
+	If Not BVM_RequirePrivileged() Then Return
 	Actor.ActorInstance = Object.ActorInstance(Param1%)
 	If Actor <> Null
 		If Actor\Gender = 0
@@ -628,6 +643,17 @@ Function BVM_ACTORCALLFORHELP(Param1%)
 End Function
 
 Function BVM_SETACTORAISTATE(Param1%, Param2%)
+	; NOT gated. Shipped content (AOE Damage Spell Template.rsl at
+	; data/Server Data/Scripts/) uses this from non-priv spell-cast
+	; spawns to make targeted NPCs become aggressive (AIMode = 3) on
+	; spell impact. A full-priv gate would silently no-op the spell's
+	; aggro-pull effect.
+	;
+	; The clicker brick risk (SetActorAIState(SomeGuard, AI_Wait)
+	; disables a hostile guard's AI) is real but addressing it would
+	; require either (a) rewriting the shipped AOE template to spawn
+	; privileged, or (b) carving a chat-command / spell-cast privilege
+	; path. Tracked as a follow-up.
 	Actor.ActorInstance = Object.ActorInstance(Param1%)
 	If Actor <> Null
 		Actor\AIMode = Param2%
@@ -653,6 +679,16 @@ Return Result%
 End Function
 
 Function BVM_SETACTORTARGET(Param1%, Param2%=0)
+	; NOT gated. Shipped content uses this from non-priv spawns:
+	;   - /Assist chat command (In-game Commands.rsl:37) targets the
+	;     assisted player's current target.
+	;   - AOE Damage Spell Template.rsl:41,48 targets the player on
+	;     spell impact (aggro-pull).
+	; The function already has partial safety (Aggressiveness=3
+	; non-combatants and friendly-faction targets rejected). The
+	; remaining clicker-brick risk (SetActorTarget(SomeGuard,
+	; anotherPlayer) weaponizing a hostile NPC) requires the chat-
+	; command / spell-cast privilege carve-out (tracked).
 	Actor.ActorInstance = Object.ActorInstance(Param1%)
 	Actor2.ActorInstance = Object.ActorInstance(Param2%)
 	If Actor <> Null
@@ -1157,6 +1193,9 @@ Return Result%
 End Function
 
 Function BVM_SETACTORCLOTHES(Param1%, Param2%)
+	; Cosmetic appearance setter -- same gating rationale as the
+	; rest of the SET_ACTOR_(GENDER|BEARD|HAIR|FACE|CLOTHES) cluster.
+	If Not BVM_RequirePrivileged() Then Return
 	Actor.ActorInstance = Object.ActorInstance(Param1%)
 	If Actor <> Null
 		; Bound Param2% to the 5-slot Body-IDs arrays. 1-based -> 0-based clamp.
@@ -1182,6 +1221,9 @@ Return Result%
 End Function
 
 Function BVM_SETACTORFACE(Param1%, Param2%)
+	; Cosmetic appearance setter -- same gating rationale as the
+	; rest of the SET_ACTOR_(GENDER|BEARD|HAIR|FACE|CLOTHES) cluster.
+	If Not BVM_RequirePrivileged() Then Return
 	Actor.ActorInstance = Object.ActorInstance(Param1%)
 	If Actor <> Null
 		; Bound Param2% to the 5-slot Face-IDs arrays. 1-based -> 0-based clamp.
@@ -2435,6 +2477,12 @@ Return Result$
 End Function
 
 Function BVM_SETNAME(Param1%, Param2$)
+	; NOT gated. Shipped content uses this from non-priv RightClick
+	; spawns: marriage.rsl + Click_marriage.rsl append a surname to
+	; both players on marriage. Spawn_Test.rsl labels test NPCs.
+	; The clicker griefing risk (SetName(target, "<slur>") + broadcast)
+	; is real but a full-priv gate would silently break marriage.
+	; Tracked as a follow-up alongside the AOE / Assist cluster.
 	Actor.ActorInstance = Object.ActorInstance(Param1%)
 	If Actor <> Null
 		Actor\Name$ = BVM_DEQUOTE(Param2$)
@@ -2461,6 +2509,9 @@ Return Result$
 End Function
 
 Function BVM_SETTAG(Param1%, Param2$)
+	; NOT gated -- same shape and same content-script-callers as
+	; SETNAME above (Spawn_Test.rsl uses it to label test NPCs).
+	; Same clicker-griefing risk; same follow-up.
 	Actor.ActorInstance = Object.ActorInstance(Param1%)
 	If Actor <> Null
 		Actor\Tag$ = Param2$
