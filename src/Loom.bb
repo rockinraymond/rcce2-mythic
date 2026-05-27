@@ -110,6 +110,7 @@ Include "Modules\Loom\Browser.bb"
 Include "Modules\Loom\Composer.bb"
 Include "Modules\Loom\Palette.bb"
 Include "Modules\Loom\Ribbon.bb"
+Include "Modules\Loom\Atlas.bb"
 Include "Modules\Loom\EntityFactory.bb"
 
 
@@ -126,6 +127,7 @@ Type Loom
     Field composer.Composer
     Field palette.Palette
     Field ribbon.Ribbon
+    Field atlas.Atlas
 
 
     Method create.Loom(windowWidth%, windowHeight%, projectName$)
@@ -147,6 +149,13 @@ Type Loom
         // Composer (so a dirty-badge click can dispatch to the same
         // commitSaveForKind path the composer's Save button uses).
         self\ribbon = New Ribbon(self\threads, self\composer)
+
+        // Atlas holds a Threads reference for node-click focus dispatch.
+        // The Browser activates / deactivates Atlas via Browser::setAtlas
+        // and routes the viewport rect through to Atlas::renderAndUpdate
+        // when the user toggles to atlas mode on the Zones tab.
+        self\atlas = New Atlas(self\threads)
+        Browser::setAtlas(self\browser, self\atlas)
 
         Return self
     End Method
