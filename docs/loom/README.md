@@ -27,22 +27,29 @@ The full original design brief — written for an outside design agent — is pr
 5. **Session timeline scrubber** — visible history of the current session's edits, with a draggable handle to rewind.
 6. **Walk-in playtest** — spawn into the zone you're editing as a live player without restarting the server.
 
-The shipped alpha implements **one of these (threads)** and a simpler version of one more (the atlas, as the browser's category grid). The other four are deferred — see [roadmap.md](roadmap.md).
+The shipped beta implements **five of these directly** (threads, conscience ribbon, world atlas, command palette, session timeline scrubber) and a sixth (walk-in playtest) remains the only deferred signature surface.
 
-## What Loom is today (alpha)
+## What Loom is today (beta)
 
-Read-only entity browser with thread navigation. Specifically:
+A full-featured GUE replacement with thread navigation, search, and a custom-drawn aesthetic. Specifically:
 
-- Boots into a **browser** that lists every actor / item / spell / zone / faction / animation set as clickable cards.
-- Picking a card opens a **composer** panel on the right showing the entity's full property set.
-- Reference fields render as **thread chips**: click an actor's faction → composer switches to that faction with its member roster → click a member → that actor. Esc walks back through the trail.
-- Reads through the same data loaders GUE uses (`LoadActors`, `LoadItems`, `LoadSpells`, `ServerLoadArea`, …) so anything GUE can edit, Loom can see.
+- **Browser** with seven categories (actors / items / spells / zones / factions / anim sets / tools) — each card is clickable; arrow keys + Enter for keyboard nav; live filter input above the grid.
+- **Composer** panel for the focused entity — ~40 editable fields across every kind; Save / Discard / Delete buttons (arm-confirm on the destructive ones); per-field range clamps so typos can't poison data.
+- **Thread chips** for every reference between entities — left-click jumps + pushes back stack (Esc walks back); right-click opens the **palette as a picker** filtered to that chip's kind so you can swap the referent without leaving the composer. Broken refs render danger-red.
+- **Conscience Ribbon** at the top — per-kind dirty badges (click to Save), broken-reference count (click → modal that enumerates each dangling ref with click-to-jump), total entity counts.
+- **Command palette** (Ctrl+K) — type-to-search find-anywhere across every entity in the project with prefix > substring ranking.
+- **Session timeline** (Ctrl+H) — every edit / create / delete recorded with click-to-revert on edits.
+- **Recents** (Ctrl+R) — per-project persisted list of recently-focused entities; survives across sessions.
+- **World Atlas** — Zones tab has a Card / Atlas toggle; Atlas renders the portal-link graph as a force-directed spatial view.
+- **Tools tab** — launchers for GUE's seven standalone editors (RC Architect, Terrain / Caves / Rock / Tree, Gubbin, Spell Wizard). Missing-binary detection paints unbuilt tools in danger-red.
+- **+ New** button on every entity tab — create a fresh actor / item / spell / zone / faction / anim set, auto-focused for editing.
+- Reads through the same data loaders GUE uses and writes through the same `SaveX` functions, so the two editors cannot drift on the file format.
 
-What it deliberately can't do:
+What it deliberately still can't do:
 
-- **Edit anything.** Every field is read-only. Editing needs save / dirty tracking that's its own design surface — see [decisions/002-read-only-alpha.md](decisions/002-read-only-alpha.md).
 - **Render zones in 3D.** The 3D mesh loader is locked into GUE's UI substrate — see [decisions/004-deferred-3d-viewport.md](decisions/004-deferred-3d-viewport.md).
-- **Search across everything (Ctrl+K).** Not yet wired. The command palette is on the roadmap.
+- **Walk-in playtest.** Requires server-side feature work (out-of-band player spawn API) — see roadmap "Deferred."
+- **Multi-cursor / collaboration.** Out of scope indefinitely.
 
 ## How to read this directory
 

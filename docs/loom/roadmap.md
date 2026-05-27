@@ -2,7 +2,7 @@
 
 Shipped, next, and deferred. Read this when picking what to build next.
 
-## Shipped (alpha)
+## Shipped (alpha + beta)
 
 - **Skeleton** — `bin/Loom.exe` builds, Project Manager launches it, themed window opens, exits cleanly. ([#292](https://github.com/RydeTec/rcce2/pull/292), merged)
 - **Theme primitives** — Loom design palette + 2D drawing helpers. Everything Loom paints goes through this layer.
@@ -25,7 +25,37 @@ Shipped, next, and deferred. Read this when picking what to build next.
 - **Tools tab** — new browser category exposing GUE's seven standalone editor launchers (RC Architect, Terrain / Caves / Rock / Tree Editor, Gubbin Tool, Spell Wizard). Each card shows the tool name, description, and a Launch >> hint; click `ExecFile`s the .exe with the project's `Data/` folder as CWD. Missing-binary detection paints the card with a danger-red border + "binary not built" label so the user gets immediate feedback when the partial-build trap bites. ([#343](https://github.com/RydeTec/rcce2/pull/343))
 - **Recents list (Ctrl+R)** — persisted per-project list of recently-focused entities. `Modules/Loom/Recents.bb` writes to `Data/Loom/recents.txt` (via `SafeWriteOpen/Commit`); load on boot, save on shutdown. `Threads::focus` + `Threads::jump` emit through a `Recents_Record` facade. Stable keys per kind (refID for typed entities, Name for zones since Handles regenerate) so the list survives across sessions. Ctrl+R opens a modal newest-first; stale entries (referenced entity deleted between sessions) render in danger-red and skip on click.
 
-All six original "next up" roadmap items are now shipped. The remaining work is in the **Deferred** section below.
+All six original "next up" roadmap items are shipped, plus eight scope-expanded surfaces (palette, search-within-category, entity creation, deletion, discard, conscience ribbon, broken-ref finder, keyboard nav, atlas, ref-field editing, timeline scrubber, recents, tools tab). Loom is now in **beta** — every primary GUE workflow has a Loom equivalent.
+
+Beta vs alpha distinction: alpha was read-only browsing; beta covers full editing parity with GUE. Out-of-scope items (3D viewport, walk-in playtest, multi-cursor) remain in the deferred list below.
+
+## Next up
+
+The next-tier roadmap items, in rough order of leverage:
+
+### 1. Performance: cache the data scans
+
+Ribbon::recomputeCache, BrokenRefs::rebuild, Atlas::countZones, and Palette::rebuildResults all walk the same global type pools per-frame or per-modal-open. At 50-100 entities none of this matters; at 5000+ actors / items the per-frame ribbon scan starts to bite. Add a shared dirty-bit cache that invalidates on Composer::commitEdit / EntityFactory create/delete, so Ribbon and friends only recompute when the underlying data changed.
+
+Estimated scope: 200-300 LOC across Composer + Ribbon + a new `Cache.bb`.
+
+### 2. Bulk edit / multi-select
+
+Select multiple cards via Shift+Click on the grid; opening the composer shows a unified property panel where edits apply to every selected entity. Useful for "bump every weapon's damage by 10%." Today the composer is single-focus only.
+
+Estimated scope: 400-600 LOC. Touches Browser (selection set), Composer (multi-focus rendering), writeField (broadcast).
+
+### 3. Asset preview (textures + meshes)
+
+Item / Actor reference textures and meshes by integer ID. The composer shows the ID but not the asset itself. A small preview panel in the composer (or a hover-thumbnail on the chip) would surface the asset directly. Needs the texture / mesh loaders Loom currently avoids — likely a Loom-side decoder rather than pulling in GUE's media stack.
+
+Estimated scope: 500-800 LOC. Significant new surface.
+
+### 4. Aesthetic immersion toggle (Tool / Balanced / In-world)
+
+The design's slider for chrome-density: utilitarian "Tool" mode at one end, fully-immersive "In-world" parchment-scroll aesthetic at the other. Current Loom chrome is "Balanced." Add a toggle in the Conscience Ribbon's right-side that re-themes the surfaces. Mostly a Theme.bb palette swap + a few layout tweaks per mode.
+
+Estimated scope: 200-300 LOC.
 
 ## Deferred (with reasons — read before reopening)
 
@@ -37,23 +67,11 @@ All six original "next up" roadmap items are now shipped. The remaining work is 
 
 See [decisions/004-deferred-3d-viewport.md](decisions/004-deferred-3d-viewport.md) for full context.
 
-### Validation conscience ribbon
-
-**Reason:** The design called for a top status ribbon with broken-reference counts, balance hints, and unsaved-entity badges. Loom already detects broken references inline (thread chips render in red when they don't resolve). A separate ribbon adds value when there are *many* findings and you need a roll-up — that's mostly a #3-editing concern (unsaved counts) plus a real validator framework (balance hints).
-
-**Path to unblocking:** ships after #3 (editing), since pre-edit there are no unsaved entities to count.
-
 ### Walk-in playtest
 
 **Reason:** The design called for "spawn into the zone as a player without restarting the server." This requires a live server bridge — Loom would have to either (a) speak the wire protocol to a running `Server.exe` to inject a player, or (b) embed a server in-process. (b) is huge. (a) needs the wire protocol stable and a way for the server to accept "spawn this account at this position" out of band, which it doesn't today.
 
 **Path to unblocking:** server-side feature work, not Loom work. Out of scope until a Server.exe admin/test API exists.
-
-### Aesthetic immersion toggle (Tool / Balanced / In-world)
-
-**Reason:** The design had a slider for chrome-density: utilitarian "Tool" mode at one end, fully-immersive "In-world" parchment-scroll aesthetic at the other. Cute, but not load-bearing for the alpha. The current Loom chrome is "Balanced" by default and there's no demand yet for variants.
-
-**Path to unblocking:** ship when there's a real user request. Don't pre-build.
 
 ### Multi-cursor / collaboration
 
