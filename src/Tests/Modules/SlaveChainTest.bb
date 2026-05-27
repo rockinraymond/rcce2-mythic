@@ -81,11 +81,29 @@ Function ChainContains%(L.MockActor, S.MockActor)
 	Return False
 End Function
 
+; Sweep-walk the MockActor pool and Delete every instance. Called at
+; the start of each Test to cap the live count. Same rationale as
+; OnlinePlayerChainTest's ResetChain: each test creates several
+; instances that the file's no-EnableGC mode can't reference-count
+; away; left alone they accumulate to ~50+ over 17 tests, which is
+; enough for Blitz3D's process-exit cleanup to stack-overflow non-
+; deterministically (~30-40% CI flake shape). For-Each + Delete-
+; current is safe in BlitzForge per the verified basic.cpp ref-
+; counting walk (PR #313 / feedback_blitzforge_enablegc_requires_
+; strict memory).
+Function ResetPool()
+	Local entry.MockActor
+	For entry = Each MockActor
+		Delete entry
+	Next
+End Function
+
 ; ====================================================================
 ; Link: head-insert, NumberOfSlaves bookkeeping, idempotency
 ; ====================================================================
 
 Test testLinkOneSlave()
+	ResetPool()
 	Local L.MockActor = New MockActor() : L\Name = "L"
 	Local S.MockActor = New MockActor() : S\Name = "S"
 	MockSlaveLink(L, S)
@@ -96,6 +114,7 @@ Test testLinkOneSlave()
 End Test
 
 Test testLinkManyHeadInsertOrder()
+	ResetPool()
 	Local L.MockActor = New MockActor() : L\Name = "L"
 	Local A.MockActor = New MockActor() : A\Name = "A"
 	Local B.MockActor = New MockActor() : B\Name = "B"
@@ -112,6 +131,7 @@ Test testLinkManyHeadInsertOrder()
 End Test
 
 Test testLinkIdempotentNoDoubleCount()
+	ResetPool()
 	Local L.MockActor = New MockActor() : L\Name = "L"
 	Local S.MockActor = New MockActor() : S\Name = "S"
 	MockSlaveLink(L, S)
@@ -124,6 +144,7 @@ Test testLinkIdempotentNoDoubleCount()
 End Test
 
 Test testLinkReassignsToNewLeader()
+	ResetPool()
 	Local L1.MockActor = New MockActor() : L1\Name = "L1"
 	Local L2.MockActor = New MockActor() : L2\Name = "L2"
 	Local S.MockActor = New MockActor() : S\Name = "S"
@@ -139,6 +160,7 @@ Test testLinkReassignsToNewLeader()
 End Test
 
 Test testLinkNullSlaveIsNoOp()
+	ResetPool()
 	Local L.MockActor = New MockActor() : L\Name = "L"
 	MockSlaveLink(L, Null)
 	Assert(L\NumberOfSlaves = 0)
@@ -146,6 +168,7 @@ Test testLinkNullSlaveIsNoOp()
 End Test
 
 Test testLinkNullLeaderIsNoOp()
+	ResetPool()
 	Local S.MockActor = New MockActor() : S\Name = "S"
 	MockSlaveLink(Null, S)
 	Assert(S\Leader = Null)
@@ -156,6 +179,7 @@ End Test
 ; ====================================================================
 
 Test testUnlinkHead()
+	ResetPool()
 	Local L.MockActor = New MockActor() : L\Name = "L"
 	Local A.MockActor = New MockActor() : A\Name = "A"
 	Local B.MockActor = New MockActor() : B\Name = "B"
@@ -170,6 +194,7 @@ Test testUnlinkHead()
 End Test
 
 Test testUnlinkMiddle()
+	ResetPool()
 	Local L.MockActor = New MockActor() : L\Name = "L"
 	Local A.MockActor = New MockActor() : A\Name = "A"
 	Local B.MockActor = New MockActor() : B\Name = "B"
@@ -186,6 +211,7 @@ Test testUnlinkMiddle()
 End Test
 
 Test testUnlinkTail()
+	ResetPool()
 	Local L.MockActor = New MockActor() : L\Name = "L"
 	Local A.MockActor = New MockActor() : A\Name = "A"
 	Local B.MockActor = New MockActor() : B\Name = "B"
@@ -200,6 +226,7 @@ Test testUnlinkTail()
 End Test
 
 Test testUnlinkSingleElement()
+	ResetPool()
 	Local L.MockActor = New MockActor() : L\Name = "L"
 	Local S.MockActor = New MockActor() : S\Name = "S"
 	MockSlaveLink(L, S)
@@ -210,6 +237,7 @@ Test testUnlinkSingleElement()
 End Test
 
 Test testUnlinkSlaveWithNoLeaderIsNoOp()
+	ResetPool()
 	Local L.MockActor = New MockActor() : L\Name = "L"
 	Local S.MockActor = New MockActor() : S\Name = "S"
 	; S has no leader.
@@ -219,6 +247,7 @@ Test testUnlinkSlaveWithNoLeaderIsNoOp()
 End Test
 
 Test testUnlinkNullIsNoOp()
+	ResetPool()
 	MockSlaveUnlink(Null)
 	; No crash, no error.
 End Test
@@ -228,6 +257,7 @@ End Test
 ; ====================================================================
 
 Test testManyLeadersWithChains()
+	ResetPool()
 	Local L1.MockActor = New MockActor() : L1\Name = "L1"
 	Local L2.MockActor = New MockActor() : L2\Name = "L2"
 	Local L1S1.MockActor = New MockActor() : L1S1\Name = "L1S1"
@@ -247,6 +277,7 @@ Test testManyLeadersWithChains()
 End Test
 
 Test testUnlinkAllInLeaderChain()
+	ResetPool()
 	Local L.MockActor = New MockActor() : L\Name = "L"
 	Local A.MockActor = New MockActor() : A\Name = "A"
 	Local B.MockActor = New MockActor() : B\Name = "B"
@@ -273,6 +304,7 @@ End Test
 ; ====================================================================
 
 Test testLoadPathWithoutResetDoublesCount()
+	ResetPool()
 	Local L.MockActor = New MockActor() : L\Name = "L"
 	Local S1.MockActor = New MockActor() : S1\Name = "S1"
 	Local S2.MockActor = New MockActor() : S2\Name = "S2"
@@ -290,6 +322,7 @@ Test testLoadPathWithoutResetDoublesCount()
 End Test
 
 Test testLoadPathWithResetMatchesChainLength()
+	ResetPool()
 	Local L.MockActor = New MockActor() : L\Name = "L"
 	Local S1.MockActor = New MockActor() : S1\Name = "S1"
 	Local S2.MockActor = New MockActor() : S2\Name = "S2"
@@ -305,6 +338,7 @@ Test testLoadPathWithResetMatchesChainLength()
 End Test
 
 Test testNumberOfSlavesMatchesChainLengthAfterChurn()
+	ResetPool()
 	Local L.MockActor = New MockActor() : L\Name = "L"
 	Local A.MockActor = New MockActor() : A\Name = "A"
 	Local B.MockActor = New MockActor() : B\Name = "B"
