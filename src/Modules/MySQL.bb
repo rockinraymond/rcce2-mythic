@@ -271,26 +271,40 @@ Function My_LoadAccount.Account(User$, Pass$, Force)
 	
 	i=0
 	While(True)
-		
+
 		; Fetch the character data and leave if there isn't anything left
 		Row = SQLFetchRow(Result)
 		If Row = 0 Then Exit
-		
+
 		; Get the actor data and clean up
 		ActorId = ReadSQLField(Row, "id")
 		FreeSQLRow(Row)
-		
+
 		; Create a new actionbar and questlog
 		A\ActionBar[i] = New ActionBarData
 		A\Questlog[i] = New Questlog
-		
-		; Load the account, then assign its account
+
+		; Load the character. My_LoadActorInstance now returns Null when
+		; the saved row's actorid no longer references a live template
+		; (Actor was deleted from the project between server restarts) or
+		; the actorid column is out-of-range. Skip the slot in that case
+		; -- the character-select UI tolerates missing slots, and the
+		; alternative is a crash on the next `\Account = Handle(A)`
+		; deref. Free the pre-allocated ActionBar/QuestLog on the
+		; soft-fail path so a corrupt SQL row doesn't leak them per
+		; failed login.
 		A\Character[i] = My_LoadActorInstance(ActorId, A\QuestLog[i], A\ActionBar[i], AccountID)
-		A\Character[i]\Account = Handle(A)
-		
-		; Increment the counter
-		i=i+1
-		
+		If A\Character[i] = Null
+			WriteLog(MainLog, "My_LoadAccount: character actorid=" + ActorId + " soft-failed at template lookup; slot " + i + " left empty")
+			Delete A\ActionBar[i] : A\ActionBar[i] = Null
+			Delete A\Questlog[i] : A\Questlog[i] = Null
+			; Don't bind Account; don't increment i -- the slot remains
+			; unallocated. The next iteration's row will fill this slot.
+		Else
+			A\Character[i]\Account = Handle(A)
+			i=i+1
+		EndIf
+
 	Wend
 	
 	; Clean up
@@ -609,14 +623,30 @@ Function My_LoadActorInstance.ActorInstance(ActID, Q.Questlog, C.ActionBarData, 
 
 	ActorID = ReadSQLField(Row, "actorid")
 
+	; Soft-fail on missing or out-of-range Actor template. Pre-fix this
+	; branch silently allocated a fresh empty ActorInstance with
+	; A\Actor = Null; downstream `\Actor\` derefs across 15 modules would
+	; crash on the template-less zombie. The audit comment at the
+	; `A\NumberOfSlaves = 0` reset below already documents the post-fix
+	; behavior ("returns Null and the SlaveLink call is skipped via the
+	; `If Slave <> Null` guard") -- that guard's been dead code; this
+	; change makes it reachable. The character-load loop at
+	; My_LoadAccount tolerates the new Null via a sibling guard.
+	;
+	; ActorID is a wire-read integer column. Bound it against
+	; `Dim ActorList(65535)` (Actors.bb) before the registry lookup so a
+	; corrupt SQL row with negative or > 65535 actorid doesn't OOB-walk
+	; the array. Mirrors the bounds-check pattern from CLAUDE.md ->
+	; "Bounds checks before array index".
+	If ActorID < 0 Or ActorID > 65535 Or ActorList(ActorID) = Null Then
+		WriteLog(MainLog, "My_LoadActorInstance: actor template missing or OOB (actorid=" + ActorID + ", actid=" + ActID + "); dropping")
+		FreeSQLRow(Row)
+		FreeSQLQuery(Result)
+		Return Null
+	EndIf
+
 	; Setup Instance
-	If ActorList(ActorID) = Null Then
-		A.ActorInstance = New ActorInstance
-		A\Attributes = New Attributes
-		A\Inventory = New Inventory
-	Else
-		A.ActorInstance = CreateActorInstance(ActorList(ActorID))
-	End If
+	A.ActorInstance = CreateActorInstance(ActorList(ActorID))
 
 	If A\Attributes = Null Then A\Attributes = New Attributes
 	If A\Inventory = Null Then A\Inventory = New Inventory
