@@ -249,14 +249,30 @@ Function ThreadScript(Name$, Func$, Actor%, CActor%, Param$ = "", Privileged% = 
 		EndIf
 	Next
 	If Found = True
-		; Elevate privilege if the script name is on the allowlist. Elevation
-		; only -- the caller's explicit Privileged% baseline is preserved if
-		; it was already True. See LoadPrivilegedScripts() above for the
-		; trust-model and rationale. The deferred BVMs (SETACTORAISTATE /
-		; SETACTORTARGET / SETNAME / SETTAG) gate on RequirePrivileged() and
-		; rely on this carve-out to keep working from shipped content.
+		; Elevate privilege if the script name is on the allowlist AND this
+		; spawn was initiated by the engine (not by another script via
+		; BVM_THREADEXECUTE).
+		;
+		; Elevation only -- the caller's explicit Privileged% baseline is
+		; preserved if it was already True. See LoadPrivilegedScripts()
+		; above for the trust model and rationale. The deferred BVMs
+		; (SETACTORAISTATE / SETACTORTARGET / SETNAME / SETTAG) gate on
+		; RequirePrivileged() and rely on this carve-out to keep working
+		; from shipped content.
+		;
+		; **Engine-initiated check (`hSI = 0`):** without this, a hostile
+		; non-priv script could call BVM_THREADEXECUTE("In-game Commands",
+		; "ItemPack", victim_handle, ...) and the spawn would elevate
+		; because the script name is on the list. BVM_THREADEXECUTE runs
+		; from inside another script's body, so hSI is set (the currently-
+		; running script's instance). The chat-command / spell-cast /
+		; right-click / NPC-init spawn paths in ServerNet.bb / GameServer.bb
+		; are all invoked from engine code outside any running script, so
+		; hSI is 0 at the call site. Gating elevation on `hSI = 0` cleanly
+		; separates the two -- engine-initiated spawns get the carve-out,
+		; script-chained spawns do not.
 		Local EffectivePriv% = Privileged%
-		If EffectivePriv = 0
+		If EffectivePriv = 0 And hSI = 0
 			If IsPrivilegedScript(Name$) Then EffectivePriv = 1
 		EndIf
 		TS.ThreadScript = New ThreadScript

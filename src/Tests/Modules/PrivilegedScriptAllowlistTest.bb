@@ -90,11 +90,18 @@ End Function
 ; Replicates ThreadScript's elevation block. Returns the effective
 ; privilege that the spawned ThreadScript Type instance would carry.
 ; If CallerPriv is already 1, returns 1 unchanged (never demote).
-; If CallerPriv is 0 and Name is allowlisted, returns 1.
+; If CallerPriv is 0 AND HSI is 0 (engine-initiated, not script-initiated)
+;     AND Name is allowlisted, returns 1.
 ; Else returns 0.
-Function MockEffectivePriv%(Name$, CallerPriv%)
+;
+; The HSI gate is critical: BVM_THREADEXECUTE runs from inside a script's
+; body, where hSI is set (the currently-running script's instance). Without
+; this gate, a hostile non-priv script could call ThreadExecute on any
+; allowlisted name and inherit its elevation. Engine-initiated spawns (chat
+; dispatch, spell-cast, right-click, NPC-init) all have hSI = 0.
+Function MockEffectivePriv%(Name$, CallerPriv%, HSI%)
 	Local EffectivePriv% = CallerPriv%
-	If EffectivePriv = 0
+	If EffectivePriv = 0 And HSI = 0
 		If MockIsPrivileged%(Name) Then EffectivePriv = 1
 	EndIf
 	Return EffectivePriv
@@ -113,32 +120,32 @@ End Test
 
 Test testEmptyListDoesNotElevate()
 	MockReset()
-	Assert(MockEffectivePriv%("Spawn_Test", 0) = 0)
-	Assert(MockEffectivePriv%("anything",   0) = 0)
+	Assert(MockEffectivePriv%("Spawn_Test", 0, 0) = 0)
+	Assert(MockEffectivePriv%("anything",   0, 0) = 0)
 End Test
 
 Test testEmptyListPreservesExplicitPrivCaller()
 	; Engine-tick spawns (LoginScript, DM /script command) pass
 	; Privileged=1 explicitly. Empty allowlist must NOT demote them.
 	MockReset()
-	Assert(MockEffectivePriv%("LoginScript", 1) = 1)
+	Assert(MockEffectivePriv%("LoginScript", 1, 0) = 1)
 End Test
 
 ; ====================================================================
-; Populated allowlist -- elevation works
+; Populated allowlist -- elevation works (engine-initiated; hSI=0)
 ; ====================================================================
 
-Test testAllowlistedScriptElevates()
+Test testAllowlistedScriptElevatesFromEngineContext()
 	MockReset()
 	MockAdd("marriage")
-	Assert(MockEffectivePriv%("marriage", 0) = 1)
+	Assert(MockEffectivePriv%("marriage", 0, 0) = 1)
 End Test
 
 Test testNonAllowlistedScriptDoesNotElevate()
 	MockReset()
 	MockAdd("marriage")
-	Assert(MockEffectivePriv%("user_script", 0) = 0)
-	Assert(MockEffectivePriv%("Bad_Brick",   0) = 0)
+	Assert(MockEffectivePriv%("user_script", 0, 0) = 0)
+	Assert(MockEffectivePriv%("Bad_Brick",   0, 0) = 0)
 End Test
 
 Test testMultipleAllowlistEntries()
@@ -146,10 +153,10 @@ Test testMultipleAllowlistEntries()
 	MockAdd("In-game Commands")
 	MockAdd("AOE Damage Spell Template")
 	MockAdd("marriage")
-	Assert(MockEffectivePriv%("In-game Commands",            0) = 1)
-	Assert(MockEffectivePriv%("AOE Damage Spell Template",   0) = 1)
-	Assert(MockEffectivePriv%("marriage",                    0) = 1)
-	Assert(MockEffectivePriv%("not_listed",                  0) = 0)
+	Assert(MockEffectivePriv%("In-game Commands",            0, 0) = 1)
+	Assert(MockEffectivePriv%("AOE Damage Spell Template",   0, 0) = 1)
+	Assert(MockEffectivePriv%("marriage",                    0, 0) = 1)
+	Assert(MockEffectivePriv%("not_listed",                  0, 0) = 0)
 End Test
 
 ; ====================================================================
@@ -159,16 +166,16 @@ End Test
 Test testLookupIsCaseInsensitiveLower()
 	MockReset()
 	MockAdd("Spawn_Test")
-	Assert(MockEffectivePriv%("spawn_test", 0) = 1)
-	Assert(MockEffectivePriv%("SPAWN_TEST", 0) = 1)
-	Assert(MockEffectivePriv%("Spawn_Test", 0) = 1)
+	Assert(MockEffectivePriv%("spawn_test", 0, 0) = 1)
+	Assert(MockEffectivePriv%("SPAWN_TEST", 0, 0) = 1)
+	Assert(MockEffectivePriv%("Spawn_Test", 0, 0) = 1)
 End Test
 
 Test testLookupIsCaseInsensitiveMixedCaseListedEntry()
 	MockReset()
 	MockAdd("MARRIAGE")
-	Assert(MockEffectivePriv%("marriage", 0) = 1)
-	Assert(MockEffectivePriv%("Marriage", 0) = 1)
+	Assert(MockEffectivePriv%("marriage", 0, 0) = 1)
+	Assert(MockEffectivePriv%("Marriage", 0, 0) = 1)
 End Test
 
 ; ====================================================================
@@ -181,7 +188,7 @@ Test testExplicitPrivCallerStaysPrivWhenAllowlisted()
 	; privilege must be preserved unchanged (idempotent for this case).
 	MockReset()
 	MockAdd("marriage")
-	Assert(MockEffectivePriv%("marriage", 1) = 1)
+	Assert(MockEffectivePriv%("marriage", 1, 0) = 1)
 End Test
 
 Test testExplicitPrivCallerStaysPrivWhenNotAllowlisted()
@@ -190,7 +197,7 @@ Test testExplicitPrivCallerStaysPrivWhenNotAllowlisted()
 	; just because the script name isn't on the allowlist.
 	MockReset()
 	MockAdd("marriage")
-	Assert(MockEffectivePriv%("any_user_script", 1) = 1)
+	Assert(MockEffectivePriv%("any_user_script", 1, 0) = 1)
 End Test
 
 Test testExplicitPrivCallerStaysPrivWithEmptyAllowlist()
@@ -198,8 +205,8 @@ Test testExplicitPrivCallerStaysPrivWithEmptyAllowlist()
 	; privileged spawns must continue to function -- the carve-out
 	; cannot accidentally introduce a "must be on the list" rule.
 	MockReset()
-	Assert(MockEffectivePriv%("LoginScript", 1) = 1)
-	Assert(MockEffectivePriv%("DeathScript", 1) = 1)
+	Assert(MockEffectivePriv%("LoginScript", 1, 0) = 1)
+	Assert(MockEffectivePriv%("DeathScript", 1, 0) = 1)
 End Test
 
 ; ====================================================================
@@ -210,5 +217,44 @@ End Test
 Test testEmptyNameDoesNotElevate()
 	MockReset()
 	MockAdd("marriage")
-	Assert(MockEffectivePriv%("", 0) = 0)
+	Assert(MockEffectivePriv%("", 0, 0) = 0)
+End Test
+
+; ====================================================================
+; Script-initiated spawn (BVM_THREADEXECUTE bypass) — hSI != 0 means a
+; script is currently executing and calling ThreadScript via
+; BVM_THREADEXECUTE. The allowlist elevation MUST NOT fire here;
+; otherwise a hostile non-priv script could call
+; `ThreadExecute("In-game Commands", "ItemPack", victim_handle, ...)`
+; and inherit elevation via the allowlisted name. PR #329 reviewer
+; raised this exact concern; closed via the `hSI = 0` gate in
+; ThreadScript's elevation block.
+; ====================================================================
+
+Test testScriptInitiatedAllowlistedSpawnDoesNotElevate()
+	; Non-priv script (hSI != 0, CallerPriv = 0) calls ThreadExecute
+	; on an allowlisted name. Expected: NO elevation.
+	MockReset()
+	MockAdd("marriage")
+	MockAdd("In-game Commands")
+	Assert(MockEffectivePriv%("marriage",         0, 12345) = 0)
+	Assert(MockEffectivePriv%("In-game Commands", 0, 12345) = 0)
+End Test
+
+Test testScriptInitiatedExplicitPrivIsStillPreserved()
+	; Privileged script calling ThreadExecute -- BVM_THREADEXECUTE
+	; propagates the caller's priv. Should pass through to the new
+	; spawn unchanged (1 stays 1 regardless of hSI / allowlist).
+	MockReset()
+	MockAdd("marriage")
+	Assert(MockEffectivePriv%("marriage",         1, 12345) = 1)
+	Assert(MockEffectivePriv%("user_script",      1, 12345) = 1)
+End Test
+
+Test testScriptInitiatedNonAllowlistedStaysNonPriv()
+	; Non-priv script calls ThreadExecute on a non-allowlisted name.
+	; Expected: no elevation (the default path).
+	MockReset()
+	MockAdd("marriage")
+	Assert(MockEffectivePriv%("user_script", 0, 12345) = 0)
 End Test
