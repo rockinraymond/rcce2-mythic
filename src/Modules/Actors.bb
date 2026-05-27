@@ -580,7 +580,23 @@ End Function
 ; Creates a new instance of an actor
 Function CreateActorInstance.ActorInstance(Actor.Actor)
 
-	If Actor = Null Then RuntimeError("Could not create actor instance - actor does not exist!")
+	; Soft-fail on Null Actor template. Previously RuntimeError'd, which
+	; crashed the server (any thread) or client (UI preview thread)
+	; if any caller forgot the upstream ActorList(ActorID) <> Null
+	; guard. The production-server callers all guard upstream (PR
+	; #138-#144 sweep): Actors.bb (PreLoadSpawns + ActorInstanceFromString)
+	; ServerNet.bb (P_CreateCharacter), MySQL.bb (LoadCharacter). The
+	; client-side preview callers in MainMenu.bb mostly guard too,
+	; except the change-race path -- a combo-box pick of a race that
+	; was deleted from the project would crash. Defense-in-depth: log
+	; the unexpected Null and Return Null. Callers that already check
+	; the return value handle this naturally; callers that don't will
+	; deref Null on the next line which is at least a localized crash
+	; (not a server-wide RuntimeError) the runtime traps cleanly.
+	If Actor = Null
+		WriteLog(MainLog, "CreateActorInstance: called with Null Actor template; returning Null instead of RuntimeError-ing the whole process")
+		Return Null
+	EndIf
 
 	A.ActorInstance = New ActorInstance
 	A\Attributes = New Attributes
