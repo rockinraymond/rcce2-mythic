@@ -643,13 +643,17 @@ Function BVM_ACTORCALLFORHELP(Param1%)
 End Function
 
 Function BVM_SETACTORAISTATE(Param1%, Param2%)
-	; AIMode drives NPC AI behavior selection. Legitimate use is from
-	; Idle/Death/LevelUp/etc. scripts that already spawn privileged.
-	; Non-priv clicker exploit: SetActorAIState(SomeGuard, AI_Wait)
-	; disables a hostile guard's AI -- the clicker can then walk past
-	; or attack without retaliation. Same shape as the SETLEADER pet-
-	; recruitment exploit from PR #301.
-	If Not BVM_RequirePrivileged() Then Return
+	; NOT gated. Shipped content (AOE Damage Spell Template.rsl at
+	; data/Server Data/Scripts/) uses this from non-priv spell-cast
+	; spawns to make targeted NPCs become aggressive (AIMode = 3) on
+	; spell impact. A full-priv gate would silently no-op the spell's
+	; aggro-pull effect.
+	;
+	; The clicker brick risk (SetActorAIState(SomeGuard, AI_Wait)
+	; disables a hostile guard's AI) is real but addressing it would
+	; require either (a) rewriting the shipped AOE template to spawn
+	; privileged, or (b) carving a chat-command / spell-cast privilege
+	; path. Tracked as a follow-up.
 	Actor.ActorInstance = Object.ActorInstance(Param1%)
 	If Actor <> Null
 		Actor\AIMode = Param2%
@@ -675,16 +679,16 @@ Return Result%
 End Function
 
 Function BVM_SETACTORTARGET(Param1%, Param2%=0)
-	; Sets an NPC's AI target. Has partial safety (Aggressiveness=3
-	; non-combatants and friendly-faction targets rejected) but a
-	; non-priv clicker can still call SetActorTarget(SomeGuard,
-	; anotherPlayer) to weaponize a hostile NPC against a chosen
-	; victim. Full-priv gate (not self-or-priv) for the same
-	; clicker-handle reason as the SET/CHANGE attribute cluster:
-	; SI\AI = Handle(clicker) for Examine / Trade / RightClick /
-	; ItemScript spawns, so self-or-priv on Param1 would let the
-	; clicker target THEMSELVES with an arbitrary Param2.
-	If Not BVM_RequirePrivileged() Then Return
+	; NOT gated. Shipped content uses this from non-priv spawns:
+	;   - /Assist chat command (In-game Commands.rsl:37) targets the
+	;     assisted player's current target.
+	;   - AOE Damage Spell Template.rsl:41,48 targets the player on
+	;     spell impact (aggro-pull).
+	; The function already has partial safety (Aggressiveness=3
+	; non-combatants and friendly-faction targets rejected). The
+	; remaining clicker-brick risk (SetActorTarget(SomeGuard,
+	; anotherPlayer) weaponizing a hostile NPC) requires the chat-
+	; command / spell-cast privilege carve-out (tracked).
 	Actor.ActorInstance = Object.ActorInstance(Param1%)
 	Actor2.ActorInstance = Object.ActorInstance(Param2%)
 	If Actor <> Null
@@ -2473,14 +2477,12 @@ Return Result$
 End Function
 
 Function BVM_SETNAME(Param1%, Param2$)
-	; Renames an actor and broadcasts P_NameChange to every player in
-	; the area. Non-priv clicker exploit: SetName(anotherPlayer,
-	; "<slur>") griefs by renaming a third party; even self-grief
-	; (renaming oneself to an inappropriate string from a clicker
-	; script) is unwanted -- the name was server-validated at
-	; character-create time. Quest reward scripts that legitimately
-	; rename (title bestowal etc.) already run privileged.
-	If Not BVM_RequirePrivileged() Then Return
+	; NOT gated. Shipped content uses this from non-priv RightClick
+	; spawns: marriage.rsl + Click_marriage.rsl append a surname to
+	; both players on marriage. Spawn_Test.rsl labels test NPCs.
+	; The clicker griefing risk (SetName(target, "<slur>") + broadcast)
+	; is real but a full-priv gate would silently break marriage.
+	; Tracked as a follow-up alongside the AOE / Assist cluster.
 	Actor.ActorInstance = Object.ActorInstance(Param1%)
 	If Actor <> Null
 		Actor\Name$ = BVM_DEQUOTE(Param2$)
@@ -2507,10 +2509,9 @@ Return Result$
 End Function
 
 Function BVM_SETTAG(Param1%, Param2$)
-	; Same shape as SETNAME -- mutates the "tag" string (e.g. guild
-	; label, title) and broadcasts P_NameChange. Same clicker-griefing
-	; vector and same gate.
-	If Not BVM_RequirePrivileged() Then Return
+	; NOT gated -- same shape and same content-script-callers as
+	; SETNAME above (Spawn_Test.rsl uses it to label test NPCs).
+	; Same clicker-griefing risk; same follow-up.
 	Actor.ActorInstance = Object.ActorInstance(Param1%)
 	If Actor <> Null
 		Actor\Tag$ = Param2$
