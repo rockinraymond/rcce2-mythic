@@ -124,7 +124,9 @@ If Result = False
 EndIf
 ```
 
-See the `Soft-fail` series of merged PRs (#128–#134 for the original cluster, #138–#144 for the follow-up rounds covering `CreateActorInstance(ActorList(...))`, `PreLoadSpawns`, missing-`Head`-joint, character-select preview, and stale `PlayerTarget` handles) — the audit comment block in each fix explains the threat model.
+See the `Soft-fail` series of merged PRs (#128–#134 for the original cluster, #138–#144 for the follow-up rounds covering `CreateActorInstance(ActorList(...))`, `PreLoadSpawns`, missing-`Head`-joint, character-select preview, and stale `PlayerTarget` handles, #306/#307/#308/#309 for the final sweep covering MainMenu mesh-load, names-filter file, ClientAreas zone-load mesh/emitter, and the `P_ActorGone` Me-self crash) — the audit comment block in each fix explains the threat model. As of #309 there are **no remaining wire-driven RuntimeError sites** in the client or server packet-handler paths; every recoverable failure soft-fails through `WriteLog + drop + continue`.
+
+**Me-only-RuntimeError exception.** A small set of failure paths preserve `RuntimeError(...)` even after the soft-fail sweep, *only* for the local-player case where there's no recoverable state: `ClientNet.bb:295` / `:306` / `:331` (Me's own actor mesh fails to load, or Me's mesh is missing a `Head` joint — there's no body to control). These are gated `If AI <> Me ... Else RuntimeError`, and the audit comment at `ClientNet.bb:284-290` records the intentional preservation. New code touching the actor-mesh load path on the client should follow the same shape — soft-fail for `AI <> Me`, hard-fail only when Me has no usable body.
 
 ### Bounds checks before array index
 
