@@ -51,10 +51,11 @@ Regression tests for the chain semantics: [`src/Tests/Modules/OnlinePlayerChainT
   - `OnlinePlayerRemove(AI)` (always — safe on never-online actors)
   - `SlaveUnlink(AI)` (always — safe on never-linked actors)
   - `FirstSlave` chain orphan handling (any actors leading this one transfer to the orphan chain)
-  - `FirstInZone` chain removal via `SetArea(AI, Null)`
-  - Inventory + Attributes object deletion (the per-instance sub-Types)
   - `RuntimeIDList(AI\RuntimeID) = Null`
-- **`SafeFreeActorInstance(AI)`** — every-frame wrapper that ALSO clears the global `PlayerTarget` if it pointed at `AI`. The client renders `PlayerTarget` every frame; a stale handle there crashes the renderer. Always call this from per-tick code paths (`UpdateActorInstances`, `P_ActorGone`, etc.); the bare `FreeActorInstance` is for paths that don't risk stale `PlayerTarget`.
+  - `Delete(AI)`
+
+  Callers that need `FirstInZone` unlinking are expected to call `SetArea(AI, Null)` *before* `FreeActorInstance` (the per-tick lifecycle path does this). `FreeActorInstance` itself does not call `SetArea` — the `NextInZone` pointer is left in place and orphaned on the in-list `Delete`.
+- **`SafeFreeActorInstance(AI)`** (in [`Actors3D.bb`](../../src/Modules/Actors3D.bb), not this file) — every-frame wrapper that ALSO clears the global `PlayerTarget` if it pointed at `AI`. The client renders `PlayerTarget` every frame; a stale handle there crashes the renderer. Always call this from per-tick code paths (`UpdateActorInstances`, `P_ActorGone`, etc.); the bare `FreeActorInstance` is for paths that don't risk stale `PlayerTarget`.
 
 ### 40-attribute schema
 
