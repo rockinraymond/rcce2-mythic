@@ -75,7 +75,7 @@ End Function
 
 
 Function Browser_AddCategory(kind$, title$)
-    Local c.BrowserCategory = New BrowserCategory
+    Local c.BrowserCategory = New BrowserCategory()
     c\Kind$ = kind$
     c\Title$ = title$
 End Function
