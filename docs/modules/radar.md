@@ -18,7 +18,7 @@ Z-order  Entity                Texture          Purpose
 -3009    Radar_PlayerEnt       Radar_PlayerTex  Player-position marker (default-generated or custom .png)
 ```
 
-All four are parented to `Radar_Ent1` and rendered into the 2D HUD camera (`GY_Cam`). `EntityOrder` Z values are chosen so the player marker is always on top and the snapshot is bottom-most.
+The three overlay entities are parented to `Radar_Ent1` (see `EntityParent` calls at [`Radar.bb:146-148`](../../src/Modules/Radar.bb#L146)); `Radar_Ent1` itself is parented to `GY_Cam` (the 2D HUD camera) via the `Radar_CreateQuadr(GY_Cam)` allocation at [`Radar.bb:118`](../../src/Modules/Radar.bb#L118). Hide/show on `Radar_Ent1` propagates to all three children. `EntityOrder` Z values are chosen so the player marker is always on top and the snapshot is bottom-most.
 
 `Radar_TexSize = 512` is the per-texture pixel size — all four textures are 512×512 regardless of zone size. The snapshot is downscaled to fit; the fog/border/player overlays are computed at this resolution directly.
 
@@ -33,7 +33,7 @@ All four are parented to `Radar_Ent1` and rendered into the 2D HUD camera (`GY_C
 7. Load `<area>.rdr` if it exists (preserves fog progression from a previous play session); otherwise create a fresh fog texture via `Create_Radar_Fog`.
 8. Build the four quad meshes, apply textures, parent everything to `Radar_Ent1`, position+scale into the HUD.
 
-This is per-zone, called from [`ClientAreas.bb`](clientareas.md)'s zone-load flow. The leak fix is critical because zone changes happen every gameplay session — pre-fix accumulation hit memory pressure in long sessions.
+This is per-zone, called from [`ClientNet.bb`](clientnet.md)'s zone-load packet handler ([`ClientNet.bb:1738`](../../src/Modules/ClientNet.bb#L1738)). The matching `Save_Radar_Fog` call lives in the zone-leave path ([`ClientNet.bb:1682`](../../src/Modules/ClientNet.bb#L1682)). `Unload_Radar` is invoked at client-shutdown time from [`ClientLoaders.bb:372`](../../src/Modules/ClientLoaders.bb#L372). The leak fix is critical because zone changes happen every gameplay session — pre-fix accumulation hit memory pressure in long sessions.
 
 ### Per-tick reveal (`UpdateRadar`)
 
@@ -84,7 +84,8 @@ Both bugs are closed: `SafeWriteCommit` owns the close, atomic-promotes the temp
 
 ## Related modules
 
-- [`ClientAreas.bb`](clientareas.md) — calls `Load_Radar` / `Unload_Radar` on zone enter / leave.
+- [`ClientNet.bb`](clientnet.md) — calls `Load_Radar` on zone-enter (~line 1738) and `Save_Radar_Fog` on zone-leave (~line 1682). The actual zone-change packet dispatch lives here.
+- [`ClientLoaders.bb`](clientloaders.md) — calls `Unload_Radar` at client shutdown (~line 372).
 - [`Logging.bb`](logging.md) — provides `SafeWriteOpen$` / `SafeWriteCommit%` (the atomic-write helpers).
 - [`Environment.bb`](environment.md) / [`Environment3D.bb`](environment3d.md) — own `GY_Cam` (the 2D HUD camera) and `Cam` (the 3D world camera).
 

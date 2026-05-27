@@ -41,7 +41,7 @@ The constants are grouped by purpose; the file's comments mark transitions:
 
 The slash-command range is special-cased: `LoadLanguage` upper-cases everything in `[LS_SKick..LS_SSeason]` (190..219) on load so the runtime string-compare against `/<command>` is case-insensitive without needing per-compare normalization. The audit-comment at line 301 documents this. If you add new slash-command constants outside that range, the upper-casing won't apply and `/<command>` matching will be case-sensitive.
 
-> **Constant-name typo**: the source uses `LS_SKick` / `LS_SSeason` in the `LoadLanguage` range check but the actual constant names are `LS_SCKick` / `LS_SCSeason`. These resolve to the same numeric values (190 / 219) — undeclared identifiers in non-Strict files default to 0, so `LS_SKick = 0` and `LS_SSeason = 0` would make the range `[0..0]`, which silently *under-applies* the upper-case rule. This is a real source bug if the file is not Strict — verify against `If ID >= LS_SKick And ID <= LS_SSeason` at [`Language.bb:301`](../../src/Modules/Language.bb#L301). (Confirm or file as follow-up.)
+> **Confirmed source bug — constant-name typo defangs the upper-case rule.** [`Language.bb`](../../src/Modules/Language.bb) is non-Strict (no `Strict` keyword at top). The range guard at [`Language.bb:301`](../../src/Modules/Language.bb#L301) reads `If ID >= LS_SKick And ID <= LS_SSeason` — but the actual constants are `LS_SCKick = 190` (line 196) and `LS_SCSeason = 219` (line 225). In non-Strict, undeclared identifiers read as `0`, so the guard evaluates to `If ID >= 0 And ID <= 0` — only catches `ID = 0` (`LS_ConnectingToServer`). Effect: slash-command strings loaded from a customized `Language.txt` retain whatever case the file has (probably lowercase), instead of being normalized to UPPERCASE for case-insensitive `/<command>` matching. The production server escapes the bug because the fallback defaults block at [`Language.bb:241-270`](../../src/Modules/Language.bb#L241) hardcodes the slash-command names UPPERCASE — but any locale that ships a customized slash-command file breaks. A paired typo at [`ServerNet.bb:419`](../../src/Modules/ServerNet.bb#L419) (`LS_SCGM` undeclared; should be `LS_SCGMSay`) makes the `/GM` dispatch match `LanguageString$(0)` instead of `"GM"`. Both flagged for a follow-up fix.
 
 ### File format
 
@@ -57,7 +57,7 @@ So a fully-commented row counts as **no row** — it does not consume an `ID`. T
 
 `RestoreLanguage(Filename$)` writes the current in-memory `LanguageString$()` array out to a file — used by tooling to dump the active locale back to disk after edits. It first reloads `Data\Game Data\Language.txt` so a partial in-memory state isn't persisted. The output is plain `WriteLine` per slot; comments are not preserved (the input-side comment stripping is one-way).
 
-There is no hot-reload of `Data\Game Data\Language.txt` at runtime — strings are read once at boot in `MainMenu.bb`. To test a localized string change, restart the client.
+There is no hot-reload at runtime — strings are read once at boot. The actual `LoadLanguage` callers are [`ClientLoaders.bb:4`](../../src/Modules/ClientLoaders.bb#L4) for the client and [`Server.bb:197`](../../src/Server.bb#L197) for the server (the latter loads `Data\Server Data\Language.txt`, distinct from the client's `Data\Game Data\Language.txt`). `MainMenu.bb` is the largest consumer of the loaded strings but does not load them. To test a localized string change, restart the affected process.
 
 ## Conventions for new code touching this module
 
@@ -69,7 +69,9 @@ There is no hot-reload of `Data\Game Data\Language.txt` at runtime — strings a
 
 ## Related modules
 
-- [`MainMenu.bb`](mainmenu.md) — calls `LoadLanguage("Data\Game Data\Language.txt")` at boot. The biggest consumer of `LanguageString$(LS_*)` (login screen, character-create, options pages).
+- [`ClientLoaders.bb`](clientloaders.md) — calls `LoadLanguage("Data\Game Data\Language.txt")` at client boot.
+- [`Server.bb`](../../src/Server.bb) — calls `LoadLanguage("Data\Server Data\Language.txt")` at server boot (separate file from the client's).
+- [`MainMenu.bb`](mainmenu.md) — biggest consumer of `LanguageString$(LS_*)` (login screen, character-create, options pages).
 - [`Interface.bb`](interface.md) — 2D in-game UI; consumes `LS_Weapon` / `LS_Armour` / item-type names, `LS_YouHit` damage text, `LS_QuestLogUpdate`, etc.
 - [`ServerNet.bb`](servernet.md) — chat-command dispatch matches `/<word>` against the slash-command range (190..219).
 - [`ClientCombat.bb`](clientcombat.md) — combat-log strings (`LS_YouHit`, `LS_For`, `LS_DamageWow`, `LS_HitsYou`, `LS_AttacksYouMisses`, `LS_YouAttack`, `LS_AndMiss`, `LS_CriticalDamage`).
