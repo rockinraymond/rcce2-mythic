@@ -109,6 +109,7 @@ Include "Modules\Loom\Threads.bb"
 Include "Modules\Loom\Browser.bb"
 Include "Modules\Loom\Composer.bb"
 Include "Modules\Loom\Palette.bb"
+Include "Modules\Loom\BrokenRefs.bb"
 Include "Modules\Loom\Ribbon.bb"
 Include "Modules\Loom\Atlas.bb"
 Include "Modules\Loom\Timeline.bb"
@@ -130,6 +131,7 @@ Type Loom
     Field ribbon.Ribbon
     Field atlas.Atlas
     Field timeline.Timeline
+    Field brokenRefs.BrokenRefs
 
 
     Method create.Loom(windowWidth%, windowHeight%, projectName$)
@@ -155,10 +157,16 @@ Type Loom
         Composer::setPalette(self\composer, self\palette)
         Palette::setComposer(self\palette, self\composer)
 
-        // Ribbon holds Threads (for future broken-ref-finder jumps) +
+        // BrokenRefs modal -- shown when user clicks the ribbon's
+        // broken-ref count chip. Holds a Threads ref for click-to-jump.
+        self\brokenRefs = New BrokenRefs(self\threads)
+
+        // Ribbon holds Threads (for click-to-jump from broken-ref chip) +
         // Composer (so a dirty-badge click can dispatch to the same
-        // commitSaveForKind path the composer's Save button uses).
+        // commitSaveForKind path the composer's Save button uses) +
+        // BrokenRefs (clicking the broken-ref count chip opens the modal).
         self\ribbon = New Ribbon(self\threads, self\composer)
+        Ribbon::setBrokenRefs(self\ribbon, self\brokenRefs)
 
         // Atlas holds a Threads reference for node-click focus dispatch.
         // The Browser activates / deactivates Atlas via Browser::setAtlas
@@ -202,7 +210,7 @@ Type Loom
         // no-ops if already open). Detect BEFORE any other input handler
         // so openModal's FlushKeys swallows the K/H keystroke before it
         // can land in a query buffer.
-        If Palette::isOpen(self\palette) = False And Timeline::isOpen(self\timeline) = False
+        If Palette::isOpen(self\palette) = False And Timeline::isOpen(self\timeline) = False And BrokenRefs::isOpen(self\brokenRefs) = False
             If (KeyDown(29) Or KeyDown(157)) And KeyHit(37)
                 Palette::openModal(self\palette)
             Else If (KeyDown(29) Or KeyDown(157)) And KeyHit(35)
@@ -212,10 +220,11 @@ Type Loom
 
         // Browser input is enabled only when no higher-priority surface is
         // already consuming keystrokes. Priority chain (highest first):
-        //   timeline > palette > composer-edit > browser filter
+        //   any-modal > composer-edit > browser filter
         Local browserInput% = True
         If Timeline::isOpen(self\timeline) = True Then browserInput = False
         If Palette::isOpen(self\palette) = True Then browserInput = False
+        If BrokenRefs::isOpen(self\brokenRefs) = True Then browserInput = False
         If Composer::isEditing(self\composer) = True Then browserInput = False
 
         Browser::renderAndUpdate(self\browser, self\windowWidth, self\windowHeight, self\projectName, browserInput)
@@ -227,13 +236,15 @@ Type Loom
         // strip, harmless to overwrite). Sits BELOW the modal overlays.
         Ribbon::renderAndUpdate(self\ribbon, self\windowWidth)
 
-        // Modal overlays -- timeline before palette so opening the palette
-        // from a closed-timeline state doesn't have the timeline modal
-        // visually steal a frame. Each consumes its own keys (including
+        // Modal overlays. Order matters only for visual stacking when
+        // multiple are somehow open at once (shouldn't happen -- each
+        // openModal closes the others implicitly via closeModal call
+        // chains in the user flow). Each consumes its own keys (including
         // Esc) when open and returns True so the outer Esc handler skips.
-        Local timelineAte% = Timeline::renderAndUpdate(self\timeline, self\windowWidth, self\windowHeight)
-        Local paletteAte%  = Palette::renderAndUpdate(self\palette, self\windowWidth, self\windowHeight)
-        Local modalAte%    = (timelineAte Or paletteAte)
+        Local timelineAte%   = Timeline::renderAndUpdate(self\timeline, self\windowWidth, self\windowHeight)
+        Local brokenRefsAte% = BrokenRefs::renderAndUpdate(self\brokenRefs, self\windowWidth, self\windowHeight)
+        Local paletteAte%    = Palette::renderAndUpdate(self\palette, self\windowWidth, self\windowHeight)
+        Local modalAte%      = (timelineAte Or brokenRefsAte Or paletteAte)
 
         // Esc priority (when no modal ate the press):
         //   filter clear > back-stack pop > close composer > exit Loom
