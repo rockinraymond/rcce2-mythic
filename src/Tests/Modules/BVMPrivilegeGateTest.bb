@@ -4,8 +4,8 @@ EnableGC
 ; Regression tests pinning the BVM privilege-gate contract for the
 ; "equivalent-effect bypass" cluster in ScriptingCommands.bb.
 ;
-; Nine BVM functions had effects identical to already-gated peers but
-; lacked the gate themselves, defeating the privilege model:
+; Thirteen BVM functions had effects identical to already-gated peers
+; but lacked the gate themselves, defeating the privilege model:
 ;
 ;   Newly-gated function    Bypass of           Gate chosen
 ;   -------------------------------------------------------------------
@@ -17,6 +17,10 @@ EnableGC
 ;   BVM_CHANGEATTRIBUTE     BVM_KILLACTOR       RequirePrivileged
 ;   BVM_SETMAXATTRIBUTE     BVM_SETATTRIBUTE    RequirePrivileged
 ;   BVM_CHANGEMAXATTRIBUTE  BVM_SETATTRIBUTE    RequirePrivileged
+;   BVM_SETREPUTATION       BVM_SETHOMEFACTION  RequirePrivileged
+;   BVM_SETLEADER           (pet recruitment)   RequirePrivileged
+;   BVM_SETABILITYLEVEL     BVM_SETATTRIBUTE    RequirePrivileged
+;   BVM_SETITEMHEALTH       (item brick)        RequirePrivileged
 ;   BVM_REMOVEZONEINSTANCE  (admin-only)        RequirePrivileged
 ;
 ; ScriptingCommands.bb can't be Included directly into a test build --
@@ -82,6 +86,10 @@ Global MutationSetAttr = 0
 Global MutationChangeAttr = 0
 Global MutationSetMaxAttr = 0
 Global MutationChangeMaxAttr = 0
+Global MutationSetReputation = 0
+Global MutationSetLeader = 0
+Global MutationSetAbilityLevel = 0
+Global MutationSetItemHealth = 0
 Global MutationRemoveZone = 0
 
 Function MockBVM_CHANGEGOLD(Param1%, Param2%)
@@ -124,6 +132,26 @@ Function MockBVM_CHANGEMAXATTRIBUTE(Param1%, Param2$, Param3%)
 	MutationChangeMaxAttr = MutationChangeMaxAttr + Param3%
 End Function
 
+Function MockBVM_SETREPUTATION(Param1%, Param2%)
+	If Not BVM_RequirePrivileged() Then Return
+	MutationSetReputation = MutationSetReputation + Param2%
+End Function
+
+Function MockBVM_SETLEADER(Param1%, Param2%)
+	If Not BVM_RequirePrivileged() Then Return
+	MutationSetLeader = MutationSetLeader + 1
+End Function
+
+Function MockBVM_SETABILITYLEVEL(Param1%, Param2$, Param3%)
+	If Not BVM_RequirePrivileged() Then Return
+	MutationSetAbilityLevel = MutationSetAbilityLevel + Param3%
+End Function
+
+Function MockBVM_SETITEMHEALTH(Param1%, Param2%)
+	If Not BVM_RequirePrivileged() Then Return
+	MutationSetItemHealth = MutationSetItemHealth + Param2%
+End Function
+
 Function MockBVM_REMOVEZONEINSTANCE(Param1$, Instance%)
 	If Not BVM_RequirePrivileged() Then Return
 	MutationRemoveZone = MutationRemoveZone + 1
@@ -139,6 +167,10 @@ Function ResetMutationCounters()
 	MutationChangeAttr = 0
 	MutationSetMaxAttr = 0
 	MutationChangeMaxAttr = 0
+	MutationSetReputation = 0
+	MutationSetLeader = 0
+	MutationSetAbilityLevel = 0
+	MutationSetItemHealth = 0
 	MutationRemoveZone = 0
 	LastScriptLog$ = ""
 End Function
@@ -412,6 +444,109 @@ Test testChangeMaxAttributeGatePassesForPrivileged()
 	ResetMutationCounters()
 	MockBVM_CHANGEMAXATTRIBUTE(999, "Health", 50)
 	Assert(MutationChangeMaxAttr = 50)
+End Test
+
+; ======================================================================
+; Faction / leader / ability / item-health -- the next slice of the
+; brick-vector sweep flagged by PR #300's reviewer. Each one is a
+; non-priv-script-reachable mutation that bricks gameplay state.
+; ======================================================================
+
+; SetReputation -- faction-interaction key. Brick: SetReputation(clicker,
+; -10000) locks the player out of every reputation-gated vendor / quest
+; / zone.
+Test testSetReputationGateBlocksArbitraryTarget()
+	InstallScript(0, 100, 0)
+	ResetMutationCounters()
+	MockBVM_SETREPUTATION(999, -10000)
+	Assert(MutationSetReputation = 0)
+End Test
+
+Test testSetReputationGateBlocksBrickingOwnAITarget()
+	; The exact clicker shape: SI\AI = clicker, Param1 = clicker.
+	; Full-priv must refuse where self-or-priv would not.
+	InstallScript(0, 777, 200)
+	ResetMutationCounters()
+	MockBVM_SETREPUTATION(777, -10000)
+	Assert(MutationSetReputation = 0)
+End Test
+
+Test testSetReputationGatePassesForPrivileged()
+	InstallScript(1, 0, 0)
+	ResetMutationCounters()
+	MockBVM_SETREPUTATION(999, 50)
+	Assert(MutationSetReputation = 50)
+End Test
+
+; SetLeader -- pet recruitment. Brick: SetLeader(SomeWorldGuard,
+; clicker) recruits world NPCs as private pets. Production function
+; restricts Param1 to NPCs (Actor\RNID = -1), so the player-as-pet
+; shape is impossible, but the world-NPC-as-pet shape is the gap.
+Test testSetLeaderGateBlocksNonPrivileged()
+	InstallScript(0, 100, 0)
+	ResetMutationCounters()
+	MockBVM_SETLEADER(999, 777)
+	Assert(MutationSetLeader = 0)
+End Test
+
+Test testSetLeaderGateBlocksOwnAILeader()
+	; Clicker-shape: SI\AI = clicker handle (777), Param2 = clicker
+	; (the would-be new leader). Full-priv refuses.
+	InstallScript(0, 777, 200)
+	ResetMutationCounters()
+	MockBVM_SETLEADER(999, 777)
+	Assert(MutationSetLeader = 0)
+End Test
+
+Test testSetLeaderGatePassesForPrivileged()
+	InstallScript(1, 0, 0)
+	ResetMutationCounters()
+	MockBVM_SETLEADER(999, 777)
+	Assert(MutationSetLeader = 1)
+End Test
+
+; SetAbilityLevel -- combat ability scaling. Brick: SetAbilityLevel(
+; clicker, "<spell>", 0) zeros out the chosen ability; iteration over
+; the spell list bricks the player's entire combat toolkit.
+Test testSetAbilityLevelGateBlocksArbitraryTarget()
+	InstallScript(0, 100, 0)
+	ResetMutationCounters()
+	MockBVM_SETABILITYLEVEL(999, "Fireball", 0)
+	Assert(MutationSetAbilityLevel = 0)
+End Test
+
+Test testSetAbilityLevelGateBlocksBrickingOwnAITarget()
+	InstallScript(0, 777, 200)
+	ResetMutationCounters()
+	MockBVM_SETABILITYLEVEL(777, "Fireball", 0)
+	Assert(MutationSetAbilityLevel = 0)
+End Test
+
+Test testSetAbilityLevelGatePassesForPrivileged()
+	InstallScript(1, 0, 0)
+	ResetMutationCounters()
+	MockBVM_SETABILITYLEVEL(999, "Fireball", 5)
+	Assert(MutationSetAbilityLevel = 5)
+End Test
+
+; SetItemHealth -- durability. Brick: iterate clicker's
+; Inventory\Items[] and zero each ItemHealth, gutting all gear in one
+; click. Param1 is an ItemInstance handle (not an ActorInstance), so
+; the self-or-priv shortcut doesn't apply -- there is no SI\AI for an
+; item. RequirePrivileged is the only sensible gate; tests just cover
+; the priv vs. non-priv contract.
+Test testSetItemHealthGateBlocksNonPrivileged()
+	InstallScript(0, 0, 0)
+	ResetMutationCounters()
+	MockBVM_SETITEMHEALTH(12345, 0)
+	Assert(MutationSetItemHealth = 0)
+End Test
+
+Test testSetItemHealthGatePassesForPrivileged()
+	InstallScript(1, 0, 0)
+	ResetMutationCounters()
+	MockBVM_SETITEMHEALTH(12345, 100)
+	Assert(MutationSetItemHealth = 100)
 End Test
 
 Test testRemoveZoneInstanceGateBlocksNonPrivileged()

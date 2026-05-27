@@ -889,6 +889,16 @@ Return Result%
 End Function
 
 Function BVM_SETITEMHEALTH(Param1%, Param2%)
+	; ItemHealth is the durability field; zeroing it bricks a player's
+	; equipped weapon / armour on next use (Items.bb breaks items at
+	; ItemHealth <= 0). A non-priv Examine / Trade / RightClick script
+	; could iterate the clicker's Inventory\Items[] and zero the
+	; ItemHealth on each, gutting all gear in one click. Note that
+	; Param1 is an ItemInstance handle (not an ActorInstance), so the
+	; self-or-priv shortcut doesn't apply -- there is no SI\AI for an
+	; item. RequirePrivileged is the only sensible gate. Quest reward
+	; scripts that legitimately repair / damage items run privileged.
+	If Not BVM_RequirePrivileged() Then Return
 	Item.ItemInstance = Object.ItemInstance(Param1%)
 	If Item <> Null
 		Item\ItemHealth = Param2%
@@ -936,6 +946,15 @@ Return Result%
 End Function
 
 Function BVM_SETLEADER(Param1%, Param2%)
+	; The function-body guard `If Actor\RNID = -1` restricts Param1 to
+	; NPCs (a clicker can't make a player a pet), but Param2 (the new
+	; leader) can be any actor handle including the clicker itself --
+	; so a non-priv Examine / Trade / RightClick script could call
+	; SetLeader(SomeWorldGuard, clicker) to recruit world NPCs as
+	; private pets. Guards belong to the world, not whoever clicks an
+	; NPC. Quest reward scripts that legitimately bind pets already
+	; run privileged (Privileged=1 spawn).
+	If Not BVM_RequirePrivileged() Then Return
 	Actor.ActorInstance = Object.ActorInstance(Param1%)
 	If Actor <> Null
 		If Actor\RNID = -1
@@ -1518,6 +1537,13 @@ Return Result%
 End Function
 
 Function BVM_SETABILITYLEVEL(Param1%, Param2$, Param3%)
+	; SpellLevels[] gates ability damage / healing / utility scaling.
+	; SetAbilityLevel(clicker, "<spell>", 0) zeros out the chosen
+	; ability; combined with iteration over the spell list it bricks
+	; the player's entire combat toolkit. Same clicker brick-vector
+	; class as SETMAXATTRIBUTE / SETREPUTATION. Quest reward scripts
+	; that legitimately grant ability levels already run privileged.
+	If Not BVM_RequirePrivileged() Then Return
 	Actor.ActorInstance = Object.ActorInstance(Param1%)
 	If Actor <> Null
 		SpellName$ = Upper$(Param2$)
@@ -2176,6 +2202,14 @@ Return Result%
 End Function
 
 Function BVM_SETREPUTATION(Param1%, Param2%)
+	; Reputation drives faction-interaction gating, vendor / quest /
+	; zone access. A non-priv clicker script calling
+	; SetReputation(clicker, -10000) bricks the player out of every
+	; reputation-gated content surface -- same brick-vector shape as
+	; SETMAXATTRIBUTE. Full-priv (not self-or-priv) for the same
+	; clicker-handle reason: SI\AI = Handle(clicker) for Examine /
+	; Trade / RightClick / ItemScript spawns.
+	If Not BVM_RequirePrivileged() Then Return
 	Actor.ActorInstance = Object.ActorInstance(Param1%)
 	If Actor <> Null Then UpdateReputation(Actor, Param2%)
 End Function
