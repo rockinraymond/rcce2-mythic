@@ -416,7 +416,16 @@ Function UpdateNetwork()
 									A2 = A2\NextOnlinePlayer
 								Wend
 								AddListBoxItem(Game\ChatText, Pa$ + Chr$(13))
-							Case LanguageString$(LS_SCGM)
+							; The constant is `LS_SCGMSay` (= 205, "GM" in the
+							; defaults block at Language.bb:256), not `LS_SCGM`.
+							; Pre-fix the typo'd identifier read as 0 in this
+							; non-Strict file, so the case matched
+							; LanguageString$(0) (LS_ConnectingToServer) instead of
+							; the slash-command "GM" -- the /gm DM-broadcast chat
+							; command was unreachable. Renaming to the real
+							; constant restores the dispatch the rest of the case
+							; body was already coded against.
+							Case LanguageString$(LS_SCGMSay)
 								A.Account = Object.Account(AI\Account)
 								If A <> Null And A\IsDM = True
 									Pa$ = Chr$(254) + "<GM> <" + AI\Name$ + "> " + Params$
