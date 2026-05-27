@@ -678,11 +678,14 @@ Function LoadArea(Name$, CameraEN, DisplayItems = False, UpdateRottNet = False)
 				EndIf
 			; Mesh has been deleted or removed from the database!
 			Else
-				If DisplayItems = True
-					Delete(S)
-				Else
-					RuntimeError("Could not find model with ID " + S\MeshID)
-				EndIf
+				; Soft-fail: log and drop the scenery. Pre-fix, the
+				; live-game path (DisplayItems=False) RuntimeError-
+				; crashed every player entering a zone with a missing
+				; MeshID -- bad world data could grief the entire
+				; server. The editor path (True) already silently
+				; Delete'd; now both branches log + drop uniformly.
+				WriteLog(MainLog, "LoadArea: scenery MeshID " + S\MeshID + " not found in model database; dropping scenery (zone: " + Name$ + ")")
+				Delete(S)
 			EndIf
 			.CancelScenery
 
@@ -844,9 +847,13 @@ Function LoadArea(Name$, CameraEN, DisplayItems = False, UpdateRottNet = False)
 				; Position/rotation
 				PositionEntity E\EN, X#, Y#, Z#
 				RotateEntity E\EN, Pitch#, Yaw#, Roll# 
-			; Failed to load config, remove the emitter and display an error message if running on client
+			; Failed to load config, remove the emitter and (pre-fix)
+			; RuntimeError on the live-game path. Now soft-fail: log
+			; and continue zone load. Same threat-model as the scenery
+			; site above -- a bad emitter ConfigName$ in world data
+			; should not crash the whole client.
 			Else
-				If DisplayItems = False Then RuntimeError("Could not load emitter: " + E\ConfigName$)
+				WriteLog(MainLog, "LoadArea: emitter config '" + E\ConfigName$ + "' could not load; dropping emitter (zone: " + Name$ + ")")
 				HideEntity(E\EN)
 				FreeEntity(E\EN)
 				Delete(E)

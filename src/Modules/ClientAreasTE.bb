@@ -386,11 +386,13 @@ Function LoadArea(Name$, CameraEN, DisplayItems = False, UpdateRottNet = False)
 				EndIf
 			; Mesh has been deleted or removed from the database!
 			Else
-				If DisplayItems = True
-					Delete(S)
-				Else
-					RuntimeError("Could not find model with ID " + S\MeshID)
-				EndIf
+				; Soft-fail matching the FE / GUE variants -- log + drop.
+				; Terrain Editor previously took the silent-Delete
+				; branch in normal use; the RuntimeError fallback now
+				; logs instead so any caller passing DisplayItems=False
+				; doesn't crash mid-zone-load.
+				WriteLog(MainLog, "LoadArea: scenery MeshID " + S\MeshID + " not found in model database; dropping scenery (zone: " + Name$ + ")")
+				Delete(S)
 			EndIf
 			.CancelScenery
 
@@ -526,9 +528,12 @@ Function LoadArea(Name$, CameraEN, DisplayItems = False, UpdateRottNet = False)
 				; Position/rotation
 				PositionEntity E\EN, X#, Y#, Z#
 				RotateEntity E\EN, Pitch#, Yaw#, Roll#
-			; Failed to load config, remove the emitter and display an error message if running on client
+			; Failed to load config -- soft-fail matching the FE / GUE
+			; variants. Note this variant lacks the HideEntity call
+			; the others have (TE doesn't hide before free); preserving
+			; the existing TE-specific cleanup shape.
 			Else
-				If DisplayItems = False Then RuntimeError("Could not load emitter: " + E\ConfigName$)
+				WriteLog(MainLog, "LoadArea: emitter config '" + E\ConfigName$ + "' could not load; dropping emitter (zone: " + Name$ + ")")
 				FreeEntity(E\EN)
 				Delete(E)
 			EndIf
@@ -726,7 +731,12 @@ Function LoadAreaTE(Name$)
 				RotateEntity dm\ent,dm\pitch,dm\yaw,dm\roll
 				EntityFX dm\ent,2
 			Else
-				RuntimeError("Could not find model with ID " + dm\id)
+				; Soft-fail (Terrain-Editor-specific scenery load path):
+				; log + skip placement. Refusing to load the entire
+				; zone for one missing mesh used to require restarting
+				; the editor; logging instead lets the author notice
+				; and fix the bad reference.
+				WriteLog(MainLog, "LoadAreaTE: scenery dm\id " + dm\id + " could not load mesh; skipping placement")
 			EndIf
 		Else
 			loadworkpath$ = dm\rcTe$
