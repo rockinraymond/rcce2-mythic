@@ -1246,6 +1246,16 @@ Function SaveFactions(Filename$)
 
 End Function
 
+; Setter for the FactionNames$ global. Exists so Strict modules (Loom's
+; Composer.bb) can rename a faction; Strict mode disallows direct writes
+; to Dim'd globals from inside Functions / Methods (see CLAUDE.md
+; "Strict-mode Dim array assignment" feedback memory). Bounds-checked so a
+; bad index can't scribble outside the 0..99 slot range.
+Function SetFactionName(Index, Name$)
+	If Index < 0 Or Index > 99 Then Return
+	FactionNames$(Index) = Name$
+End Function
+
 ; Gives a known spell (ability) to an actor instance (SERVER ONLY!)
 Function AddSpell(AI.ActorInstance, SpellID, Lvl = 1)
 	If Lvl < 1 Then Return
