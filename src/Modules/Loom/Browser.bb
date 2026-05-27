@@ -132,6 +132,10 @@ Type Browser
         Browser::addCategory(self, "zone",    "Zones")
         Browser::addCategory(self, "faction", "Factions")
         Browser::addCategory(self, "animset", "Animation Sets")
+        // Tools tab: standalone editor launchers (RC Architect, Terrain
+        // Editor, etc.). Not an entity kind, so the composer / new / save
+        // affordances don't apply on this tab -- it's pure launch surface.
+        Browser::addCategory(self, "tools",   "Tools")
 
         Return self
     End Method
@@ -302,26 +306,31 @@ Type Browser
 
         // "+ New" button on the left -- creates a fresh entity of the
         // current category and focuses it. Dispatches to EntityFactory.
+        // Hidden on the Tools tab since tools aren't entities -- they're
+        // launchers for external editor binaries.
         Local nbX% = 20
         Local nbY% = y + 4
         Local nbW% = 96
         Local nbH% = 22
-        Local nbHover% = (mx >= nbX And mx < nbX + nbW And my >= nbY And my < nbY + nbH)
+        Local nbHover% = False
+        If self\category <> "tools"
+            nbHover = (mx >= nbX And mx < nbX + nbW And my >= nbY And my < nbY + nbH)
 
-        If nbHover = True
-            LoomFill(nbX, nbY, nbW, nbH, LOOM_ARCANE_700_R, LOOM_ARCANE_700_G, LOOM_ARCANE_700_B)
-            LoomBorder(nbX, nbY, nbW, nbH, LOOM_ARCANE_500_R, LOOM_ARCANE_500_G, LOOM_ARCANE_500_B)
-        Else
-            LoomFill(nbX, nbY, nbW, nbH, LOOM_STONE_800_R, LOOM_STONE_800_G, LOOM_STONE_800_B)
-            LoomBorder(nbX, nbY, nbW, nbH, LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
-        EndIf
-        LoomText(nbX + 10, nbY + 4, "+ New " + Browser::categoryLabel(self, self\category), LOOM_PARCHMENT_100_R, LOOM_PARCHMENT_100_G, LOOM_PARCHMENT_100_B)
+            If nbHover = True
+                LoomFill(nbX, nbY, nbW, nbH, LOOM_ARCANE_700_R, LOOM_ARCANE_700_G, LOOM_ARCANE_700_B)
+                LoomBorder(nbX, nbY, nbW, nbH, LOOM_ARCANE_500_R, LOOM_ARCANE_500_G, LOOM_ARCANE_500_B)
+            Else
+                LoomFill(nbX, nbY, nbW, nbH, LOOM_STONE_800_R, LOOM_STONE_800_G, LOOM_STONE_800_B)
+                LoomBorder(nbX, nbY, nbW, nbH, LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
+            EndIf
+            LoomText(nbX + 10, nbY + 4, "+ New " + Browser::categoryLabel(self, self\category), LOOM_PARCHMENT_100_R, LOOM_PARCHMENT_100_G, LOOM_PARCHMENT_100_B)
 
-        If nbHover And clicked
-            EntityFactory_Create(self\category, self\threads)
-            // EntityFactory focuses the new entity on success; we don't
-            // need to do anything else here. Leave cardClickLatch alone
-            // (the Composer takes over from here).
+            If nbHover And clicked
+                EntityFactory_Create(self\category, self\threads)
+                // EntityFactory focuses the new entity on success; we don't
+                // need to do anything else here. Leave cardClickLatch alone
+                // (the Composer takes over from here).
+            EndIf
         EndIf
 
         // Card / Atlas view toggle -- only present on the Zones tab. Lives
@@ -538,6 +547,9 @@ Type Browser
         If cat = "animset"
             count = Browser::drawAnimSetGrid(self, sw, sh, mx, my, clicked, gridX, gridY, cols)
         EndIf
+        If cat = "tools"
+            count = Browser::drawToolsGrid(self, sw, sh, mx, my, clicked, gridX, gridY, cols)
+        EndIf
 
         // Cache for next frame's pumpNavKeyboard.
         self\lastCount = count
@@ -697,6 +709,102 @@ Type Browser
             EndIf
         Next
         Return count
+    End Method
+
+
+    // -------------------------------------------------------------------------
+    // drawToolsGrid -- the Tools tab. Each card is a standalone-editor
+    // launcher, not a focusable entity. Click ExecFiles the .exe via
+    // Tools_Launch instead of dispatching Threads::focus.
+    //
+    // Tools own their own paint (no drawCardChrome) because we want the
+    // body layout to be different -- larger description, "Launch >>"
+    // hint -- and because there's no kind/refID to feed the standard
+    // chrome's hit-test path.
+    // -------------------------------------------------------------------------
+    Method drawToolsGrid%(sw%, sh%, mx%, my%, clicked%, gridX%, gridY%, cols%)
+        Local col% = 0
+        Local row% = 0
+        Local count% = 0
+        For t.ToolDef = Each ToolDef
+            // Filter applies to the tool name -- you can type "terrain" to
+            // narrow the grid to a single card, same as on entity tabs.
+            If Browser::matchesFilter(self, t\Name$) = True
+                Local cx% = gridX + col * (BR_CARD_W + BR_CARD_GAP)
+                Local cy% = gridY + row * (BR_CARD_H + BR_CARD_GAP)
+                If cy + BR_CARD_H < sh - BR_BOT_RIBBON
+                    Browser::drawToolCard(self, t, cx, cy, mx, my, clicked, count)
+                EndIf
+                count = count + 1
+                col = col + 1
+                If col >= cols Then col = 0 : row = row + 1
+            EndIf
+        Next
+        Return count
+    End Method
+
+
+    // -------------------------------------------------------------------------
+    // drawToolCard -- one tool launcher card. Shape mirrors the entity-card
+    // chrome (so the Tools tab visually belongs in the same grid) but
+    // dispatches Tools_Launch on click instead of Threads::focus.
+    //
+    // Missing-binary state: when Tools_Launch returns False, the card
+    // shouldn't visually flicker since the click already happened. The
+    // log line gives the diagnostic; future iterations may overlay a
+    // toast or grey out the card when FileType(exe) <> 1.
+    // -------------------------------------------------------------------------
+    Method drawToolCard(t.ToolDef, x%, y%, mx%, my%, clicked%, cardIdx%)
+        Local hovered% = (mx >= x And mx < x + BR_CARD_W And my >= y And my < y + BR_CARD_H)
+        Local selected% = (cardIdx = self\selectedIndex)
+        Local missing% = (FileType(t\ExePath) <> 1)
+
+        // Background -- dimmed when the .exe is missing
+        If missing = True
+            LoomFill(x, y, BR_CARD_W, BR_CARD_H, LOOM_STONE_700_R, LOOM_STONE_700_G, LOOM_STONE_700_B)
+        Else
+            LoomFill(x, y, BR_CARD_W, BR_CARD_H, LOOM_STONE_800_R, LOOM_STONE_800_G, LOOM_STONE_800_B)
+        EndIf
+
+        // Border -- hover > keyboard selection > base. Missing-binary cards
+        // get a danger-red base border so they read as broken.
+        If hovered = True
+            LoomBorder(x, y, BR_CARD_W, BR_CARD_H, LOOM_ARCANE_500_R, LOOM_ARCANE_500_G, LOOM_ARCANE_500_B)
+            LoomBorder(x + 1, y + 1, BR_CARD_W - 2, BR_CARD_H - 2, LOOM_ARCANE_500_R, LOOM_ARCANE_500_G, LOOM_ARCANE_500_B)
+        Else If selected = True
+            LoomBorder(x, y, BR_CARD_W, BR_CARD_H, LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
+            LoomBorder(x + 1, y + 1, BR_CARD_W - 2, BR_CARD_H - 2, LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
+        Else If missing = True
+            LoomBorder(x, y, BR_CARD_W, BR_CARD_H, LOOM_DANGER_R, LOOM_DANGER_G, LOOM_DANGER_B)
+        Else
+            LoomBorder(x, y, BR_CARD_W, BR_CARD_H, LOOM_BRASS_700_R, LOOM_BRASS_700_G, LOOM_BRASS_700_B)
+        EndIf
+
+        // Top brass accent
+        LoomHRule(x + 12, y + 8, BR_CARD_W - 24, LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
+
+        // Body: name + description + launch hint (or missing-binary note)
+        LoomText(x + 12, y + 18, t\Name$, LOOM_PARCHMENT_100_R, LOOM_PARCHMENT_100_G, LOOM_PARCHMENT_100_B)
+        LoomText(x + 12, y + 44, t\Description$, LOOM_STONE_200_R, LOOM_STONE_200_G, LOOM_STONE_200_B)
+        If missing = True
+            LoomText(x + 12, y + 72, "binary not built", LOOM_DANGER_R, LOOM_DANGER_G, LOOM_DANGER_B)
+        Else
+            LoomText(x + BR_CARD_W - 70, y + 72, "Launch >>", LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
+        EndIf
+
+        // Click + missing-binary skip: log the failure inside Tools_Launch
+        // so the user sees something useful in Loom Log.txt.
+        If hovered And clicked
+            Tools_Launch(t)
+            self\cardClickLatch = True
+        EndIf
+
+        // Keyboard Enter on the selected tool card -- same dispatch.
+        If selected = True And self\pendingEnter = True
+            Tools_Launch(t)
+            self\cardClickLatch = True
+            self\pendingEnter = False
+        EndIf
     End Method
 
 
