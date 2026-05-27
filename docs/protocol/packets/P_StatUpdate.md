@@ -32,7 +32,7 @@ The same opcode is emitted with two different audience strategies, driven by **a
 
 The breath-update sites in [GameServer.bb:770](../../../src/Modules/GameServer.bb#L770) / [:805](../../../src/Modules/GameServer.bb#L805) are also single-recipient — observers don't need to see a player's breath ticking down.
 
-The dispatching `If Attribute = HealthStat Or Attribute = SpeedStat Or Attribute = EnergyStat` lives at [ScriptingCommands.bb:2230](../../../src/Modules/ScriptingCommands.bb#L2230) (SETATTRIBUTE), [:2267](../../../src/Modules/ScriptingCommands.bb#L2267) (CHANGEATTRIBUTE), [:2301](../../../src/Modules/ScriptingCommands.bb#L2301) (SETMAXATTRIBUTE), [:2328](../../../src/Modules/ScriptingCommands.bb#L2328) (CHANGEMAXATTRIBUTE), and [ServerNet.bb:353](../../../src/Modules/ServerNet.bb#L353) / [:367](../../../src/Modules/ServerNet.bb#L367) — five sites that must stay in lockstep with the canonical importance list.
+The dispatching `If Attribute = HealthStat Or Attribute = SpeedStat Or Attribute = EnergyStat` lives at six sites — four BVM mutators in `ScriptingCommands.bb` (`BVM_SETATTRIBUTE`, `BVM_CHANGEATTRIBUTE`, `BVM_SETMAXATTRIBUTE`, `BVM_CHANGEMAXATTRIBUTE`) and the two DM-chat handlers in `ServerNet.bb` (`/setattribute`, `/setattributemax`, inside `Case LanguageString$(LS_SCSetAttribute)` / `LS_SCSetAttributeMax`). All six must stay in lockstep with the canonical importance list (`HealthStat` / `SpeedStat` / `EnergyStat`). Adding a new "important" attribute means touching every one of them.
 
 ## Validation requirements
 
