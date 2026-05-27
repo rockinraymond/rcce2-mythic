@@ -1550,8 +1550,19 @@ Function FUI_CustomMessageBox( msg$, title$="", style=0 )
 	Repeat
 
 		FUI_Update
-		
-		For e.Event = Each Event
+
+		; After-cursor walk: the body unconditionally Delete's e after
+		; the Select Case. Pre-fix `For e = Each Event / ... / Next`
+		; advanced the cursor via the deleted instance's next pointer,
+		; so a multi-event tick (window-resize + button-click delivered
+		; in the same frame) lost the second event -- modal hangs on
+		; missed input. Sibling Architect_Gui_Shell_Fui.bb's event loop
+		; already uses this after-cursor shape (PR #76 / #247). See
+		; CLAUDE.md "Iterator-during-iteration hazards".
+		Local e.Event = First Event
+		Local eNext.Event = Null
+		While e <> Null
+			eNext = After e
 			Select e\EventID
 				;Window Events
 				Case win
@@ -1608,10 +1619,11 @@ Function FUI_CustomMessageBox( msg$, title$="", style=0 )
 					EndIf
 					DlgClose = True
 			End Select
-			
+
 			;Remove event from queue
 			Delete e
-		Next
+			e = eNext
+		Wend
 		
 		RenderWorld
 		Flip
@@ -1681,10 +1693,17 @@ Function FUI_CustomOpenDialog( title$ = "", initdir$ = "", filter$ = "", BackHac
 	DlgDir$ = initdir$
 	DlgFile$ = ""
 	Repeat
-		
+
 		FUI_Update
 
-		For e.Event = Each Event
+		; After-cursor walk: the body unconditionally Delete's e. Same
+		; multi-event-tick hazard as the MessageBox event-pump above
+		; (CLAUDE.md "Iterator-during-iteration hazards"). PR #330
+		; reviewer caught this sibling that the initial pass missed.
+		Local e.Event = First Event
+		Local eNext.Event = Null
+		While e <> Null
+			eNext = After e
 			Select e\EventID
 				;Window Events
 				Case win
@@ -1800,19 +1819,20 @@ Function FUI_CustomOpenDialog( title$ = "", initdir$ = "", filter$ = "", BackHac
 						EndIf
 					EndIf
 			End Select
-			
+
 			;Remove event from queue
 			Delete e
-		Next
+			e = eNext
+		Wend
 
 		RenderWorld
 		Flip
 
 ;		FUI_SetCursor app\Win32Mouse
-		
+
 	Until DlgClose = True
 	DlgClose = False
-	
+
 ;	FUI_SetCursor IDCArrow
 	
 	FUI_DeleteGadget win
@@ -1878,10 +1898,17 @@ Function FUI_CustomSaveDialog( title$ = "", initdir$ = "", filter$ = "", index =
 	DlgDir$ = initdir$
 	DlgFile$ = ""
 	Repeat
-		
+
 		FUI_Update
-		
-		For e.Event = Each Event
+
+		; After-cursor walk: same multi-event-tick hazard as the
+		; MessageBox / FUI_CustomOpenDialog event-pumps above. PR #330
+		; reviewer caught this third sibling that the initial pass
+		; missed. See CLAUDE.md "Iterator-during-iteration hazards".
+		Local e.Event = First Event
+		Local eNext.Event = Null
+		While e <> Null
+			eNext = After e
 			Select e\EventID
 				;Window Events
 				Case win
@@ -1933,7 +1960,7 @@ Function FUI_CustomSaveDialog( title$ = "", initdir$ = "", filter$ = "", index =
 						FILTER_CURRENT_INDEX = Int( e\EventData ) - 1
 						FUI_GetFiles lst, DlgDir$
 					EndIf
-					
+
 				Case ok
 					app\currentFile = DlgDir$ + DlgFile$
 					DlgResult = True
@@ -1942,16 +1969,17 @@ Function FUI_CustomSaveDialog( title$ = "", initdir$ = "", filter$ = "", index =
 					DlgResult = False
 					DlgClose = True
 			End Select
-			
+
 			;Remove event from queue
 			Delete e
-		Next
-		
+			e = eNext
+		Wend
+
 		RenderWorld
 		Flip
-		
+
 ;		FUI_SetCursor app\Win32Mouse
-		
+
 	Until DlgClose = True
 	DlgClose = False
 	
@@ -24022,14 +24050,25 @@ Function FUI_FreeEntity( mesh.BBEntity )
 End Function
 
 Function FUI_FreeAllEntities( ID=2 )
-	
-	For m.Mesh = Each Mesh
+
+	; After-cursor walk: selective Delete with no Exit -- multiple
+	; meshes match the filter (ID=0 matches all; ID=2 default matches
+	; every F-UI-owned mesh) and the deleted instance's next pointer
+	; was the iterator's hop target. The sibling FUI_FreeEntity at
+	; ~line 24013 is safe because it has `Exit` after the Delete; this
+	; bulk-free path was the only multi-match variant left unfixed.
+	; See CLAUDE.md "Iterator-during-iteration hazards".
+	Local m.Mesh = First Mesh
+	Local mNext.Mesh = Null
+	While m <> Null
+		mNext = After m
 		If m\ID = ID Or ID = 0
 			FreeEntity m\Mesh
 			Delete m
 		EndIf
-	Next
-	
+		m = mNext
+	Wend
+
 End Function
 
 Function FUI_WireFrame.BBEntity( mesh.BBEntity, Value=True )

@@ -199,7 +199,21 @@ End Function
 ; Updates all floating numbers
 Function UpdateFloatingNumbers()
 
-	For F.FloatingNumber = Each FloatingNumber
+	; After-cursor walk: the lifespan-expired branch calls FreeEntity +
+	; Delete F mid-iteration. The pre-fix `For F = Each FloatingNumber /
+	; Next` cursor advanced via the deleted instance's next pointer on
+	; the following step, so two FloatingNumbers expiring in the same
+	; tick (very common in group PvP -- each hit creates one and they
+	; all hit 50.0 lifespan together) would either skip the next entry
+	; or deref a freed Type instance. Silent client-side entity-handle
+	; leak + possible UB. See CLAUDE.md "Iterator-during-iteration
+	; hazards" for the three established fix shapes; this is the
+	; after-cursor walk template (Scripting.bb's PausedScript loop
+	; is the canonical example).
+	Local F.FloatingNumber = First FloatingNumber
+	Local FNext.FloatingNumber = Null
+	While F <> Null
+		FNext = After F
 		; Move
 		TranslateEntity F\EN, 0, 0.1 * Delta#, 0
 		PointEntity F\EN, Cam
@@ -210,6 +224,7 @@ Function UpdateFloatingNumbers()
 			FreeEntity F\EN
 			Delete F
 		EndIf
-	Next
+		F = FNext
+	Wend
 
 End Function

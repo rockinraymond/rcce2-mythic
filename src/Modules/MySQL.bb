@@ -64,14 +64,27 @@ Global BBThreadCount = 0
 
 ; Update all BB Threads
 Function My_UpdateThreads()
-	
-	; Loop through the threads	
-	For T.BBThread = Each BBThread
+
+	; After-cursor walk: the complete-thread branch calls Delete T
+	; mid-iteration. Pre-fix the `For T = Each BBThread / Next` cursor
+	; advanced through the deleted instance's next pointer, so multiple
+	; threads completing in the same tick would skip / deref freed Type
+	; instances.
+	;
+	; This function is currently DORMANT -- its only callsite at
+	; Server.bb:533 is commented out (the MySQL-async path is disabled).
+	; The fix lands as doctrinal hygiene so the bug doesn't re-arm if
+	; someone uncomments the call. Matches the post-PR-#74 Track-E
+	; rewrite intent. See CLAUDE.md "Iterator-during-iteration hazards".
+	Local T.BBThread = First BBThread
+	Local TNext.BBThread = Null
+	While T <> Null
+		TNext = After T
 		If BBThreadComplete(T\Hand) Then
-			
+
 			; Update all the new info!
 			A.ActorInstance = Object.ActorInstance(T\Actor)
-			
+
 			A\My_ID					= BBGetInt(T\Cont,0)
 			A\Attribute_ID			= BBGetInt(T\Cont,1)
 			A\Inventory\My_ID 		= BBGetInt(T\Cont,2)
@@ -81,34 +94,35 @@ Function My_UpdateThreads()
 			A\Script_ID				= BBGetInt(T\Cont,6)
 			A\Memorised_ID			= BBGetInt(T\Cont,7)
 			A\Resistance_ID			= BBGetInt(T\Cont,8)
-			
+
 			; If its a PC
 			If T\isslave = False Then
-			
+
 				; Get their data
 				Q.Questlog = Object.QuestLog(T\Quest)
 				C.ActionBarData = Object.ActionBarData(T\Action)
-				
+
 				Q\My_ID = BBGetInt(T\Cont,8)
 				C\My_ID = BBGetInt(T\Cont,9)
-				
+
 				; Update the client (slaves are stored when they leave,
 				; 	all Human characters will be at this point)
 				RCE_Send(Host, T\MsgID, P_CreateCharacter, "Y", True)
-				
+
 			End If
-			
+
 			; Write to the log
 			WriteLog(MainLog,"SQL Thread Ended: "+T\Hand , True, True)
-			
+
 			; Free Thread Instance information
 			BBFreeThread(T\Hand)
 			Delete T
 			; Test code to correctly report current threads
 			BBThreadCount = BBThreadCount - 1
 		End If
-	Next
-	
+		T = TNext
+	Wend
+
 End Function
 			
 			
