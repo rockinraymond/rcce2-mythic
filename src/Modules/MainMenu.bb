@@ -2568,7 +2568,20 @@ Function CreateChar()
 						Preview\Gender = Gender
 					EndIf
 					Result = LoadActorInstance3D(Preview, 1.0, False, False)
-					If Result = False Then RuntimeError("Could not load actor mesh for " + A\Race$ + "!")
+					; Mesh-load failure soft-fail (was RuntimeError, crashing
+					; the client on any class-with-broken-mesh button press).
+					; Free the half-loaded preview, log, and continue
+					; searching -- another playable Actor variant may have
+					; a working mesh. If the loop wraps without finding one,
+					; the pre-existing infinite-loop trap fires (separate
+					; concern; see project memory).
+					If Result = False
+						WriteLog(MainLog, "CharCreation BNextClass: mesh load failed for race '" + A\Race$ + "'; freeing preview, continuing search")
+						SafeFreeActorInstance(Preview)
+						Preview = Null
+						; Continue the Repeat -- no Exit. Next iteration
+						; tries the next Actor variant.
+					Else
 					PlayAnimation(Preview, 1, 0.003, Anim_Idle)
 					PositionEntity Preview\CollisionEN, 30, -(35.0 + EntityY#(Preview\EN, True)), 100
 					;If Preview\ShadowEN <> 0 Then HideEntity(Preview\ShadowEN) [###]
@@ -2585,6 +2598,7 @@ Function CreateChar()
 					GY_LockGadget(BPrevBeard, Not ActorHasBeard(Preview\Actor))
 					GY_LockGadget(BNextGender, Preview\Actor\Genders) : GY_LockGadget(BPrevGender, Preview\Actor\Genders)
 					Exit
+					EndIf
 				EndIf
 			Forever
 		ElseIf GY_ButtonHit(BPrevClass) = True
@@ -2600,7 +2614,11 @@ Function CreateChar()
 						Preview\Gender = Gender
 					EndIf
 					Result = LoadActorInstance3D(Preview, 1.0, False, False)
-					If Result = False Then RuntimeError("Could not load actor mesh for " + A\Race$ + "!")
+					If Result = False
+						WriteLog(MainLog, "CharCreation BPrevClass: mesh load failed for race '" + A\Race$ + "'; freeing preview, continuing search")
+						SafeFreeActorInstance(Preview)
+						Preview = Null
+					Else
 					PlayAnimation(Preview, 1, 0.003, Anim_Idle)
 					PositionEntity Preview\CollisionEN, 30, -(35.0 + EntityY#(Preview\EN, True)), 100
 					;If Preview\ShadowEN <> 0 Then HideEntity(Preview\ShadowEN) [###]
@@ -2617,6 +2635,7 @@ Function CreateChar()
 					GY_LockGadget(BPrevBeard, Not ActorHasBeard(Preview\Actor))
 					GY_LockGadget(BNextGender, Preview\Actor\Genders) : GY_LockGadget(BPrevGender, Preview\Actor\Genders)
 					Exit
+					EndIf
 				EndIf
 			Forever
 		EndIf

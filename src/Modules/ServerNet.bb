@@ -2742,7 +2742,17 @@ Function UpdateNetwork()
 								Next
 							EndIf
 							F = ReadFile("Data\Server Data\Names Filter.txt")
-							If F = 0 Then RuntimeError("Could not open Names Filter.txt!")
+							; Missing filter file used to RuntimeError-crash the
+							; server here (during P_CreateCharacter handler -- so
+							; the first new player after server boot disconnected
+							; every other player). Soft-fail: log and accept the
+							; name without filtering. The fix is to restore the
+							; file; failing-open is the right default during the
+							; window between the file disappearing and an admin
+							; noticing.
+							If F = 0
+								WriteLog(MainLog, "P_CreateCharacter: Names Filter.txt missing or unreadable; accepting all names without filtering until file is restored")
+							Else
 								While Eof(F) = False
 									Banned$ = Trim$(ReadLine$(F))
 									If Banned$ <> ""
@@ -2751,7 +2761,8 @@ Function UpdateNetwork()
 										EndIf
 									EndIf
 								Wend
-							CloseFile(F)
+								CloseFile(F)
+							EndIf
 
 							; Check character name is not already in use
 							If MySQL

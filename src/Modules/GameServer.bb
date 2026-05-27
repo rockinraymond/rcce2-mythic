@@ -1402,7 +1402,14 @@ Function CommandPet(AI.ActorInstance, Command$, Params$)
 			NameValid = True
 			Name$ = Upper$(Params$)
 			F = ReadFile("Data\Server Data\Names Filter.txt")
-			If F = 0 Then RuntimeError("Could not open Names Filter.txt!")
+			; Soft-fail same as ServerNet.bb's P_CreateCharacter path --
+			; missing filter file used to RuntimeError-crash the entire
+			; server when a player typed /pet name. Failing open here is
+			; the right default; the bigger risk is server outage from a
+			; legitimate /pet command.
+			If F = 0
+				WriteLog(MainLog, "Pet NAME: Names Filter.txt missing or unreadable; accepting pet name without filtering until file is restored")
+			Else
 				While Eof(F) = False
 					Banned$ = Trim$(ReadLine$(F))
 					If Banned$ <> ""
@@ -1411,7 +1418,8 @@ Function CommandPet(AI.ActorInstance, Command$, Params$)
 						EndIf
 					EndIf
 				Wend
-			CloseFile(F)
+				CloseFile(F)
+			EndIf
 
 			; Set pet name, broadcast to others in area if any.
 			If NameValid = True
