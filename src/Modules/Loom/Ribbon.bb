@@ -191,107 +191,28 @@ Type Ribbon
 
 
     // -------------------------------------------------------------------------
-    // recomputeCache -- walk every entity and total counts + broken refs.
-    // Called once per frame at the top of renderAndUpdate.
+    // recomputeCache -- delegates to WorldCache (shared with BrokenRefs /
+    // Atlas). The cache itself only re-walks the type pools when a
+    // mutation has fired WorldCache_Invalidate since the last call; a
+    // clean cache returns immediately.
     //
-    // Broken-reference checks (per kind):
-    //   Actor   : DefaultFaction must be 0..99 with FactionNames$ non-empty
-    //             MAnimationSet / FAnimationSet must resolve in AnimList
-    //   Zone    : every non-empty PortalLinkArea$ must resolve to an Area
+    // Before WorldCache landed this Method did the full O(actors *
+    // animsets + zones * portals * zones) scan every frame; now the
+    // expensive walk fires at most once per mutation and amortizes
+    // across however many frames sit between mutations.
     //
-    // We intentionally DON'T flag Faction=0 with empty FactionNames$(0) as
-    // broken when DefaultFaction defaults to 0 -- that's the implicit
-    // "no faction set" state, not a broken ref. The check requires the
-    // referenced slot have a non-empty name.
-    //
-    // Counters are accumulated directly on `self\cached*` fields rather
-    // than Method-scope Locals because BlitzForge Strict rejects re-
-    // assigning a Method Local from inside nested For/If blocks (the
-    // architecture.md gotcha). Field writes through `self\` work at any
-    // nesting depth.
+    // The local cachedX fields stay populated as a snapshot for the
+    // current frame so the drawing code below doesn't need a per-Method
+    // re-fetch through the WorldCache getters.
     // -------------------------------------------------------------------------
     Method recomputeCache()
-        self\cachedBrokenRefs = 0
-        self\cachedTotalActors = 0
-        self\cachedTotalItems = 0
-        self\cachedTotalSpells = 0
-        self\cachedTotalZones = 0
-        self\cachedTotalFactions = 0
-        self\cachedTotalAnimSets = 0
-
-        // Actor totals + broken-ref checks
-        For Ac.Actor = Each Actor
-            self\cachedTotalActors = self\cachedTotalActors + 1
-            If Ac\DefaultFaction < 0 Or Ac\DefaultFaction > 99
-                self\cachedBrokenRefs = self\cachedBrokenRefs + 1
-            Else If Ac\DefaultFaction > 0 And FactionNames$(Ac\DefaultFaction) = ""
-                self\cachedBrokenRefs = self\cachedBrokenRefs + 1
-            EndIf
-            If Ac\MAnimationSet <> 0
-                If Ribbon::animSetExists(self, Ac\MAnimationSet) = False
-                    self\cachedBrokenRefs = self\cachedBrokenRefs + 1
-                EndIf
-            EndIf
-            If Ac\FAnimationSet <> 0
-                If Ribbon::animSetExists(self, Ac\FAnimationSet) = False
-                    self\cachedBrokenRefs = self\cachedBrokenRefs + 1
-                EndIf
-            EndIf
-        Next
-
-        // Item / Spell totals -- no cross-entity refs to check here
-        // (their script names are .rsl files on disk, not entity handles).
-        For It.Item = Each Item
-            self\cachedTotalItems = self\cachedTotalItems + 1
-        Next
-
-        For Sp.Spell = Each Spell
-            self\cachedTotalSpells = self\cachedTotalSpells + 1
-        Next
-
-        // Zone totals + portal broken-ref checks
-        For Ar.Area = Each Area
-            self\cachedTotalZones = self\cachedTotalZones + 1
-            Local portalIdx% = 0
-            For portalIdx = 0 To 99
-                If Ar\PortalLinkArea$[portalIdx] <> ""
-                    If Ribbon::zoneExists(self, Ar\PortalLinkArea$[portalIdx]) = False
-                        self\cachedBrokenRefs = self\cachedBrokenRefs + 1
-                    EndIf
-                EndIf
-            Next
-        Next
-
-        // Faction totals
-        Local fi% = 0
-        For fi = 0 To 99
-            If FactionNames$(fi) <> ""
-                self\cachedTotalFactions = self\cachedTotalFactions + 1
-            EndIf
-        Next
-
-        // AnimSet totals
-        For As.AnimSet = Each AnimSet
-            self\cachedTotalAnimSets = self\cachedTotalAnimSets + 1
-        Next
-    End Method
-
-
-    Method animSetExists%(id%)
-        Local As.AnimSet
-        For As = Each AnimSet
-            If As\ID = id Then Return True
-        Next
-        Return False
-    End Method
-
-
-    Method zoneExists%(name$)
-        Local upr$ = Upper$(name)
-        Local Ar.Area
-        For Ar = Each Area
-            If Upper$(Ar\Name$) = upr Then Return True
-        Next
-        Return False
+        If LoomWorldCache = Null Then Return
+        self\cachedBrokenRefs    = WorldCache::brokenRefs(LoomWorldCache)
+        self\cachedTotalActors   = WorldCache::totalActors(LoomWorldCache)
+        self\cachedTotalItems    = WorldCache::totalItems(LoomWorldCache)
+        self\cachedTotalSpells   = WorldCache::totalSpells(LoomWorldCache)
+        self\cachedTotalZones    = WorldCache::totalZones(LoomWorldCache)
+        self\cachedTotalFactions = WorldCache::totalFactions(LoomWorldCache)
+        self\cachedTotalAnimSets = WorldCache::totalAnimSets(LoomWorldCache)
     End Method
 End Type

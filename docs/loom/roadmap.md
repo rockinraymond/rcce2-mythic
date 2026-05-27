@@ -23,7 +23,8 @@ Shipped, next, and deferred. Read this when picking what to build next.
 - **Broken-ref finder modal** — extends the Conscience Ribbon's broken-ref count from a passive number into a clickable chip. New `Modules/Loom/BrokenRefs.bb` enumerates each broken reference (Actor→Faction/AnimSet, Zone→portal-target) with diagnosis text and click-to-jump to the source entity. Capped at 250 entries so a fundamentally broken project doesn't render thousands of rows. ([#342](https://github.com/RydeTec/rcce2/pull/342))
 - **Browser keyboard navigation** — arrow keys move a brass-ringed selection cursor across the active category's card grid; Enter focuses the selected card. Up/Down jumps by row width (`lastCols`), Left/Right by 1. Selection clamps on category switch. Ctrl-anything skipped so global shortcuts (Ctrl+K / Ctrl+H) don't dribble through. ([#342](https://github.com/RydeTec/rcce2/pull/342))
 - **Tools tab** — new browser category exposing GUE's seven standalone editor launchers (RC Architect, Terrain / Caves / Rock / Tree Editor, Gubbin Tool, Spell Wizard). Each card shows the tool name, description, and a Launch >> hint; click `ExecFile`s the .exe with the project's `Data/` folder as CWD. Missing-binary detection paints the card with a danger-red border + "binary not built" label so the user gets immediate feedback when the partial-build trap bites. ([#343](https://github.com/RydeTec/rcce2/pull/343))
-- **Recents list (Ctrl+R)** — persisted per-project list of recently-focused entities. `Modules/Loom/Recents.bb` writes to `Data/Loom/recents.txt` (via `SafeWriteOpen/Commit`); load on boot, save on shutdown. `Threads::focus` + `Threads::jump` emit through a `Recents_Record` facade. Stable keys per kind (refID for typed entities, Name for zones since Handles regenerate) so the list survives across sessions. Ctrl+R opens a modal newest-first; stale entries (referenced entity deleted between sessions) render in danger-red and skip on click.
+- **Recents list (Ctrl+R)** — persisted per-project list of recently-focused entities. `Modules/Loom/Recents.bb` writes to `Data/Loom/recents.txt` (via `SafeWriteOpen/Commit`); load on boot, save on shutdown. `Threads::focus` + `Threads::jump` emit through a `Recents_Record` facade. Stable keys per kind (refID for typed entities, Name for zones since Handles regenerate) so the list survives across sessions. Ctrl+R opens a modal newest-first; stale entries (referenced entity deleted between sessions) render in danger-red and skip on click. ([#344](https://github.com/RydeTec/rcce2/pull/344))
+- **World-state cache (perf)** — new `Modules/Loom/WorldCache.bb` holds cached aggregates (broken-ref count, 6 entity totals). Before: `Ribbon::recomputeCache` walked `O(actors * animsets + zones * portals * zones)` every frame. After: the same scan fires at most once per mutation (Composer commit/toggle/discard, EntityFactory create/delete, Palette picker commit invoke `WorldCache_Invalidate`); between mutations the per-frame ribbon paint is constant-time. Same recorder-facade pattern as Timeline / Recents (ADR 005).
 
 All six original "next up" roadmap items are shipped, plus eight scope-expanded surfaces (palette, search-within-category, entity creation, deletion, discard, conscience ribbon, broken-ref finder, keyboard nav, atlas, ref-field editing, timeline scrubber, recents, tools tab). Loom is now in **beta** — every primary GUE workflow has a Loom equivalent.
 
@@ -33,25 +34,19 @@ Beta vs alpha distinction: alpha was read-only browsing; beta covers full editin
 
 The next-tier roadmap items, in rough order of leverage:
 
-### 1. Performance: cache the data scans
-
-Ribbon::recomputeCache, BrokenRefs::rebuild, Atlas::countZones, and Palette::rebuildResults all walk the same global type pools per-frame or per-modal-open. At 50-100 entities none of this matters; at 5000+ actors / items the per-frame ribbon scan starts to bite. Add a shared dirty-bit cache that invalidates on Composer::commitEdit / EntityFactory create/delete, so Ribbon and friends only recompute when the underlying data changed.
-
-Estimated scope: 200-300 LOC across Composer + Ribbon + a new `Cache.bb`.
-
-### 2. Bulk edit / multi-select
+### 1. Bulk edit / multi-select
 
 Select multiple cards via Shift+Click on the grid; opening the composer shows a unified property panel where edits apply to every selected entity. Useful for "bump every weapon's damage by 10%." Today the composer is single-focus only.
 
 Estimated scope: 400-600 LOC. Touches Browser (selection set), Composer (multi-focus rendering), writeField (broadcast).
 
-### 3. Asset preview (textures + meshes)
+### 2. Asset preview (textures + meshes)
 
 Item / Actor reference textures and meshes by integer ID. The composer shows the ID but not the asset itself. A small preview panel in the composer (or a hover-thumbnail on the chip) would surface the asset directly. Needs the texture / mesh loaders Loom currently avoids — likely a Loom-side decoder rather than pulling in GUE's media stack.
 
 Estimated scope: 500-800 LOC. Significant new surface.
 
-### 4. Aesthetic immersion toggle (Tool / Balanced / In-world)
+### 3. Aesthetic immersion toggle (Tool / Balanced / In-world)
 
 The design's slider for chrome-density: utilitarian "Tool" mode at one end, fully-immersive "In-world" parchment-scroll aesthetic at the other. Current Loom chrome is "Balanced." Add a toggle in the Conscience Ribbon's right-side that re-themes the surfaces. Mostly a Theme.bb palette swap + a few layout tweaks per mode.
 
