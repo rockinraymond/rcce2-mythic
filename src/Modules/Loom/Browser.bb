@@ -269,7 +269,7 @@ End Function
 
 
 // Draws the shared card chrome (background, hover border, kind eyebrow)
-// and registers the rect for hit-testing. Returns True if this card was
+// and performs the hit-test inline. Returns True if this card was
 // clicked this frame (and calls Threads_Focus as a side effect).
 Function Browser_DrawCardChrome(kind$, refID, x, y, mx, my, clicked)
     Local hovered = (mx >= x And mx < x + BR_CARD_W And my >= y And my < y + BR_CARD_H)
