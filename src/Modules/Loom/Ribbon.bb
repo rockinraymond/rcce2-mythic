@@ -48,6 +48,8 @@ Const RIBBON_BADGE_GAP    = 6
 Type Ribbon
     Field threads.Threads
     Field composer.Composer
+    Field brokenRefs.BrokenRefs   // set by setBrokenRefs; click on the
+                                  // broken-ref count opens this modal
 
     // Per-frame cache so multiple drawing passes don't re-walk all
     // entities. Recomputed at the top of renderAndUpdate.
@@ -63,7 +65,18 @@ Type Ribbon
     Method create.Ribbon(threads.Threads, composer.Composer)
         self\threads = threads
         self\composer = composer
+        self\brokenRefs = Null
         Return self
+    End Method
+
+
+    // -------------------------------------------------------------------------
+    // setBrokenRefs -- injection point from Loom.bb so a click on the
+    // broken-ref count chip can open the BrokenRefs modal. Called once
+    // at construction (after both instances exist).
+    // -------------------------------------------------------------------------
+    Method setBrokenRefs(brokenRefs.BrokenRefs)
+        self\brokenRefs = brokenRefs
     End Method
 
 
@@ -109,11 +122,30 @@ Type Ribbon
         result = Ribbon::drawDirtyBadge(self, "Factions", "faction", FactionsSaved, x, mx, my, clicked) : x = result
         result = Ribbon::drawDirtyBadge(self, "Anims",    "animset", AnimsSaved,    x, mx, my, clicked) : x = result
 
-        // Center: broken-ref count -- danger-red when > 0, dim when 0
+        // Center: broken-ref count chip -- danger-red when > 0, dim when 0.
+        // Clickable when > 0 + BrokenRefs is wired: opens the finder modal
+        // so the user can jump to each broken source and fix it.
         If self\cachedBrokenRefs > 0
             Local brokenLabel$ = Str(self\cachedBrokenRefs) + " broken ref"
             If self\cachedBrokenRefs > 1 Then brokenLabel = brokenLabel + "s"
-            LoomTextCentered(sw / 2, 6, brokenLabel, LOOM_DANGER_R, LOOM_DANGER_G, LOOM_DANGER_B)
+            Local brkW% = StringWidth(brokenLabel) + 24
+            Local brkX% = sw / 2 - brkW / 2
+            Local brkY% = 4
+            Local brkH% = RIBBON_BADGE_H
+            Local brkHover% = (mx >= brkX And mx < brkX + brkW And my >= brkY And my < brkY + brkH)
+
+            If brkHover = True
+                LoomFill(brkX, brkY, brkW, brkH, LOOM_DANGER_R, LOOM_DANGER_G, LOOM_DANGER_B)
+                LoomBorder(brkX, brkY, brkW, brkH, LOOM_PARCHMENT_100_R, LOOM_PARCHMENT_100_G, LOOM_PARCHMENT_100_B)
+                LoomTextCentered(sw / 2, 6, brokenLabel, LOOM_PARCHMENT_100_R, LOOM_PARCHMENT_100_G, LOOM_PARCHMENT_100_B)
+            Else
+                LoomTextCentered(sw / 2, 6, brokenLabel, LOOM_DANGER_R, LOOM_DANGER_G, LOOM_DANGER_B)
+            EndIf
+
+            If brkHover And clicked And self\brokenRefs <> Null
+                BrokenRefs::openModal(self\brokenRefs)
+                consumed = True
+            EndIf
         Else
             LoomTextCentered(sw / 2, 6, "no broken references", LOOM_STONE_300_R, LOOM_STONE_300_G, LOOM_STONE_300_B)
         EndIf

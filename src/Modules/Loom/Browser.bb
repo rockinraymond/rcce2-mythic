@@ -87,6 +87,29 @@ Type Browser
     Field atlas.Atlas
     Field atlasMode%
 
+    // Keyboard-navigation state. selectedIndex is the per-category cursor
+    // (which card the arrow keys highlight). Mouse hover doesn't move it
+    // (so it stays put as the user reaches for the keyboard); arrow keys
+    // do. Enter focuses the selected card (same as clicking it).
+    //
+    // Storing one selectedIndex (not per-category) is intentional -- when
+    // the user tabs from Actors to Items, the selectedIndex clamps to the
+    // new category's range. The simpler shape beats per-category state
+    // for the modest UX cost.
+    Field selectedIndex%
+
+    // Cached grid geometry from the previous frame's drawCardGrid call --
+    // arrow-key pump uses these to know how many cards exist (clamp) and
+    // how wide a row is (Up/Down jumps). First frame defaults to 1 col / 0
+    // count, which is harmless.
+    Field lastCols%
+    Field lastCount%
+
+    // Pending-Enter flag: set by pumpNavKeyboard when the user presses
+    // Enter; consumed by the per-kind grid method when it reaches the
+    // selectedIndex card, dispatching Threads::focus then clearing.
+    Field pendingEnter%
+
 
     Method create.Browser(threads.Threads)
         self\threads = threads
@@ -95,6 +118,10 @@ Type Browser
         self\filterQuery = ""
         self\atlas = Null
         self\atlasMode = False
+        self\selectedIndex = 0
+        self\lastCols = 1
+        self\lastCount = 0
+        self\pendingEnter = False
 
         // Build the ordered category list. Iterated via `Each BrowserCategory`
         // in insertion order (Blitz3D's global type pool is FIFO) -- also the
@@ -138,11 +165,13 @@ Type Browser
         Local my% = MouseY()
         Local clicked% = MouseHit(1)
 
-        // Drain keyboard into the per-category filter buffer (printable chars
-        // + Backspace). Esc is owned by the outer Loom frame -- when the
-        // filter is non-empty, the outer Esc handler clears it first via
+        // Drain keyboard. Arrow keys + Enter handled FIRST so they don't
+        // dribble into the filter buffer; the filter pump skips arrows.
+        // Esc is owned by the outer Loom frame -- when the filter is
+        // non-empty, the outer Esc handler clears it first via
         // Browser::clearFilter (called from Loom.bb).
         If inputEnabled = True
+            Browser::pumpNavKeyboard(self)
             Browser::pumpFilterKeyboard(self)
         EndIf
 
@@ -205,6 +234,43 @@ Type Browser
             EndIf
             k = GetKey()
         Wend
+    End Method
+
+
+    // -------------------------------------------------------------------------
+    // pumpNavKeyboard -- arrow keys + Enter on the card grid. Move the
+    // selectedIndex cursor by 1 (left/right) or by lastCols (up/down);
+    // Enter sets pendingEnter so the next per-kind grid pass focuses the
+    // selected card.
+    //
+    // Skipped when Ctrl is held (so Ctrl+K / Ctrl+H global shortcuts
+    // don't accidentally move the cursor on the way through).
+    // -------------------------------------------------------------------------
+    Method pumpNavKeyboard()
+        If KeyDown(29) Or KeyDown(157) Then Return
+
+        // Scan codes: 200=Up, 208=Down, 203=Left, 205=Right, 28=Enter
+        If KeyHit(200) And self\selectedIndex >= self\lastCols
+            self\selectedIndex = self\selectedIndex - self\lastCols
+        EndIf
+        If KeyHit(208)
+            Local nextDown% = self\selectedIndex + self\lastCols
+            If nextDown < self\lastCount Then self\selectedIndex = nextDown
+        EndIf
+        If KeyHit(203) And self\selectedIndex > 0
+            self\selectedIndex = self\selectedIndex - 1
+        EndIf
+        If KeyHit(205)
+            If self\selectedIndex + 1 < self\lastCount Then self\selectedIndex = self\selectedIndex + 1
+        EndIf
+        If KeyHit(28)
+            self\pendingEnter = True
+        EndIf
+
+        // Clamp (defensive -- category switch could have shrunk the count
+        // since the last frame's drawCardGrid).
+        If self\selectedIndex < 0 Then self\selectedIndex = 0
+        If self\lastCount > 0 And self\selectedIndex >= self\lastCount Then self\selectedIndex = self\lastCount - 1
     End Method
 
 
@@ -431,6 +497,11 @@ Type Browser
         Local cols% = (gridW + BR_CARD_GAP) / (BR_CARD_W + BR_CARD_GAP)
         If cols < 1 Then cols = 1
 
+        // Cache geometry for the next frame's pumpNavKeyboard. Arrow keys
+        // run BEFORE drawCardGrid so they operate on last-frame's cols /
+        // count -- first frame defaults to (1, 0), harmless.
+        self\lastCols = cols
+
         self\cardClickLatch = False
 
         Local cat$ = self\category
@@ -443,6 +514,7 @@ Type Browser
             Local viewportH% = sh - gridY - BR_BOT_RIBBON - BR_SECTION_PAD
             Local hit% = Atlas::renderAndUpdate(self\atlas, gridX, gridY, gridW, viewportH)
             If hit = True Then self\cardClickLatch = True
+            self\lastCount = 0    // Atlas doesn't participate in keyboard nav
             Return self\cardClickLatch
         EndIf
 
@@ -466,6 +538,15 @@ Type Browser
         If cat = "animset"
             count = Browser::drawAnimSetGrid(self, sw, sh, mx, my, clicked, gridX, gridY, cols)
         EndIf
+
+        // Cache for next frame's pumpNavKeyboard.
+        self\lastCount = count
+
+        // Pending Enter is consumed by drawCardChrome when the iteration
+        // reaches selectedIndex; if it didn't (e.g. selectedIndex past the
+        // visible/filtered subset), clear it anyway so it doesn't fire
+        // later. Defensive cleanup -- no behavior change in the happy path.
+        self\pendingEnter = False
 
         // Empty-state copy -- different message when the project HAS entities
         // of this kind but the filter excluded them all.
@@ -499,7 +580,7 @@ Type Browser
                 Local cx% = gridX + col * (BR_CARD_W + BR_CARD_GAP)
                 Local cy% = gridY + row * (BR_CARD_H + BR_CARD_GAP)
                 If cy + BR_CARD_H < sh - BR_BOT_RIBBON
-                    Browser::drawCardChrome(self, "actor", Ac\ID, cx, cy, mx, my, clicked)
+                    Browser::drawCardChrome(self, "actor", Ac\ID, cx, cy, mx, my, clicked, count)
                     Browser::drawActorCardBody(self, Ac, cx, cy)
                 EndIf
                 count = count + 1
@@ -520,7 +601,7 @@ Type Browser
                 Local cx% = gridX + col * (BR_CARD_W + BR_CARD_GAP)
                 Local cy% = gridY + row * (BR_CARD_H + BR_CARD_GAP)
                 If cy + BR_CARD_H < sh - BR_BOT_RIBBON
-                    Browser::drawCardChrome(self, "item", It\ID, cx, cy, mx, my, clicked)
+                    Browser::drawCardChrome(self, "item", It\ID, cx, cy, mx, my, clicked, count)
                     Browser::drawItemCardBody(self, It, cx, cy)
                 EndIf
                 count = count + 1
@@ -541,7 +622,7 @@ Type Browser
                 Local cx% = gridX + col * (BR_CARD_W + BR_CARD_GAP)
                 Local cy% = gridY + row * (BR_CARD_H + BR_CARD_GAP)
                 If cy + BR_CARD_H < sh - BR_BOT_RIBBON
-                    Browser::drawCardChrome(self, "spell", Sp\ID, cx, cy, mx, my, clicked)
+                    Browser::drawCardChrome(self, "spell", Sp\ID, cx, cy, mx, my, clicked, count)
                     Browser::drawSpellCardBody(self, Sp, cx, cy)
                 EndIf
                 count = count + 1
@@ -562,7 +643,7 @@ Type Browser
                 Local cx% = gridX + col * (BR_CARD_W + BR_CARD_GAP)
                 Local cy% = gridY + row * (BR_CARD_H + BR_CARD_GAP)
                 If cy + BR_CARD_H < sh - BR_BOT_RIBBON
-                    Browser::drawCardChrome(self, "zone", Handle(Ar), cx, cy, mx, my, clicked)
+                    Browser::drawCardChrome(self, "zone", Handle(Ar), cx, cy, mx, my, clicked, count)
                     Browser::drawZoneCardBody(self, Ar, cx, cy)
                 EndIf
                 count = count + 1
@@ -585,7 +666,7 @@ Type Browser
                     Local cx% = gridX + col * (BR_CARD_W + BR_CARD_GAP)
                     Local cy% = gridY + row * (BR_CARD_H + BR_CARD_GAP)
                     If cy + BR_CARD_H < sh - BR_BOT_RIBBON
-                        Browser::drawCardChrome(self, "faction", i, cx, cy, mx, my, clicked)
+                        Browser::drawCardChrome(self, "faction", i, cx, cy, mx, my, clicked, count)
                         Browser::drawFactionCardBody(self, i, cx, cy)
                     EndIf
                     count = count + 1
@@ -607,7 +688,7 @@ Type Browser
                 Local cx% = gridX + col * (BR_CARD_W + BR_CARD_GAP)
                 Local cy% = gridY + row * (BR_CARD_H + BR_CARD_GAP)
                 If cy + BR_CARD_H < sh - BR_BOT_RIBBON
-                    Browser::drawCardChrome(self, "animset", As\ID, cx, cy, mx, my, clicked)
+                    Browser::drawCardChrome(self, "animset", As\ID, cx, cy, mx, my, clicked, count)
                     Browser::drawAnimSetCardBody(self, As, cx, cy)
                 EndIf
                 count = count + 1
@@ -620,19 +701,32 @@ Type Browser
 
 
     // -------------------------------------------------------------------------
-    // drawCardChrome -- shared card background + hover border + brass accent +
-    // inline hit-test. Sets self\cardClickLatch and calls Threads::focus on
-    // click (side effects; no return value so per-kind grid methods don't
-    // need to propagate booleans through nested scopes).
+    // drawCardChrome -- shared card background + hover/keyboard-selected
+    // border + brass accent + inline hit-test. Sets self\cardClickLatch
+    // and calls Threads::focus on click (side effects; no return value so
+    // per-kind grid methods don't need to propagate booleans through
+    // nested scopes).
+    //
+    // cardIdx is the 0-based index of this card within the visible (post-
+    // filter) iteration. When it equals selectedIndex, the card is the
+    // keyboard cursor and paints with an extra brass selection ring; if
+    // pendingEnter is True at that same index, we dispatch focus and
+    // clear the flag.
     // -------------------------------------------------------------------------
-    Method drawCardChrome(kind$, refID%, x%, y%, mx%, my%, clicked%)
+    Method drawCardChrome(kind$, refID%, x%, y%, mx%, my%, clicked%, cardIdx%)
         Local hovered% = (mx >= x And mx < x + BR_CARD_W And my >= y And my < y + BR_CARD_H)
+        Local selected% = (cardIdx = self\selectedIndex)
 
         LoomFill(x, y, BR_CARD_W, BR_CARD_H, LOOM_STONE_800_R, LOOM_STONE_800_G, LOOM_STONE_800_B)
 
         If hovered = True
             LoomBorder(x, y, BR_CARD_W, BR_CARD_H, LOOM_ARCANE_500_R, LOOM_ARCANE_500_G, LOOM_ARCANE_500_B)
             LoomBorder(x + 1, y + 1, BR_CARD_W - 2, BR_CARD_H - 2, LOOM_ARCANE_500_R, LOOM_ARCANE_500_G, LOOM_ARCANE_500_B)
+        Else If selected = True
+            // Keyboard cursor -- brass double ring so it reads as
+            // distinct from arcane hover.
+            LoomBorder(x, y, BR_CARD_W, BR_CARD_H, LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
+            LoomBorder(x + 1, y + 1, BR_CARD_W - 2, BR_CARD_H - 2, LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
         Else
             LoomBorder(x, y, BR_CARD_W, BR_CARD_H, LOOM_BRASS_700_R, LOOM_BRASS_700_G, LOOM_BRASS_700_B)
         EndIf
@@ -644,6 +738,14 @@ Type Browser
             Threads::focus(self\threads, kind, refID)
             self\cardClickLatch = True
             WriteLog(LoomLog, "Browser: focused " + kind + "#" + Str(refID))
+        EndIf
+
+        // Keyboard Enter -- only the selected card consumes it.
+        If selected = True And self\pendingEnter = True
+            Threads::focus(self\threads, kind, refID)
+            self\cardClickLatch = True
+            self\pendingEnter = False
+            WriteLog(LoomLog, "Browser: focused (Enter) " + kind + "#" + Str(refID))
         EndIf
     End Method
 
