@@ -3,40 +3,33 @@
 // =============================================================================
 //
 // A drop-in alternative to GUE, sharing the on-disk data formats but with
-// a fresh UI built around the Loom design concept (see
-// .claude/skills/loom-design-brief/ and the prototype handoff bundle).
+// a fresh UI built around the Loom design concept: every entity is browsable,
+// every reference between entities is a clickable thread.
 //
-// Architecture overview (the multi-PR roadmap; this commit ships only #1):
+// Surface model:
+//   BROWSER         everything-grid by category (Actors / Items / Spells /
+//                   Zones / Factions / Animation Sets). Click a card to
+//                   focus the entity in the COMPOSER.
 //
-//   #1  Skeleton + theme + Project Manager launcher
-//         Loom.exe compiles, Project Manager launches it,
-//         shows a themed splash, exits cleanly. THIS COMMIT.
+//   COMPOSER        right-side property panel for the focused entity.
+//                   Reference fields render as thread chips (Threads.bb);
+//                   clicking a chip jumps focus and pushes a back-stack
+//                   entry. Esc pops the stack (or, if empty, closes the
+//                   composer back to the browser).
 //
-//   #2  Data loading + atlas
-//         Loom uses GUE's existing data modules (Items.bb, Actors.bb,
-//         Spells.bb, ServerAreas.bb, ...) via Include. After load,
-//         the atlas surface lists every zone in the project.
+// Esc behavior:
+//   composer focused, back stack non-empty   ->  pop one step back
+//   composer focused, back stack empty       ->  close composer
+//   browser only (nothing focused)           ->  exit Loom
 //
-//   #3  World view
-//         Picking a zone in the atlas renders it in a 3D viewport
-//         using Blitz3D's engine (the same engine GUE's Zones tab uses).
-//         Click an entity to select it.
-//
-//   #4  Composer
-//         Right-side property panel that paints the focused entity's
-//         data (faction, level, mesh, equipped items) using Loom theme
-//         primitives. Read-only for the alpha.
-//
-// Design intent for the alpha as a whole: "Loom can open my existing
-// Realm Crafter project and let me look at my world through a different
-// lens." Editing comes in beta.
+// Read-only in this alpha. Editing is a beta concern (needs save/dirty
+// tracking that's its own design surface).
 // =============================================================================
 
 
 // -----------------------------------------------------------------------------
-// Bootstrap globals (mirrors GUE.bb's startup so the relative paths work
-// identically -- both binaries live in bin/ and are launched with CWD set to
-// <project>/Data/).
+// Bootstrap globals (mirrors GUE.bb so paths and log placement match -- both
+// binaries live in bin/ and are launched from PM with CWD set to <proj>/Data).
 // -----------------------------------------------------------------------------
 Global rcceVersion$ = "2.0.0"
 Global componentName$ = "loom"
@@ -46,16 +39,40 @@ ChangeDir RootDir$
 
 
 // -----------------------------------------------------------------------------
-// Includes -- minimum surface for the skeleton.
+// Includes
 //
-// PR #1 deliberately does NOT include the data modules (Items, Actors,
-// Spells, etc.) or F-UI. The skeleton's only job is to prove the build
-// pipeline and the Project Manager hook work. PR #2 will add Logging-
-// adjacent data loaders. PR #3 brings in Blitz3D's 3D pipeline for the
-// world view.
+// Data layer: same modules GUE pulls in for the data layer, minus the
+// UI-tied ones (F-UI, MediaDialogs, CharacterEditorLoader, ClientAreas).
+// The loaders here parse .dat files into the global type instances; Loom
+// reads through those same instances so the two editors can't drift apart
+// in how they parse the files.
+//
+// Order matters for Type declarations -- mirror GUE.bb's order.
 // -----------------------------------------------------------------------------
+Include "Modules\RCEnet.bb"
+Include "Modules\Media.bb"
+Include "Modules\MediaImport.bb"
+Include "Modules\Projectiles.bb"
+Include "Modules\Language.bb"
+Include "Modules\Items.bb"
+Include "Modules\Inventories.bb"
+Include "Modules\Animations.bb"
+Include "Modules\Spells.bb"
+Include "Modules\Actors.bb"
+Include "Modules\Environment.bb"
+Include "Modules\Interface.bb"
+// ClientAreas.bb deliberately omitted -- depends on GetFilename$ which
+// lives inside GUE.bb. We don't need 3D zone meshes for the alpha; the
+// composer renders zone metadata as text + portal chips.
+Include "Modules\ServerAreas.bb"
+Include "Modules\Packets.bb"
 Include "Modules\Logging.bb"
+
+// Loom UI layer.
 Include "Modules\Loom\Theme.bb"
+Include "Modules\Loom\Threads.bb"
+Include "Modules\Loom\Browser.bb"
+Include "Modules\Loom\Composer.bb"
 
 
 // -----------------------------------------------------------------------------
@@ -74,8 +91,7 @@ AppTitle("Loom -- World Editor (Alpha) -- Realm Crafter " + rcceVersion$)
 
 
 // -----------------------------------------------------------------------------
-// Log -- written to Data\Logs\Loom Log.txt (relative to project root, the
-// same place GUE writes its log).
+// Log -- Data\Logs\Loom Log.txt (relative to project root, next to GUE's log).
 // -----------------------------------------------------------------------------
 Global LoomLog = StartLog("Loom Log", False)
 WriteLog(LoomLog, "** Loom startup begins **", True, True)
@@ -83,29 +99,105 @@ WriteLog(LoomLog, "Resolution: " + Str(Loom_width) + "x" + Str(Loom_height))
 
 
 // -----------------------------------------------------------------------------
-// Resolve project name from the working directory. When PM launches us, CWD
-// has been set to <project>/Data/ and then ChangeDir "..\" walked us up to
-// <project>/. The leaf folder name is the project's display name.
+// Resolve project name from the working directory leaf.
 // -----------------------------------------------------------------------------
 Local cwd$ = CurrentDir$()
-Local projectName$ = LoomGetLeafDir(cwd$)
+Global LoomProjectName$ = LoomGetLeafDir(cwd$)
 WriteLog(LoomLog, "Project root: " + cwd$)
-WriteLog(LoomLog, "Project name: " + projectName$)
+WriteLog(LoomLog, "Project name: " + LoomProjectName$)
 
 LoomTheme_Init()
 
 
 // -----------------------------------------------------------------------------
-// Splash screen loop. Runs until Esc.
-// PR #2 replaces this with the atlas as the boot surface.
+// Load project data. Same order GUE uses, same loaders, same in-memory
+// representation. Failures RuntimeError with a Win32 dialog -- mirrors
+// GUE.bb's behavior; a half-loaded project would just confuse the user
+// later.
 // -----------------------------------------------------------------------------
-WriteLog(LoomLog, "** Splash loop running **")
+WriteLog(LoomLog, "** Loading project data **")
+Loom_DrawLoadingScreen("Loading project data...")
+
+Loom_LoadStep("damage types", LoadDamageTypes("Data\Server Data\Damage.dat"), False)
+Loom_LoadStep("attributes",   LoadAttributes("Data\Server Data\Attributes.dat"), False)
+Loom_LoadStep("factions",     LoadFactions("Data\Server Data\Factions.dat"), True)
+Loom_LoadStep("animations",   LoadAnimSets("Data\Game Data\Animations.dat"), True)
+
+Global TotalProjectiles = LoadProjectiles("Data\Server Data\Projectiles.dat")
+If TotalProjectiles = -1 Then RuntimeError("Loom could not open Data\Server Data\Projectiles.dat")
+WriteLog(LoomLog, "Loaded " + Str(TotalProjectiles) + " projectiles")
+
+Global TotalItems = LoadItems("Data\Server Data\Items.dat")
+If TotalItems = -1 Then RuntimeError("Loom could not open Data\Server Data\Items.dat")
+WriteLog(LoomLog, "Loaded " + Str(TotalItems) + " items")
+
+Global TotalActors = LoadActors("Data\Server Data\Actors.dat")
+If TotalActors = -1 Then RuntimeError("Loom could not open Data\Server Data\Actors.dat")
+WriteLog(LoomLog, "Loaded " + Str(TotalActors) + " actors")
+
+Global TotalSpells = LoadSpells("Data\Server Data\Spells.dat")
+If TotalSpells = -1 Then RuntimeError("Loom could not open Data\Server Data\Spells.dat")
+WriteLog(LoomLog, "Loaded " + Str(TotalSpells) + " spells")
+
+Global TotalZones = 0
+Local zoneDir = ReadDir("Data\Server Data\Areas")
+Local zoneFile$ = NextFile$(zoneDir)
+While zoneFile$ <> ""
+    If FileType("Data\Server Data\Areas\" + zoneFile$) = 1 And Len(zoneFile$) > 4
+        ServerLoadArea(Left$(zoneFile$, Len(zoneFile$) - 4))
+        TotalZones = TotalZones + 1
+    EndIf
+    zoneFile$ = NextFile$(zoneDir)
+Wend
+CloseDir(zoneDir)
+WriteLog(LoomLog, "Loaded " + Str(TotalZones) + " zones")
+
+WriteLog(LoomLog, "** Data load complete **")
+
+
+// -----------------------------------------------------------------------------
+// Initialize Loom UI state.
+// -----------------------------------------------------------------------------
+Threads_Init()
+Browser_Init()
+
+
+// -----------------------------------------------------------------------------
+// Main loop. Single surface that paints the browser, then layers the
+// composer on top when something's focused. Click flows:
+//
+//   browser card click   -> Threads_Focus (no back-stack push)
+//   composer chip click  -> Threads_Jump  (back-stack push)
+//
+// Esc consumes one of:
+//   1. Threads_Back if back stack non-empty
+//   2. Close composer if focus exists but stack empty
+//   3. Exit Loom otherwise
+// -----------------------------------------------------------------------------
+WriteLog(LoomLog, "** Main loop running **")
 
 Repeat
     Cls
-    LoomRenderSplash(Loom_width, Loom_height, projectName$)
+
+    Browser_RenderAndUpdate(Loom_width, Loom_height, LoomProjectName$)
+    Composer_RenderAndUpdate(Loom_width, Loom_height)
+
+    If KeyHit(1)   // Esc
+        If Threads_Back() = False
+            If Loom_FocusKind$ <> ""
+                // Close composer back to plain browser.
+                Threads_Focus("", 0)
+                Threads_ClearStack()
+                WriteLog(LoomLog, "Esc: closed composer")
+            Else
+                // Nothing left to close -- exit Loom.
+                Exit
+            EndIf
+        EndIf
+    EndIf
+
     Flip
-Until KeyHit(1)
+Until False
 
 WriteLog(LoomLog, "** Loom shutdown **")
 CloseAllLogs()
@@ -113,59 +205,47 @@ End
 
 
 // =============================================================================
-// LoomRenderSplash -- paint the alpha splash surface.
-//
-// Layout:
-//   - Full-screen vertical gradient stone_900 -> stone_950
-//   - Centered "LOOM" title in parchment
-//   - "WORLD EDITOR" subtitle in brass, spaced
-//   - Brass divider rule
-//   - Project context line
-//   - Footer instruction
+// Loom_LoadStep -- route the inconsistent loader return-value conventions
+// (some return -1 on failure, some return False) through a single check.
 // =============================================================================
-Function LoomRenderSplash(sw, sh, projectName$)
-    // Background gradient (BlitzForge does not support line continuation,
-    // so these calls are intentionally long single lines.)
-    LoomGradientV(0, 0, sw, sh, LOOM_STONE_900_R, LOOM_STONE_900_G, LOOM_STONE_900_B, LOOM_STONE_950_R, LOOM_STONE_950_G, LOOM_STONE_950_B)
+Function Loom_LoadStep(stepName$, result, isMinusOneFailure)
+    Local failed = False
+    If isMinusOneFailure = True
+        If result = -1 Then failed = True
+    Else
+        If result = False Then failed = True
+    EndIf
 
-    Local cx = sw / 2
-    Local cy = sh / 2
+    If failed = True
+        WriteLog(LoomLog, "LOAD FAILED: " + stepName$)
+        RuntimeError("Loom could not load " + stepName$ + ". Make sure the project's Data folder is intact and try again.")
+    EndIf
 
-    // Title -- "LOOM" centered, drawn twice with a 1px offset to fake bolder
-    // weight on top of the Blitz default font. Real display fonts arrive in
-    // a later PR.
-    LoomTextCentered(cx, cy - 90, "LOOM", LOOM_PARCHMENT_100_R, LOOM_PARCHMENT_100_G, LOOM_PARCHMENT_100_B)
-    LoomTextCentered(cx + 1, cy - 90, "LOOM", LOOM_PARCHMENT_100_R, LOOM_PARCHMENT_100_G, LOOM_PARCHMENT_100_B)
-
-    // Subtitle
-    LoomTextCentered(cx, cy - 64, "W O R L D   E D I T O R", LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
-
-    // Brass divider (triple rule for an ornamented bar)
-    LoomHRule(cx - 180, cy - 40, 360, LOOM_BRASS_700_R, LOOM_BRASS_700_G, LOOM_BRASS_700_B)
-    LoomHRule(cx - 180, cy - 39, 360, LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
-    LoomHRule(cx - 180, cy - 38, 360, LOOM_BRASS_700_R, LOOM_BRASS_700_G, LOOM_BRASS_700_B)
-
-    // Project context
-    LoomTextCentered(cx, cy - 16, "Alpha for " + projectName$, LOOM_STONE_200_R, LOOM_STONE_200_G, LOOM_STONE_200_B)
-    LoomTextCentered(cx, cy + 2, "Realm Crafter Community Edition " + rcceVersion$, LOOM_STONE_300_R, LOOM_STONE_300_G, LOOM_STONE_300_B)
-
-    // Skeleton-stage notice (will be removed in PR #2 when the atlas becomes
-    // the boot surface).
-    LoomTextCentered(cx, cy + 60, "skeleton build -- atlas, world view, and composer arrive in subsequent PRs", LOOM_STONE_300_R, LOOM_STONE_300_G, LOOM_STONE_300_B)
-
-    // Footer
-    LoomTextCentered(cx, sh - 40, "Esc to exit", LOOM_STONE_300_R, LOOM_STONE_300_G, LOOM_STONE_300_B)
+    WriteLog(LoomLog, "Loaded " + stepName$)
 End Function
 
 
 // =============================================================================
-// LoomGetLeafDir -- return the leaf folder name from a directory path.
-// E.g. "C:\rcce2\projects\Embergloom" -> "Embergloom".
-// Falls back to the whole path if no separator is found.
+// Loom_DrawLoadingScreen -- single-frame loading message while the data
+// loaders run. The loads are fast enough on modern disks that an animated
+// progress would just flicker.
+// =============================================================================
+Function Loom_DrawLoadingScreen(msg$)
+    Cls
+    LoomGradientV(0, 0, GraphicsWidth(), GraphicsHeight(), LOOM_STONE_900_R, LOOM_STONE_900_G, LOOM_STONE_900_B, LOOM_STONE_950_R, LOOM_STONE_950_G, LOOM_STONE_950_B)
+    Local cx = GraphicsWidth() / 2
+    Local cy = GraphicsHeight() / 2
+    LoomTextCentered(cx, cy - 10, "LOOM", LOOM_PARCHMENT_100_R, LOOM_PARCHMENT_100_G, LOOM_PARCHMENT_100_B)
+    LoomTextCentered(cx, cy + 10, msg$, LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
+    Flip
+End Function
+
+
+// =============================================================================
+// LoomGetLeafDir -- leaf folder name from a directory path.
 // =============================================================================
 Function LoomGetLeafDir$(path$)
     Local trimmed$ = path$
-    // Strip trailing slashes / backslashes so the leaf isn't an empty string.
     While Len(trimmed$) > 1 And (Right$(trimmed$, 1) = "\" Or Right$(trimmed$, 1) = "/")
         trimmed$ = Left$(trimmed$, Len(trimmed$) - 1)
     Wend
