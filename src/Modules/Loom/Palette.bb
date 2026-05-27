@@ -76,34 +76,97 @@ End Type
 // =============================================================================
 Type Palette
     Field threads.Threads
+    Field composer.Composer       // set via setComposer, used in picker mode
+                                  // to dispatch writeField on selection
 
     Field open%
     Field query$
     Field highlightIdx%
     Field resultCount%      // total candidates with score > 0
 
+    // Picker mode -- when True, the palette is acting as a reference-field
+    // picker rather than a navigator. Only results matching pickerKind are
+    // shown (filtered in rebuildResults); on selection, we WRITE the
+    // chosen entity's refID into Composer::writeField at the target
+    // coordinates instead of calling Threads::jump.
+    //
+    // pickerTargetValueStrFn is implicit: for typed-ID refs (faction,
+    // animset) we write Str(refID). For zone-portal-by-name we write the
+    // entity's name string. The kind discriminator handles this in
+    // commitPicker below.
+    Field pickerMode%
+    Field pickerKind$              // kind to filter results by
+    Field pickerTargetKind$        // entity kind that owns the field
+    Field pickerTargetRefID%       // entity ID
+    Field pickerTargetFieldId$     // field name within the entity
+
 
     Method create.Palette(threads.Threads)
         self\threads = threads
+        self\composer = Null
         self\open = False
         self\query = ""
         self\highlightIdx = 0
         self\resultCount = 0
+        self\pickerMode = False
+        self\pickerKind = ""
+        self\pickerTargetKind = ""
+        self\pickerTargetRefID = 0
+        self\pickerTargetFieldId = ""
         Return self
     End Method
 
 
     // -------------------------------------------------------------------------
-    // openModal -- show the palette, clear any prior query. Called when the
+    // setComposer -- injection point from Loom.bb so the picker mode can
+    // dispatch writeField. Called once at construction.
+    // -------------------------------------------------------------------------
+    Method setComposer(composer.Composer)
+        self\composer = composer
+    End Method
+
+
+    // -------------------------------------------------------------------------
+    // openModal -- show the palette in navigator mode. Called when the
     // outer Loom frame detects Ctrl+K.
     // -------------------------------------------------------------------------
     Method openModal()
         self\open = True
         self\query = ""
         self\highlightIdx = 0
+        self\pickerMode = False
+        self\pickerKind = ""
+        self\pickerTargetKind = ""
+        self\pickerTargetRefID = 0
+        self\pickerTargetFieldId = ""
         Palette::clearResults(self)
         FlushKeys
-        WriteLog(LoomLog, "Palette: open")
+        WriteLog(LoomLog, "Palette: open (navigator)")
+    End Method
+
+
+    // -------------------------------------------------------------------------
+    // openAsPicker -- show the palette in picker mode. Only entities of
+    // `pickerKind` will be candidates; on selection, the chosen entity's
+    // refID is written into (targetKind, targetRefID, targetFieldId) via
+    // Composer::writeField + markDirtyForKind.
+    //
+    // Called by Composer::chipRow on a right-click of a thread chip. The
+    // pickerKind matches the chip's kind so the user can only pick a
+    // valid replacement (no cross-kind shenanigans).
+    // -------------------------------------------------------------------------
+    Method openAsPicker(pickerKind$, targetKind$, targetRefID%, targetFieldId$)
+        self\open = True
+        self\query = ""
+        self\highlightIdx = 0
+        self\pickerMode = True
+        self\pickerKind = pickerKind
+        self\pickerTargetKind = targetKind
+        self\pickerTargetRefID = targetRefID
+        self\pickerTargetFieldId = targetFieldId
+        Palette::clearResults(self)
+        FlushKeys
+        WriteLog(LoomLog, "Palette: open (picker " + pickerKind + " -> " + targetKind + "#" + Str(targetRefID) + "." + targetFieldId + ")")
     End Method
 
 
@@ -114,6 +177,11 @@ Type Palette
         self\open = False
         self\query = ""
         self\highlightIdx = 0
+        self\pickerMode = False
+        self\pickerKind = ""
+        self\pickerTargetKind = ""
+        self\pickerTargetRefID = 0
+        self\pickerTargetFieldId = ""
         Palette::clearResults(self)
         WriteLog(LoomLog, "Palette: close")
     End Method
@@ -246,7 +314,11 @@ Type Palette
 
         If self\resultCount = 0
             If Len(self\query) = 0
-                LoomText(rx, startY, "Type to search actors, items, spells, zones, factions, animation sets.", LOOM_STONE_300_R, LOOM_STONE_300_G, LOOM_STONE_300_B)
+                If self\pickerMode = True
+                    LoomText(rx, startY, "Picking a " + self\pickerKind + ". Type to filter.", LOOM_STONE_300_R, LOOM_STONE_300_G, LOOM_STONE_300_B)
+                Else
+                    LoomText(rx, startY, "Type to search actors, items, spells, zones, factions, animation sets.", LOOM_STONE_300_R, LOOM_STONE_300_G, LOOM_STONE_300_B)
+                EndIf
             Else
                 LoomText(rx, startY, "No matches.", LOOM_STONE_300_R, LOOM_STONE_300_G, LOOM_STONE_300_B)
             EndIf
@@ -366,65 +438,100 @@ Type Palette
         Palette::clearResults(self)
 
         Local q$ = Lower$(Trim$(self\query))
-        If q = "" Then Return
 
-        // Actors -- "Race [Class]" composite name
-        For Ac.Actor = Each Actor
-            Local aName$ = Ac\Race$ + " [" + Ac\Class$ + "]"
-            Local aScore% = Palette::scoreName(self, q, aName)
-            If aScore > 0
-                Palette::addResult(self, "actor", Ac\ID, aName, "actor", aScore)
-            EndIf
-        Next
+        // Navigator mode: empty query = no results (avoids dumping the
+        // whole project unprompted). Picker mode: empty query = show
+        // every candidate of the picker kind unranked (score 1) so the
+        // user can scan a small fixed roster without typing -- common
+        // case for "what factions exist?".
+        Local showAllBaseline% = False
+        If self\pickerMode = True And q = "" Then showAllBaseline = True
+        If self\pickerMode = False And q = "" Then Return
 
-        // Items
-        For It.Item = Each Item
-            Local iScore% = Palette::scoreName(self, q, It\Name$)
-            If iScore > 0
-                Palette::addResult(self, "item", It\ID, It\Name$, "item", iScore)
-            EndIf
-        Next
+        // Helper-less per-kind gates: in picker mode, skip kinds that
+        // don't match pickerKind. In navigator mode, all kinds emit.
+        Local emitActor% = (self\pickerMode = False Or self\pickerKind = "actor")
+        Local emitItem% = (self\pickerMode = False Or self\pickerKind = "item")
+        Local emitSpell% = (self\pickerMode = False Or self\pickerKind = "spell")
+        Local emitZone% = (self\pickerMode = False Or self\pickerKind = "zone")
+        Local emitFaction% = (self\pickerMode = False Or self\pickerKind = "faction")
+        Local emitAnimSet% = (self\pickerMode = False Or self\pickerKind = "animset")
 
-        // Spells
-        For Sp.Spell = Each Spell
-            Local sScore% = Palette::scoreName(self, q, Sp\Name$)
-            If sScore > 0
-                Palette::addResult(self, "spell", Sp\ID, Sp\Name$, "spell", sScore)
-            EndIf
-        Next
-
-        // Zones
-        For Ar.Area = Each Area
-            Local zScore% = Palette::scoreName(self, q, Ar\Name$)
-            If zScore > 0
-                Palette::addResult(self, "zone", Handle(Ar), Ar\Name$, "zone", zScore)
-            EndIf
-        Next
-
-        // Factions
-        Local fi% = 0
-        For fi = 0 To 99
-            If FactionNames$(fi) <> ""
-                Local fScore% = Palette::scoreName(self, q, FactionNames$(fi))
-                If fScore > 0
-                    Palette::addResult(self, "faction", fi, FactionNames$(fi), "faction", fScore)
+        If emitActor = True
+            For Ac.Actor = Each Actor
+                Local aName$ = Ac\Race$ + " [" + Ac\Class$ + "]"
+                Local aScore% = Palette::scoreOrBaseline(self, q, aName, showAllBaseline)
+                If aScore > 0
+                    Palette::addResult(self, "actor", Ac\ID, aName, "actor", aScore)
                 EndIf
-            EndIf
-        Next
+            Next
+        EndIf
 
-        // Anim sets
-        For As.AnimSet = Each AnimSet
-            Local mScore% = Palette::scoreName(self, q, As\Name$)
-            If mScore > 0
-                Palette::addResult(self, "animset", As\ID, As\Name$, "anim set", mScore)
-            EndIf
-        Next
+        If emitItem = True
+            For It.Item = Each Item
+                Local iScore% = Palette::scoreOrBaseline(self, q, It\Name$, showAllBaseline)
+                If iScore > 0
+                    Palette::addResult(self, "item", It\ID, It\Name$, "item", iScore)
+                EndIf
+            Next
+        EndIf
+
+        If emitSpell = True
+            For Sp.Spell = Each Spell
+                Local sScore% = Palette::scoreOrBaseline(self, q, Sp\Name$, showAllBaseline)
+                If sScore > 0
+                    Palette::addResult(self, "spell", Sp\ID, Sp\Name$, "spell", sScore)
+                EndIf
+            Next
+        EndIf
+
+        If emitZone = True
+            For Ar.Area = Each Area
+                Local zScore% = Palette::scoreOrBaseline(self, q, Ar\Name$, showAllBaseline)
+                If zScore > 0
+                    Palette::addResult(self, "zone", Handle(Ar), Ar\Name$, "zone", zScore)
+                EndIf
+            Next
+        EndIf
+
+        If emitFaction = True
+            Local fi% = 0
+            For fi = 0 To 99
+                If FactionNames$(fi) <> ""
+                    Local fScore% = Palette::scoreOrBaseline(self, q, FactionNames$(fi), showAllBaseline)
+                    If fScore > 0
+                        Palette::addResult(self, "faction", fi, FactionNames$(fi), "faction", fScore)
+                    EndIf
+                EndIf
+            Next
+        EndIf
+
+        If emitAnimSet = True
+            For As.AnimSet = Each AnimSet
+                Local mScore% = Palette::scoreOrBaseline(self, q, As\Name$, showAllBaseline)
+                If mScore > 0
+                    Palette::addResult(self, "animset", As\ID, As\Name$, "anim set", mScore)
+                EndIf
+            Next
+        EndIf
 
         // Clamp highlight to the (possibly smaller) result count.
         Local cap% = self\resultCount
         If cap > PAL_MAX_RESULTS Then cap = PAL_MAX_RESULTS
         If self\highlightIdx >= cap Then self\highlightIdx = cap - 1
         If self\highlightIdx < 0 Then self\highlightIdx = 0
+    End Method
+
+
+    // -------------------------------------------------------------------------
+    // scoreOrBaseline -- scoreName with a fallback: when showAllBaseline is
+    // True (picker-mode empty-query), every name gets a score of 1 so it
+    // shows up in the unranked list. Used to populate the picker with the
+    // full roster when the user hasn't typed anything yet.
+    // -------------------------------------------------------------------------
+    Method scoreOrBaseline%(q$, name$, showAllBaseline%)
+        If showAllBaseline = True Then Return 1
+        Return Palette::scoreName(self, q, name)
     End Method
 
 
@@ -504,13 +611,50 @@ Type Palette
 
     // -------------------------------------------------------------------------
     // jumpToResult -- shared dispatch for click + Enter. Closes the modal
-    // before jumping so the focus change isn't shadowed by the dim overlay
-    // on the same frame.
+    // first so the focus change isn't shadowed by the dim overlay on the
+    // same frame.
+    //
+    // In navigator mode: Threads::jump pushes prev focus to the back stack
+    // and sets the new focus.
+    // In picker mode: Composer::writeField writes the chosen entity's
+    // refID into the target field; mark dirty so Save appears. The
+    // current focus is preserved (the user is still on the entity whose
+    // field they were picking for).
     // -------------------------------------------------------------------------
     Method jumpToResult(r.PaletteResult)
         Local k$ = r\Kind
         Local id% = r\RefID
         Local nm$ = r\DisplayName
+
+        If self\pickerMode = True
+            // Capture picker target before closeModal clears it.
+            Local tKind$ = self\pickerTargetKind
+            Local tID% = self\pickerTargetRefID
+            Local tField$ = self\pickerTargetFieldId
+
+            Palette::closeModal(self)
+
+            If self\composer = Null
+                WriteLog(LoomLog, "Palette: picker selected but Composer not wired -- noop")
+                Return
+            EndIf
+
+            // Encode the chosen value for the target field. For zone
+            // portals (string-by-name) we'd write the entity name; all
+            // other ref fields take the integer ID as string.
+            Local val$
+            If k = "zone"
+                val = nm        // for any future zone-by-name field
+            Else
+                val = Str(id)
+            EndIf
+
+            Composer::writeField(self\composer, tKind, tID, tField, val)
+            Composer::markDirtyForKind(self\composer, tKind)
+            WriteLog(LoomLog, "Palette: picked " + k + "#" + Str(id) + " (" + nm + ") -> " + tKind + "#" + Str(tID) + "." + tField)
+            Return
+        EndIf
+
         Palette::closeModal(self)
         Threads::jump(self\threads, k, id)
         WriteLog(LoomLog, "Palette: jumped to " + k + "#" + Str(id) + " (" + nm + ")")

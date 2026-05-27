@@ -145,6 +145,14 @@ Type Loom
         self\composer = New Composer(self\threads)
         self\palette = New Palette(self\threads)
 
+        // Cross-link Palette <-> Composer for ref-field picker mode. The
+        // Composer's chipRow opens the palette as a picker on right-click;
+        // the Palette's commit path writes via Composer::writeField. The
+        // cycle is fine because both refs are set after both instances
+        // exist (no constructor-time call).
+        Composer::setPalette(self\composer, self\palette)
+        Palette::setComposer(self\palette, self\composer)
+
         // Ribbon holds Threads (for future broken-ref-finder jumps) +
         // Composer (so a dirty-badge click can dispatch to the same
         // commitSaveForKind path the composer's Save button uses).
