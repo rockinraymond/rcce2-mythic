@@ -4,7 +4,7 @@ EnableGC
 ; Regression tests pinning the BVM privilege-gate contract for the
 ; "equivalent-effect bypass" cluster in ScriptingCommands.bb.
 ;
-; Thirteen BVM functions had effects identical to already-gated peers
+; Fourteen BVM functions had effects identical to already-gated peers
 ; but lacked the gate themselves, defeating the privilege model:
 ;
 ;   Newly-gated function    Bypass of           Gate chosen
@@ -21,6 +21,7 @@ EnableGC
 ;   BVM_SETLEADER           (pet recruitment)   RequirePrivileged
 ;   BVM_SETABILITYLEVEL     BVM_SETATTRIBUTE    RequirePrivileged
 ;   BVM_SETITEMHEALTH       (item brick)        RequirePrivileged
+;   BVM_SETRESISTANCE       BVM_SETFACTIONRATING RequirePrivileged
 ;   BVM_REMOVEZONEINSTANCE  (admin-only)        RequirePrivileged
 ;
 ; ScriptingCommands.bb can't be Included directly into a test build --
@@ -90,6 +91,7 @@ Global MutationSetReputation = 0
 Global MutationSetLeader = 0
 Global MutationSetAbilityLevel = 0
 Global MutationSetItemHealth = 0
+Global MutationSetResistance = 0
 Global MutationRemoveZone = 0
 
 Function MockBVM_CHANGEGOLD(Param1%, Param2%)
@@ -152,6 +154,11 @@ Function MockBVM_SETITEMHEALTH(Param1%, Param2%)
 	MutationSetItemHealth = MutationSetItemHealth + Param2%
 End Function
 
+Function MockBVM_SETRESISTANCE(Param1%, Param2$, Param3%)
+	If Not BVM_RequirePrivileged() Then Return
+	MutationSetResistance = MutationSetResistance + Param3%
+End Function
+
 Function MockBVM_REMOVEZONEINSTANCE(Param1$, Instance%)
 	If Not BVM_RequirePrivileged() Then Return
 	MutationRemoveZone = MutationRemoveZone + 1
@@ -171,6 +178,7 @@ Function ResetMutationCounters()
 	MutationSetLeader = 0
 	MutationSetAbilityLevel = 0
 	MutationSetItemHealth = 0
+	MutationSetResistance = 0
 	MutationRemoveZone = 0
 	LastScriptLog$ = ""
 End Function
@@ -547,6 +555,32 @@ Test testSetItemHealthGatePassesForPrivileged()
 	ResetMutationCounters()
 	MockBVM_SETITEMHEALTH(12345, 100)
 	Assert(MutationSetItemHealth = 100)
+End Test
+
+; SetResistance -- damage-type resistance; consumed by the combat
+; damage formula the same way FactionRatings[] is. Brick path is
+; symmetric to SETFACTIONRATING (already gated): negative value =
+; catastrophic damage taken; >100 value = invulnerable in PvE.
+Test testSetResistanceGateBlocksArbitraryTarget()
+	InstallScript(0, 100, 0)
+	ResetMutationCounters()
+	MockBVM_SETRESISTANCE(999, "Fire", -100)
+	Assert(MutationSetResistance = 0)
+End Test
+
+Test testSetResistanceGateBlocksBrickingOwnAITarget()
+	; Clicker-shape: SI\AI = clicker (777), Param1 = clicker.
+	InstallScript(0, 777, 200)
+	ResetMutationCounters()
+	MockBVM_SETRESISTANCE(777, "Fire", -100)
+	Assert(MutationSetResistance = 0)
+End Test
+
+Test testSetResistanceGatePassesForPrivileged()
+	InstallScript(1, 0, 0)
+	ResetMutationCounters()
+	MockBVM_SETRESISTANCE(999, "Fire", 50)
+	Assert(MutationSetResistance = 50)
 End Test
 
 Test testRemoveZoneInstanceGateBlocksNonPrivileged()

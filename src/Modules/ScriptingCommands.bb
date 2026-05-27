@@ -2221,6 +2221,15 @@ Return Result%
 End Function
 
 Function BVM_SETRESISTANCE(Param1%, Param2$, Param3%)
+	; Resistances[] is consumed by the combat damage formula in
+	; GameServer.bb -- the same role FactionRatings[] plays for
+	; engagement. A non-priv clicker script calling
+	; SetResistance(clicker, "Fire", -100) makes the player take
+	; catastrophic damage from every fire source; (clicker, "Fire",
+	; 100) makes them invulnerable in PvE. Same brick-vector class
+	; as SETFACTIONRATING (already gated) and the four sibling
+	; gates in this PR. Full-priv for the same clicker-handle reason.
+	If Not BVM_RequirePrivileged() Then Return
 	Actor.ActorInstance = Object.ActorInstance(Param1%)
 	If Actor <> Null
 		Attribute = FindDamageType(Param2$)
