@@ -67,17 +67,17 @@ Record shapes (per asset type):
 
 `MediaReadFilename$` is duplicated locally rather than imported from [`Logging.bb`](logging.md)'s `ReadBoundedString$` so the editor Tools can include this file without pulling in the full logging substrate ([`Media.bb:18-22`](../../src/Modules/Media.bb#L18) audit comment).
 
-### Three security defenses applied at every load
+### Three security defenses (applied where each is load-bearing)
 
-`GetMesh`, `GetTexture`, `GetSound`, `GetMeshName$`, `GetTextureName$`, `GetSoundName$`, `GetMusicName$`, `GetMeshNameClean$`, `SetMeshScale`, `SetMeshOffset`, `SetMeshShader`, and the three `UnloadX` functions all apply this layered defense:
+Defenses are layered but not uniformly applied — each is applied only where the relevant attack surface exists:
 
-1. **ID-range gate** — `If ID < 0 Or ID > 65534 Then Return 0/""/False`. Catches sentinel IDs (`-1` is used in some Actors paths to mean "no asset") and out-of-range values. Without the gate, `SeekFile F, ID * 4` would seek to a negative or far-past-EOF offset, with Blitz3D-undefined behavior.
+1. **ID-range gate** — `If ID < 0 Or ID > 65534 Then Return 0/""/False`. Catches sentinel IDs (`-1` is used in some Actors paths to mean "no asset") and out-of-range values. Without the gate, `SeekFile F, ID * 4` would seek to a negative or far-past-EOF offset, with Blitz3D-undefined behavior. **Applied in every function that takes an `ID` argument:** `GetMesh`, `GetTexture`, `GetSound`, `GetMeshName$`, `GetTextureName$`, `GetSoundName$`, `GetMusicName$`, `GetMeshNameClean$`, `SetMeshScale`, `SetMeshOffset`, `SetMeshShader`, `UnloadMesh`, `UnloadTexture`, `UnloadSound`.
 
-2. **Bounded filename read** — `MediaReadFilename$(F, 260)`. 260 is a generous Windows-MAX_PATH ceiling. A corrupted or tampered `Meshes.dat` could otherwise carry a wild `Int` length prefix and hang the client allocating gigabytes for one filename. See the audit-comment block at [`Media.bb:812-823`](../../src/Modules/Media.bb#L812).
+2. **Bounded filename read** — `MediaReadFilename$(F, 260)`. 260 is a generous Windows-MAX_PATH ceiling. A corrupted or tampered `Meshes.dat` could otherwise carry a wild `Int` length prefix and hang the client allocating gigabytes for one filename. See the audit-comment block at [`Media.bb:812-823`](../../src/Modules/Media.bb#L812). **Applied in every function that reads a name from the `.dat` index:** `GetMesh`, `GetTexture`, `GetSound`, `GetMeshName$`, `GetTextureName$`, `GetSoundName$`, `GetMusicName$`, `GetMeshNameClean$`, plus the dup-check scans in `AddXToDatabase` and the rebuild-stream walks in `RemoveXFromDatabase`. Not relevant for `Set*` or `Unload*` (no name read).
 
-3. **Path-traversal rejection** — `If Instr(Name$, "..") > 0 Then Return 0`. The update channel can rewrite `.dat` files in place; a hostile update payload could plant `..\..\<x>` in a stored filename and force `LoadMesh` / `LoadTexture` / `LoadSound` against an arbitrary file path. The traversal check rejects before `LoadX` is called.
+3. **Path-traversal rejection** — `If Instr(Name$, "..") > 0 Then Return 0`. The update channel can rewrite `.dat` files in place; a hostile update payload could plant `..\..\<x>` in a stored filename and force `LoadMesh` / `LoadTexture` / `LoadSound` against an arbitrary file path. The traversal check rejects before `LoadX` is called. **Applied only in `GetMesh` ([Media.bb:832](../../src/Modules/Media.bb#L832)), `GetTexture` ([Media.bb:910](../../src/Modules/Media.bb#L910)), and `GetSound` ([Media.bb:954](../../src/Modules/Media.bb#L954))** — the three functions that concatenate the stored name into a `LoadX("Data\<dir>\" + Name$)` filesystem call. The `*Name$` accessors and `*NameClean$` return the name to the caller; if a downstream caller of `GetMeshName$` builds its own `LoadMesh` path, the caller must `Instr` itself (none currently do — `GetMeshName$` is consumed only by `MediaDialogs.bb` for UI display, and the `..` substring would just appear in the picker).
 
-The three defenses are layered — even if a future bug bypasses the bound check, the bounded read still caps allocation; even if both bypass, the path-traversal check still blocks the read. New asset Types (e.g. shaders, fonts) added to this module should follow all three patterns.
+The three defenses are layered where they overlap (the load functions) — even if a future bug bypasses the bound check, the bounded read still caps allocation; even if both bypass, the path-traversal check still blocks the read. New asset Types (e.g. shaders, fonts) added to this module that build a `LoadX("Data\<dir>\" + Name$)` path must apply all three.
 
 ### `CreateDatabase` — atomic-zero-init via SafeWrite
 
