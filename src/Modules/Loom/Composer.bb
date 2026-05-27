@@ -88,6 +88,11 @@ Type Composer
     Field discardArmKind$
     Field discardArmAt%
 
+    // Palette reference -- set by setPalette from Loom.bb at construction.
+    // Used by chipRow to dispatch picker-mode opens on right-click of a
+    // thread chip.
+    Field palette.Palette
+
 
     Method create.Composer(threads.Threads)
         self\threads = threads
@@ -101,7 +106,17 @@ Type Composer
         self\deleteArmAt = 0
         self\discardArmKind = ""
         self\discardArmAt = 0
+        self\palette = Null
         Return self
+    End Method
+
+
+    // -------------------------------------------------------------------------
+    // setPalette -- injection point from Loom.bb so chipRow can dispatch
+    // picker-mode opens. Called once at construction.
+    // -------------------------------------------------------------------------
+    Method setPalette(palette.Palette)
+        self\palette = palette
     End Method
 
 
@@ -154,6 +169,11 @@ Type Composer
         Local mx% = MouseX()
         Local my% = MouseY()
         Local clicked% = MouseHit(1)
+        // Right-click captured once per frame; thread chips read it via
+        // chipRow -> renderChip to dispatch picker-mode opens. Capture
+        // here (not in chipRow) so MouseHit(2)'s consume-once semantics
+        // don't make only the first chip see the press.
+        Local rightClicked% = MouseHit(2)
 
         Local x% = sw - CMP_W
         Local y% = CMP_TOP
@@ -202,17 +222,17 @@ Type Composer
         self\chipHit = False
 
         If kind = "actor"
-            Composer::renderActor(self, x, bodyY, w, bodyH, mx, my, clicked)
+            Composer::renderActor(self, x, bodyY, w, bodyH, mx, my, clicked, rightClicked)
         Else If kind = "item"
             Composer::renderItem(self, x, bodyY, w, bodyH, mx, my, clicked)
         Else If kind = "spell"
             Composer::renderSpell(self, x, bodyY, w, bodyH, mx, my, clicked)
         Else If kind = "zone"
-            Composer::renderZone(self, x, bodyY, w, bodyH, mx, my, clicked)
+            Composer::renderZone(self, x, bodyY, w, bodyH, mx, my, clicked, rightClicked)
         Else If kind = "faction"
-            Composer::renderFaction(self, x, bodyY, w, bodyH, mx, my, clicked)
+            Composer::renderFaction(self, x, bodyY, w, bodyH, mx, my, clicked, rightClicked)
         Else If kind = "animset"
-            Composer::renderAnimSet(self, x, bodyY, w, bodyH, mx, my, clicked)
+            Composer::renderAnimSet(self, x, bodyY, w, bodyH, mx, my, clicked, rightClicked)
         EndIf
 
         // Footer: back-stack hint (or edit-mode hint when editing). Two
@@ -525,6 +545,12 @@ Type Composer
             If fieldId = "trade_mode"     Then A\TradeMode       = Composer::parseIntClamped(self, value, A\TradeMode,       0, 2) : Return
             If fieldId = "playable"       Then A\Playable    = (value = "1") : Return
             If fieldId = "rideable"       Then A\Rideable    = (value = "1") : Return
+            // Reference fields edited via the palette picker. The picker
+            // writes the chosen entity's refID as a string; clamp to the
+            // valid slot range for the kind.
+            If fieldId = "default_faction" Then A\DefaultFaction = Composer::parseIntClamped(self, value, A\DefaultFaction, 0, 99)   : Return
+            If fieldId = "manim_set"       Then A\MAnimationSet  = Composer::parseIntClamped(self, value, A\MAnimationSet,  0, 999)  : Return
+            If fieldId = "fanim_set"       Then A\FAnimationSet  = Composer::parseIntClamped(self, value, A\FAnimationSet,  0, 999)  : Return
         EndIf
 
         // ---- ZONE -----------------------------------------------------------
@@ -538,6 +564,14 @@ Type Composer
             If fieldId = "weather_link"   Then Ar\WeatherLink$ = value   : Return
             If fieldId = "outdoors"       Then Ar\Outdoors = (value = "1") : Return
             If fieldId = "pvp"            Then Ar\PvP      = (value = "1") : Return
+            // Portal-target reference fields: editFieldId = "portal_<i>".
+            // The picker passes the chosen zone's Name as the value (the
+            // portal stores by name, not handle).
+            If Left$(fieldId, 7) = "portal_"
+                Local portIdx% = Int(Mid$(fieldId, 8))
+                If portIdx >= 0 And portIdx <= 99 Then Ar\PortalLinkArea$[portIdx] = value
+                Return
+            EndIf
         EndIf
 
         // ---- FACTION --------------------------------------------------------
@@ -959,13 +993,22 @@ Type Composer
 
     // label : thread chip row. Returns the next Y. ORs into self\chipHit
     // when the chip is clicked so renderAndUpdate can surface it.
-    Method chipRow%(panelX%, panelW%, rowY%, label$, kind$, refID%, mx%, my%, clicked%)
+    //
+    // editFieldId$: when non-empty + right-click consumed, open the palette
+    // as a picker targeting (self\threads\focusKind, self\threads\focusID,
+    // editFieldId). When empty (back-reference chips, e.g. faction members
+    // or animset users), right-click is ignored -- there's no field on the
+    // current focus to write the chosen entity into.
+    Method chipRow%(panelX%, panelW%, rowY%, label$, kind$, refID%, mx%, my%, clicked%, rightClicked%, editFieldId$)
         LoomText(panelX + CMP_PAD, rowY + 4, label, LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
 
         Local chipX% = panelX + CMP_PAD + 120
         Local chipW% = panelW - CMP_PAD * 2 - 120
-        Local hit% = Threads::renderChip(self\threads, chipX, rowY, chipW, CMP_CHIP_H, kind, refID, mx, my, clicked)
-        If hit Then self\chipHit = True
+        Local code% = Threads::renderChip(self\threads, chipX, rowY, chipW, CMP_CHIP_H, kind, refID, mx, my, clicked, rightClicked)
+        If code = 1 Then self\chipHit = True
+        If code = 2 And editFieldId <> "" And self\palette <> Null
+            Palette::openAsPicker(self\palette, kind, self\threads\focusKind, self\threads\focusID, editFieldId)
+        EndIf
 
         Return rowY + CMP_CHIP_H + 4
     End Method
@@ -995,7 +1038,7 @@ Type Composer
     // returns void; chipHit is latched onto self for renderAndUpdate to see.
     // -------------------------------------------------------------------------
 
-    Method renderActor(panelX%, bodyY%, panelW%, bodyH%, mx%, my%, clicked%)
+    Method renderActor(panelX%, bodyY%, panelW%, bodyH%, mx%, my%, clicked%, rightClicked%)
         Local refID% = self\threads\focusID
         If refID < 0 Or refID > 65535 Then Return
         Local A.Actor = ActorList(refID)
@@ -1019,9 +1062,12 @@ Type Composer
 
         y = Composer::sectionHeader(self, panelX, panelW, y, "Threads")
 
-        y = Composer::chipRow(self, panelX, panelW, y, "Faction",    "faction", A\DefaultFaction, mx, my, clicked)
-        y = Composer::chipRow(self, panelX, panelW, y, "M anim set", "animset", A\MAnimationSet,  mx, my, clicked)
-        y = Composer::chipRow(self, panelX, panelW, y, "F anim set", "animset", A\FAnimationSet,  mx, my, clicked)
+        // Editable ref chips: right-click opens the palette as a picker
+        // filtered to the chip's kind; selection writes the new refID
+        // into the named field via Composer::writeField.
+        y = Composer::chipRow(self, panelX, panelW, y, "Faction",    "faction", A\DefaultFaction, mx, my, clicked, rightClicked, "default_faction")
+        y = Composer::chipRow(self, panelX, panelW, y, "M anim set", "animset", A\MAnimationSet,  mx, my, clicked, rightClicked, "manim_set")
+        y = Composer::chipRow(self, panelX, panelW, y, "F anim set", "animset", A\FAnimationSet,  mx, my, clicked, rightClicked, "fanim_set")
     End Method
 
 
@@ -1092,7 +1138,7 @@ Type Composer
     End Method
 
 
-    Method renderZone(panelX%, bodyY%, panelW%, bodyH%, mx%, my%, clicked%)
+    Method renderZone(panelX%, bodyY%, panelW%, bodyH%, mx%, my%, clicked%, rightClicked%)
         Local Ar.Area = Object.Area(self\threads\focusID)
         If Ar = Null Then Return
         Local h% = Handle(Ar)
@@ -1142,7 +1188,12 @@ Type Composer
                 If Ar\PortalName$[p] <> "" And y < bodyY + bodyH - CMP_CHIP_H - 24
                     Local targetHandle% = Composer::findZoneByName(self, Ar\PortalLinkArea$[p])
                     If targetHandle <> 0
-                        y = Composer::chipRow(self, panelX, panelW, y, Ar\PortalName$[p], "zone", targetHandle, mx, my, clicked)
+                        // Portal-target chips: editable via right-click. fieldId
+                        // encodes the portal index ("portal_<i>") so writeField
+                        // can route to the right slot. Picker writes the
+                        // target zone's NAME (not handle) because the wire
+                        // format stores by string.
+                        y = Composer::chipRow(self, panelX, panelW, y, Ar\PortalName$[p], "zone", targetHandle, mx, my, clicked, rightClicked, "portal_" + Str(p))
                     Else
                         // Unknown target -- render a brass label that names it in danger-red.
                         LoomText(panelX + CMP_PAD, y + 4, Ar\PortalName$[p], LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
@@ -1157,7 +1208,7 @@ Type Composer
     End Method
 
 
-    Method renderFaction(panelX%, bodyY%, panelW%, bodyH%, mx%, my%, clicked%)
+    Method renderFaction(panelX%, bodyY%, panelW%, bodyH%, mx%, my%, clicked%, rightClicked%)
         Local idx% = self\threads\focusID
         If idx < 0 Or idx > 99 Then Return
 
@@ -1172,7 +1223,9 @@ Type Composer
         Local memberCount% = 0
         For Ac.Actor = Each Actor
             If Ac\DefaultFaction = idx And y < bodyY + bodyH - CMP_CHIP_H - 24
-                y = Composer::chipRow(self, panelX, panelW, y, "", "actor", Ac\ID, mx, my, clicked)
+                // Members are a back-reference; no field on the focused
+                // faction to edit via this chip, so editFieldId = "".
+                y = Composer::chipRow(self, panelX, panelW, y, "", "actor", Ac\ID, mx, my, clicked, rightClicked, "")
                 memberCount = memberCount + 1
             EndIf
         Next
@@ -1183,7 +1236,7 @@ Type Composer
     End Method
 
 
-    Method renderAnimSet(panelX%, bodyY%, panelW%, bodyH%, mx%, my%, clicked%)
+    Method renderAnimSet(panelX%, bodyY%, panelW%, bodyH%, mx%, my%, clicked%, rightClicked%)
         Local targetID% = self\threads\focusID
 
         // AnimSet is iterated, not indexed -- walk to find.
@@ -1208,7 +1261,9 @@ Type Composer
         Local userCount% = 0
         For Ac.Actor = Each Actor
             If (Ac\MAnimationSet = targetID Or Ac\FAnimationSet = targetID) And y < bodyY + bodyH - CMP_CHIP_H - 24
-                y = Composer::chipRow(self, panelX, panelW, y, "", "actor", Ac\ID, mx, my, clicked)
+                // Back-reference (actors using this anim set); no field
+                // on the focused animset to edit via this chip.
+                y = Composer::chipRow(self, panelX, panelW, y, "", "actor", Ac\ID, mx, my, clicked, rightClicked, "")
                 userCount = userCount + 1
             EndIf
         Next

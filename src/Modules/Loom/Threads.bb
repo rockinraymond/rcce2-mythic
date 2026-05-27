@@ -196,15 +196,22 @@ Type Threads
 
 
     // -------------------------------------------------------------------------
-    // renderChip -- draw a clickable chip, hit-test the mouse, call jump on
-    // click. Returns True if the chip consumed a click this frame.
+    // renderChip -- draw a clickable chip, hit-test mouse, dispatch on click.
     //
-    // The chip handles the navigation internally so callers can be dumb -- they
-    // just lay out the rect and pass mouse state. The Composer reads the
-    // boolean return only to OR-fold into its own "any chip clicked this
-    // frame?" flag for the back-stack hint.
+    // Return codes:
+    //   0  no interaction this frame
+    //   1  left click consumed -- chip already called Threads::jump
+    //   2  right click consumed -- caller should open a picker for (kind, refID)
+    //
+    // The chip handles the navigation internally so callers can be dumb --
+    // they just lay out the rect and pass mouse state. Right-click never
+    // jumps; it's a signal to the Composer's chipRow to open the palette
+    // in picker mode targeting the field this chip represents.
+    //
+    // Broken refs accept right-click (so the user can pick a replacement
+    // for a dangling chip) but not left-click (no entity to jump to).
     // -------------------------------------------------------------------------
-    Method renderChip%(x%, y%, w%, h%, kind$, refID%, mx%, my%, clicked%)
+    Method renderChip%(x%, y%, w%, h%, kind$, refID%, mx%, my%, clicked%, rightClicked%)
         Local hovered% = (mx >= x And mx < x + w And my >= y And my < y + h)
 
         Local cName$ = Threads::lookupName(self, kind, refID)
@@ -239,17 +246,28 @@ Type Threads
             LoomText(x + CHIP_PAD_X + CHIP_ICON_W, y + 5, cName, LOOM_PARCHMENT_100_R, LOOM_PARCHMENT_100_G, LOOM_PARCHMENT_100_B)
         EndIf
 
-        // Right-side arrow indicating "jump"
-        If broken = False
+        // Right-side affordance -- on hover, show pencil hint for the
+        // right-click-to-edit affordance; otherwise the > arrow for the
+        // left-click-jump affordance.
+        If hovered = True
+            LoomText(x + w - 32, y + 5, "RMB:edit", LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
+        Else If broken = False
             LoomText(x + w - 16, y + 5, ">", LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
         EndIf
 
-        // Click consumed?
+        // Left click jumps (only when not broken).
         If hovered And clicked And broken = False
             Threads::jump(self, kind, refID)
-            Return True
+            Return 1
         EndIf
-        Return False
+
+        // Right click signals picker request (works on broken refs too,
+        // so a dangling chip can be fixed in place).
+        If hovered And rightClicked
+            Return 2
+        EndIf
+
+        Return 0
     End Method
 
 

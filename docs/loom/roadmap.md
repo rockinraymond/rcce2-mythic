@@ -17,17 +17,12 @@ Shipped, next, and deferred. Read this when picking what to build next.
 - **Editing phase 1 (broaden)** — int / float / bool field types; ~40 editable fields across every entity kind (Actor / Item / Spell / Zone / Faction / AnimSet); Save dispatch for every kind (`SaveActors`, `SaveItems`, `SaveFactions`, `SaveAnimSets`, `ServerSaveArea`); `SetFactionName` helper added to `Actors.bb` to work around the Strict-mode global-array-write trap. ([#336](https://github.com/RydeTec/rcce2/pull/336))
 - **Entity creation (+ New)** — `EntityFactory.bb` wraps the GUE constructors (`CreateActor`, `CreateItem`, `CreateSpell`, `ServerCreateArea`, `CreateAnimSet`, faction-slot-first-empty); "+ New X" button on the browser filter bar dispatches per active category, focuses the new entity for immediate editing, marks the kind dirty. Zone names auto-deduplicate via `EntityFactory_UniqueZoneName` so a new zone doesn't overwrite an existing `.dat`. ([#337](https://github.com/RydeTec/rcce2/pull/337))
 - **Entity deletion + Discard + Validation Ribbon** — Delete button on the composer (two-click arm/confirm); Discard button (revert kind from disk, also arm/confirm); Validation Conscience Ribbon at the top of every Loom surface showing per-kind dirty badges (click to save), broken-reference count (Actor->Faction, Actor->AnimSet, Zone->Portal->Zone), and total entity counts. New `Ribbon.bb` module; new `DeleteX Template` helpers in `Actors.bb`/`Items.bb`/`Spells.bb`/`Animations.bb` (non-Strict, to work around the Dim-write trap). ([#338](https://github.com/RydeTec/rcce2/pull/338))
-- **World Atlas** — design's #3 signature surface. Zones tab gains a Card / Atlas toggle. Atlas renders zones as nodes with portals as edges using a Fruchterman-Reingold force-directed layout derived from the portal-link graph topology. Click a node → focus that zone; layout rebuilds on zone add / delete; circular seeding avoids the all-same-position singularity.
+- **World Atlas** — design's #3 signature surface. Zones tab gains a Card / Atlas toggle. Atlas renders zones as nodes with portals as edges using a Fruchterman-Reingold force-directed layout derived from the portal-link graph topology. Click a node → focus that zone; layout rebuilds on zone add / delete; circular seeding avoids the all-same-position singularity. ([#339](https://github.com/RydeTec/rcce2/pull/339))
+- **Reference-field editing (phase 2)** — right-click any thread chip → palette opens as a picker filtered to that chip's kind; choosing writes the new refID into the underlying field (Actor→DefaultFaction, Actor→MAnimationSet, Actor→FAnimationSet, Zone→portal target by name). Works on broken-ref chips too (so dangling references can be repaired in place). Picker mode with empty query lists every candidate of the kind (no need to type to discover the roster).
 
 ## Next up (in rough order of leverage)
 
-### 1. Editing — phase 2: reference-field editing
-
-Once free-form fields edit, reference-typed fields (faction, anim set, zone target) need pickers. The chip becomes click-to-jump-OR-shift-click-to-edit (or some affordance — UX decision). Reuses the palette as the picker.
-
-Estimated scope: 200-300 LOC. Builds on the shipped palette as picker.
-
-### 2. Session timeline scrubber
+### 1. Session timeline scrubber
 
 Visible history of the session's edits (entity X changed field Y from A to B at time T). Click an entry → revert. Drag the handle → preview a past state. Needs an undo log layered on top of the existing in-memory dirty tracking.
 
