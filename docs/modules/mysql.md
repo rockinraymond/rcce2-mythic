@@ -12,15 +12,18 @@ This module is **MySQL-specific**. The companion module [`AccountsServer.bb`](ac
 
 | Symbol | Where | Role |
 |---|---|---|
-| `Global hSQL = 0` | [`src/Server.bb:110`](../../src/Server.bb#L110) | Single connection handle for the entire server. `0` = no connection. |
-| `OpenSQLStream(host, port, user, pass, database, 1)` | [`src/Server.bb:128`](../../src/Server.bb#L128) | Boot-time connect. Stored in `hSQL`. |
-| `SQLQuery / SQLFetchRow / SQLRowCount / FreeSQLQuery / FreeSQLRow / ReadSQLField / ReadSQLField$` | [`src/userlibs/BlitzSQL.decls`](../../src/userlibs/BlitzSQL.decls) | The MySQL userlib primitives. Imperative: every `SQLQuery` returns a result handle that **must** be `FreeSQLQuery`-ed; every `SQLFetchRow` result must be `FreeSQLRow`-ed. |
+| `Const MySQL = False` | [`src/Server.bb:109`](../../src/Server.bb#L109) | Compile-time toggle. **This is the canonical gate** — callers wrap their MySQL paths in `If MySQL = True Then ...` and fall through to the flat-file path in [`AccountsServer.bb`](accountsserver.md) when `False`. The default build is `False`. |
+| `Global MY_Reason` | [`src/Server.bb:111`](../../src/Server.bb#L111) | File-global error-reason slot set by `My_LoadAccount` on every failure path; read by auth handlers in [`ServerNet.bb`](servernet.md) to pick the wire-side error code. |
+| `Global hSQL = 0` | [`src/Server.bb:110`](../../src/Server.bb#L110) | Single SQL stream handle for the entire server when MySQL is enabled. `0` = no stream (set only at declaration; `OpenSQLStream` runtime failure is not currently guarded). |
+| `OpenSQLStream(host, port, user, pass, database, flag)` | [`src/Server.bb:128`](../../src/Server.bb#L128) | Boot-time connect. Stored in `hSQL`. |
+| `SQLQuery / SQLFetchRow / SQLRowCount / FreeSQLQuery / FreeSQLRow / ReadSQLField / ReadSQLField$ / CloseSQLStream / SQLFieldCount` | [`src/userlibs/BlitzSQL.decls`](../../src/userlibs/BlitzSQL.decls) → `BlitzSQL.dll` | The MySQL-query userlib primitives. Imperative: every `SQLQuery` returns a result handle that **must** be `FreeSQLQuery`-ed; every `SQLFetchRow` result must be `FreeSQLRow`-ed. |
+| `SQLStart / SQLMakeInstance / BBThreadComplete / BBFreeThread / BBMakeContainer / BBDestroyContainer / BBSetInt / BBSetStr / BBSetFloat / BBGetInt / BBGetStr / BBGetFloat` | [`src/userlibs/BBThread.decls`](../../src/userlibs/BBThread.decls) → `SQLDLL.dll` | The threading primitives used by `My_NewActorInstance` to issue a batched character INSERT off the main tick. See "Threading model" below. |
 
 All `My_*` functions in this module use `hSQL` directly — there is no connection-pool or per-thread connection. The single-connection model means the BBThread machinery below is mandatory for any query that would otherwise block the main tick.
 
 ### Reason-code constants
 
-`My_LoadAccount` returns `Null` on every failure path and sets the file-global `My_Reason` to one of:
+`My_LoadAccount` returns `Null` on every failure path and sets the file-global `MY_Reason` (declared at [`Server.bb:111`](../../src/Server.bb#L111)) to one of:
 
 | Constant | Value | Meaning |
 |---|---|---|
@@ -29,11 +32,11 @@ All `My_*` functions in this module use `hSQL` directly — there is no connecti
 | `MY_NOACCOUNT` | 4 | No row with that `username` (after `Force = False` gate). |
 | `MY_ACCOUNTLOGGEDIN` | 5 | Username found, account already has an in-memory `Account` Type with `LoggedOn <> -1`. |
 
-Defined in [`Server.bb:112-115`](../../src/Server.bb#L112). Callers (auth handlers in [`ServerNet.bb`](servernet.md)) check `My_Reason` immediately after a `Null` return to pick the wire-side error code.
+Defined in [`Server.bb:112-115`](../../src/Server.bb#L112). Callers (auth handlers in [`ServerNet.bb`](servernet.md)) check `MY_Reason` immediately after a `Null` return to pick the wire-side error code.
 
 ### SQL-injection defense: `My_Escape$`
 
-Every concatenated string field in this module's queries goes through `My_Escape$()` (the **only** safe path). The helper backslash-escapes the MySQL-special characters inside a single-quoted string literal: NUL → `\0`, LF → `\n`, CR → `\r`, Ctrl-Z → `\Z`, `"` → `\"`, `'` → `\'`, `\` → `\\`. Backslash is escaped **first** in the iteration so subsequent inserted backslashes don't get double-escaped.
+Every concatenated string field in this module's queries goes through `My_Escape$()` (the **only** safe path). The helper backslash-escapes the MySQL-special characters inside a single-quoted string literal: NUL → `\0`, LF → `\n`, CR → `\r`, Ctrl-Z → `\Z`, `"` → `\"`, `'` → `\'`, `\` → `\\`. The dispatch is per-input-character (one branch per char via `If/ElseIf`); the inserted backslashes are appended to the output and never re-scanned, so double-escaping is structurally impossible regardless of branch order.
 
 The reach of this helper is broad — the audit-comment block at the top of [`MySQL.bb`](../../src/Modules/MySQL.bb) enumerates every player- or script-controlled string that ends up in a query:
 
@@ -134,7 +137,9 @@ Pets / slaves persist as `rc_actorinstance` rows with `isslave = 1` and `slot = 
 - **At save** ([`My_SaveActorInstance`](#my_saveactorinstance) end): walks `A\FirstSlave → NextSlave` (the [`Actors.bb`](actors.md) chain) and recursively saves each slave with `IsSlave = True` and `Parent = A\My_ID`. The flat-file `SaveActor` path uses the same shape.
 - **At load** ([`My_LoadActorInstance`](#my_loadactorinstance) end): runs `SELECT id FROM rc_actorinstance WHERE isslave='1' AND slot='<leader_id>'`, iterates, loads each slave via recursive `My_LoadActorInstance(..., Null, Null, AccountID)` (Null `Q` / `C` skips quest log + action bar — slaves don't have those), then calls `SlaveLink(leader, slave)` which maintains the `FirstSlave` chain and increments `NumberOfSlaves`.
 
-The `NumberOfSlaves` Field is **reset to 0** at the start of `My_LoadActorInstance` for the leader. Each successful `SlaveLink` re-increments it. This means the stored `slaves` column is informational only — the canonical count is rebuilt from the actual rows that loaded successfully. A slave row whose `actorid` template was removed since save (returning `Null` from `My_LoadActorInstance`) gets skipped via the `If Slave <> Null` guard, and the count correctly reflects only slaves that actually loaded.
+The `NumberOfSlaves` Field is **reset to 0** at the start of `My_LoadActorInstance` for the leader (audit comment at [`MySQL.bb:645-652`](../../src/Modules/MySQL.bb#L645)). Each successful `SlaveLink` re-increments it. This means the stored `slaves` column is informational only — the canonical count is rebuilt from the actual rows that loaded successfully.
+
+> **Source caveat — `My_LoadActorInstance` does NOT return `Null` on missing template.** The function checks `If ActorList(ActorID) = Null Then A.ActorInstance = New ActorInstance` and continues, returning a freshly-allocated `ActorInstance` with `A\Actor = Null` and only the raw SQL fields populated. The `If Slave <> Null` guard at [`MySQL.bb:923`](../../src/Modules/MySQL.bb#L923) **never fires for this path** — `SlaveLink` then runs on a template-less slave whose downstream rendering will fail on actor-mesh deref. This is a known silent data-integrity issue, not yet closed. Track as a follow-up; until then, garbage slave rows survive past load and into the world.
 
 ### Soft-fail / bounds discipline at load
 
@@ -159,7 +164,7 @@ These are inline in the load loops; the comment block at each clamp explains the
 - **New character-state fields** need: a column on `rc_actorinstance` (or a new per-character table with a base-id pattern), a `BBSetX` call in `My_NewActorInstance`, an UPDATE in `My_SaveActorInstance`, and a `ReadSQLField` in `My_LoadActorInstance`. Missing any one of these silently drops the field on relog.
 - **Bound + clamp anything reading into an array index.** `ReadSQLField` returns raw column data with no range check; downstream `Field[N]` access is not bounds-checked at runtime.
 - **`BBThreadCount = 17` is fail-loud `RuntimeError`** — not a soft-fail candidate. The DLL thread cap is a real ceiling, not a wire-corruption defense.
-- **`hSQL = 0` is the offline sentinel.** New code paths that query SQL must `If hSQL = 0 Then ... fall back` rather than blindly call `SQLQuery` (which would error).
+- **Use `If MySQL = True` as the SQL/flat-file gate.** The canonical pattern in [`ServerNet.bb`](servernet.md) (see ~line 2341, 2374, 2881, 2945) is `If MySQL = True Then <SQL path> Else <flat-file path>`. The `Const MySQL = False` at [`Server.bb:109`](../../src/Server.bb#L109) makes the flat-file path the default build. Do NOT gate on `If hSQL = 0` — the only existing site at [`MySQL.bb:182`](../../src/Modules/MySQL.bb#L182) is a `WriteLog` warning that does **not** fall back; the call below it would still hit `SQLQuery(hSQL=0, ...)`.
 
 ## Related modules
 
@@ -190,10 +195,10 @@ The legacy function-by-function reference has not been generated. The conceptual
 - <a id="my_addaccount"></a>**`My_AddAccount(User$, Pass$, Email$)`** — INSERT into `rc_accounts`. **`End`s the server on failure** (legacy hard-fail; predates the soft-fail sweep).
 - <a id="my_accountexists"></a>**`My_AccountExists(User$)`** — boolean SELECT for a username. Used by `P_CreateAccount` to reject duplicates.
 - <a id="my_saveaccount"></a>**`My_SaveAccount(A.Account, SaveInstance)`** — the account-row UPDATE is **disabled** (commented out — see source comment about conflicts with DM/Banned flags set out-of-band). When `SaveInstance = True`, walks `A\Character[0..9]` and per-slot calls `My_SaveActorInstance`.
-- <a id="my_loadaccount"></a>**`My_LoadAccount.Account(User$, Pass$, Force)`** — primary auth path. Sets `My_Reason` to one of the `MY_*` codes on failure; returns `Null` on any failure. On success: reuses existing in-memory `Account` if found (via `For Each Account`), otherwise allocates a new one; loads all non-slave `rc_actorinstance` rows into `A\Character[0..9]` via recursive `My_LoadActorInstance`. `Force = True` bypasses password + ban gates (used by DM tooling).
+- <a id="my_loadaccount"></a>**`My_LoadAccount.Account(User$, Pass$, Force)`** — primary auth path. Sets `MY_Reason` to one of the `MY_*` codes on failure; returns `Null` on any failure. On success: reuses existing in-memory `Account` if found (via `For Each Account`), otherwise allocates a new one; loads all non-slave `rc_actorinstance` rows into `A\Character[0..9]` via recursive `My_LoadActorInstance`. `Force = True` bypasses password + ban gates (used by DM tooling).
 - <a id="my_deletecharacter"></a>**`My_DeleteCharacter(A.Account, Number)`** — DELETE from 9 tables + per-item `rc_itemvals` walk + `FreeActorInstance` of the in-memory copy. Idempotent — guarded by `If A\Character[i] <> Null`.
 - <a id="my_createaccountswindow"></a>**`My_CreateAccountsWindow.AccountsWindow()`** — alternate accounts-list GUI window (no DM/Ban/Delete buttons). Used by tooling that just needs the list.
 - <a id="my_actorexists"></a>**`My_ActorExists(ActorName$)`** — boolean SELECT for a character name (case-insensitive `LIKE`). Used by `P_CreateCharacter` to reject duplicates.
-- <a id="my_saveactorinstance"></a>**`My_SaveActorInstance(A.ActorInstance, Q.QuestLog, C.ActionbarData, IsSlave, AccountID, Parent)`** — full per-character UPDATE: 1 row in `rc_actorinstance` + 40 attributes + N items + 40 item-attrs per item + 100 faction ratings + 20 resistances + 1000 spells + 10 mem-spells + 10 script-globals + 500 quest entries (PC only) + 36 action-bar slots (PC only) + recursive walk of `A\FirstSlave` chain. `Parent` is the leader's `My_ID` for slave rows; `0` for PCs.
+- <a id="my_saveactorinstance"></a>**`My_SaveActorInstance(A.ActorInstance, Q.QuestLog, C.ActionbarData, IsSlave, AccountID, Parent)`** — full per-character UPDATE: 1 row in `rc_actorinstance` + 40 attributes + `Slots_Inventory + 1` items + 40 item-attrs per item + 100 faction ratings + 20 resistances + 1000 spells + 10 mem-spells + 10 script-globals + 500 quest entries (PC only) + 36 action-bar slots (PC only) + recursive walk of `A\FirstSlave` chain. `Parent` is the leader's `My_ID` for slave rows; `0` for PCs.
 - <a id="my_newactorinstance"></a>**`My_NewActorInstance(A.ActorInstance, Q.Questlog, C.ActionbarData, IsSlave, AccountID, MsgID = 0)`** — threaded INSERT via SQLDLL. Packs A's scalar fields into a `BBMakeContainer` blob, calls `SQLMakeInstance` (returns thread handle), enqueues a `BBThread` for `My_UpdateThreads` to pick up later. `MsgID` is the originating client's PeerToHost ID for the `P_CreateCharacter "Y"` ack.
-- <a id="my_loadactorinstance"></a>**`My_LoadActorInstance.ActorInstance(ActID, Q.Questlog, C.ActionBarData, AccountID)`** — single-row load. SELECTs from `rc_actorinstance`, allocates `ActorInstance` + `Attributes` + `Inventory` (or reuses an existing one if the actor's template `actorid` exists in `ActorList`), then walks the per-character tables in contiguous-`id` order populating slot arrays. Applies bounds clamps on `HomeFaction` and `MemorisedSpells[]`, Null-handles missing item templates, recursively loads slaves via `SlaveLink`. Returns `Null` if the actor's template is missing — callers must guard.
+- <a id="my_loadactorinstance"></a>**`My_LoadActorInstance.ActorInstance(ActID, Q.Questlog, C.ActionBarData, AccountID)`** — single-row load. SELECTs from `rc_actorinstance`, allocates `ActorInstance` + `Attributes` + `Inventory` (or reuses an existing one if the actor's template `actorid` exists in `ActorList`), then walks the per-character tables in contiguous-`id` order populating slot arrays. Applies bounds clamps on `HomeFaction` and `MemorisedSpells[]`, Null-handles missing item templates, recursively loads slaves via `SlaveLink`. **Always returns a non-`Null` ActorInstance** — even when the template is missing it allocates a fresh empty instance (see "Source caveat" under "Slave chain integration"). Callers that need to detect missing templates must check `A\Actor <> Null` themselves.
