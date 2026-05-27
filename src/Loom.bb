@@ -104,6 +104,7 @@ Include "Modules\Loom\Theme.bb"
 Include "Modules\Loom\Threads.bb"
 Include "Modules\Loom\Browser.bb"
 Include "Modules\Loom\Composer.bb"
+Include "Modules\Loom\Palette.bb"
 
 
 // =============================================================================
@@ -117,6 +118,7 @@ Type Loom
     Field threads.Threads
     Field browser.Browser
     Field composer.Composer
+    Field palette.Palette
 
 
     Method create.Loom(windowWidth%, windowHeight%, projectName$)
@@ -127,11 +129,12 @@ Type Loom
         // Shared focus + back stack
         self\threads = New Threads()
 
-        // Browser and Composer both hold a reference to the same Threads
-        // instance; card clicks call Threads::focus, chip clicks call
-        // Threads::jump (via Threads::renderChip).
+        // Browser, Composer, Palette all hold a reference to the same Threads
+        // instance; card clicks call Threads::focus, chip + palette-result
+        // clicks call Threads::jump.
         self\browser = New Browser(self\threads)
         self\composer = New Composer(self\threads)
+        self\palette = New Palette(self\threads)
 
         Return self
     End Method
@@ -139,18 +142,51 @@ Type Loom
 
     // -------------------------------------------------------------------------
     // renderFrame -- paint browser, then composer overlay if focused, then
-    // process Esc. Returns False when the user wants to exit (main loop
-    // breaks on that). Returning a bool from the frame is cleaner than
+    // palette overlay if open, then process global keys. Returns False when
+    // the user wants to exit. Returning a bool from the frame is cleaner than
     // mutating an `app\quit` field; the loop owns its own control flow.
+    //
+    // Render-order rationale: browser at the back, composer on top of
+    // browser, palette on top of everything. Palette dims the world behind
+    // itself so it visually owns the frame while open.
+    //
+    // Input-order rationale: Ctrl+K opens the palette BEFORE the palette's
+    // own pumpKeyboard fires (so the K keystroke isn't appended to its
+    // query). When the palette is open, its pumpKeyboard owns Esc; the outer
+    // Esc handler below only runs when the palette is closed.
     // -------------------------------------------------------------------------
     Method renderFrame%()
         Cls
 
-        Browser::renderAndUpdate(self\browser, self\windowWidth, self\windowHeight, self\projectName)
+        // Ctrl+K opens the palette (or no-ops if already open). Detect
+        // before any other input handler so openModal's FlushKeys swallows
+        // the K keystroke before it can land in the palette query.
+        If Palette::isOpen(self\palette) = False
+            If (KeyDown(29) Or KeyDown(157)) And KeyHit(37)
+                Palette::openModal(self\palette)
+            EndIf
+        EndIf
+
+        // Browser input is enabled only when no higher-priority surface is
+        // already consuming keystrokes. Priority chain (highest first):
+        //   palette > composer-edit > browser filter
+        Local browserInput% = True
+        If Palette::isOpen(self\palette) = True Then browserInput = False
+        If Composer::isEditing(self\composer) = True Then browserInput = False
+
+        Browser::renderAndUpdate(self\browser, self\windowWidth, self\windowHeight, self\projectName, browserInput)
         Composer::renderAndUpdate(self\composer, self\windowWidth, self\windowHeight)
 
-        If KeyHit(1)   // Esc
-            If Threads::back(self\threads) = False
+        // Palette consumes its own keys (including Esc) when open and
+        // returns True to signal that.
+        Local paletteAte% = Palette::renderAndUpdate(self\palette, self\windowWidth, self\windowHeight)
+
+        // Esc priority (when palette didn't already eat the press):
+        //   filter clear > back-stack pop > close composer > exit Loom
+        If paletteAte = False And KeyHit(1)   // Esc
+            If Browser::hasFilter(self\browser) = True
+                Browser::clearFilter(self\browser)
+            Else If Threads::back(self\threads) = False
                 If self\threads\focusKind <> ""
                     // Close composer back to plain browser.
                     Threads::focus(self\threads, "", 0)

@@ -84,6 +84,17 @@ Type Composer
 
 
     // -------------------------------------------------------------------------
+    // isEditing -- read accessor for the outer Loom frame so it knows the
+    // composer is currently consuming keystrokes (and the Browser's filter
+    // input must stay quiet).
+    // -------------------------------------------------------------------------
+    Method isEditing%()
+        If self\editKind <> "" Then Return True
+        Return False
+    End Method
+
+
+    // -------------------------------------------------------------------------
     // renderAndUpdate -- per-frame paint + chip hit-test. No-op when nothing
     // is focused. Returns True if any chip was clicked this frame.
     // -------------------------------------------------------------------------

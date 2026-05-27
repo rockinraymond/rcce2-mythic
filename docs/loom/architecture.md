@@ -14,8 +14,9 @@ src/
     └── Loom/
         ├── Theme.bb                 color palette + 2D drawing primitives
         ├── Threads.bb               focus state + back stack + chip primitive
-        ├── Browser.bb               category bar + entity card grid
-        └── Composer.bb              right-side property panel per kind
+        ├── Browser.bb               category bar + filter input + card grid
+        ├── Composer.bb              right-side property panel per kind
+        └── Palette.bb               Ctrl+K find-anywhere modal
 ```
 
 ### One-line module summaries

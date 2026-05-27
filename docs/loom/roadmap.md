@@ -11,24 +11,13 @@ Shipped, next, and deferred. Read this when picking what to build next.
 - **Composer panel** — per-kind property pages for all six entity kinds.
 - **Thread chips + back stack** — reference fields render as clickable chips; click jumps + pushes; Esc walks back.
 - **Faction and animset back-references** — composer computes "members" / "used by" rosters from `Each Actor` walks. ([#296](https://github.com/RydeTec/rcce2/pull/296))
+- **Editing phase 1 (free-form text)** — Spell name editable; per-tab dirty flags shared with GUE; Save button + serializer dispatch. ([#334](https://github.com/RydeTec/rcce2/pull/334))
+- **Command palette (Ctrl+K)** — modal find-anywhere across all entity kinds with prefix/substring scoring, arrow-key navigation, click-or-Enter to jump.
+- **Search-within-category** — live filter input above the card grid; case-insensitive substring match against the current category's name field. Esc clears the filter (priority above the back-stack pop).
 
 ## Next up (in rough order of leverage)
 
-### 1. Command palette (Ctrl+K find-anywhere)
-
-Type-to-search across every entity in the project. Press Ctrl+K from anywhere → modal opens → type substring → ranked results → Enter jumps. The browser tab walk is fine for known categories, but for *"where's that Goblin Shaman I edited yesterday"* the palette collapses 3 clicks into 4 keystrokes.
-
-Implementation sketch: a new `Modules/Loom/Palette.bb` module with a modal renderer + result list. Reads the same data globals the browser does. Jump uses `Threads_Focus` (no back-stack push — palette navigation is "go to," not "follow a thread") or `Threads_Jump` if invoked from inside a composer view (debatable; settle this in the PR).
-
-Estimated scope: 250-300 LOC. One PR.
-
-### 2. Search-within-category
-
-Browser tab bar gets a search box next to it. Type to filter the current category's cards by name substring. Live filter, no Enter required. Independent of the global palette — solves *"this tab has 200 actors, I want the human ones"*.
-
-Estimated scope: 100-150 LOC. Pairs naturally with #1 or ships first.
-
-### 3. Editing — phase 1: free-form text + numbers
+### 1. Editing — phase 1: free-form text + numbers (extend)
 
 Click a composer row's value → it becomes editable. Esc cancels, Enter (or click-away) commits to the in-memory instance and sets a dirty flag. Save button persists to disk via the existing `SaveActors / SaveItems / …` functions GUE already exports.
 
@@ -40,13 +29,13 @@ Needs:
 
 Estimated scope: 600-800 LOC. The big one. Likely needs to split across 2-3 PRs.
 
-### 4. Editing — phase 2: reference-field editing
+### 2. Editing — phase 2: reference-field editing
 
-Once free-form fields edit, reference-typed fields (faction, anim set, zone target) need pickers. The chip becomes click-to-jump-OR-shift-click-to-edit (or some affordance — UX decision). Reuses the palette from #1 as the picker.
+Once free-form fields edit, reference-typed fields (faction, anim set, zone target) need pickers. The chip becomes click-to-jump-OR-shift-click-to-edit (or some affordance — UX decision). Reuses the palette as the picker.
 
-Estimated scope: 200-300 LOC. Builds on #1 and #3.
+Estimated scope: 200-300 LOC. Builds on #1 (editing extension) and the shipped palette.
 
-### 5. World atlas (spatial zone view)
+### 3. World atlas (spatial zone view)
 
 Today the Zones tab in the browser is a card grid. The design called for a spatial atlas: zones laid out by position with portals drawn as lines between them. Worth shipping once there are enough zones in a project for the spatial layout to communicate something the grid doesn't (probably >10 zones).
 
@@ -54,7 +43,7 @@ Open question: zones in rcce2 don't have a stored "world position" — they're j
 
 Estimated scope: 400-500 LOC including layout heuristic. Skip if no project pressure for it.
 
-### 6. Session timeline scrubber
+### 4. Session timeline scrubber
 
 Visible history of the session's edits (entity X changed field Y from A to B at time T). Click an entry → revert. Drag the handle → preview a past state. Needs an undo log that today's read-only alpha has no use for.
 
