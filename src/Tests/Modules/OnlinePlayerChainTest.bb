@@ -90,14 +90,24 @@ Function ChainContains%(A.MockActor)
 End Function
 
 Function ResetChain()
-	; Walk the chain detaching nodes so they can be GC'd cleanly.
-	Local Cursor.MockActor = MockHead
-	Local CNext.MockActor = Null
-	While Cursor <> Null
-		CNext = Cursor\NextOnline
-		Cursor\NextOnline = Null
-		Cursor = CNext
-	Wend
+	; Sweep-walk the entire MockActor global type pool and Delete every
+	; instance. The earlier shape only detached NextOnline pointers along
+	; MockHead's chain, leaving the underlying instances pinned in the
+	; type pool. Across 14 tests that's ~36 instances accumulated by the
+	; suite's end -- enough for Blitz3D's process-exit cleanup to blow
+	; the stack ("Error: Stack overflow!" after testRemoveAllOneByOne).
+	; This was the long-running CI flake at ~30-40% rate.
+	;
+	; For-Each + Delete-current is safe in BlitzForge per the verified
+	; basic.cpp ref-counting walk (see feedback_blitzforge_enablegc_
+	; requires_strict memory + PR #302 reviewer's basic.cpp dig). The
+	; iterator holds a BBObj-level ref on the current element, so
+	; Delete decrements 2->1 and the obj stays linked in the used-list
+	; until obj->next has been consumed.
+	Local entry.MockActor
+	For entry = Each MockActor
+		Delete entry
+	Next
 	MockHead = Null
 End Function
 
