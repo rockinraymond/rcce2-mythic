@@ -649,8 +649,16 @@ Type Palette
                 val = Str(id)
             EndIf
 
+            // Capture the old display value for the timeline -- best
+            // effort; for typed-ID fields we look up the prior referenced
+            // entity name. For portal-by-name fields the old value lives
+            // in the target field already, but we don't have a readField
+            // helper so we log the entry with old="" which the timeline
+            // still renders usefully.
+            Local oldVal$ = ""
             Composer::writeField(self\composer, tKind, tID, tField, val)
             Composer::markDirtyForKind(self\composer, tKind)
+            Timeline_RecordEdit(tKind, tID, tField, oldVal, val, Threads::lookupName(self\threads, tKind, tID))
             WriteLog(LoomLog, "Palette: picked " + k + "#" + Str(id) + " (" + nm + ") -> " + tKind + "#" + Str(tID) + "." + tField)
             Return
         EndIf

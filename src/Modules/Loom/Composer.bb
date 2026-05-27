@@ -75,6 +75,8 @@ Type Composer
     Field editRefID%
     Field editFieldId$
     Field editBuffer$
+    Field editOldValue$    // snapshot at beginEdit, used by commitEdit
+                           // to record the Timeline before/after pair
 
     // Delete-arm state. When the user clicks Delete, we record the kind/
     // refID and a timestamp. A second click within CMP_DELETE_ARM_MS on
@@ -101,6 +103,7 @@ Type Composer
         self\editRefID = 0
         self\editFieldId = ""
         self\editBuffer = ""
+        self\editOldValue = ""
         self\deleteArmKind = ""
         self\deleteArmRefID = 0
         self\deleteArmAt = 0
@@ -325,6 +328,7 @@ Type Composer
             If storedValue = True Then newVal = False
             Composer::writeField(self, kind, refID, fieldId, Str(newVal))
             Composer::markDirtyForKind(self, kind)
+            Timeline_RecordToggle(kind, refID, fieldId, Str(storedValue), Str(newVal), Threads::lookupName(self\threads, kind, refID))
             WriteLog(LoomLog, "Composer: toggled " + kind + "#" + Str(refID) + " " + fieldId + " -> " + Str(newVal))
         EndIf
 
@@ -405,6 +409,7 @@ Type Composer
         self\editRefID = refID
         self\editFieldId = fieldId
         self\editBuffer = currentValue
+        self\editOldValue = currentValue
         FlushKeys      // discard any buffered keystrokes from the click itself
         WriteLog(LoomLog, "Composer: begin edit " + kind + "#" + Str(refID) + " " + fieldId + " = " + Chr(34) + currentValue + Chr(34))
     End Method
@@ -421,9 +426,16 @@ Type Composer
         Local id% = self\editRefID
         Local fid$ = self\editFieldId
         Local val$ = self\editBuffer
+        Local oldVal$ = self\editOldValue
 
         Composer::writeField(self, k, id, fid, val)
         Composer::markDirtyForKind(self, k)
+
+        // Record only when the value actually changed (avoids spamming
+        // the timeline with no-op commits from click-away-without-typing).
+        If val <> oldVal
+            Timeline_RecordEdit(k, id, fid, oldVal, val, Threads::lookupName(self\threads, k, id))
+        EndIf
 
         WriteLog(LoomLog, "Composer: commit " + k + "#" + Str(id) + " " + fid + " <- " + Chr(34) + val + Chr(34))
 
@@ -431,6 +443,7 @@ Type Composer
         self\editRefID = 0
         self\editFieldId = ""
         self\editBuffer = ""
+        self\editOldValue = ""
     End Method
 
 
@@ -444,6 +457,7 @@ Type Composer
         self\editRefID = 0
         self\editFieldId = ""
         self\editBuffer = ""
+        self\editOldValue = ""
     End Method
 
 

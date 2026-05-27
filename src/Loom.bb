@@ -111,6 +111,7 @@ Include "Modules\Loom\Composer.bb"
 Include "Modules\Loom\Palette.bb"
 Include "Modules\Loom\Ribbon.bb"
 Include "Modules\Loom\Atlas.bb"
+Include "Modules\Loom\Timeline.bb"
 Include "Modules\Loom\EntityFactory.bb"
 
 
@@ -128,6 +129,7 @@ Type Loom
     Field palette.Palette
     Field ribbon.Ribbon
     Field atlas.Atlas
+    Field timeline.Timeline
 
 
     Method create.Loom(windowWidth%, windowHeight%, projectName$)
@@ -165,6 +167,15 @@ Type Loom
         self\atlas = New Atlas(self\threads)
         Browser::setAtlas(self\browser, self\atlas)
 
+        // Timeline holds Composer for revert dispatch. Module-level
+        // recorder facade (Timeline_Record*) reaches the instance via
+        // the LoomTimeline global, set immediately so the Composer's
+        // commitEdit / EntityFactory's create+delete can record from
+        // anywhere without an explicit reference.
+        self\timeline = New Timeline()
+        Timeline::setComposer(self\timeline, self\composer)
+        LoomTimeline = self\timeline
+
         Return self
     End Method
 
@@ -187,19 +198,23 @@ Type Loom
     Method renderFrame%()
         Cls
 
-        // Ctrl+K opens the palette (or no-ops if already open). Detect
-        // before any other input handler so openModal's FlushKeys swallows
-        // the K keystroke before it can land in the palette query.
-        If Palette::isOpen(self\palette) = False
+        // Ctrl+K opens the palette / Ctrl+H opens the timeline (each
+        // no-ops if already open). Detect BEFORE any other input handler
+        // so openModal's FlushKeys swallows the K/H keystroke before it
+        // can land in a query buffer.
+        If Palette::isOpen(self\palette) = False And Timeline::isOpen(self\timeline) = False
             If (KeyDown(29) Or KeyDown(157)) And KeyHit(37)
                 Palette::openModal(self\palette)
+            Else If (KeyDown(29) Or KeyDown(157)) And KeyHit(35)
+                Timeline::openModal(self\timeline)
             EndIf
         EndIf
 
         // Browser input is enabled only when no higher-priority surface is
         // already consuming keystrokes. Priority chain (highest first):
-        //   palette > composer-edit > browser filter
+        //   timeline > palette > composer-edit > browser filter
         Local browserInput% = True
+        If Timeline::isOpen(self\timeline) = True Then browserInput = False
         If Palette::isOpen(self\palette) = True Then browserInput = False
         If Composer::isEditing(self\composer) = True Then browserInput = False
 
@@ -209,17 +224,20 @@ Type Loom
         // Conscience Ribbon last among the on-canvas surfaces -- it
         // overlays the top LOOM_TOP_RIBBON_H pixels of whatever Browser /
         // Composer painted there (which is just the top of the brand
-        // strip, harmless to overwrite). Sits BELOW the Palette so the
-        // modal still dims it when open.
+        // strip, harmless to overwrite). Sits BELOW the modal overlays.
         Ribbon::renderAndUpdate(self\ribbon, self\windowWidth)
 
-        // Palette consumes its own keys (including Esc) when open and
-        // returns True to signal that.
-        Local paletteAte% = Palette::renderAndUpdate(self\palette, self\windowWidth, self\windowHeight)
+        // Modal overlays -- timeline before palette so opening the palette
+        // from a closed-timeline state doesn't have the timeline modal
+        // visually steal a frame. Each consumes its own keys (including
+        // Esc) when open and returns True so the outer Esc handler skips.
+        Local timelineAte% = Timeline::renderAndUpdate(self\timeline, self\windowWidth, self\windowHeight)
+        Local paletteAte%  = Palette::renderAndUpdate(self\palette, self\windowWidth, self\windowHeight)
+        Local modalAte%    = (timelineAte Or paletteAte)
 
-        // Esc priority (when palette didn't already eat the press):
+        // Esc priority (when no modal ate the press):
         //   filter clear > back-stack pop > close composer > exit Loom
-        If paletteAte = False And KeyHit(1)   // Esc
+        If modalAte = False And KeyHit(1)   // Esc
             If Browser::hasFilter(self\browser) = True
                 Browser::clearFilter(self\browser)
             Else If Threads::back(self\threads) = False

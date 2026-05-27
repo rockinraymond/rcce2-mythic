@@ -69,6 +69,7 @@ Function EntityFactory_CreateActor%(threads.Threads)
     A\Genders = 0
     Threads::focus(threads, "actor", A\ID)
     ActorsSaved = False
+    Timeline_RecordCreate("actor", A\ID, A\Race$ + " [" + A\Class$ + "]")
     WriteLog(LoomLog, "EntityFactory: created actor #" + Str(A\ID))
     Return True
 End Function
@@ -83,6 +84,7 @@ Function EntityFactory_CreateItem%(threads.Threads)
     I\Name$ = "New Item"
     Threads::focus(threads, "item", I\ID)
     ItemsSaved = False
+    Timeline_RecordCreate("item", I\ID, I\Name$)
     WriteLog(LoomLog, "EntityFactory: created item #" + Str(I\ID))
     Return True
 End Function
@@ -98,6 +100,7 @@ Function EntityFactory_CreateSpell%(threads.Threads)
     // memory parity with GUE's behavior.
     Threads::focus(threads, "spell", S\ID)
     SpellsSaved = False
+    Timeline_RecordCreate("spell", S\ID, S\Name$)
     WriteLog(LoomLog, "EntityFactory: created spell #" + Str(S\ID))
     Return True
 End Function
@@ -112,6 +115,7 @@ Function EntityFactory_CreateZone%(threads.Threads)
     A\Name$ = EntityFactory_UniqueZoneName$("New Zone")
     Threads::focus(threads, "zone", Handle(A))
     ZoneSaved = False
+    Timeline_RecordCreate("zone", Handle(A), A\Name$)
     WriteLog(LoomLog, "EntityFactory: created zone " + A\Name$)
     Return True
 End Function
@@ -138,6 +142,7 @@ Function EntityFactory_CreateFaction%(threads.Threads)
     SetFactionName(slot, "New Faction")
     Threads::focus(threads, "faction", slot)
     FactionsSaved = False
+    Timeline_RecordCreate("faction", slot, "New Faction")
     WriteLog(LoomLog, "EntityFactory: created faction slot " + Str(slot))
     Return True
 End Function
@@ -153,6 +158,7 @@ Function EntityFactory_CreateAnimSet%(threads.Threads)
     EndIf
     Threads::focus(threads, "animset", newID)
     AnimsSaved = False
+    Timeline_RecordCreate("animset", newID, "New Animation Set")
     WriteLog(LoomLog, "EntityFactory: created animset #" + Str(newID))
     Return True
 End Function
@@ -213,11 +219,13 @@ End Function
 
 
 Function EntityFactory_DeleteActor%(refID%, threads.Threads)
+    Local label$ = Threads::lookupName(threads, "actor", refID)
     If DeleteActorTemplate(refID) = False
         WriteLog(LoomLog, "EntityFactory: delete actor #" + Str(refID) + " -- not found")
         Return False
     EndIf
     ActorsSaved = False
+    Timeline_RecordDelete("actor", refID, label)
     Threads::focus(threads, "", 0)
     Threads::clearStack(threads)
     WriteLog(LoomLog, "EntityFactory: deleted actor #" + Str(refID))
@@ -226,11 +234,13 @@ End Function
 
 
 Function EntityFactory_DeleteItem%(refID%, threads.Threads)
+    Local label$ = Threads::lookupName(threads, "item", refID)
     If DeleteItemTemplate(refID) = False
         WriteLog(LoomLog, "EntityFactory: delete item #" + Str(refID) + " -- not found")
         Return False
     EndIf
     ItemsSaved = False
+    Timeline_RecordDelete("item", refID, label)
     Threads::focus(threads, "", 0)
     Threads::clearStack(threads)
     WriteLog(LoomLog, "EntityFactory: deleted item #" + Str(refID))
@@ -239,11 +249,13 @@ End Function
 
 
 Function EntityFactory_DeleteSpell%(refID%, threads.Threads)
+    Local label$ = Threads::lookupName(threads, "spell", refID)
     If DeleteSpellTemplate(refID) = False
         WriteLog(LoomLog, "EntityFactory: delete spell #" + Str(refID) + " -- not found")
         Return False
     EndIf
     SpellsSaved = False
+    Timeline_RecordDelete("spell", refID, label)
     Threads::focus(threads, "", 0)
     Threads::clearStack(threads)
     WriteLog(LoomLog, "EntityFactory: deleted spell #" + Str(refID))
@@ -252,11 +264,13 @@ End Function
 
 
 Function EntityFactory_DeleteAnimSet%(refID%, threads.Threads)
+    Local label$ = Threads::lookupName(threads, "animset", refID)
     If DeleteAnimSetTemplate(refID) = False
         WriteLog(LoomLog, "EntityFactory: delete animset #" + Str(refID) + " -- not found")
         Return False
     EndIf
     AnimsSaved = False
+    Timeline_RecordDelete("animset", refID, label)
     Threads::focus(threads, "", 0)
     Threads::clearStack(threads)
     WriteLog(LoomLog, "EntityFactory: deleted animset #" + Str(refID))
@@ -267,8 +281,10 @@ End Function
 Function EntityFactory_DeleteFaction%(refID%, threads.Threads)
     If refID < 0 Or refID > 99 Then Return False
     If FactionNames$(refID) = "" Then Return False
+    Local label$ = FactionNames$(refID)
     SetFactionName(refID, "")     // empty string = vacant slot per LoadFactions semantics
     FactionsSaved = False
+    Timeline_RecordDelete("faction", refID, label)
     Threads::focus(threads, "", 0)
     Threads::clearStack(threads)
     WriteLog(LoomLog, "EntityFactory: deleted faction slot " + Str(refID))
@@ -294,6 +310,7 @@ Function EntityFactory_DeleteZone%(refID%, threads.Threads)
 
     ServerUnloadArea(A)            // frees the Area + per-area ServerWater chain
     ZoneSaved = True               // no other-zone changes pending purely from this op
+    Timeline_RecordDelete("zone", refID, zoneName)
     Threads::focus(threads, "", 0)
     Threads::clearStack(threads)
     WriteLog(LoomLog, "EntityFactory: deleted zone " + zoneName)
