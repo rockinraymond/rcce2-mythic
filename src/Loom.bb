@@ -114,6 +114,7 @@ Include "Modules\Loom\Ribbon.bb"
 Include "Modules\Loom\Atlas.bb"
 Include "Modules\Loom\Timeline.bb"
 Include "Modules\Loom\Tools.bb"
+Include "Modules\Loom\Recents.bb"
 Include "Modules\Loom\EntityFactory.bb"
 
 
@@ -133,6 +134,7 @@ Type Loom
     Field atlas.Atlas
     Field timeline.Timeline
     Field brokenRefs.BrokenRefs
+    Field recents.Recents
 
 
     Method create.Loom(windowWidth%, windowHeight%, projectName$)
@@ -185,6 +187,14 @@ Type Loom
         Timeline::setComposer(self\timeline, self\composer)
         LoomTimeline = self\timeline
 
+        // Recents -- persisted per-project recently-focused list.
+        // Threads::focus / jump emit via Recents_Record facade which
+        // reaches the singleton via LoomRecents. Load any persisted
+        // state from disk; persist back on shutdown (see end of main).
+        self\recents = New Recents(self\threads)
+        LoomRecents = self\recents
+        Recents::load(self\recents)
+
         Return self
     End Method
 
@@ -211,11 +221,13 @@ Type Loom
         // no-ops if already open). Detect BEFORE any other input handler
         // so openModal's FlushKeys swallows the K/H keystroke before it
         // can land in a query buffer.
-        If Palette::isOpen(self\palette) = False And Timeline::isOpen(self\timeline) = False And BrokenRefs::isOpen(self\brokenRefs) = False
+        If Palette::isOpen(self\palette) = False And Timeline::isOpen(self\timeline) = False And BrokenRefs::isOpen(self\brokenRefs) = False And Recents::isOpen(self\recents) = False
             If (KeyDown(29) Or KeyDown(157)) And KeyHit(37)
                 Palette::openModal(self\palette)
             Else If (KeyDown(29) Or KeyDown(157)) And KeyHit(35)
                 Timeline::openModal(self\timeline)
+            Else If (KeyDown(29) Or KeyDown(157)) And KeyHit(19)
+                Recents::openModal(self\recents)
             EndIf
         EndIf
 
@@ -226,6 +238,7 @@ Type Loom
         If Timeline::isOpen(self\timeline) = True Then browserInput = False
         If Palette::isOpen(self\palette) = True Then browserInput = False
         If BrokenRefs::isOpen(self\brokenRefs) = True Then browserInput = False
+        If Recents::isOpen(self\recents) = True Then browserInput = False
         If Composer::isEditing(self\composer) = True Then browserInput = False
 
         Browser::renderAndUpdate(self\browser, self\windowWidth, self\windowHeight, self\projectName, browserInput)
@@ -244,8 +257,9 @@ Type Loom
         // Esc) when open and returns True so the outer Esc handler skips.
         Local timelineAte%   = Timeline::renderAndUpdate(self\timeline, self\windowWidth, self\windowHeight)
         Local brokenRefsAte% = BrokenRefs::renderAndUpdate(self\brokenRefs, self\windowWidth, self\windowHeight)
+        Local recentsAte%    = Recents::renderAndUpdate(self\recents, self\windowWidth, self\windowHeight)
         Local paletteAte%    = Palette::renderAndUpdate(self\palette, self\windowWidth, self\windowHeight)
-        Local modalAte%      = (timelineAte Or brokenRefsAte Or paletteAte)
+        Local modalAte%      = (timelineAte Or brokenRefsAte Or recentsAte Or paletteAte)
 
         // Esc priority (when no modal ate the press):
         //   filter clear > back-stack pop > close composer > exit Loom
@@ -357,6 +371,9 @@ While Loom::renderFrame(app) = True
 Wend
 
 WriteLog(LoomLog, "** Loom shutdown **")
+// Persist the per-project recents list to Data/Loom/recents.txt so the
+// next session can show "where was I" without rebuilding from scratch.
+If app\recents <> Null Then Recents::persist(app\recents)
 CloseAllLogs()
 End
 

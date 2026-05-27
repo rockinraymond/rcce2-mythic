@@ -78,6 +78,12 @@ Type Threads
     Method focus(kind$, refID%)
         self\focusKind = kind$
         self\focusID = refID
+        // Record into Recents so Ctrl+R can find it later. Recents_Record
+        // skips empty-kind invocations (used to close the composer back
+        // to the browser); LoomRecents may be Null on the first focus
+        // before Loom.bb's boot finishes wiring -- the facade handles
+        // that defensively too.
+        If kind$ <> "" Then Recents_Record(kind$, refID, Threads::lookupName(self, kind$, refID))
     End Method
 
 
@@ -98,6 +104,10 @@ Type Threads
 
         self\focusKind = kind$
         self\focusID = refID
+
+        // Same Recents hook as focus() -- mirror, so navigations land in
+        // the recents list whether they come from card clicks or chip jumps.
+        If kind$ <> "" Then Recents_Record(kind$, refID, Threads::lookupName(self, kind$, refID))
 
         WriteLog(LoomLog, "Threads: jumped to " + kind$ + "#" + Str(refID) + " (back stack: " + Str(ListSize(self\backStack)) + ")")
     End Method
