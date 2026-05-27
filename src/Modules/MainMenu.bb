@@ -2505,12 +2505,42 @@ Function CreateChar()
 			PointsToSpend = AttributeAssignment
 			For i = 0 To 39 : PointSpends(i) = 0 : Next
 			ChosenRace$ = Upper$(GY_ComboBoxItem$(CRace))
+			Chosen.Actor = Null  ; reset before the search so a no-match leaves Null
 			For A.Actor = Each Actor
 				If Upper$(A\Race$) = ChosenRace$ Then Chosen.Actor = A : Exit
 			Next
-			Preview.ActorInstance = CreateActorInstance(Chosen)
-			Result = LoadActorInstance3D(Preview, 1.0, False, False)
-			If Result = False Then RuntimeError("Could not load actor mesh for " + Chosen\Race$ + "!")
+			; If the combo-box race no longer exists in the client's
+			; Actors table (project updated, race deleted, or update-
+			; channel skew), Chosen stays Null. CreateActorInstance
+			; (Null) used to RuntimeError-crash the client; now soft-
+			; fails to Null. Skip the preview swap and leave the
+			; previous Preview in place rather than render an empty
+			; character-creation screen.
+			If Chosen = Null
+				WriteLog(MainLog, "CharCreation race-change: combo-box race '" + ChosenRace$ + "' not in client Actors table; keeping previous preview")
+			Else
+				Preview.ActorInstance = CreateActorInstance(Chosen)
+				If Preview = Null
+					WriteLog(MainLog, "CharCreation race-change: CreateActorInstance returned Null for race '" + Chosen\Race$ + "'; keeping previous preview")
+				Else
+					Result = LoadActorInstance3D(Preview, 1.0, False, False)
+					If Result = False
+						; Mesh-load failure: log + free + bail rather
+						; than RuntimeError-crash the client. Mirrors
+						; the same recovery pattern as the initial
+						; character-pick at line 2292.
+						WriteLog(MainLog, "CharCreation race-change: mesh load failed for race '" + Chosen\Race$ + "'; freeing preview")
+						SafeFreeActorInstance(Preview)
+						Preview = Null
+					EndIf
+				EndIf
+			EndIf
+			; The follow-on code (PositionEntity Preview\CollisionEN,
+			; SetUpPreview(Preview\Actor), ...) requires Preview to be
+			; non-Null. Skip when the preview wasn't created.
+			If Preview = Null
+				Goto SkipPreviewSetup
+			EndIf
 			;PlayAnimation(Preview, 1, 0.003, Anim_Idle)
 			PositionEntity Preview\CollisionEN, 30, -(35.0 + EntityY#(Preview\EN, True)), 100
 			;If Preview\ShadowEN <> 0 Then HideEntity(Preview\ShadowEN) [###]
@@ -2521,6 +2551,7 @@ Function CreateChar()
 			GY_LockGadget(BNextHair, Not ActorHasHair(Preview\Actor, Preview\Gender + 1)) : GY_LockGadget(BPrevHair, Not ActorHasHair(Preview\Actor, Preview\Gender + 1))
 			GY_LockGadget(BNextBeard, Not ActorHasBeard(Preview\Actor)) : GY_LockGadget(BPrevBeard, Not ActorHasBeard(Preview\Actor))
 			GY_LockGadget(BNextGender, Preview\Actor\Genders) : GY_LockGadget(BPrevGender, Preview\Actor\Genders)
+			.SkipPreviewSetup
 		EndIf
 
 		; Next/Previous class
