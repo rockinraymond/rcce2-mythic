@@ -1693,10 +1693,17 @@ Function FUI_CustomOpenDialog( title$ = "", initdir$ = "", filter$ = "", BackHac
 	DlgDir$ = initdir$
 	DlgFile$ = ""
 	Repeat
-		
+
 		FUI_Update
 
-		For e.Event = Each Event
+		; After-cursor walk: the body unconditionally Delete's e. Same
+		; multi-event-tick hazard as the MessageBox event-pump above
+		; (CLAUDE.md "Iterator-during-iteration hazards"). PR #330
+		; reviewer caught this sibling that the initial pass missed.
+		Local e.Event = First Event
+		Local eNext.Event = Null
+		While e <> Null
+			eNext = After e
 			Select e\EventID
 				;Window Events
 				Case win
@@ -1812,19 +1819,20 @@ Function FUI_CustomOpenDialog( title$ = "", initdir$ = "", filter$ = "", BackHac
 						EndIf
 					EndIf
 			End Select
-			
+
 			;Remove event from queue
 			Delete e
-		Next
+			e = eNext
+		Wend
 
 		RenderWorld
 		Flip
 
 ;		FUI_SetCursor app\Win32Mouse
-		
+
 	Until DlgClose = True
 	DlgClose = False
-	
+
 ;	FUI_SetCursor IDCArrow
 	
 	FUI_DeleteGadget win
@@ -1890,10 +1898,17 @@ Function FUI_CustomSaveDialog( title$ = "", initdir$ = "", filter$ = "", index =
 	DlgDir$ = initdir$
 	DlgFile$ = ""
 	Repeat
-		
+
 		FUI_Update
-		
-		For e.Event = Each Event
+
+		; After-cursor walk: same multi-event-tick hazard as the
+		; MessageBox / FUI_CustomOpenDialog event-pumps above. PR #330
+		; reviewer caught this third sibling that the initial pass
+		; missed. See CLAUDE.md "Iterator-during-iteration hazards".
+		Local e.Event = First Event
+		Local eNext.Event = Null
+		While e <> Null
+			eNext = After e
 			Select e\EventID
 				;Window Events
 				Case win
@@ -1945,7 +1960,7 @@ Function FUI_CustomSaveDialog( title$ = "", initdir$ = "", filter$ = "", index =
 						FILTER_CURRENT_INDEX = Int( e\EventData ) - 1
 						FUI_GetFiles lst, DlgDir$
 					EndIf
-					
+
 				Case ok
 					app\currentFile = DlgDir$ + DlgFile$
 					DlgResult = True
@@ -1954,16 +1969,17 @@ Function FUI_CustomSaveDialog( title$ = "", initdir$ = "", filter$ = "", index =
 					DlgResult = False
 					DlgClose = True
 			End Select
-			
+
 			;Remove event from queue
 			Delete e
-		Next
-		
+			e = eNext
+		Wend
+
 		RenderWorld
 		Flip
-		
+
 ;		FUI_SetCursor app\Win32Mouse
-		
+
 	Until DlgClose = True
 	DlgClose = False
 	
