@@ -28,7 +28,13 @@
 //   browser only (nothing focused)           ->  exit Loom
 //
 // Read-only in this alpha. Editing is a beta concern (needs save/dirty
-// tracking that's its own design surface).
+// tracking that's its own design surface -- see docs/loom/decisions/002).
+//
+// Architecture: `Type Loom` owns instances of `Threads`, `Browser`, and
+// `Composer`. The main loop calls `Loom::renderFrame(app)` once per frame.
+// All three sub-modules are Types with Methods, called as
+// `Module::method(self, args)` per the project's OO convention. See
+// .claude/skills/blitzforge-language/SKILL.md "Module architecture" section.
 // =============================================================================
 
 
@@ -46,11 +52,10 @@ ChangeDir RootDir$
 // -----------------------------------------------------------------------------
 // Includes
 //
-// Data layer: same modules GUE pulls in for the data layer, minus the
-// UI-tied ones (F-UI, MediaDialogs, CharacterEditorLoader, ClientAreas).
-// The loaders here parse .dat files into the global type instances; Loom
-// reads through those same instances so the two editors can't drift apart
-// in how they parse the files.
+// Data layer: same modules GUE pulls in, minus UI-tied ones (F-UI,
+// MediaDialogs, CharacterEditorLoader, ClientAreas). The loaders parse .dat
+// files into the global type instances; Loom reads through those same
+// instances so the two editors can't drift in how they parse the format.
 //
 // Order matters for Type declarations -- mirror GUE.bb's order.
 // -----------------------------------------------------------------------------
@@ -66,9 +71,10 @@ Include "Modules\Spells.bb"
 Include "Modules\Actors.bb"
 Include "Modules\Environment.bb"
 Include "Modules\Interface.bb"
-// ClientAreas.bb deliberately omitted -- depends on GetFilename$ which
-// lives inside GUE.bb. We don't need 3D zone meshes for the alpha; the
-// composer renders zone metadata as text + portal chips.
+// ClientAreas.bb deliberately omitted -- depends on GetFilename$ which lives
+// inside GUE.bb. We don't need 3D zone meshes for the alpha; the composer
+// renders zone metadata as text + portal chips. See
+// docs/loom/decisions/004-deferred-3d-viewport.md.
 Include "Modules\ServerAreas.bb"
 Include "Modules\Packets.bb"
 Include "Modules\Logging.bb"
@@ -80,36 +86,95 @@ Include "Modules\Loom\Browser.bb"
 Include "Modules\Loom\Composer.bb"
 
 
-// -----------------------------------------------------------------------------
+// =============================================================================
+// Loom -- top-level application type. Owns the Threads / Browser / Composer
+// instances and orchestrates the render loop.
+// =============================================================================
+Type Loom
+    Field windowWidth%
+    Field windowHeight%
+    Field projectName$
+    Field threads.Threads
+    Field browser.Browser
+    Field composer.Composer
+
+
+    Method create.Loom(windowWidth%, windowHeight%, projectName$)
+        self\windowWidth = windowWidth
+        self\windowHeight = windowHeight
+        self\projectName = projectName$
+
+        // Shared focus + back stack
+        self\threads = New Threads()
+
+        // Browser and Composer both hold a reference to the same Threads
+        // instance; card clicks call Threads::focus, chip clicks call
+        // Threads::jump (via Threads::renderChip).
+        self\browser = New Browser(self\threads)
+        self\composer = New Composer(self\threads)
+
+        Return self
+    End Method
+
+
+    // -------------------------------------------------------------------------
+    // renderFrame -- paint browser, then composer overlay if focused, then
+    // process Esc. Returns False when the user wants to exit (main loop
+    // breaks on that). Returning a bool from the frame is cleaner than
+    // mutating an `app\quit` field; the loop owns its own control flow.
+    // -------------------------------------------------------------------------
+    Method renderFrame%()
+        Cls
+
+        Browser::renderAndUpdate(self\browser, self\windowWidth, self\windowHeight, self\projectName)
+        Composer::renderAndUpdate(self\composer, self\windowWidth, self\windowHeight)
+
+        If KeyHit(1)   // Esc
+            If Threads::back(self\threads) = False
+                If self\threads\focusKind <> ""
+                    // Close composer back to plain browser.
+                    Threads::focus(self\threads, "", 0)
+                    Threads::clearStack(self\threads)
+                    WriteLog(LoomLog, "Esc: closed composer")
+                Else
+                    // Nothing left to close -- exit Loom.
+                    Return False
+                EndIf
+            EndIf
+        EndIf
+
+        Flip
+        Return True
+    End Method
+End Type
+
+
+// =============================================================================
+// Main -- bootstrap graphics, load data, build the Loom app, run frames.
+// =============================================================================
+
 // Graphics mode -- match GUE's window sizing so the two editors feel sibling.
-// -----------------------------------------------------------------------------
-Local Loom_width# = GetSystemMetrics(0) * 0.9
-Local Loom_height# = GetSystemMetrics(1) * 0.8
-If (Loom_width < 1280 And Loom_height < 800)
-    Loom_width = 1280
-    Loom_height = 800
+Local boot_width# = GetSystemMetrics(0) * 0.9
+Local boot_height# = GetSystemMetrics(1) * 0.8
+If (boot_width < 1280 And boot_height < 800)
+    boot_width = 1280
+    boot_height = 800
 EndIf
 
-Graphics3D(Loom_width, Loom_height, 0, 2)
+Graphics3D(boot_width, boot_height, 0, 2)
 SetBuffer(BackBuffer())
 AppTitle("Loom -- World Editor (Alpha) -- Realm Crafter " + rcceVersion$)
 
-
-// -----------------------------------------------------------------------------
 // Log -- Data\Logs\Loom Log.txt (relative to project root, next to GUE's log).
-// -----------------------------------------------------------------------------
 Global LoomLog = StartLog("Loom Log", False)
 WriteLog(LoomLog, "** Loom startup begins **", True, True)
-WriteLog(LoomLog, "Resolution: " + Str(Loom_width) + "x" + Str(Loom_height))
+WriteLog(LoomLog, "Resolution: " + Str(boot_width) + "x" + Str(boot_height))
 
-
-// -----------------------------------------------------------------------------
 // Resolve project name from the working directory leaf.
-// -----------------------------------------------------------------------------
 Local cwd$ = CurrentDir$()
-Global LoomProjectName$ = LoomGetLeafDir(cwd$)
+Local projectName$ = LoomGetLeafDir(cwd$)
 WriteLog(LoomLog, "Project root: " + cwd$)
-WriteLog(LoomLog, "Project name: " + LoomProjectName$)
+WriteLog(LoomLog, "Project name: " + projectName$)
 
 LoomTheme_Init()
 
@@ -117,8 +182,7 @@ LoomTheme_Init()
 // -----------------------------------------------------------------------------
 // Load project data. Same order GUE uses, same loaders, same in-memory
 // representation. Failures RuntimeError with a Win32 dialog -- mirrors
-// GUE.bb's behavior; a half-loaded project would just confuse the user
-// later.
+// GUE.bb's behavior; a half-loaded project would just confuse the user later.
 // -----------------------------------------------------------------------------
 WriteLog(LoomLog, "** Loading project data **")
 Loom_DrawLoadingScreen("Loading project data...")
@@ -161,48 +225,13 @@ WriteLog(LoomLog, "** Data load complete **")
 
 
 // -----------------------------------------------------------------------------
-// Initialize Loom UI state.
+// Construct the app instance and run frames until renderFrame returns False.
 // -----------------------------------------------------------------------------
-Threads_Init()
-Browser_Init()
-
-
-// -----------------------------------------------------------------------------
-// Main loop. Single surface that paints the browser, then layers the
-// composer on top when something's focused. Click flows:
-//
-//   browser card click   -> Threads_Focus (no back-stack push)
-//   composer chip click  -> Threads_Jump  (back-stack push)
-//
-// Esc consumes one of:
-//   1. Threads_Back if back stack non-empty
-//   2. Close composer if focus exists but stack empty
-//   3. Exit Loom otherwise
-// -----------------------------------------------------------------------------
+Local app.Loom = New Loom(boot_width, boot_height, projectName)
 WriteLog(LoomLog, "** Main loop running **")
 
-Repeat
-    Cls
-
-    Browser_RenderAndUpdate(Loom_width, Loom_height, LoomProjectName$)
-    Composer_RenderAndUpdate(Loom_width, Loom_height)
-
-    If KeyHit(1)   // Esc
-        If Threads_Back() = False
-            If Loom_FocusKind$ <> ""
-                // Close composer back to plain browser.
-                Threads_Focus("", 0)
-                Threads_ClearStack()
-                WriteLog(LoomLog, "Esc: closed composer")
-            Else
-                // Nothing left to close -- exit Loom.
-                Exit
-            EndIf
-        EndIf
-    EndIf
-
-    Flip
-Until False
+While Loom::renderFrame(app) = True
+Wend
 
 WriteLog(LoomLog, "** Loom shutdown **")
 CloseAllLogs()
