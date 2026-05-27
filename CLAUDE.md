@@ -6,14 +6,15 @@ Orientation for Claude agents working in this repo. User-facing docs live in [Re
 
 Server + Client + tools for an open-source MMORPG engine, written in the **BlitzForge** language (a modernized Blitz3D fork — *not* base Blitz3D). The compiler is vendored as a git submodule at [compiler/BlitzForge](compiler/BlitzForge).
 
-The four shipping executables built from `src/`:
+The five shipping executables built from `src/`:
 
 | Source | Output | Purpose |
 |---|---|---|
 | [src/Server.bb](src/Server.bb) | `bin/Server.exe` | Authoritative game server |
 | [src/Client.bb](src/Client.bb) | `bin/Client.exe` | Game client |
-| [src/GUE.bb](src/GUE.bb) | `bin/GUE.exe` | Graphical world editor |
-| [src/Project Manager.bb](src/Project%20Manager.bb) | `Project Manager.exe` | Project launcher |
+| [src/GUE.bb](src/GUE.bb) | `bin/GUE.exe` | Graphical world editor (the established editor) |
+| [src/Loom.bb](src/Loom.bb) | `bin/Loom.exe` | Loom alpha — parallel redesigned editor; **read [docs/loom/README.md](docs/loom/README.md) before touching** |
+| [src/Project Manager.bb](src/Project%20Manager.bb) | `Project Manager.exe` | Project launcher — launches GUE or Loom for the active project |
 
 Plus seven editor tools under `src/Tools/` (RC Architect, Terrain/Cave/Rock/Tree editors, Gubbin Tool).
 
@@ -25,6 +26,24 @@ Always check `.claude/skills/` for relevant skills before working in a specialty
 - **rcce2-packet-handler** — invoke before touching [ServerNet.bb](src/Modules/ServerNet.bb) or [ClientNet.bb](src/Modules/ClientNet.bb). Wire encoding, bounds-checking, soft-fail patterns.
 - **rcce2-bvm-command** — invoke before adding/modifying a `BVM_*` function in [ScriptingCommands.bb](src/Modules/ScriptingCommands.bb). The dispatch in [RC_Standard_Invoker.bb](src/Modules/RC_Standard_Invoker.bb) is alphabetically opcode-ordered and has a 142-case renumber trap.
 - **rcce2-test-writing** — invoke before adding a test under `src/Tests/`. Test files are `Strict`+`EnableGC`+inline-stubbed and must not pull in network/world deps.
+
+## Loom (alpha redesigned editor)
+
+A parallel editor to GUE, shipping as `bin/Loom.exe`. Built around the design concept *"every reference between entities is a clickable thread."* Read-only in the alpha; editing is a beta concern.
+
+**Before touching any `src/Loom.bb` or `src/Modules/Loom/*` file, read [docs/loom/README.md](docs/loom/README.md).** It explains what Loom is supposed to be, separate from what it currently is.
+
+| Doc | When to read it |
+|---|---|
+| [docs/loom/README.md](docs/loom/README.md) | First. The north star and what's shipped. |
+| [docs/loom/architecture.md](docs/loom/architecture.md) | Before adding or restructuring a Loom module. Module map, state conventions, BlitzForge gotchas. |
+| [docs/loom/roadmap.md](docs/loom/roadmap.md) | Before picking what to build next. Shipped / next-up / deferred (with reasons). |
+| [docs/loom/decisions/](docs/loom/decisions/) | Before arguing with an existing choice. ADRs for custom-draw-vs-F-UI, read-only-alpha, the zone-only pivot, deferred 3D viewport. |
+| [docs/loom/prototype/](docs/loom/prototype/) | When sizing a new visual surface. The literal Claude Design HTML/JSX/CSS bundle. Open `Loom - World Editor.html` in a browser. |
+
+Loom reuses GUE's data modules (`Items.bb`, `Actors.bb`, `Spells.bb`, `ServerAreas.bb`, etc.) via `Include`, so it can't drift from GUE's view of the project on disk. Anything that touches a data module needs to keep both editors compiling — `compile.bat` builds all five engine targets and CI runs the same.
+
+The Loom UI is custom-drawn on top of Blitz3D's 2D primitives (`Color`/`Rect`/`Line`/`Text`) wrapped in `Modules/Loom/Theme.bb`. F-UI is **not** Included by Loom — see [docs/loom/decisions/001-custom-draw-not-fui.md](docs/loom/decisions/001-custom-draw-not-fui.md) for the rationale, including specific F-UI quirks that derailed the earlier retrofit attempts.
 
 ## Build and test
 
@@ -59,8 +78,9 @@ The compile target (`Server.exe`, `Client.exe`, `GUE.exe`, `Project Manager.exe`
 rcce2/
 ├── src/                          # all engine source — your primary work area
 │   ├── Server.bb · Client.bb     # entry points (include cascade — start here)
-│   ├── GUE.bb · Project Manager.bb
+│   ├── GUE.bb · Loom.bb · Project Manager.bb
 │   ├── Modules/                  # ~70 .bb files; see "Module map" below
+│   │   └── Loom/                 # Loom-specific UI modules (Theme, Threads, Browser, Composer)
 │   ├── Tools/                    # standalone editor utilities (each .bb → .exe)
 │   └── Tests/                    # Strict-mode test files (see test skill)
 ├── compiler/BlitzForge/          # SUBMODULE — compiler + runtime (C++17)
@@ -68,6 +88,7 @@ rcce2/
 ├── extras/reshade/               # SUBMODULE — post-processing
 ├── data/                         # default game project (worlds, scripts, assets)
 ├── docs/                         # user-facing engine + scripting docs
+│   └── loom/                     # Loom design intent, architecture, roadmap, ADRs, prototype bundle
 ├── bin/                          # compiled binaries + vendored DLLs (gitignored .exe)
 ├── scripts/                      # cross-platform build helpers
 ├── .claude/skills/               # agent skills for specialty work

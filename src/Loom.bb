@@ -2,6 +2,11 @@
 // Loom.bb -- Loom World Editor (Alpha)
 // =============================================================================
 //
+// **Read docs/loom/README.md first** if you're picking this up. The north
+// star, architecture, roadmap, and the ADRs that explain why the code is
+// shaped the way it is all live under docs/loom/. The literal Claude Design
+// prototype the alpha is built against is preserved at docs/loom/prototype/.
+//
 // A drop-in alternative to GUE, sharing the on-disk data formats but with
 // a fresh UI built around the Loom design concept: every entity is browsable,
 // every reference between entities is a clickable thread.
