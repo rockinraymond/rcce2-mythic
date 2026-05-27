@@ -84,7 +84,7 @@ none = void/Bool. Parameter sigils inside the argument list use the same.
 | `ACTORZONEINSTANCE` | `ACTORZONEINSTANCE(PARAM1%)` : Int | None |
 | `MOVEACTOR` | `MOVEACTOR(PARAM1%, PARAM2#, PARAM3#, PARAM4#, PARAM5%=0, PARAM6%=0)` | SelfOrPrivileged |
 | `ROTATEACTOR` | `ROTATEACTOR(PARAM1%, PARAM2#)` | SelfOrPrivileged |
-| `SETACTORAISTATE` | `SETACTORAISTATE(PARAM1%, PARAM2%)` | None |
+| `SETACTORAISTATE` | `SETACTORAISTATE(PARAM1%, PARAM2%)` | Privileged |
 | `SETACTORBEARD` | `SETACTORBEARD(PARAM1%, PARAM2%)` | Privileged |
 | `SETACTORCLOTHES` | `SETACTORCLOTHES(PARAM1%, PARAM2%)` | Privileged |
 | `SETACTORDESTINATION` | `SETACTORDESTINATION(PARAM1%, PARAM2#, PARAM3#)` | SelfOrPrivileged |
@@ -95,7 +95,7 @@ none = void/Bool. Parameter sigils inside the argument list use the same.
 | `SETACTORGUILD` | `SETACTORGUILD(PARAM1%, PARAM2%)` | Privileged |
 | `SETACTORHAIR` | `SETACTORHAIR(PARAM1%, PARAM2%)` | Privileged |
 | `SETACTORLEVEL` | `SETACTORLEVEL(PARAM1%, PARAM2%)` | Privileged |
-| `SETACTORTARGET` | `SETACTORTARGET(PARAM1%, PARAM2%=0)` | None |
+| `SETACTORTARGET` | `SETACTORTARGET(PARAM1%, PARAM2%=0)` | Privileged |
 | `SPAWN` | `SPAWN(PARAM1%, PARAM2$, PARAM3#, PARAM4#, PARAM5#, PARAM6$ = "", PARAM7$ = "", PARAM8%=0)` : Int | None |
 
 ## Item
@@ -316,12 +316,12 @@ none = void/Bool. Parameter sigils inside the argument list use the same.
 | `SETHOMEFACTION` | `SETHOMEFACTION(PARAM1%, PARAM2$)` | Privileged |
 | `SETLEADER` | `SETLEADER(PARAM1%, PARAM2%)` | Privileged |
 | `SETMAXATTRIBUTE` | `SETMAXATTRIBUTE(PARAM1%, PARAM2$, PARAM3%)` | Privileged |
-| `SETNAME` | `SETNAME(PARAM1%, PARAM2$)` | None |
+| `SETNAME` | `SETNAME(PARAM1%, PARAM2$)` | Privileged |
 | `SETOWNER` | `SETOWNER(PARAM1%, PARAM2$, PARAM3%, PARAM4% = 0)` | None |
 | `SETREPUTATION` | `SETREPUTATION(PARAM1%, PARAM2%)` | Privileged |
 | `SETRESISTANCE` | `SETRESISTANCE(PARAM1%, PARAM2$, PARAM3%)` | Privileged |
 | `SETSUPERGLOBAL` | `SETSUPERGLOBAL(PARAM1%, PARAM2$)` | None |
-| `SETTAG` | `SETTAG(PARAM1%, PARAM2$)` | None |
+| `SETTAG` | `SETTAG(PARAM1%, PARAM2$)` | Privileged |
 | `SETWAITINFO` | `SETWAITINFO(PARAM1%, PARAM2%)` | None |
 | `SETWAITING` | `SETWAITING(X%)` | None |
 | `SETWAITITEM` | `SETWAITITEM(PARAM1%, PARAM2$, PARAM3%)` | None |

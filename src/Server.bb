@@ -212,6 +212,7 @@ Number = LoadProjectiles("Data\Server Data\Projectiles.dat") : WriteLog(MainLog,
 If Number = -1 Then RuntimeError("Could not open Data\Server Data\Projectiles.dat!")
 Number = LoadAccounts() : WriteLog(MainLog, "Loaded " + Str$(Number) + " accounts...")
 Number = LoadScripts() : WriteLog(MainLog, "Loaded " + Str$(Number) + " scripts...")
+LoadPrivilegedScripts() ; Server-controlled allowlist; gates BVM priv elevation at ThreadScript boundary. See Scripting.bb's `LoadPrivilegedScripts` header for the trust model.
 Number = CompileModules(): WriteLog(MainLog, "Compiled " + Str$(Number) + " Modules...")
 Result = LoadSuperGlobals("Data\Server Data\Superglobals.dat") : WriteLog(MainLog, "Loaded superglobal variables...")
 ; Load zones
