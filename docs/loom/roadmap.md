@@ -16,7 +16,8 @@ Shipped, next, and deferred. Read this when picking what to build next.
 - **Search-within-category** — live filter input above the card grid; case-insensitive substring match against the current category's name field. Esc clears the filter (priority above the back-stack pop). ([#335](https://github.com/RydeTec/rcce2/pull/335))
 - **Editing phase 1 (broaden)** — int / float / bool field types; ~40 editable fields across every entity kind (Actor / Item / Spell / Zone / Faction / AnimSet); Save dispatch for every kind (`SaveActors`, `SaveItems`, `SaveFactions`, `SaveAnimSets`, `ServerSaveArea`); `SetFactionName` helper added to `Actors.bb` to work around the Strict-mode global-array-write trap. ([#336](https://github.com/RydeTec/rcce2/pull/336))
 - **Entity creation (+ New)** — `EntityFactory.bb` wraps the GUE constructors (`CreateActor`, `CreateItem`, `CreateSpell`, `ServerCreateArea`, `CreateAnimSet`, faction-slot-first-empty); "+ New X" button on the browser filter bar dispatches per active category, focuses the new entity for immediate editing, marks the kind dirty. Zone names auto-deduplicate via `EntityFactory_UniqueZoneName` so a new zone doesn't overwrite an existing `.dat`. ([#337](https://github.com/RydeTec/rcce2/pull/337))
-- **Entity deletion + Discard + Validation Ribbon** — Delete button on the composer (two-click arm/confirm); Discard button (revert kind from disk, also arm/confirm); Validation Conscience Ribbon at the top of every Loom surface showing per-kind dirty badges (click to save), broken-reference count (Actor->Faction, Actor->AnimSet, Zone->Portal->Zone), and total entity counts. New `Ribbon.bb` module; new `DeleteX Template` helpers in `Actors.bb`/`Items.bb`/`Spells.bb`/`Animations.bb` (non-Strict, to work around the Dim-write trap).
+- **Entity deletion + Discard + Validation Ribbon** — Delete button on the composer (two-click arm/confirm); Discard button (revert kind from disk, also arm/confirm); Validation Conscience Ribbon at the top of every Loom surface showing per-kind dirty badges (click to save), broken-reference count (Actor->Faction, Actor->AnimSet, Zone->Portal->Zone), and total entity counts. New `Ribbon.bb` module; new `DeleteX Template` helpers in `Actors.bb`/`Items.bb`/`Spells.bb`/`Animations.bb` (non-Strict, to work around the Dim-write trap). ([#338](https://github.com/RydeTec/rcce2/pull/338))
+- **World Atlas** — design's #3 signature surface. Zones tab gains a Card / Atlas toggle. Atlas renders zones as nodes with portals as edges using a Fruchterman-Reingold force-directed layout derived from the portal-link graph topology. Click a node → focus that zone; layout rebuilds on zone add / delete; circular seeding avoids the all-same-position singularity.
 
 ## Next up (in rough order of leverage)
 
@@ -26,15 +27,7 @@ Once free-form fields edit, reference-typed fields (faction, anim set, zone targ
 
 Estimated scope: 200-300 LOC. Builds on the shipped palette as picker.
 
-### 2. World atlas (spatial zone view)
-
-Today the Zones tab in the browser is a card grid. The design called for a spatial atlas: zones laid out by position with portals drawn as lines between them. Worth shipping once there are enough zones in a project for the spatial layout to communicate something the grid doesn't (probably >10 zones).
-
-Open question: zones in rcce2 don't have a stored "world position" — they're just floating in a flat list. The spatial layout would have to be either (a) derived from portal-link graph topology, or (b) a manual layout Loom remembers per-project.
-
-Estimated scope: 400-500 LOC including layout heuristic. Skip if no project pressure for it.
-
-### 3. Session timeline scrubber
+### 2. Session timeline scrubber
 
 Visible history of the session's edits (entity X changed field Y from A to B at time T). Click an entry → revert. Drag the handle → preview a past state. Needs an undo log layered on top of the existing in-memory dirty tracking.
 

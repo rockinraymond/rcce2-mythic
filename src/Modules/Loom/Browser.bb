@@ -79,12 +79,22 @@ Type Browser
     // typing into the browser feels immediate without a click-into-input.
     Field filterQuery$
 
+    // Atlas state -- the Zones tab can swap from card grid to a spatial
+    // portal-graph view. Atlas instance is set by Loom.bb at construction
+    // via Browser::setAtlas; atlasMode tracks whether the user has toggled
+    // it on (persists across tab switches so a return to Zones honors the
+    // last setting). Defaults to card-mode.
+    Field atlas.Atlas
+    Field atlasMode%
+
 
     Method create.Browser(threads.Threads)
         self\threads = threads
         self\category = "actor"     // richest content; most useful starting point
         self\cardClickLatch = False
         self\filterQuery = ""
+        self\atlas = Null
+        self\atlasMode = False
 
         // Build the ordered category list. Iterated via `Each BrowserCategory`
         // in insertion order (Blitz3D's global type pool is FIFO) -- also the
@@ -104,6 +114,15 @@ Type Browser
         Local c.BrowserCategory = New BrowserCategory()
         c\Kind = kind$
         c\Title = title$
+    End Method
+
+
+    // -------------------------------------------------------------------------
+    // setAtlas -- injection point for the Loom top-level type to share the
+    // Atlas instance with the Browser. Called once at construction.
+    // -------------------------------------------------------------------------
+    Method setAtlas(atlas.Atlas)
+        self\atlas = atlas
     End Method
 
 
@@ -239,8 +258,49 @@ Type Browser
             // (the Composer takes over from here).
         EndIf
 
-        // Hint between the button and the input
-        LoomText(nbX + nbW + 16, y + 8, "TYPE TO FILTER  ·  CTRL+K SEARCH ALL", LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
+        // Card / Atlas view toggle -- only present on the Zones tab. Lives
+        // immediately right of the "+ New" button so the action cluster
+        // stays packed together.
+        Local hintX% = nbX + nbW + 16
+        If self\category = "zone" And self\atlas <> Null
+            Local tbX% = nbX + nbW + 10
+            Local tbY% = y + 4
+            Local tbW% = 130
+            Local tbH% = 22
+            Local tbHover% = (mx >= tbX And mx < tbX + tbW And my >= tbY And my < tbY + tbH)
+
+            If tbHover = True
+                LoomFill(tbX, tbY, tbW, tbH, LOOM_ARCANE_700_R, LOOM_ARCANE_700_G, LOOM_ARCANE_700_B)
+                LoomBorder(tbX, tbY, tbW, tbH, LOOM_ARCANE_500_R, LOOM_ARCANE_500_G, LOOM_ARCANE_500_B)
+            Else
+                LoomFill(tbX, tbY, tbW, tbH, LOOM_STONE_800_R, LOOM_STONE_800_G, LOOM_STONE_800_B)
+                LoomBorder(tbX, tbY, tbW, tbH, LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
+            EndIf
+
+            // Active half gets a brass fill underline; inactive half stays
+            // neutral. Click anywhere on the button flips.
+            Local halfW% = tbW / 2
+            If self\atlasMode = False
+                LoomFill(tbX, tbY + tbH - 3, halfW, 3, LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
+            Else
+                LoomFill(tbX + halfW, tbY + tbH - 3, halfW, 3, LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
+            EndIf
+            LoomText(tbX + 10, tbY + 4, "Card", LOOM_PARCHMENT_100_R, LOOM_PARCHMENT_100_G, LOOM_PARCHMENT_100_B)
+            LoomText(tbX + halfW + 10, tbY + 4, "Atlas", LOOM_PARCHMENT_100_R, LOOM_PARCHMENT_100_G, LOOM_PARCHMENT_100_B)
+
+            If tbHover And clicked
+                If mx < tbX + halfW
+                    self\atlasMode = False
+                Else
+                    self\atlasMode = True
+                EndIf
+                WriteLog(LoomLog, "Browser: zone view -> " + Browser::viewModeLabel(self))
+            EndIf
+            hintX = tbX + tbW + 16
+        EndIf
+
+        // Hint between the button cluster and the input
+        LoomText(hintX, y + 8, "TYPE TO FILTER  ·  CTRL+K SEARCH ALL", LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
 
         // Input on the right -- 280px wide
         Local iw% = 280
@@ -289,6 +349,16 @@ Type Browser
         If kind = "faction" Then Return "Faction"
         If kind = "animset" Then Return "Anim Set"
         Return kind
+    End Method
+
+
+    // -------------------------------------------------------------------------
+    // viewModeLabel -- short human label for the current zone view mode.
+    // Used in WriteLog calls and could surface in the footer hint later.
+    // -------------------------------------------------------------------------
+    Method viewModeLabel$()
+        If self\atlasMode = True Then Return "atlas"
+        Return "card"
     End Method
 
 
@@ -363,8 +433,20 @@ Type Browser
 
         self\cardClickLatch = False
 
-        Local count% = 0
         Local cat$ = self\category
+
+        // Zone tab + atlasMode = swap the card grid for the spatial atlas.
+        // Atlas owns its own paint + hit-test inside the viewport rect.
+        // (Filter applies to the card view only -- the atlas always shows
+        //  every zone since spatial context is what it's for.)
+        If cat = "zone" And self\atlasMode = True And self\atlas <> Null
+            Local viewportH% = sh - gridY - BR_BOT_RIBBON - BR_SECTION_PAD
+            Local hit% = Atlas::renderAndUpdate(self\atlas, gridX, gridY, gridW, viewportH)
+            If hit = True Then self\cardClickLatch = True
+            Return self\cardClickLatch
+        EndIf
+
+        Local count% = 0
 
         If cat = "actor"
             count = Browser::drawActorGrid(self, sw, sh, mx, my, clicked, gridX, gridY, cols)
