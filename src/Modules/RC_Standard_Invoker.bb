@@ -92,6 +92,16 @@ Function BVM_InitStringConst_BVM_MAIN_CMD_SET_DEF_$()
 	s = s + "Function ACTORDESTINATIONZ<BVM_ACTORDESTINATIONZ>#(PARAM1%)"+Chr(10)
 	s = s + "Function ACTORUNDERWATER<BVM_ACTORUNDERWATER>%(PARAM1%)"+Chr(10)
 	s = s + "Function ACTORGENDER<BVM_ACTORGENDER>%(PARAM1%)"+Chr(10)
+	; DEAD-API: SetOwner / SceneryOwner are permanently disabled. The
+	; underlying OwnedScenery type was removed from ServerAreas.bb:53
+	; and these BVM impls are commented out at ScriptingCommands.bb:1046
+	; / :1071. Both contract entries stay alive because removing them
+	; would shift opcodes for every BVM alphabetically after
+	; SCENERYOWNER and SETOWNER, breaking the fixed-Case dispatch at
+	; lines 1363 / 1494 below. The dispatch cases push a 0 sentinel
+	; (SCENERYOWNER) or no-op (SETOWNER) so scripts that still call
+	; these don't corrupt the stack. Do not remove without an opcode-
+	; renumber audit of every Case >= 501.
 	s = s + "Function SETOWNER<BVM_SETOWNER>(PARAM1%, PARAM2$, PARAM3%, PARAM4% = 0)"+Chr(10)
 	s = s + "Function SCENERYOWNER<BVM_SCENERYOWNER>%(PARAM1$, PARAM2%, PARAM3%=0)"+Chr(10)
 	s = s + "Function ACTORID<BVM_ACTORID>%(PARAM1$, PARAM2$)"+Chr(10)
@@ -1369,7 +1379,19 @@ Function BVM_Invoke%(withTimeOut% = 0)
 				iparam2% = BVM_PopInt()
 				iparam1% = BVM_PopInt()
 				sparam0$ = BVM_PopString()
-				;BVM_PushInt(BVM_SCENERYOWNER(sparam0$, iparam1%, iparam2%)) {##}
+				; BVM_SCENERYOWNER is permanently disabled -- the underlying
+				; OwnedScenery type was commented out in
+				; ServerAreas.bb:53 alongside its supporting code. The impl
+				; in ScriptingCommands.bb:1071 has been commented out as
+				; well. The contract entry above at line ~95 stays alive to
+				; preserve opcode stability for every BVM alphabetically
+				; after SCENERYOWNER, so this dispatch case still gets
+				; reached when a script calls SceneryOwner(...).
+				; Push 0 (sentinel "no owner") so the caller's stack stays
+				; balanced -- without this push, the int the caller
+				; expected back is missing and every subsequent BVM
+				; operation in that expression pops the wrong slot.
+				BVM_PushInt(0)
 			Case 502
 				iparam6% = BVM_PopInt()
 				iparam5% = BVM_PopInt()
@@ -1496,7 +1518,13 @@ Function BVM_Invoke%(withTimeOut% = 0)
 				iparam2% = BVM_PopInt()
 				sparam1$ = BVM_PopString()
 				iparam0% = BVM_PopInt()
-				;BVM_SETOWNER(iparam0%, sparam1$, iparam2%, iparam3%) {##}
+				; BVM_SETOWNER is permanently disabled -- same context as
+				; the SCENERYOWNER no-op at Case 501. SetOwner is void, so
+				; the 4-arg pop is stack-balanced on its own and no
+				; sentinel push is needed; the case becomes a silent no-op
+				; for scripts that call SetOwner(...). The contract entry
+				; above at line ~95 stays alive for opcode stability;
+				; impl at ScriptingCommands.bb:1046 is commented out.
 			Case 531
 				iparam1% = BVM_PopInt()
 				iparam0% = BVM_PopInt()

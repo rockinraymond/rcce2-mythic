@@ -1043,6 +1043,14 @@ Function BVM_ACTORGENDER%(Param1%)
 Return Result%
 End Function
 
+; DEAD-API: BVM_SETOWNER permanently disabled. The underlying
+; OwnedScenery type was removed from ServerAreas.bb:53; the public
+; contract entry in RC_Standard_Invoker.bb:~95 stays alive for opcode
+; stability (removing it would renumber every BVM alphabetically after
+; SCENERYOWNER/SETOWNER and break the fixed-Case dispatch). Dispatch
+; case at RC_Standard_Invoker.bb:1494 is a silent no-op. Sibling
+; BVM_SCENERYOWNER below has the same treatment but with a 0-sentinel
+; push to keep its return-value caller stack-balanced.
 ;Function BVM_SETOWNER(Param1%, Param2$, Param3%, Param4% = 0) {##}
 ;	Actor.ActorInstance = Object.ActorInstance(Param1%)
 ;	Zone.Area = FindArea(Param2$)
@@ -1068,6 +1076,13 @@ End Function
 
 ;End Function
 
+; DEAD-API: BVM_SCENERYOWNER permanently disabled. See the audit
+; comment above BVM_SETOWNER for the OwnedScenery feature removal and
+; the opcode-stability rationale. The dispatch case at
+; RC_Standard_Invoker.bb:1363 now pushes 0 (sentinel "no owner") so the
+; caller's stack stays balanced -- before that fix, the case popped 3
+; args and pushed nothing, corrupting every subsequent BVM operation
+; in the calling expression.
 ;Function BVM_SCENERYOWNER%(Param1$, Param2%, Param3%=0) {##}
 ;	Zone.Area = FindArea(Param1$)
 ;	If Zone <> Null
