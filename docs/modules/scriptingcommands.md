@@ -14,19 +14,29 @@ This page is the **conceptual overview** of how the file is structured and what 
 
 `ScriptingCommands.bb` is a long flat file — 222 `Function BVM_<NAME>(...)` definitions in roughly-grouped sections. There is no `Type` declaration in the file; all state lives in the actor / item / spell / etc. modules. The functions are pure work-units called by the BVM runtime.
 
-Approximate section groupings (use a `^Function BVM_` grep to locate exact lines, since they drift):
+Functions are roughly grouped by theme but the file has no enforced sectioning — names interleave in places. Use the **landmark functions** below as navigation anchors (grep `^Function BVM_<NAME>` for exact lines; line numbers drift, names don't):
 
-| Range | Theme |
+| Theme | Landmark functions |
 |---|---|
-| ~50–220 | Privilege-gate helpers (`BVM_RequirePrivileged`, `BVM_RequireSelfOrPrivileged`, `BVM_ScriptPathIsSafe`, `BVM_SetWaitResult`). These are internal — not advertised in `RC_Standard_Invoker.bb`'s contract. |
-| ~250–900 | Actor lifecycle + appearance + AI (Spawn, Kill, SetLeader, SetActorGender / Hair / Beard / Face / Clothes, SetActorAIState, SetActorTarget, MoveActor, RotateActor, AnimateActor) |
-| ~900–1500 | Items + inventory + equipment (SpawnItem, GiveItem, HasItem, ItemHealth, equip/unequip helpers) |
-| ~1500–2000 | Spells + abilities (Spell ID lookups, AddSpell, SetAbilityLevel, mem state) |
-| ~2000–2400 | Attributes + factions + reputation (Set/Change Attribute / MaxAttribute, FactionRating, Reputation, Resistance) |
-| ~2400–2700 | Player party + trading + quest + dialog (Party state, OpenTrading, NewQuest / UpdateQuest, dialog spawn / output / input) |
-| ~2700–3300 | Output (chat / debug / log) + persistence (MySQL family) + UDP networking + utility (Split, RuntimeError) |
+| Privilege-gate helpers (internal — not advertised in `RC_Standard_Invoker.bb`'s contract) | `BVM_RequirePrivileged`, `BVM_RequireSelfOrPrivileged`, `BVM_ScriptPathIsSafe`, `BVM_SetWaitResult` |
+| Actor lifecycle | `BVM_SPAWN`, `BVM_KILLACTOR`, `BVM_SETLEADER` |
+| Actor appearance | `BVM_SETACTORGENDER`, `BVM_SETACTORBEARD`, `BVM_SETACTORHAIR`, `BVM_SETACTORFACE`, `BVM_SETACTORCLOTHES` |
+| Actor movement + animation | `BVM_MOVEACTOR`, `BVM_ROTATEACTOR`, `BVM_SETACTORDESTINATION`, `BVM_ANIMATEACTOR`, `BVM_SETACTORTARGET`, `BVM_SETACTORAISTATE` |
+| Items + inventory | `BVM_SPAWNITEM`, `BVM_GIVEITEM`, `BVM_HASITEM`, `BVM_SETITEMHEALTH`, `BVM_ITEMATTRIBUTE` |
+| Spells + abilities | `BVM_ADDABILITY`, `BVM_DELETEABILITY`, `BVM_SETABILITYLEVEL`, `BVM_ABILITYLEVEL`, `BVM_ABILITYKNOWN`, `BVM_ABILITYMEMORISED` |
+| Attributes | `BVM_SETATTRIBUTE`, `BVM_CHANGEATTRIBUTE`, `BVM_SETMAXATTRIBUTE`, `BVM_CHANGEMAXATTRIBUTE`, `BVM_ATTRIBUTE`, `BVM_MAXATTRIBUTE` |
+| Factions + reputation + resistance | `BVM_SETFACTIONRATING`, `BVM_CHANGEFACTIONRATING`, `BVM_SETHOMEFACTION`, `BVM_SETREPUTATION`, `BVM_SETRESISTANCE` |
+| Currency + progression | `BVM_SETGOLD`, `BVM_CHANGEGOLD`, `BVM_SETMONEY`, `BVM_CHANGEMONEY`, `BVM_GIVEXP`, `BVM_GIVEKILLXP`, `BVM_SETACTORLEVEL` |
+| Party + trading | `BVM_OPENTRADING`, `BVM_COUNTPARTYMEMBERS`, `BVM_PARTYMEMBER` |
+| Quest + script-wait state | `BVM_NEWQUEST`, `BVM_UPDATEQUEST`, `BVM_COMPLETEQUEST`, `BVM_DELETEQUEST`, `BVM_QUESTSTATUS`, `BVM_QUESTCOMPLETE`, `BVM_SETWAITKILL`, `BVM_SETWAITSPEAK`, `BVM_SETWAITITEM`, `BVM_GETWAITRESULT` |
+| World + zone | `BVM_WARP`, `BVM_CREATEZONEINSTANCE`, `BVM_REMOVEZONEINSTANCE`, `BVM_ZONEINSTANCEEXISTS`, `BVM_ACTORSINZONE`, `BVM_FIRSTACTORINZONE`, `BVM_NEXTACTORINZONE` |
+| Output / debug | `BVM_OUTPUT`, `BVM_BUBBLEOUTPUT`, `BVM_CREATEFLOATINGNUMBER`, `BVM_DEBUGLOG`, `BVM_SCRIPTLOG`, `BVM_RUNTIMEERROR` |
+| Persistence (MySQL) | `BVM_MYSQLQUERY`, `BVM_MYSQLNUMROWS`, `BVM_MYSQLFETCHROW`, `BVM_MYSQLGETVAR`, `BVM_MYSQLFREEQUERY`, `BVM_MYSQLFREEROW`, `BVM_SQLACCOUNTID`, `BVM_SQLACTORID` |
+| UDP networking | `BVM_CreateUDPStream`, `BVM_SendUDPMsg`, `BVM_RecvUDPMsg`, `BVM_CloseUDPStream` |
+| Filesystem (path-traversal guarded) | `BVM_DELETEFILE`, `BVM_WRITEFILE`, `BVM_OPENFILE`, `BVM_APPENDFILE`, `BVM_CREATEDIR`, `BVM_FILESIZE`, `BVM_FILETYPE` |
+| Utility | `BVM_SPLIT`, `BVM_HOUR`, `BVM_MINUTE`, `BVM_THREADEXECUTE`, `BVM_PERSISTENT`, `BVM_SAVESTATE` |
 
-Refresh the section table when major reorganization happens; use it as a navigation aid, not a strict spec.
+For any specific function, grep `^Function BVM_<NAME>` directly. The auto-generated [BVM reference](../bvm-reference.md) catalog has every signature + current gate.
 
 ## Privilege gating — the load-bearing security invariant
 
@@ -69,7 +79,7 @@ The full regression-test contract lives in [`src/Tests/Modules/BVMPrivilegeGateT
 
 Two functions live as commented-out stubs (`;Function BVM_<NAME>(...)`) — the underlying feature was disabled at the data-model level but the contract entries in `RC_Standard_Invoker.bb` stay alive for opcode stability:
 
-- **`BVM_SETOWNER`** ([:1054](../../src/Modules/ScriptingCommands.bb#L1054)) and **`BVM_SCENERYOWNER`** ([:1086](../../src/Modules/ScriptingCommands.bb#L1086)) — the `OwnedScenery` type was removed from [ServerAreas.bb](serverareas.md) alongside its supporting code. PR [#297](https://github.com/RydeTec/rcce2/pull/297) added a stack-balance sentinel push to SCENERYOWNER's dispatch case (which had been popping 3 args + pushing nothing → silent stack corruption in caller expressions) and cross-linked all five dead-API sites with audit comments.
+- **`BVM_SETOWNER`** and **`BVM_SCENERYOWNER`** (grep `;Function BVM_SETOWNER` / `;Function BVM_SCENERYOWNER` in this file) — the `OwnedScenery` type was removed from [ServerAreas.bb](serverareas.md) alongside its supporting code. PR [#297](https://github.com/RydeTec/rcce2/pull/297) added a stack-balance sentinel push to SCENERYOWNER's dispatch case (which had been popping 3 args + pushing nothing → silent stack corruption in caller expressions) and cross-linked all five dead-API sites with audit comments.
 
 Do not remove the contract entries without an opcode-renumber audit of every `Case >= 501` in `RC_Standard_Invoker.bb`. The dispatch is keyed by opcode number; removal shifts every BVM alphabetically after `SCENERYOWNER` / `SETOWNER`.
 
@@ -133,7 +143,7 @@ Every newly-gated function should also get a `Mock<NAME>` + 3-4 tests in [`src/T
 |---|---|
 | Privilege-gating bypass cluster (PRs #260 / #237–#239 era) | Initial 7-function gate sweep documented in the test file header |
 | Float sanitisation (PRs #237–#239) | `ClampWorldCoord` / `ClampSaneFloat` added to BVM_MOVE/ROTATE/SPAWN/etc. |
-| Iterator hazards (PRs #246 / #247 / #248) | After-cursor walks in `BVM_REFRESHSCRIPTS` / `BVM_REMOVEZONEINSTANCE` / similar |
+| Iterator hazards (PR era ~#240s–#259) | After-cursor walks in `BVM_REFRESHSCRIPTS` / `BVM_REMOVEZONEINSTANCE` and the `Delete` / `For-Each` pattern across the BVM dispatch. See `CLAUDE.md` → "Iterator-during-iteration hazards" for the canonical pattern. |
 | MySQL row/query gate (PRs #233 / #234) | UDP family + MySQL handle-walkers gated to Privileged |
 | SETMAXATTRIBUTE / CHANGEMAXATTRIBUTE ([PR #300](https://github.com/RydeTec/rcce2/pull/300)) | Brick vector — siblings of the already-gated SET/CHANGE pair |
 | Faction / leader / ability / item-health / resistance ([PR #301](https://github.com/RydeTec/rcce2/pull/301)) | 5 more brick-vector gates closed |
