@@ -16,7 +16,11 @@ Strict
 //   Each Area, FactionNames$, Each AnimSet)
 //
 // Writes:
-//   Nothing. Read-only in the alpha.
+//   When edit mode is active for a field, mutates the underlying type instance
+//   on commit (Enter or Save button). Sets the corresponding per-tab *Saved
+//   global to False so GUE sees Loom's edits as dirty too. Save dispatch
+//   (Composer::commitSaveForKind) calls GUE's existing Save* serializers
+//   (SaveSpells, SaveItems, ...) so the on-disk format stays canonical.
 //
 // Architecture: Type with Methods, called as `Composer::method(self, args)`.
 
@@ -27,6 +31,13 @@ Const CMP_BOT_PAD     = 36     // matches BR_BOT_RIBBON
 Const CMP_PAD         = 16
 Const CMP_ROW_H       = 22
 Const CMP_CHIP_H      = 26
+
+// Save button (top-right of the composer title block).
+Const CMP_SAVE_BTN_W  = 70
+Const CMP_SAVE_BTN_H  = 22
+
+// Edit-buffer cursor blink rate (ms). MilliSecs() Mod CMP_CURSOR_PERIOD < half = visible.
+Const CMP_CURSOR_PERIOD = 1000
 
 
 // =============================================================================
@@ -40,10 +51,24 @@ Type Composer
     // caller can react (e.g. log it, refresh another surface).
     Field chipHit%
 
+    // Edit-buffer state. editKind = "" means no edit in progress.
+    // (kind, refID, fieldId) together identify which field of which entity
+    // the user is currently typing into. editBuffer is the in-progress value
+    // shown with a blinking cursor; on Enter it's written to the entity's
+    // field via commitEdit.
+    Field editKind$
+    Field editRefID%
+    Field editFieldId$
+    Field editBuffer$
+
 
     Method create.Composer(threads.Threads)
         self\threads = threads
         self\chipHit = False
+        self\editKind = ""
+        self\editRefID = 0
+        self\editFieldId = ""
+        self\editBuffer = ""
         Return self
     End Method
 
@@ -65,6 +90,24 @@ Type Composer
     Method renderAndUpdate%(sw%, sh%)
         If self\threads\focusKind = "" Then Return False
 
+        Local kind$ = self\threads\focusKind
+        Local refID% = self\threads\focusID
+
+        // If focus changed while editing, cancel the pending edit (don't
+        // mutate a stale target). Same kind+id keeps the edit active.
+        If self\editKind <> ""
+            If self\editKind <> kind Or self\editRefID <> refID
+                Composer::cancelEdit(self)
+            EndIf
+        EndIf
+
+        // Drain keyboard into editBuffer if an edit is active. Consumes Esc
+        // (cancel) and Enter (commit) so Loom's outer Esc handler doesn't
+        // see them on the same frame.
+        If self\editKind <> ""
+            Composer::pumpKeyboard(self)
+        EndIf
+
         Local mx% = MouseX()
         Local my% = MouseY()
         Local clicked% = MouseHit(1)
@@ -80,13 +123,23 @@ Type Composer
         LoomFill(x, y, 3, h, LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
 
         // Title block
-        Local kind$ = self\threads\focusKind
         Local kindLabel$ = Composer::kindLabel(self, kind)
-        Local entityName$ = Threads::lookupName(self\threads, kind, self\threads\focusID)
+        Local entityName$ = Threads::lookupName(self\threads, kind, refID)
         If entityName = "" Then entityName = "(unknown)"
+
+        // Dirty asterisk -- prefix the entity name when its kind has unsaved
+        // edits. Visible regardless of who made the edit (Loom or GUE).
+        Local dirty% = Composer::isDirtyForKind(self, kind)
+        If dirty = True Then entityName = "* " + entityName
 
         LoomText(x + CMP_PAD, y + CMP_PAD, kindLabel, LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
         LoomText(x + CMP_PAD, y + CMP_PAD + 16, entityName, LOOM_PARCHMENT_100_R, LOOM_PARCHMENT_100_G, LOOM_PARCHMENT_100_B)
+
+        // Save button on the right of the title block, only shown when dirty.
+        If dirty = True
+            Composer::drawSaveButton(self, x + w - CMP_SAVE_BTN_W - CMP_PAD, y + CMP_PAD - 2, mx, my, clicked, kind)
+        EndIf
+
         LoomHRule(x + CMP_PAD, y + CMP_PAD + 38, w - CMP_PAD * 2, LOOM_BRASS_700_R, LOOM_BRASS_700_G, LOOM_BRASS_700_B)
 
         // Body -- per-kind render dispatch
@@ -108,11 +161,16 @@ Type Composer
             Composer::renderAnimSet(self, x, bodyY, w, bodyH, mx, my, clicked)
         EndIf
 
-        // Footer: back-stack hint
+        // Footer: back-stack hint (or edit-mode hint when editing). Two
+        // separate Ifs rather than If/Else-If to dodge the BlitzForge
+        // Else-If scope leak (issue #61).
         Local stackSize% = ListSize(self\threads\backStack)
         Local footMsg$ = "Esc returns to browser"
-        If stackSize > 0
+        If self\editKind = "" And stackSize > 0
             footMsg = "Esc walks back  ·  " + Str(stackSize) + " in trail"
+        EndIf
+        If self\editKind <> ""
+            footMsg = "Enter to commit  ·  Esc to cancel edit"
         EndIf
         LoomText(x + CMP_PAD, y + h - 22, footMsg, LOOM_STONE_300_R, LOOM_STONE_300_G, LOOM_STONE_300_B)
 
@@ -129,6 +187,254 @@ Type Composer
         LoomText(panelX + CMP_PAD,       rowY, label, LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
         LoomText(panelX + CMP_PAD + 120, rowY, value, LOOM_PARCHMENT_100_R, LOOM_PARCHMENT_100_G, LOOM_PARCHMENT_100_B)
         Return rowY + CMP_ROW_H
+    End Method
+
+
+    // -------------------------------------------------------------------------
+    // editableRow -- like row(), but the value cell is clickable to begin
+    // editing. When this exact (kind, refID, fieldId) is active, the cell
+    // shows the edit buffer with a blinking cursor instead of the stored
+    // value. Click elsewhere or Enter to commit; Esc to cancel.
+    //
+    // Returns the next Y.
+    // -------------------------------------------------------------------------
+    Method editableRow%(panelX%, panelW%, rowY%, label$, kind$, refID%, fieldId$, storedValue$, mx%, my%, clicked%)
+        Local valX% = panelX + CMP_PAD + 120
+        Local valY% = rowY - 3
+        Local valW% = panelW - CMP_PAD * 2 - 120
+        Local valH% = CMP_ROW_H
+
+        Local active% = (self\editKind = kind And self\editRefID = refID And self\editFieldId = fieldId)
+        Local hovered% = (mx >= valX And mx < valX + valW And my >= valY And my < valY + valH)
+
+        // Background + border. Editing > hover > flat.
+        If active = True
+            LoomFill(valX, valY, valW, valH, LOOM_STONE_700_R, LOOM_STONE_700_G, LOOM_STONE_700_B)
+            LoomBorder(valX, valY, valW, valH, LOOM_ARCANE_500_R, LOOM_ARCANE_500_G, LOOM_ARCANE_500_B)
+        Else If hovered = True
+            LoomFill(valX, valY, valW, valH, LOOM_STONE_800_R, LOOM_STONE_800_G, LOOM_STONE_800_B)
+            LoomBorder(valX, valY, valW, valH, LOOM_BRASS_700_R, LOOM_BRASS_700_G, LOOM_BRASS_700_B)
+        EndIf
+
+        // Label
+        LoomText(panelX + CMP_PAD, rowY, label, LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
+
+        // Value (buffer when editing; stored value otherwise)
+        Local shown$
+        If active = True
+            shown = self\editBuffer
+        Else
+            shown = storedValue
+        EndIf
+        LoomText(valX + 4, rowY, shown, LOOM_PARCHMENT_100_R, LOOM_PARCHMENT_100_G, LOOM_PARCHMENT_100_B)
+
+        // Blinking cursor at end of buffer when editing
+        If active = True
+            If (MilliSecs() Mod CMP_CURSOR_PERIOD) < (CMP_CURSOR_PERIOD / 2)
+                Local cursorX% = valX + 4 + StringWidth(self\editBuffer)
+                LoomFill(cursorX, rowY, 2, 14, LOOM_PARCHMENT_100_R, LOOM_PARCHMENT_100_G, LOOM_PARCHMENT_100_B)
+            EndIf
+        EndIf
+
+        // Click to begin / commit. Click on the value rect while NOT editing
+        // begins; click outside while editing commits (handled here by no-op
+        // -- the next-frame check at top of renderAndUpdate sees mismatched
+        // focus and cancels, but we want commit-on-click-elsewhere).
+        If hovered And clicked And active = False
+            Composer::beginEdit(self, kind, refID, fieldId, storedValue)
+        Else If clicked And active = True And hovered = False
+            Composer::commitEdit(self)
+        EndIf
+
+        Return rowY + CMP_ROW_H
+    End Method
+
+
+    // -------------------------------------------------------------------------
+    // beginEdit -- enter edit mode for a specific (kind, refID, fieldId).
+    // Seeds the buffer with the current stored value.
+    // -------------------------------------------------------------------------
+    Method beginEdit(kind$, refID%, fieldId$, currentValue$)
+        // Commit any pending edit on a different field before switching.
+        If self\editKind <> ""
+            Composer::commitEdit(self)
+        EndIf
+        self\editKind = kind
+        self\editRefID = refID
+        self\editFieldId = fieldId
+        self\editBuffer = currentValue
+        FlushKeys      // discard any buffered keystrokes from the click itself
+        WriteLog(LoomLog, "Composer: begin edit " + kind + "#" + Str(refID) + " " + fieldId + " = " + Chr(34) + currentValue + Chr(34))
+    End Method
+
+
+    // -------------------------------------------------------------------------
+    // commitEdit -- write the buffer to the target field and mark the kind's
+    // *Saved global False. Clears edit state.
+    // -------------------------------------------------------------------------
+    Method commitEdit()
+        If self\editKind = "" Then Return
+
+        Local k$ = self\editKind
+        Local id% = self\editRefID
+        Local fid$ = self\editFieldId
+        Local val$ = self\editBuffer
+
+        Composer::writeField(self, k, id, fid, val)
+        Composer::markDirtyForKind(self, k)
+
+        WriteLog(LoomLog, "Composer: commit " + k + "#" + Str(id) + " " + fid + " <- " + Chr(34) + val + Chr(34))
+
+        self\editKind = ""
+        self\editRefID = 0
+        self\editFieldId = ""
+        self\editBuffer = ""
+    End Method
+
+
+    // -------------------------------------------------------------------------
+    // cancelEdit -- drop the buffer; field stays at its previous stored value.
+    // -------------------------------------------------------------------------
+    Method cancelEdit()
+        If self\editKind = "" Then Return
+        WriteLog(LoomLog, "Composer: cancel edit " + self\editKind + "#" + Str(self\editRefID) + " " + self\editFieldId)
+        self\editKind = ""
+        self\editRefID = 0
+        self\editFieldId = ""
+        self\editBuffer = ""
+    End Method
+
+
+    // -------------------------------------------------------------------------
+    // pumpKeyboard -- called per-frame when editing. Drains the keyboard
+    // input queue into editBuffer, handles Enter (commit) / Esc (cancel) /
+    // Backspace.
+    // -------------------------------------------------------------------------
+    Method pumpKeyboard()
+        // Backspace
+        If KeyHit(14) And Len(self\editBuffer) > 0
+            self\editBuffer = Left$(self\editBuffer, Len(self\editBuffer) - 1)
+        EndIf
+
+        // Enter -- commit
+        If KeyHit(28)
+            Composer::commitEdit(self)
+            Return
+        EndIf
+
+        // Esc -- cancel (consumed here so Loom's outer Esc doesn't fire)
+        If KeyHit(1)
+            Composer::cancelEdit(self)
+            Return
+        EndIf
+
+        // Printable chars (drain the GetKey queue). Filter to ASCII 32..126
+        // so we don't get control chars in the buffer.
+        Local k% = GetKey()
+        While k > 0
+            If k >= 32 And k <= 126
+                self\editBuffer = self\editBuffer + Chr(k)
+            EndIf
+            k = GetKey()
+        Wend
+    End Method
+
+
+    // -------------------------------------------------------------------------
+    // writeField -- dispatch table mapping (kind, fieldId) -> in-memory write.
+    // Only fields explicitly handled here are editable; unknown combinations
+    // are no-ops (logged for diagnostics).
+    //
+    // Future iterations extend this table as more fields become editable.
+    // -------------------------------------------------------------------------
+    Method writeField(kind$, refID%, fieldId$, value$)
+        If kind = "spell"
+            If refID < 0 Or refID > 65534 Then Return
+            Local S.Spell = SpellsList(refID)
+            If S = Null Then Return
+            If fieldId = "name"
+                S\Name$ = value
+                Return
+            EndIf
+        EndIf
+
+        WriteLog(LoomLog, "Composer: writeField -- no handler for " + kind + "." + fieldId)
+    End Method
+
+
+    // -------------------------------------------------------------------------
+    // isDirtyForKind -- read the per-kind *Saved global, return True if
+    // there are unsaved edits.
+    // -------------------------------------------------------------------------
+    Method isDirtyForKind%(kind$)
+        If kind = "spell"   Then Return Not SpellsSaved
+        If kind = "item"    Then Return Not ItemsSaved
+        If kind = "actor"   Then Return Not ActorsSaved
+        If kind = "faction" Then Return Not FactionsSaved
+        If kind = "zone"    Then Return Not ZoneSaved
+        If kind = "animset" Then Return Not AnimsSaved
+        Return False
+    End Method
+
+
+    // -------------------------------------------------------------------------
+    // markDirtyForKind -- set the per-kind *Saved global to False after
+    // an in-memory edit.
+    // -------------------------------------------------------------------------
+    Method markDirtyForKind(kind$)
+        If kind = "spell"   Then SpellsSaved = False
+        If kind = "item"    Then ItemsSaved = False
+        If kind = "actor"   Then ActorsSaved = False
+        If kind = "faction" Then FactionsSaved = False
+        If kind = "zone"    Then ZoneSaved = False
+        If kind = "animset" Then AnimsSaved = False
+    End Method
+
+
+    // -------------------------------------------------------------------------
+    // commitSaveForKind -- persist in-memory state for the given kind to
+    // disk via GUE's existing Save* serializers, then clear the dirty flag.
+    // -------------------------------------------------------------------------
+    Method commitSaveForKind(kind$)
+        If kind = "spell"
+            Local ok% = SaveSpells("Data\Server Data\Spells.dat")
+            If ok = False
+                WriteLog(LoomLog, "Composer: SaveSpells FAILED")
+                Return
+            EndIf
+            SpellsSaved = True
+            WriteLog(LoomLog, "Composer: saved Spells.dat")
+            Return
+        EndIf
+
+        // Other kinds defer to subsequent iterations as their editable
+        // fields land. Logging a no-op is louder than silently failing.
+        WriteLog(LoomLog, "Composer: commitSaveForKind -- no handler for " + kind)
+    End Method
+
+
+    // -------------------------------------------------------------------------
+    // drawSaveButton -- top-right Save affordance, only painted by
+    // renderAndUpdate when the focused kind is dirty.
+    // -------------------------------------------------------------------------
+    Method drawSaveButton(btnX%, btnY%, mx%, my%, clicked%, kind$)
+        Local hovered% = (mx >= btnX And mx < btnX + CMP_SAVE_BTN_W And my >= btnY And my < btnY + CMP_SAVE_BTN_H)
+
+        If hovered = True
+            LoomFill(btnX, btnY, CMP_SAVE_BTN_W, CMP_SAVE_BTN_H, LOOM_ARCANE_700_R, LOOM_ARCANE_700_G, LOOM_ARCANE_700_B)
+            LoomBorder(btnX, btnY, CMP_SAVE_BTN_W, CMP_SAVE_BTN_H, LOOM_ARCANE_500_R, LOOM_ARCANE_500_G, LOOM_ARCANE_500_B)
+        Else
+            LoomFill(btnX, btnY, CMP_SAVE_BTN_W, CMP_SAVE_BTN_H, LOOM_STONE_800_R, LOOM_STONE_800_G, LOOM_STONE_800_B)
+            LoomBorder(btnX, btnY, CMP_SAVE_BTN_W, CMP_SAVE_BTN_H, LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
+        EndIf
+        LoomText(btnX + 18, btnY + 4, "Save", LOOM_PARCHMENT_100_R, LOOM_PARCHMENT_100_G, LOOM_PARCHMENT_100_B)
+
+        If hovered And clicked
+            // Commit any in-progress edit first so the buffer is written
+            // before serialization.
+            If self\editKind <> "" Then Composer::commitEdit(self)
+            Composer::commitSaveForKind(self, kind)
+        EndIf
     End Method
 
 
@@ -255,6 +561,11 @@ Type Composer
 
         Local y% = bodyY
         y = Composer::row(self, panelX, panelW, y, "ID",       Str(S\ID))
+        // Name is the first editable field shipped in Loom -- click to edit,
+        // Enter to commit, Esc to cancel. Save button appears top-right when
+        // dirty. Future iterations make more fields editable through the
+        // same editableRow pattern.
+        y = Composer::editableRow(self, panelX, panelW, y, "Name", "spell", S\ID, "name", S\Name$, mx, my, clicked)
         y = Composer::row(self, panelX, panelW, y, "Recharge", Str(S\RechargeTime) + " ms")
 
         If S\Description$ <> ""

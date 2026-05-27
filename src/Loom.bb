@@ -50,6 +50,26 @@ ChangeDir RootDir$
 
 
 // -----------------------------------------------------------------------------
+// Per-tab dirty flags (shared with GUE). GUE declares the same set in GUE.bb
+// at lines 47-48; declaring them here lets Loom write to them so the two
+// editors see each other's dirty state. False = unsaved changes pending;
+// True = on-disk == in-memory.
+// -----------------------------------------------------------------------------
+Global ItemsSaved = True
+Global ActorsSaved = True
+Global FactionsSaved = True
+Global ParticlesSaved = True
+Global DamageTypesSaved = True
+Global ZoneSaved = True
+Global AnimsSaved = True
+Global StatsSaved = True
+Global SpellsSaved = True
+Global InterfaceSaved = True
+Global ProjectilesSaved = True
+Global EnvironmentSaved = True
+
+
+// -----------------------------------------------------------------------------
 // Includes
 //
 // Data layer: same modules GUE pulls in, minus UI-tied ones (F-UI,
