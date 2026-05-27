@@ -8,17 +8,18 @@ This module is **declaration-heavy, logic-light**. Most of it is `Global W<Windo
 
 ## Conceptual overview
 
-### Three small Types
+### Seven Types
 
 | Type | Purpose |
 |---|---|
 | `Dialog` | NPC-conversation modal. `Win`, 14 text lines (`TextLines[13]` / `TextText$[13]` + per-line R/G/B and `OptionNum[]`), an `ActorInstance` link, a `ScriptHandle`. Per-NPC dialog ID. |
 | `TextInput` | Single-line text-entry modal. `Win`, `TextBox`, `AcceptButton`, `ScriptHandle`. Used by `BVM_GETSTRING` and similar script prompts. |
 | `Bubble` | Floating chat-bubble entity that follows an actor for a short time. `EN`, `Width#` / `Height#`, `Timer`, `ActorInstance`. |
-| `InterfaceComponent` | Persistent layout descriptor (X/Y/W/H in fraction-of-screen, Alpha, Component handle, Texture, R/G/B). Backs `Chat`, `ChatEntry`, `BuffsArea`, `Radar`, `Compass`, the per-attribute bar array, and inventory buttons. Read/written via `ReadInterfaceComponent` / `WriteInterfaceComponent`. |
-| `EffectIcon` / `EffectIconSlot` | Buff-icon HUD entries (name, ID, texture). |
+| `CurrentChat` | Transient chat-line entry (`Dat$`, `cR`/`cG`/`cB`, `Timer`) — the "fades after N seconds" chat layer. Walked alongside `ChatHistory$` to render the volatile chat overlay. |
+| `EffectIcon` / `EffectIconSlot` | Buff-icon HUD entries — `EffectIcon` is the catalog entry (`Name$`, `ID`, `TextureID`); `EffectIconSlot` is the rendered slot pointing back at one (`EN`, `Effect.EffectIcon`). |
+| `InterfaceComponent` | Persistent layout descriptor (X/Y/W/H in fraction-of-screen, Alpha, Component handle, Texture, R/G/B). Backs `Chat`, `ChatEntry`, `BuffsArea`, `Radar`, `Compass`, the per-attribute bar array, inventory window/drop/eat/gold, and the inventory-slot button array. Read/written via `ReadInterfaceComponent` / `WriteInterfaceComponent`. |
 
-`Dialog` and `TextInput` are addressed by Handle via `DialogScriptHandle(Han)` from script context, which returns the `ScriptHandle` field for downstream BVM dispatch.
+`Dialog` is addressed by Handle via `DialogScriptHandle(Han)` at [`Interface.bb:196-201`](../../src/Modules/Interface.bb#L196), which returns the `Dialog\ScriptHandle` field for downstream BVM dispatch. **`TextInput` has no equivalent handle-walking helper in this file** — script-side TextInput lookups go through a different path. (Adding `TextInputScriptHandle(Han)` would close the asymmetry; not currently present.)
 
 ### The gadget-globals registry
 
@@ -56,13 +57,13 @@ The bulk of this file is one large registry of `Global` handles, grouped by HUD 
 | `1009..1016` | Joystick hat / axes | `JoyHat()` direction matching for "Hat Up/Down/Left/Right"; `JoyXDir() / JoyYDir()` for analog stick directions. |
 | else | Unknown | `ControlName$` returns `LanguageString$(LS_Unknown)`. |
 
-The hat-direction Cases use **edge detection** via static-`True` flags (`JoyHatUp = True` after the first hit, gating subsequent hits until the hat re-centers) — this is the **only** Hit-vs-Down distinction in the joystick path. Buttons get standard `JoyHit` edge behavior from Blitz; analog axes don't (they fire continuously while held).
+The hat-direction Cases **intend** edge detection — code like `If JoyHatUp = False Then JoyHatUp = True : Return True` reads as "first call returns true, subsequent calls suppressed until reset". But `JoyHatUp` / `JoyHatDown` / `JoyHatLeft` / `JoyHatRight` are **not declared anywhere** (no `Global`, no `Const`); under Blitz3D's non-Strict semantics they're function-local variables that re-initialize to 0 on every call. So the gating never actually fires — the `Return True` branch hits on every call where the hat is in the right position, identical to `ControlDown`'s behavior. This is a latent bug worth a follow-up (declare `Global JoyHatUp / Down / Left / Right` at file scope and reset on hat-centered, or just remove the dead gating). Analog axes (`JoyXDir() / JoyYDir()`) and buttons (`JoyHit`) use the standard Blitz idioms — only the hat branch has the latent edge-detect aspiration.
 
 `ControlName$` is a switch-statement of every supported control number to a human-readable label. Used to populate the key-binding UI in the options menu.
 
 ### Interface-component persistence
 
-`LoadInterfaceSettings` / `SaveInterfaceSettings` (re)build the global `Chat / ChatEntry / BuffsArea / Radar / Compass / InventoryWindow / etc.` `InterfaceComponent` handles by reading/writing fixed-shape records. Save uses **atomic `SafeWriteOpen$` / `SafeWriteCommit%`** (lines 340-368) so an interrupted save can't leave a truncated layout file.
+`LoadInterfaceSettings` / `SaveInterfaceSettings` (re)build the persistent layout. The full sequence (positional — read order must equal write order) is: `Chat` + its `Chat\Texture` (extra `ReadShort`/`WriteShort`), `ChatEntry`, `AttributeDisplays(0..39)`, `BuffsArea`, `Radar`, `Compass`, `InventoryWindow`, `InventoryDrop`, `InventoryEat`, `InventoryGold`, `InventoryButtons(0..Slots_Inventory)`. Save uses **atomic `SafeWriteOpen$` / `SafeWriteCommit%`** ([`Interface.bb:340-368`](../../src/Modules/Interface.bb#L340)) so an interrupted save can't leave a truncated layout file. `LoadInterfaceSettings` is a plain `ReadFile` ([`Interface.bb:298-337`](../../src/Modules/Interface.bb#L298)) — no atomicity needed on the read side.
 
 The component shape on disk is 8 fields per record:
 

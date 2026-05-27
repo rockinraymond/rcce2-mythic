@@ -53,7 +53,7 @@ Four parallel functions — `ChooseMeshDialog`, `ChooseTextureDialog`, `ChooseSo
 
 ### `FolderChangeHandler$(Name$, InitialFolder$)`
 
-Helper that resolves the `..` parent-folder semantic in a folder-list click. Returns the new effective folder path. Used by all four dialogs.
+Helper that resolves the `(Previous folder)` parent-folder semantic in a folder-list click. If `Name$ = "(Previous folder)"`, returns `InitialFolder$` with its final path component stripped; otherwise returns `InitialFolder$ + "\" + Name$`. Used by all four dialogs.
 
 ### `FillXList` / `FillXFolderList` family — eight similar functions
 
@@ -64,13 +64,9 @@ The eight `Fill*` functions are direct parallels:
 - `FillSoundsList`, `FillSoundsFolderList`
 - `FillMusicList`, `FillMusicFolderList`
 
-Each `Fill<X>List(List, Folder$, [type])` walks the corresponding `<X>Names$(65534)` array, filters entries by:
+Each `Fill<X>List(List, Folder$, [type])` walks the corresponding `<X>Names$(65534)` array. For each entry, the algorithm scans **backward from end-of-name** to the last `\` or `/`, splits the name into `Name$` (basename) and `Path$` (parent directory), then accepts the entry if and only if `Upper$(Right$(Path$, Len(Folder$))) = Upper$(Folder$)` — a **case-insensitive suffix match on the parent directory**. A file at `Meshes\Goblins\warlord.b3d` has parent `Meshes\Goblins`; opening dialog at `Folder$ = "Goblins"` accepts it because `Right$("Meshes\Goblins", Len("Goblins"))` is `"Goblins"`. The empty `Folder$ = ""` case takes the special branch: accept iff `Name$` has no slash (top-level only). The (Sound / Mesh)-only type filter (`MeshType` / `SoundType`) is an additional gate on the same loop.
 
-1. Folder prefix — `Left$(name$, Len(Folder$)) = Folder$`
-2. Slash-count — entries with more slashes than `Folder$` are sub-folders, not files in the current folder.
-3. (Sound/Mesh only) Type filter — `MeshType` / `SoundType` constant matches the asset's actual class.
-
-`FillXFolderList(List, Folder$)` is the same shape but emits **distinct sub-folder names** (one entry per unique sub-folder reached from `Folder$`), plus the `..` parent entry.
+`FillXFolderList(List, Folder$)` is the same shape but emits **distinct sub-folder names**: walks all names, computes each name's path relative to `Folder$`, splits at the first `\` or `/`, and inserts each unique first-component as a folder entry. If `Folder$ <> ""` it prepends a `(Previous folder)` row that `FolderChangeHandler$` (see below) maps to the parent path.
 
 The result is the standard two-pane folder browser: folders on top, files at bottom.
 
@@ -80,7 +76,7 @@ The result is the standard two-pane folder browser: folders on top, files at bot
 - **All four dialogs share the same gadget-naming pattern** — `W<Asset>Dialog`, `L<Asset>Folder`, `L<Asset>Dialog`, `B<Asset>DialogOK`, `B<Asset>DialogCancel`, optional `B<Asset>DialogPlay`. New asset-picker dialogs (e.g. shaders, fonts) should mirror this exactly so editor-tool consumers can dispatch generically.
 - **F-UI-only toolkit.** Don't mix Gooey and F-UI gadget calls within the same window — they have different event dispatch and re-flow semantics. The Mesh / Texture / Sound / Music dialogs are pure F-UI by convention.
 - **`GetXName$(i)` returning `""` is the empty-slot sentinel** — `FillXList` skips entries with `Len = 0` so empty slots are silently filtered. New asset Types should keep the empty-string-means-empty convention.
-- **Folder paths use backslash `\` separators** (Windows-native; matches Blitz3D's native file API). The slash-counting filter in `FillXList` assumes this.
+- **Folder paths tolerate both `\` and `/` separators** — the path-split scan accepts either ([`MediaDialogs.bb:418`](../../src/Modules/MediaDialogs.bb#L418), `:461-462`). Asset paths in the wild are typically Windows-native backslash, but mixed-separator names are handled correctly.
 
 ## Related modules
 
@@ -105,4 +101,4 @@ The legacy function-by-function reference for this module has not been generated
 - **`ChooseSoundDialog(SoundType, InitialFolder$, XPos, YPos)`** — same, for sounds. Has in-dialog preview-play.
 - **`ChooseMusicDialog(InitialFolder$, XPos, YPos)`** — same, for music. Has in-dialog preview-play.
 - **`FolderChangeHandler$(Name$, InitialFolder$)`** — resolve `..` parent-folder navigation.
-- **`FillMeshesList(List, Folder$, MeshType)` / `FillMeshesFolderList(List, Folder$)`** — populate file and folder list-boxes for meshes in `Folder$`. The eight parallel `Fill*` functions follow the same shape per asset type.
+- **`FillMeshesList(List, Folder$, MeshType)` / `FillMeshesFolderList(List, Folder$)`** — populate file and folder list-boxes for meshes in `Folder$`. The eight parallel `Fill*` functions follow the same shape, with one detail: `FillMeshesList` and `FillSoundsList` take a third `MeshType` / `SoundType` argument; `FillTexturesList` and `FillMusicList` are two-argument (no filter).

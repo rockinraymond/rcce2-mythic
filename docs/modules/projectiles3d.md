@@ -2,9 +2,11 @@
 
 **Projectiles3D.bb**
 
-Client-side projectile rendering. The whole module is three functions plus one Type — total source is ~107 lines. Owns the `ProjectileInstance` Type, the per-tick `UpdateProjectiles` mover that walks every live projectile and frees them on impact, and the `CreateProjectile` / `FreeProjectileInstance` lifecycle pair.
+Client-side projectile rendering. The whole module is three functions plus one Type — total source is ~107 lines. Owns the `ProjectileInstance` Type (a live in-flight projectile), the per-tick `UpdateProjectiles` mover that walks every live projectile and frees them on impact, and the `CreateProjectile(Source, Target, MeshID, Homing, Speed, ...)` / `FreeProjectileInstance` lifecycle pair.
 
-The server side of projectile gameplay (damage application, hit registration, target validation) lives in [`Projectiles.bb`](projectiles.md). This module is *only* the visual representation on the client.
+Sibling module [`Projectiles.bb`](projectiles.md) owns the `Projectile` Type (the static **template** — name, mesh ID, damage, hit chance, emitter names, included on both server and client) and the `LoadProjectiles` / `SaveProjectiles` / `FindProjectile` file-I/O over `ProjectileList(5000)`. Damage application, hit registration, and target validation actually live in combat code in [`Spells.bb`](spells.md) / [`GameServer.bb`](gameserver.md), not in `Projectiles.bb`. This module (`Projectiles3D.bb`) is *only* the visual representation on the client.
+
+> **Function-name collision:** both [`Projectiles.bb:14`](../../src/Modules/Projectiles.bb#L14) (`Function CreateProjectile.Projectile()` — allocates a template slot in `ProjectileList`) **and** [`Projectiles3D.bb:11`](../../src/Modules/Projectiles3D.bb#L11) (`Function CreateProjectile(Source.ActorInstance, Target.ActorInstance, MeshID, Homing, Speed#, ...)` — allocates a live `ProjectileInstance`) declare a function named `CreateProjectile`. BlitzForge resolves them by the typed-return marker on the template form vs. the untyped instance form, so both compile. When this doc says "`CreateProjectile`" unqualified, it means **this module's** instance-side function. Cross-referencing the source by name will hit two definitions — the template one is the unrelated template-allocation helper.
 
 ## Conceptual overview
 
@@ -61,12 +63,12 @@ Both emitters are optional — empty `Emitter1$` / `Emitter2$` strings skip the 
 
 ### Globals it reads
 
-The module doesn't define globals itself but reads three from elsewhere:
+The module doesn't define globals itself but reads four from elsewhere:
 
 - **`Cam`** — the world camera handle (defined in [`Environment3D.bb`](environment3d.md)). Passed to `RP_LoadEmitterConfig` as the billboard camera.
-- **`GPP`** — the global position pivot, reused by `UpdateProjectiles` to position the target coordinate so `EntityDistance` can be called.
+- **`GPP`** — the global position pivot allocated in [`ClientLoaders.bb:197`](../../src/Modules/ClientLoaders.bb#L197). Reused by `UpdateProjectiles` to position the target coordinate so `EntityDistance` can be called against `P\EN`. Each tick the homing branch overrides `P\TargetX/Y/Z` from the live target before positioning `GPP`.
 - **`Delta#`** — the frame delta, used to scale `MoveEntity(P\EN, 0, 0, P\Speed# * Delta#)` for framerate-independent movement.
-- **`LoadedMeshScales#(MeshID)`** — per-template scale factor, sourced from the mesh registry.
+- **`LoadedMeshScales#(MeshID)`** — per-template scale factor, declared `Dim LoadedMeshScales#(65534)` in [`Media.bb:3`](../../src/Modules/Media.bb#L3). Indexed by `Actor\MeshID` (or here, by the projectile's `MeshID` argument).
 
 ## Conventions for new code touching this module
 
@@ -77,11 +79,13 @@ The module doesn't define globals itself but reads three from elsewhere:
 
 ## Related modules
 
-- [`Projectiles.bb`](projectiles.md) — server-side projectile logic (damage, target validation, hit packets). The client `CreateProjectile` is driven by packets emitted from here.
+- [`Projectiles.bb`](projectiles.md) — **template** registry (`Projectile` Type — name, mesh ID, damage, emitter names, hit chance), shared between server and client. Damage application is not here; see `Spells.bb` / `GameServer.bb`.
 - [`RottParticles.bb`](rottparticles.md) — supplies `RP_LoadEmitterConfig` / `RP_CreateEmitter` / `RP_KillEmitter`. The emitter substrate.
 - [`Environment3D.bb`](environment3d.md) — owns `Cam` (the world camera) and the entity-management primitives.
-- [`Spells.bb`](spells.md) — caller (server-side spell-cast packets trigger client-side `CreateProjectile`).
-- [`Actors3D.bb`](actors3d.md) — owns `ActorInstance\CollisionEN`, the source/target collision entity that the projectile homes on.
+- [`Spells.bb`](spells.md) — combat path that issues the projectile-spawn packets the client then materializes via `CreateProjectile` here.
+- [`Actors.bb`](actors.md) — declares `Field CollisionEN` on `ActorInstance` ([`Actors.bb:153`](../../src/Modules/Actors.bb#L153)). `Actors3D.bb` is what allocates and frees it.
+- [`ClientLoaders.bb`](clientloaders.md) — owns the `GPP` global pivot used here.
+- [`Media.bb`](media.md) — owns the `LoadedMeshScales#(65534)` `Dim` array consulted by `CreateProjectile`.
 
 ## See also
 
