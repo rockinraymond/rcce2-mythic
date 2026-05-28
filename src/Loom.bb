@@ -117,6 +117,7 @@ Include "Modules\Loom\Timeline.bb"
 Include "Modules\Loom\Tools.bb"
 Include "Modules\Loom\Recents.bb"
 Include "Modules\Loom\EntityFactory.bb"
+Include "Modules\Loom\SaveAll.bb"
 
 
 // =============================================================================
@@ -137,6 +138,7 @@ Type Loom
     Field brokenRefs.BrokenRefs
     Field recents.Recents
     Field worldCache.WorldCache
+    Field exitPrompt.ExitPrompt
 
 
     Method create.Loom(windowWidth%, windowHeight%, projectName$)
@@ -206,6 +208,12 @@ Type Loom
         LoomRecents = self\recents
         Recents::load(self\recents)
 
+        // ExitPrompt -- modal that intercepts Esc-exit when any kind is
+        // dirty. Holds Composer for SaveAll_Persist dispatch on the
+        // "Save All" button. Triggered by the Loom::renderFrame Esc
+        // handler at exit time (see the chain below).
+        self\exitPrompt = New ExitPrompt(self\composer)
+
         Return self
     End Method
 
@@ -232,13 +240,19 @@ Type Loom
         // no-ops if already open). Detect BEFORE any other input handler
         // so openModal's FlushKeys swallows the K/H keystroke before it
         // can land in a query buffer.
-        If Palette::isOpen(self\palette) = False And Timeline::isOpen(self\timeline) = False And BrokenRefs::isOpen(self\brokenRefs) = False And Recents::isOpen(self\recents) = False
+        If Palette::isOpen(self\palette) = False And Timeline::isOpen(self\timeline) = False And BrokenRefs::isOpen(self\brokenRefs) = False And Recents::isOpen(self\recents) = False And ExitPrompt::isOpen(self\exitPrompt) = False
             If (KeyDown(29) Or KeyDown(157)) And KeyHit(37)
                 Palette::openModal(self\palette)
             Else If (KeyDown(29) Or KeyDown(157)) And KeyHit(35)
                 Timeline::openModal(self\timeline)
             Else If (KeyDown(29) Or KeyDown(157)) And KeyHit(19)
                 Recents::openModal(self\recents)
+            Else If (KeyDown(29) Or KeyDown(157)) And KeyHit(31)
+                // Ctrl+S -- Save All across every dirty kind. Per the
+                // "drop-in for GUE" goal, the user expects one shortcut
+                // to write everything; the per-kind Save buttons are
+                // for when you only want to save one tab's state.
+                SaveAll_Persist(self\composer)
             EndIf
         EndIf
 
@@ -250,6 +264,7 @@ Type Loom
         If Palette::isOpen(self\palette) = True Then browserInput = False
         If BrokenRefs::isOpen(self\brokenRefs) = True Then browserInput = False
         If Recents::isOpen(self\recents) = True Then browserInput = False
+        If ExitPrompt::isOpen(self\exitPrompt) = True Then browserInput = False
         If Composer::isEditing(self\composer) = True Then browserInput = False
 
         Browser::renderAndUpdate(self\browser, self\windowWidth, self\windowHeight, self\projectName, browserInput)
@@ -270,7 +285,14 @@ Type Loom
         Local brokenRefsAte% = BrokenRefs::renderAndUpdate(self\brokenRefs, self\windowWidth, self\windowHeight)
         Local recentsAte%    = Recents::renderAndUpdate(self\recents, self\windowWidth, self\windowHeight)
         Local paletteAte%    = Palette::renderAndUpdate(self\palette, self\windowWidth, self\windowHeight)
-        Local modalAte%      = (timelineAte Or brokenRefsAte Or recentsAte Or paletteAte)
+        Local exitPromptAte% = ExitPrompt::renderAndUpdate(self\exitPrompt, self\windowWidth, self\windowHeight)
+        Local modalAte%      = (timelineAte Or brokenRefsAte Or recentsAte Or paletteAte Or exitPromptAte)
+
+        // If ExitPrompt's Save All / Discard All button closed the modal
+        // with exitConfirmed = True, honor the user's decision NOW and
+        // exit the main loop. This sits between the modal-render and the
+        // Esc handler so the exit fires the same frame the user clicks.
+        If ExitPrompt::isExitConfirmed(self\exitPrompt) = True Then Return False
 
         // Esc priority (when no modal ate the press):
         //   filter clear > back-stack pop > close composer > exit Loom
@@ -284,8 +306,16 @@ Type Loom
                     Threads::clearStack(self\threads)
                     WriteLog(LoomLog, "Esc: closed composer")
                 Else
-                    // Nothing left to close -- exit Loom.
-                    Return False
+                    // Nothing left to close. If any kind is dirty, open
+                    // the ExitPrompt modal so unsaved work isn't lost
+                    // silently. The modal's Save All / Discard All
+                    // buttons set exitConfirmed which the next frame
+                    // observes (above) to break the main loop.
+                    If SaveAll_AnyDirty() = True
+                        ExitPrompt::openModal(self\exitPrompt)
+                    Else
+                        Return False
+                    EndIf
                 EndIf
             EndIf
         EndIf
