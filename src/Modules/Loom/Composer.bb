@@ -2095,6 +2095,68 @@ Type Composer
     End Method
 
 
+    // -------------------------------------------------------------------------
+    // addNewButton -- small brass "+ New" pill button. Paints + hit-tests in
+    // one call; returns True iff hovered AND clicked this frame. Designed to
+    // be called RIGHT AFTER a sectionHeader so the button sits in the header
+    // strip, but the caller passes the row Y where the header started.
+    // -------------------------------------------------------------------------
+    Method addNewButton%(panelX%, panelW%, sectionRowY%, mx%, my%, clicked%)
+        Local btnW% = 60
+        Local btnH% = 20
+        Local btnX% = panelX + panelW - btnW - CMP_PAD - 4
+        Local btnY% = sectionRowY + 6
+        Local visible% = Composer::canPaintRow(self, sectionRowY, 28)
+        Local hovered% = (mx >= btnX And mx < btnX + btnW And my >= btnY And my < btnY + btnH)
+
+        If visible = True
+            If hovered = True
+                LoomFill(btnX, btnY, btnW, btnH, LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
+                LoomBorder(btnX, btnY, btnW, btnH, LOOM_BRASS_300_R, LOOM_BRASS_300_G, LOOM_BRASS_300_B)
+                LoomText(btnX + 12, btnY + 2, "+ New", LOOM_PARCHMENT_100_R, LOOM_PARCHMENT_100_G, LOOM_PARCHMENT_100_B)
+            Else
+                LoomFill(btnX, btnY, btnW, btnH, LOOM_STONE_800_R, LOOM_STONE_800_G, LOOM_STONE_800_B)
+                LoomBorder(btnX, btnY, btnW, btnH, LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
+                LoomText(btnX + 12, btnY + 2, "+ New", LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
+            EndIf
+        EndIf
+
+        Return (hovered And clicked)
+    End Method
+
+
+    // -------------------------------------------------------------------------
+    // subDeleteButton -- tiny "x" button for deleting one sub-entity row
+    // (a portal, trigger, or spawn inside a zone). Paints + hit-tests in one
+    // call; returns True iff hovered AND clicked this frame. No arm/confirm
+    // for sub-entities -- they're typically authored in the same session
+    // and an accidental delete is recoverable via Discard. Whole-entity
+    // delete still uses arm/confirm because that's a bigger blast radius.
+    // -------------------------------------------------------------------------
+    Method subDeleteButton%(panelX%, panelW%, headerRowY%, mx%, my%, clicked%)
+        Local btnW% = 18
+        Local btnH% = 18
+        Local btnX% = panelX + panelW - btnW - CMP_PAD - 4
+        Local btnY% = headerRowY + 1
+        Local visible% = Composer::canPaintRow(self, headerRowY, CMP_ROW_H)
+        Local hovered% = (mx >= btnX And mx < btnX + btnW And my >= btnY And my < btnY + btnH)
+
+        If visible = True
+            If hovered = True
+                LoomFill(btnX, btnY, btnW, btnH, LOOM_DANGER_R, LOOM_DANGER_G, LOOM_DANGER_B)
+                LoomBorder(btnX, btnY, btnW, btnH, LOOM_PARCHMENT_100_R, LOOM_PARCHMENT_100_G, LOOM_PARCHMENT_100_B)
+                LoomText(btnX + 6, btnY + 2, "x", LOOM_PARCHMENT_100_R, LOOM_PARCHMENT_100_G, LOOM_PARCHMENT_100_B)
+            Else
+                LoomFill(btnX, btnY, btnW, btnH, LOOM_STONE_800_R, LOOM_STONE_800_G, LOOM_STONE_800_B)
+                LoomBorder(btnX, btnY, btnW, btnH, LOOM_DANGER_R, LOOM_DANGER_G, LOOM_DANGER_B)
+                LoomText(btnX + 6, btnY + 2, "x", LOOM_DANGER_R, LOOM_DANGER_G, LOOM_DANGER_B)
+            EndIf
+        EndIf
+
+        Return (hovered And clicked)
+    End Method
+
+
     Method kindLabel$(kind$)
         If kind = "actor"   Then Return "ACTOR"
         If kind = "item"    Then Return "ITEM"
@@ -2361,29 +2423,134 @@ Type Composer
         y = Composer::editableRow(self, panelX, panelW, y, "Entry", "zone", h, "entry_script", Ar\EntryScript$, mx, my, clicked)
         y = Composer::editableRow(self, panelX, panelW, y, "Exit",  "zone", h, "exit_script",  Ar\ExitScript$,  mx, my, clicked)
 
-        // Portals -- each non-empty PortalName$ becomes a labeled sub-section
-        // with link-target chip + coord rows (X/Y/Z/Size/Yaw). The chip
-        // remains right-clickable to swap the target zone via picker.
-        If portals > 0
-            y = Composer::sectionHeader(self, panelX, panelW, y, "Portals")
-            y = Composer::renderZonePortals(self, panelX, panelW, y, Ar, h, mx, my, clicked, rightClicked)
-        EndIf
+        // Portals / Triggers / Spawns -- always render the section header
+        // (with "+ New" button) even when empty, so designers can add
+        // the first one. Each existing sub-entity sub-section gets a
+        // delete button on its header row.
+        Local sectY%
 
-        // Triggers -- each non-empty TriggerScript$ becomes a sub-section
-        // with X/Y/Z/Size + Script/Method editing.
-        If triggers > 0
-            y = Composer::sectionHeader(self, panelX, panelW, y, "Triggers")
-            y = Composer::renderZoneTriggers(self, panelX, panelW, y, Ar, h, mx, my, clicked)
+        sectY = y
+        y = Composer::sectionHeader(self, panelX, panelW, y, "Portals")
+        If Composer::addNewButton(self, panelX, panelW, sectY, mx, my, clicked) = True
+            If Composer::zoneAddPortal(self, Ar) = True
+                Composer::markDirtyForKind(self, "zone")
+                WorldCache_Invalidate()
+                Toast_Show("Added portal to " + Ar\Name$, "success")
+            Else
+                Toast_Show("No empty portal slots", "warning")
+            EndIf
         EndIf
+        y = Composer::renderZonePortals(self, panelX, panelW, y, Ar, h, mx, my, clicked, rightClicked)
 
-        // Spawns -- each defined SpawnActor (>0) becomes a sub-section
-        // with actor reference + waypoint + scripts + frequency cluster.
-        If spawns > 0
-            y = Composer::sectionHeader(self, panelX, panelW, y, "Spawns")
-            y = Composer::renderZoneSpawns(self, panelX, panelW, y, Ar, h, mx, my, clicked, rightClicked)
+        sectY = y
+        y = Composer::sectionHeader(self, panelX, panelW, y, "Triggers")
+        If Composer::addNewButton(self, panelX, panelW, sectY, mx, my, clicked) = True
+            If Composer::zoneAddTrigger(self, Ar) = True
+                Composer::markDirtyForKind(self, "zone")
+                WorldCache_Invalidate()
+                Toast_Show("Added trigger to " + Ar\Name$, "success")
+            Else
+                Toast_Show("No empty trigger slots", "warning")
+            EndIf
         EndIf
+        y = Composer::renderZoneTriggers(self, panelX, panelW, y, Ar, h, mx, my, clicked)
+
+        sectY = y
+        y = Composer::sectionHeader(self, panelX, panelW, y, "Spawns")
+        If Composer::addNewButton(self, panelX, panelW, sectY, mx, my, clicked) = True
+            If Composer::zoneAddSpawn(self, Ar) = True
+                Composer::markDirtyForKind(self, "zone")
+                WorldCache_Invalidate()
+                Toast_Show("Added spawn to " + Ar\Name$, "success")
+            Else
+                Toast_Show("No empty spawn slots", "warning")
+            EndIf
+        EndIf
+        y = Composer::renderZoneSpawns(self, panelX, panelW, y, Ar, h, mx, my, clicked, rightClicked)
 
         Composer::recordContentBottom(self, y)
+    End Method
+
+
+    // -------------------------------------------------------------------------
+    // zoneAddPortal -- find first empty PortalName$ slot, seed with sensible
+    // defaults. Returns True if added, False if no slots available.
+    // -------------------------------------------------------------------------
+    Method zoneAddPortal%(Ar.Area)
+        Local i%
+        For i = 0 To 99
+            If Ar\PortalName$[i] = ""
+                Ar\PortalName$[i]      = "New portal " + Str(i)
+                Ar\PortalLinkArea$[i]  = Ar\Name$    ; loops back to self until designer changes it
+                Ar\PortalLinkName$[i]  = ""
+                Ar\PortalX#[i]         = 0.0
+                Ar\PortalY#[i]         = 0.0
+                Ar\PortalZ#[i]         = 0.0
+                Ar\PortalSize#[i]      = 5.0
+                Ar\PortalYaw#[i]       = 0.0
+                Return True
+            EndIf
+        Next
+        Return False
+    End Method
+
+
+    // -------------------------------------------------------------------------
+    // zoneAddTrigger -- find first empty TriggerScript$ slot, seed defaults.
+    // -------------------------------------------------------------------------
+    Method zoneAddTrigger%(Ar.Area)
+        Local i%
+        For i = 0 To 149
+            If Ar\TriggerScript$[i] = ""
+                Ar\TriggerScript$[i] = "New trigger"
+                Ar\TriggerMethod$[i] = ""
+                Ar\TriggerX#[i]      = 0.0
+                Ar\TriggerY#[i]      = 0.0
+                Ar\TriggerZ#[i]      = 0.0
+                Ar\TriggerSize#[i]   = 5.0
+                Return True
+            EndIf
+        Next
+        Return False
+    End Method
+
+
+    // -------------------------------------------------------------------------
+    // zoneAddSpawn -- find first empty SpawnActor (=0) slot, seed defaults.
+    // SpawnActor defaults to the first defined actor ID (so the slot is
+    // immediately valid -- a Spawn with SpawnActor=0 is treated as empty).
+    // -------------------------------------------------------------------------
+    Method zoneAddSpawn%(Ar.Area)
+        Local seedActor% = Composer::firstDefinedActorID(self)
+        Local i%
+        For i = 0 To 999
+            If Ar\SpawnActor[i] = 0
+                Ar\SpawnActor[i]        = seedActor
+                Ar\SpawnWaypoint[i]     = 0
+                Ar\SpawnSize#[i]        = 5.0
+                Ar\SpawnRange#[i]       = 100.0
+                Ar\SpawnFrequency[i]    = 30000
+                Ar\SpawnMax[i]          = 1
+                Ar\SpawnScript$[i]      = ""
+                Ar\SpawnActorScript$[i] = ""
+                Ar\SpawnDeathScript$[i] = ""
+                Return True
+            EndIf
+        Next
+        Return False
+    End Method
+
+
+    // -------------------------------------------------------------------------
+    // firstDefinedActorID -- helper for seeding a new spawn's actor ref.
+    // Returns the lowest defined actor ID, or 0 if there are no actors.
+    // -------------------------------------------------------------------------
+    Method firstDefinedActorID%()
+        Local i%
+        For i = 1 To 65534
+            If ActorList(i) <> Null Then Return i
+        Next
+        Return 0
     End Method
 
 
@@ -2395,9 +2562,18 @@ Type Composer
         Local p%
         For p = 0 To 99
             If Ar\PortalName$[p] <> ""
-                // Sub-header showing "Portal <i>"
+                // Sub-header + delete button
                 If Composer::canPaintRow(self, y, CMP_ROW_H) = True
                     LoomText(panelX + CMP_PAD, y + 4, "Portal " + Str(p), LOOM_ARCANE_500_R, LOOM_ARCANE_500_G, LOOM_ARCANE_500_B)
+                EndIf
+                If Composer::subDeleteButton(self, panelX, panelW, y, mx, my, clicked) = True
+                    Ar\PortalName$[p]     = ""
+                    Ar\PortalLinkArea$[p] = ""
+                    Ar\PortalLinkName$[p] = ""
+                    Composer::markDirtyForKind(self, "zone")
+                    WorldCache_Invalidate()
+                    Toast_Show("Deleted portal " + Str(p), "danger")
+                    Return y + CMP_ROW_H   ; bail; the index is gone, restart on next frame
                 EndIf
                 y = y + CMP_ROW_H
 
@@ -2441,6 +2617,14 @@ Type Composer
                 If Composer::canPaintRow(self, y, CMP_ROW_H) = True
                     LoomText(panelX + CMP_PAD, y + 4, "Trigger " + Str(t), LOOM_ARCANE_500_R, LOOM_ARCANE_500_G, LOOM_ARCANE_500_B)
                 EndIf
+                If Composer::subDeleteButton(self, panelX, panelW, y, mx, my, clicked) = True
+                    Ar\TriggerScript$[t] = ""
+                    Ar\TriggerMethod$[t] = ""
+                    Composer::markDirtyForKind(self, "zone")
+                    WorldCache_Invalidate()
+                    Toast_Show("Deleted trigger " + Str(t), "danger")
+                    Return y + CMP_ROW_H
+                EndIf
                 y = y + CMP_ROW_H
 
                 y = Composer::editableFloatRow(self, panelX, panelW, y, "X",    "zone", h, "trigger_x_"    + Str(t), Ar\TriggerX#[t],    mx, my, clicked)
@@ -2468,6 +2652,13 @@ Type Composer
             If Ar\SpawnActor[s] > 0
                 If Composer::canPaintRow(self, y, CMP_ROW_H) = True
                     LoomText(panelX + CMP_PAD, y + 4, "Spawn " + Str(s), LOOM_ARCANE_500_R, LOOM_ARCANE_500_G, LOOM_ARCANE_500_B)
+                EndIf
+                If Composer::subDeleteButton(self, panelX, panelW, y, mx, my, clicked) = True
+                    Ar\SpawnActor[s] = 0
+                    Composer::markDirtyForKind(self, "zone")
+                    WorldCache_Invalidate()
+                    Toast_Show("Deleted spawn " + Str(s), "danger")
+                    Return y + CMP_ROW_H
                 EndIf
                 y = y + CMP_ROW_H
 
