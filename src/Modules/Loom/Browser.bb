@@ -175,6 +175,10 @@ Type Browser
         // as a card. Composer shows full 3D orbit/zoom preview via the
         // existing MeshPreview widget. Sibling of Textures from iter 66.
         Browser::addCategory(self, "mesh",    "Meshes")
+        // Sounds tab: every defined sound from Data\Game Data\Sounds.dat
+        // as a card. Composer view adds a Play button for in-place
+        // audition -- a feature GUE doesn't expose at all.
+        Browser::addCategory(self, "sound",   "Sounds")
         // Settings tab: project-level configuration singleton (Misc.dat /
         // Other.dat / Money.dat / Hosts.dat). Clicking the tab focuses
         // the singleton composer view directly -- no card grid since
@@ -429,7 +433,7 @@ Type Browser
         Local nbW% = 96
         Local nbH% = 22
         Local nbHover% = False
-        If self\category <> "tools" And self\category <> "script" And self\category <> "texture" And self\category <> "mesh"
+        If self\category <> "tools" And self\category <> "script" And self\category <> "texture" And self\category <> "mesh" And self\category <> "sound"
             nbHover = (mx >= nbX And mx < nbX + nbW And my >= nbY And my < nbY + nbH)
 
             If nbHover = True
@@ -542,6 +546,7 @@ Type Browser
         If kind = "script"  Then Return "Script"
         If kind = "texture" Then Return "Texture"
         If kind = "mesh"    Then Return "Mesh"
+        If kind = "sound"   Then Return "Sound"
         Return kind
     End Method
 
@@ -699,6 +704,9 @@ Type Browser
         EndIf
         If cat = "mesh"
             count = Browser::drawMeshesGrid(self, sw, sh, mx, my, clicked, gridX, gridY, cols)
+        EndIf
+        If cat = "sound"
+            count = Browser::drawSoundsGrid(self, sw, sh, mx, my, clicked, gridX, gridY, cols)
         EndIf
         If cat = "settings"
             count = Browser::drawSettingsCard(self, sw, sh, mx, my, clicked, gridX, gridY)
@@ -1213,6 +1221,73 @@ Type Browser
         EndIf
         If selected = True And self\pendingEnter = True
             Threads::focus(self\threads, "mesh", me\Index)
+            self\cardClickLatch = True
+            self\pendingEnter = False
+        EndIf
+    End Method
+
+
+    // -------------------------------------------------------------------------
+    // drawSoundsGrid -- one card per defined sound in the project.
+    // Cards are text-only; the per-sound Play button lives in the
+    // composer view where the user is committed to that sound's context.
+    // -------------------------------------------------------------------------
+    Method drawSoundsGrid%(sw%, sh%, mx%, my%, clicked%, gridX%, gridY%, cols%)
+        Local col% = 0
+        Local row% = 0
+        Local count% = 0
+        For se.SoundEntry = Each SoundEntry
+            If Browser::matchesFilter(self, se\Filename$) = True
+                Local cx% = gridX + col * (BR_CARD_W + BR_CARD_GAP)
+                Local cy% = gridY + row * (BR_CARD_H + BR_CARD_GAP)
+                If cy + BR_CARD_H < sh - BR_BOT_RIBBON
+                    Browser::drawSoundCard(self, se, cx, cy, mx, my, clicked, count)
+                EndIf
+                count = count + 1
+                col = col + 1
+                If col >= cols Then col = 0 : row = row + 1
+            EndIf
+        Next
+        Return count
+    End Method
+
+
+    // -------------------------------------------------------------------------
+    // drawSoundCard -- card chrome + filename + ID + 3D badge.
+    // -------------------------------------------------------------------------
+    Method drawSoundCard(se.SoundEntry, x%, y%, mx%, my%, clicked%, cardIdx%)
+        Local hovered% = (mx >= x And mx < x + BR_CARD_W And my >= y And my < y + BR_CARD_H)
+        Local selected% = (cardIdx = self\selectedIndex)
+
+        LoomShadowCard(x, y, BR_CARD_W, BR_CARD_H)
+        LoomFill(x, y, BR_CARD_W, BR_CARD_H, LOOM_STONE_800_R, LOOM_STONE_800_G, LOOM_STONE_800_B)
+
+        If hovered = True
+            LoomBorder(x, y, BR_CARD_W, BR_CARD_H, LOOM_ARCANE_500_R, LOOM_ARCANE_500_G, LOOM_ARCANE_500_B)
+            LoomBorder(x + 1, y + 1, BR_CARD_W - 2, BR_CARD_H - 2, LOOM_ARCANE_500_R, LOOM_ARCANE_500_G, LOOM_ARCANE_500_B)
+        Else If selected = True
+            LoomBorder(x, y, BR_CARD_W, BR_CARD_H, LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
+            LoomBorder(x + 1, y + 1, BR_CARD_W - 2, BR_CARD_H - 2, LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
+        Else
+            LoomBorder(x, y, BR_CARD_W, BR_CARD_H, LOOM_BRASS_700_R, LOOM_BRASS_700_G, LOOM_BRASS_700_B)
+        EndIf
+
+        LoomHRule(x + 12, y + 8, BR_CARD_W - 24, LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
+
+        Local nm$ = se\Filename$
+        If Len(nm) > 22 Then nm = Left$(nm, 21) + "~"
+        LoomText(x + 12, y + 18, nm, LOOM_PARCHMENT_100_R, LOOM_PARCHMENT_100_G, LOOM_PARCHMENT_100_B)
+        LoomText(x + 12, y + 44, "id " + Str(se\ID), LOOM_STONE_200_R, LOOM_STONE_200_G, LOOM_STONE_200_B)
+        If se\Is3D <> 0
+            LoomText(x + BR_CARD_W - 40, y + 72, "3D", LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
+        EndIf
+
+        If hovered And clicked
+            Threads::focus(self\threads, "sound", se\Index)
+            self\cardClickLatch = True
+        EndIf
+        If selected = True And self\pendingEnter = True
+            Threads::focus(self\threads, "sound", se\Index)
             self\cardClickLatch = True
             self\pendingEnter = False
         EndIf

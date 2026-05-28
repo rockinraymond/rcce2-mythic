@@ -425,6 +425,8 @@ Type Composer
             Composer::renderTexture(self, x, scrolledBodyY, w, bodyH, mx, my, clicked, rightClicked)
         Else If kind = "mesh"
             Composer::renderMesh(self, x, scrolledBodyY, w, bodyH, mx, my, clicked, rightClicked)
+        Else If kind = "sound"
+            Composer::renderSound(self, x, scrolledBodyY, w, bodyH, mx, my, clicked, rightClicked)
         EndIf
 
         // Scrollbar indicator -- thin brass thumb on the right edge,
@@ -3845,6 +3847,88 @@ Type Composer
         EndIf
         If Composer::canPaintRow(self, y, CMP_ROW_H) = True
             LoomText(panelX + CMP_PAD, y + 4, Str(itemHits) + " item(s) | " + Str(actorHits) + " actor(s)", LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
+        EndIf
+        y = y + CMP_ROW_H
+
+        Composer::recordContentBottom(self, y)
+    End Method
+
+
+    // -------------------------------------------------------------------------
+    // renderSound -- composer view for a focused sound from the
+    // SoundCatalog. Shows metadata + an in-place Play button + reverse
+    // refs from every actor's MSpeechIDs / FSpeechIDs slot families.
+    //
+    // The Play button is the killer feature here: GUE has no in-place
+    // audition for sounds. Sounds_Play uses the engine's GetSound +
+    // PlaySound path so the cache stays warm across rapid re-plays.
+    // -------------------------------------------------------------------------
+    Method renderSound(panelX%, bodyY%, panelW%, bodyH%, mx%, my%, clicked%, rightClicked%)
+        Local sd.SoundEntry = Sounds_GetByIndex(self\threads\focusID)
+        If sd = Null Then Return
+
+        Local y% = bodyY
+        y = Composer::row(self, panelX, panelW, y, "Filename", sd\Filename$)
+        y = Composer::row(self, panelX, panelW, y, "ID",       Str(sd\ID))
+        y = Composer::row(self, panelX, panelW, y, "Spatial",  Composer::boolLabel(self, sd\Is3D))
+        y = Composer::row(self, panelX, panelW, y, "Path",     "Data\Sounds\" + sd\Filename$)
+
+        // Play button -- audition the sound. Caller-owned cooldown
+        // would be nicer but PlaySound is fire-and-forget and the
+        // user rarely spam-clicks; let the engine handle channel
+        // assignment.
+        y = Composer::sectionHeader(self, panelX, panelW, y, "Audition")
+        Local btnW% = 80
+        Local btnH% = 26
+        Local btnX% = panelX + CMP_PAD
+        Local btnY% = y
+        Local btnHovered% = (mx >= btnX And mx < btnX + btnW And my >= btnY And my < btnY + btnH)
+        If Composer::canPaintRow(self, y, btnH) = True
+            If btnHovered = True
+                LoomFill(btnX, btnY, btnW, btnH, LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
+                LoomBorder(btnX, btnY, btnW, btnH, LOOM_PARCHMENT_100_R, LOOM_PARCHMENT_100_G, LOOM_PARCHMENT_100_B)
+                LoomText(btnX + 18, btnY + 6, "> play", LOOM_PARCHMENT_100_R, LOOM_PARCHMENT_100_G, LOOM_PARCHMENT_100_B)
+            Else
+                LoomFill(btnX, btnY, btnW, btnH, LOOM_STONE_700_R, LOOM_STONE_700_G, LOOM_STONE_700_B)
+                LoomBorder(btnX, btnY, btnW, btnH, LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
+                LoomText(btnX + 18, btnY + 6, "> play", LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
+            EndIf
+        EndIf
+        If btnHovered = True And clicked = True
+            Sounds_Play(sd\ID)
+        EndIf
+        y = y + btnH + 4
+
+        // Reverse refs -- only actor speech slots reference sounds.
+        y = Composer::sectionHeader(self, panelX, panelW, y, "Used by")
+        Local actorHits% = 0
+        Local actorIdx% = 0
+        For actorIdx = 0 To 65535
+            Local Ac.Actor = ActorList(actorIdx)
+            If Ac <> Null
+                Local slotLabel$ = ""
+                Local si% = 0
+                For si = 0 To 15
+                    If Ac\MSpeechIDs[si] = sd\ID Then slotLabel = slotLabel + "MSpeech[" + Str(si) + "] "
+                    If Ac\FSpeechIDs[si] = sd\ID Then slotLabel = slotLabel + "FSpeech[" + Str(si) + "] "
+                Next
+                If slotLabel <> ""
+                    If actorHits < 50
+                        y = Composer::chipRow(self, panelX, panelW, y, slotLabel, "actor", Ac\ID, mx, my, clicked, rightClicked, "")
+                    EndIf
+                    actorHits = actorHits + 1
+                EndIf
+            EndIf
+        Next
+
+        If actorHits = 0
+            If Composer::canPaintRow(self, y, CMP_ROW_H) = True
+                LoomText(panelX + CMP_PAD, y + 4, "(unused -- safe to remove from the catalog)", LOOM_WARNING_R, LOOM_WARNING_G, LOOM_WARNING_B)
+            EndIf
+            y = y + CMP_ROW_H
+        EndIf
+        If Composer::canPaintRow(self, y, CMP_ROW_H) = True
+            LoomText(panelX + CMP_PAD, y + 4, Str(actorHits) + " actor(s)", LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
         EndIf
         y = y + CMP_ROW_H
 
