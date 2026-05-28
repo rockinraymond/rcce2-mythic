@@ -110,6 +110,13 @@ Global VPDirty         = True
 Global VPPrevHighlightKind$ = ""
 Global VPPrevHighlightIdx   = -1
 
+; Auto-fit values captured at zone load. The Reset View button
+; restores these so the user can recover from a confusing camera
+; orbit without reloading the zone.
+Global VPInitialCenterX# = 0.0
+Global VPInitialCenterZ# = 0.0
+Global VPInitialDistance# = VP_DEFAULT_CAM_DIST#
+
 ; Module-level Composer pointer set by Loom.bb after construction.
 ; Lets Loom_PickZoneMarker dispatch into Composer::scrollToZoneSubEntity
 ; without holding a per-call reference. Same shape as LoomWorldCache.
@@ -510,6 +517,25 @@ Function Loom_LoadZoneMarkers(Ar.Area)
     ; Reset orbit so each new zone starts at a comfortable default angle.
     VPYaw# = 0.0
     VPPitch# = 25.0
+
+    ; Capture auto-fit values so the Reset View button can restore them.
+    VPInitialCenterX# = VPSceneCenterX#
+    VPInitialCenterZ# = VPSceneCenterZ#
+    VPInitialDistance# = VPDistance#
+End Function
+
+
+; =============================================================================
+; Loom_ResetZoneView -- restore the zone's auto-fit camera. Called by
+; the Reset View pill in the viewport overlay.
+; =============================================================================
+Function Loom_ResetZoneView()
+    VPSceneCenterX# = VPInitialCenterX#
+    VPSceneCenterZ# = VPInitialCenterZ#
+    VPDistance# = VPInitialDistance#
+    VPYaw# = 0.0
+    VPPitch# = 25.0
+    VPDirty = True
 End Function
 
 
@@ -736,12 +762,59 @@ Function Loom_DrawZoneViewport(zoneHandle, x, y)
     LoomText x + 8, y + 40, "triggers "  + Str(VPCountTriggers),  LOOM_WARNING_R, LOOM_WARNING_G, LOOM_WARNING_B
     LoomText x + 8, y + 56, "waypoints " + Str(VPCountWaypoints), 200, 200, 210
     ; X/Y/Z axis legend (matches the colored lines at scene origin)
-    LoomText x + VP_RT_SIZE - 60, y + 8,  "X", 220, 60, 60
-    LoomText x + VP_RT_SIZE - 48, y + 8,  "Y", 60, 220, 60
-    LoomText x + VP_RT_SIZE - 36, y + 8,  "Z", 60, 120, 220
+    LoomText x + VP_RT_SIZE - 60, y + 26, "X", 220, 60, 60
+    LoomText x + VP_RT_SIZE - 48, y + 26, "Y", 60, 220, 60
+    LoomText x + VP_RT_SIZE - 36, y + 26, "Z", 60, 120, 220
+
+    ; Reset View pill -- top-right corner. Click restores auto-fit
+    ; camera + clears orbit/zoom for the loaded zone. Useful when
+    ; the user has spun the camera so far they can't find anything.
+    Local rsW = 60
+    Local rsX = x + VP_RT_SIZE - rsW - 6
+    Local rsY = y + 6
+    Local rsHover = (mx >= rsX And mx < rsX + rsW And my >= rsY And my < rsY + 16)
+    If rsHover = True
+        LoomFill rsX, rsY, rsW, 16, LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B
+        LoomText rsX + 4, rsY + 1, "reset view", LOOM_PARCHMENT_100_R, LOOM_PARCHMENT_100_G, LOOM_PARCHMENT_100_B
+    Else
+        LoomBorder rsX, rsY, rsW, 16, LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B
+        LoomText rsX + 4, rsY + 1, "reset view", LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B
+    EndIf
+    If rsHover = True And Loom_MouseClicked() = True
+        Loom_ResetZoneView()
+        Loom_ConsumeClick()
+    EndIf
+
+    ; Highlighted-marker name label: project the highlighted marker's
+    ; world position to screen via CameraProject and float its label
+    ; above the marker. Gives a clear visual cross-reference between
+    ; the composer's "you are here" and the 3D marker that lit up.
+    If LoomZoneHighlightKind$ <> "" And LoomZoneHighlightIdx >= 0
+        Local hl.ZoneViewportMarker
+        For hl = Each ZoneViewportMarker
+            If hl\Kind = LoomZoneHighlightKind$ And hl\IndexN = LoomZoneHighlightIdx
+                CameraProject VPCam, EntityX#(hl\EN), EntityY#(hl\EN), EntityZ#(hl\EN)
+                If ProjectedZ#() > 0
+                    Local pxL = x + Int(ProjectedX#())
+                    Local pyL = y + Int(ProjectedY#()) - 22  ; lift above marker
+                    Local lbl$ = hl\Kind$ + " " + Str(hl\IndexN)
+                    Local lblW = StringWidth(lbl) + 8
+                    ; Clamp inside widget rect so the text doesn't
+                    ; leak outside the viewport border.
+                    If pxL < x + 4 Then pxL = x + 4
+                    If pxL + lblW > x + VP_RT_SIZE - 4 Then pxL = x + VP_RT_SIZE - lblW - 4
+                    If pyL < y + 4 Then pyL = y + 4
+                    LoomFill pxL, pyL, lblW, 14, LOOM_STONE_900_R, LOOM_STONE_900_G, LOOM_STONE_900_B
+                    LoomBorder pxL, pyL, lblW, 14, LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B
+                    LoomText pxL + 4, pyL - 1, lbl, LOOM_PARCHMENT_100_R, LOOM_PARCHMENT_100_G, LOOM_PARCHMENT_100_B
+                EndIf
+                Exit
+            EndIf
+        Next
+    EndIf
 
     If inside = True
-        LoomText x + 8, y + VP_RT_SIZE - 18, "LMB=orbit  MMB=pan  wheel=zoom", LOOM_STONE_300_R, LOOM_STONE_300_G, LOOM_STONE_300_B
+        LoomText x + 8, y + VP_RT_SIZE - 18, "LMB=orbit  MMB=pan  wheel=zoom  RMB=move", LOOM_STONE_300_R, LOOM_STONE_300_G, LOOM_STONE_300_B
     EndIf
 
     Return True
