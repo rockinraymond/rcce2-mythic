@@ -746,15 +746,32 @@ Type BrokenRefs
         // emitted. Click cycles between filter-this-category and
         // filter-clear (All). The header text always reflects the
         // active filter so designers see the scope at a glance.
+        // drawCategoryChips returns the bottom Y of the (possibly
+        // multi-row) chip strip; the list starts below it.
         Local chipsY% = modalY + BROKENREFS_HEADER_H - 4
-        BrokenRefs::drawCategoryChips(self, modalX + BROKENREFS_PAD, chipsY, mx, my, clicked)
+        Local chipsBottom% = BrokenRefs::drawCategoryChips(self, modalX + BROKENREFS_PAD, chipsY, mx, my, clicked)
 
-        BrokenRefs::drawEntries(self, modalX, modalY + BROKENREFS_HEADER_H + 22, mx, my, clicked)
-
-        // Footer hint
+        // Footer position -- the list must stop above it.
         Local hy% = modalY + BROKENREFS_MODAL_H - BROKENREFS_HINT_H - 4
+
+        // Entries list flows from below the chips to just above the footer.
+        Local listY% = chipsBottom + 10
+        Local listH% = (hy - 8) - listY
+        If listH < BROKENREFS_ROW_H Then listH = BROKENREFS_ROW_H
+
+        // Mouse-wheel scroll (row-indexed scrollOffset, same as arrow keys).
+        Local wheel% = Loom_MouseWheel()
+        If wheel <> 0
+            self\scrollOffset = self\scrollOffset - wheel
+            If self\scrollOffset < 0 Then self\scrollOffset = 0
+            If self\scrollOffset >= self\entryCount Then self\scrollOffset = self\entryCount - 1
+            If self\scrollOffset < 0 Then self\scrollOffset = 0
+            Loom_ConsumeWheel()
+        EndIf
+
+        BrokenRefs::drawEntries(self, modalX, listY, listH, mx, my, clicked)
         LoomHRule(modalX + BROKENREFS_PAD, hy - 2, BROKENREFS_MODAL_W - BROKENREFS_PAD * 2, LOOM_BRASS_700_R, LOOM_BRASS_700_G, LOOM_BRASS_700_B)
-        LoomText(modalX + BROKENREFS_PAD, hy + 4, "Click a row to jump to the source  |  arrows scroll  |  Esc to close", LOOM_STONE_300_R, LOOM_STONE_300_G, LOOM_STONE_300_B)
+        LoomText(modalX + BROKENREFS_PAD, hy + 4, "Click a row to jump to the source  |  wheel / arrows scroll  |  Esc to close", LOOM_STONE_300_R, LOOM_STONE_300_G, LOOM_STONE_300_B)
 
         If clicked = True
             If mx < modalX Or mx >= modalX + BROKENREFS_MODAL_W Or my < modalY Or my >= modalY + BROKENREFS_MODAL_H
@@ -766,12 +783,12 @@ Type BrokenRefs
     End Method
 
 
-    Method drawEntries(modalX%, listY%, mx%, my%, clicked%)
-        // Shrink visible-list height by the chip-row strip added in
-        // renderAndUpdate so the list doesn't paint past the bottom
-        // hint area.
-        Local listH% = BROKENREFS_MODAL_H - BROKENREFS_HEADER_H - BROKENREFS_HINT_H - 34
+    Method drawEntries(modalX%, listY%, listH%, mx%, my%, clicked%)
+        // listH is computed by the caller from the actual chip-strip
+        // bottom so the list never overlaps the (possibly multi-row)
+        // chips above or the footer below.
         Local rowsVisible% = listH / BROKENREFS_ROW_H
+        If rowsVisible < 1 Then rowsVisible = 1
         Local rx% = modalX + BROKENREFS_PAD
         Local rw% = BROKENREFS_MODAL_W - BROKENREFS_PAD * 2
 
@@ -816,7 +833,7 @@ Type BrokenRefs
     // issue type) are still rendered as "(0)" stone-grey so the chip
     // bar layout stays stable across sessions.
     // -------------------------------------------------------------------------
-    Method drawCategoryChips(chipsX%, chipsY%, mx%, my%, clicked%)
+    Method drawCategoryChips%(chipsX%, chipsY%, mx%, my%, clicked%)
         Local cats$[13]
         cats[0]  = "broken-ref"
         cats[1]  = "broken-script"
@@ -898,6 +915,11 @@ Type BrokenRefs
             EndIf
             cx = cx + chipW + 4
         Next
+
+        // Bottom Y of the chip strip (last row baseline + height). The
+        // caller starts the entries list below this so wrapped chip rows
+        // never overlap the list -- the original overlap bug.
+        Return cy + ch
     End Method
 
 

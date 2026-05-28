@@ -30,6 +30,9 @@ Const BR_BRAND_STRIP_H = 56
 Const BR_TOP_RIBBON    = LOOM_TOP_RIBBON_H + BR_BRAND_STRIP_H    // 28 + 56 = 84
 Const BR_TAB_BAR_H     = 36
 Const BR_FILTER_BAR_H  = 30
+// Y where the filter bar starts (just below the tab bar). cardVisible
+// and the card-grid scroll math derive the grid's top clip from this.
+Const BR_FILTER_BAR_Y  = BR_TOP_RIBBON + BR_TAB_BAR_H
 Const BR_BOT_RIBBON    = 36
 Const BR_SECTION_PAD   = 28
 Const BR_CARD_W        = 300
@@ -134,6 +137,18 @@ Type Browser
     // selectedIndex card, dispatching Threads::focus then clearing.
     Field pendingEnter%
 
+    // Vertical scroll for the card grid (pixels). Without it, a category
+    // with more rows than fit on screen silently clipped the overflow
+    // with no way to reach it. Driven by the mouse wheel (gated to the
+    // cursor being over the grid). cardScrollMax / lastGridRows are
+    // measured from the prior frame's card count so the clamp is correct.
+    // lastScrollCat / lastScrollFilter reset the scroll to the top when
+    // the visible set changes (category switch or filter edit).
+    Field cardScroll%
+    Field lastGridRows%
+    Field lastScrollCat$
+    Field lastScrollFilter$
+
 
     Method create.Browser(threads.Threads)
         self\threads = threads
@@ -147,6 +162,10 @@ Type Browser
         self\lastCount = 0
         self\pendingEnter = False
         self\selectionCount = 0
+        self\cardScroll = 0
+        self\lastGridRows = 0
+        self\lastScrollCat = ""
+        self\lastScrollFilter = ""
 
         // Build the ordered category list. Iterated via `Each BrowserCategory`
         // in insertion order (Blitz3D's global type pool is FIFO) -- also the
@@ -671,11 +690,52 @@ Type Browser
 
         Local cat$ = self\category
 
+        // The Zones tab in Atlas mode swaps the card grid for the spatial
+        // portal-graph view, which owns its own wheel (zoom) and origin.
+        // Card-grid scroll must NOT run in that mode.
+        Local atlasActive% = (cat = "zone" And self\atlasMode = True And self\atlas <> Null)
+
+        // ---- Card-grid vertical scroll -------------------------------------
+        // Reset to the top whenever the visible set changes (category switch
+        // or filter edit) so a fresh list never opens mid-scroll.
+        If self\category <> self\lastScrollCat Or self\filterQuery <> self\lastScrollFilter
+            self\cardScroll = 0
+        EndIf
+        self\lastScrollCat = self\category
+        self\lastScrollFilter = self\filterQuery
+
+        // Wheel scroll, gated to the cursor being over the grid. `sw` here
+        // is already reduced by the composer width (drawCardGrid is called
+        // with sw - composerWidth), so `mx < sw` means "left of the composer
+        // panel" and the composer owns the wheel when the cursor is on it.
+        // Loom_MouseWheel() is a true per-frame delta after the BeginFrame
+        // MouseZ fix; Loom_ConsumeWheel() stops any later surface re-applying.
+        Local rowPitch% = BR_CARD_H + BR_CARD_GAP
+        Local gridViewTop% = BR_FILTER_BAR_Y + BR_FILTER_BAR_H + 2
+        Local gridViewBottom% = sh - BR_BOT_RIBBON
+        Local wheel% = Loom_MouseWheel()
+        If wheel <> 0 And atlasActive = False And mx < sw And my >= gridViewTop And my < gridViewBottom
+            self\cardScroll = self\cardScroll - wheel * rowPitch
+            If self\cardScroll < 0 Then self\cardScroll = 0
+            Local contentH% = self\lastGridRows * rowPitch
+            Local viewH% = gridViewBottom - gridViewTop
+            Local maxScroll% = contentH - viewH
+            If maxScroll < 0 Then maxScroll = 0
+            If self\cardScroll > maxScroll Then self\cardScroll = maxScroll
+            Loom_ConsumeWheel()
+        EndIf
+
+        // Apply the scroll offset to the grid origin so rows shift up as
+        // the user scrolls down. cardVisible() clips rows that move above
+        // the grid top or below the bottom ribbon. (Not in atlas mode --
+        // the atlas places its own viewport at the unscrolled gridY.)
+        If atlasActive = False Then gridY = gridY - self\cardScroll
+
         // Zone tab + atlasMode = swap the card grid for the spatial atlas.
         // Atlas owns its own paint + hit-test inside the viewport rect.
         // (Filter applies to the card view only -- the atlas always shows
         //  every zone since spatial context is what it's for.)
-        If cat = "zone" And self\atlasMode = True And self\atlas <> Null
+        If atlasActive = True
             Local viewportH% = sh - gridY - BR_BOT_RIBBON - BR_SECTION_PAD
             Local hit% = Atlas::renderAndUpdate(self\atlas, gridX, gridY, gridW, viewportH)
             If hit = True Then self\cardClickLatch = True
@@ -731,6 +791,10 @@ Type Browser
         // Cache for next frame's pumpNavKeyboard.
         self\lastCount = count
 
+        // Rows laid out this frame -> next frame's scroll clamp. ceil(count/cols).
+        If cols < 1 Then cols = 1
+        self\lastGridRows = (count + cols - 1) / cols
+
         // Pending Enter is consumed by drawCardChrome when the iteration
         // reaches selectedIndex; if it didn't (e.g. selectedIndex past the
         // visible/filtered subset), clear it anyway so it doesn't fire
@@ -759,6 +823,21 @@ Type Browser
     // cards rendered (for the dispatcher's empty-state check).
     // -------------------------------------------------------------------------
 
+    // -------------------------------------------------------------------------
+    // cardVisible -- shared clip test for the scrollable card grid. A card
+    // at screen-y `cy` is visible iff it overlaps the band between the
+    // filter bar (top) and the bottom status ribbon. Replaces the old
+    // bottom-only clip so cards scrolled above the grid don't paint over
+    // the tab/filter chrome.
+    // -------------------------------------------------------------------------
+    Method cardVisible%(cy%, sh%)
+        Local gridTop% = BR_FILTER_BAR_Y + BR_FILTER_BAR_H + 2
+        If cy + BR_CARD_H <= gridTop Then Return False
+        If cy >= sh - BR_BOT_RIBBON Then Return False
+        Return True
+    End Method
+
+
     Method drawActorGrid%(sw%, sh%, mx%, my%, clicked%, gridX%, gridY%, cols%)
         Local col% = 0
         Local row% = 0
@@ -768,7 +847,7 @@ Type Browser
             If Browser::matchesFilter(self, aName) = True
                 Local cx% = gridX + col * (BR_CARD_W + BR_CARD_GAP)
                 Local cy% = gridY + row * (BR_CARD_H + BR_CARD_GAP)
-                If cy + BR_CARD_H < sh - BR_BOT_RIBBON
+                If Browser::cardVisible(self, cy, sh) = True
                     Browser::drawCardChrome(self, "actor", Ac\ID, cx, cy, mx, my, clicked, count)
                     Browser::drawActorCardBody(self, Ac, cx, cy)
                 EndIf
@@ -789,7 +868,7 @@ Type Browser
             If Browser::matchesFilter(self, It\Name$) = True
                 Local cx% = gridX + col * (BR_CARD_W + BR_CARD_GAP)
                 Local cy% = gridY + row * (BR_CARD_H + BR_CARD_GAP)
-                If cy + BR_CARD_H < sh - BR_BOT_RIBBON
+                If Browser::cardVisible(self, cy, sh) = True
                     Browser::drawCardChrome(self, "item", It\ID, cx, cy, mx, my, clicked, count)
                     Browser::drawItemCardBody(self, It, cx, cy)
                 EndIf
@@ -810,7 +889,7 @@ Type Browser
             If Browser::matchesFilter(self, Sp\Name$) = True
                 Local cx% = gridX + col * (BR_CARD_W + BR_CARD_GAP)
                 Local cy% = gridY + row * (BR_CARD_H + BR_CARD_GAP)
-                If cy + BR_CARD_H < sh - BR_BOT_RIBBON
+                If Browser::cardVisible(self, cy, sh) = True
                     Browser::drawCardChrome(self, "spell", Sp\ID, cx, cy, mx, my, clicked, count)
                     Browser::drawSpellCardBody(self, Sp, cx, cy)
                 EndIf
@@ -831,7 +910,7 @@ Type Browser
             If Browser::matchesFilter(self, Ar\Name$) = True
                 Local cx% = gridX + col * (BR_CARD_W + BR_CARD_GAP)
                 Local cy% = gridY + row * (BR_CARD_H + BR_CARD_GAP)
-                If cy + BR_CARD_H < sh - BR_BOT_RIBBON
+                If Browser::cardVisible(self, cy, sh) = True
                     Browser::drawCardChrome(self, "zone", Handle(Ar), cx, cy, mx, my, clicked, count)
                     Browser::drawZoneCardBody(self, Ar, cx, cy)
                 EndIf
@@ -854,7 +933,7 @@ Type Browser
                 If Browser::matchesFilter(self, FactionNames$(i)) = True
                     Local cx% = gridX + col * (BR_CARD_W + BR_CARD_GAP)
                     Local cy% = gridY + row * (BR_CARD_H + BR_CARD_GAP)
-                    If cy + BR_CARD_H < sh - BR_BOT_RIBBON
+                    If Browser::cardVisible(self, cy, sh) = True
                         Browser::drawCardChrome(self, "faction", i, cx, cy, mx, my, clicked, count)
                         Browser::drawFactionCardBody(self, i, cx, cy)
                     EndIf
@@ -876,7 +955,7 @@ Type Browser
             If Browser::matchesFilter(self, As\Name$) = True
                 Local cx% = gridX + col * (BR_CARD_W + BR_CARD_GAP)
                 Local cy% = gridY + row * (BR_CARD_H + BR_CARD_GAP)
-                If cy + BR_CARD_H < sh - BR_BOT_RIBBON
+                If Browser::cardVisible(self, cy, sh) = True
                     Browser::drawCardChrome(self, "animset", As\ID, cx, cy, mx, my, clicked, count)
                     Browser::drawAnimSetCardBody(self, As, cx, cy)
                 EndIf
@@ -981,7 +1060,7 @@ Type Browser
             If Browser::matchesFilter(self, t\Name$) = True
                 Local cx% = gridX + col * (BR_CARD_W + BR_CARD_GAP)
                 Local cy% = gridY + row * (BR_CARD_H + BR_CARD_GAP)
-                If cy + BR_CARD_H < sh - BR_BOT_RIBBON
+                If Browser::cardVisible(self, cy, sh) = True
                     Browser::drawToolCard(self, t, cx, cy, mx, my, clicked, count)
                 EndIf
                 count = count + 1
@@ -1074,7 +1153,7 @@ Type Browser
             If Browser::matchesFilter(self, sf\Name$) = True
                 Local cx% = gridX + col * (BR_CARD_W + BR_CARD_GAP)
                 Local cy% = gridY + row * (BR_CARD_H + BR_CARD_GAP)
-                If cy + BR_CARD_H < sh - BR_BOT_RIBBON
+                If Browser::cardVisible(self, cy, sh) = True
                     Browser::drawScriptCard(self, sf, cx, cy, mx, my, clicked, count)
                 EndIf
                 count = count + 1
@@ -1145,7 +1224,7 @@ Type Browser
             If Browser::matchesFilter(self, te\Filename$) = True
                 Local cx% = gridX + col * (BR_CARD_W + BR_CARD_GAP)
                 Local cy% = gridY + row * (BR_CARD_H + BR_CARD_GAP)
-                If cy + BR_CARD_H < sh - BR_BOT_RIBBON
+                If Browser::cardVisible(self, cy, sh) = True
                     Browser::drawTextureCard(self, te, cx, cy, mx, my, clicked, count)
                 EndIf
                 count = count + 1
@@ -1222,7 +1301,7 @@ Type Browser
             If Browser::matchesFilter(self, me\Filename$) = True
                 Local cx% = gridX + col * (BR_CARD_W + BR_CARD_GAP)
                 Local cy% = gridY + row * (BR_CARD_H + BR_CARD_GAP)
-                If cy + BR_CARD_H < sh - BR_BOT_RIBBON
+                If Browser::cardVisible(self, cy, sh) = True
                     Browser::drawMeshCard(self, me, cx, cy, mx, my, clicked, count)
                 EndIf
                 count = count + 1
@@ -1291,7 +1370,7 @@ Type Browser
             If Browser::matchesFilter(self, se\Filename$) = True
                 Local cx% = gridX + col * (BR_CARD_W + BR_CARD_GAP)
                 Local cy% = gridY + row * (BR_CARD_H + BR_CARD_GAP)
-                If cy + BR_CARD_H < sh - BR_BOT_RIBBON
+                If Browser::cardVisible(self, cy, sh) = True
                     Browser::drawSoundCard(self, se, cx, cy, mx, my, clicked, count)
                 EndIf
                 count = count + 1
@@ -1358,7 +1437,7 @@ Type Browser
             If Browser::matchesFilter(self, mu\Filename$) = True
                 Local cx% = gridX + col * (BR_CARD_W + BR_CARD_GAP)
                 Local cy% = gridY + row * (BR_CARD_H + BR_CARD_GAP)
-                If cy + BR_CARD_H < sh - BR_BOT_RIBBON
+                If Browser::cardVisible(self, cy, sh) = True
                     Browser::drawMusicCard(self, mu, cx, cy, mx, my, clicked, count)
                 EndIf
                 count = count + 1
