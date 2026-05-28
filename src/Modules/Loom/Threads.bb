@@ -241,6 +241,10 @@ Type Threads
             Return mu\Filename$ + " #" + Str(mu\ID)
         EndIf
 
+        If kind = "stats"
+            Return "Project Stats"
+        EndIf
+
         Return ""
     End Method
 

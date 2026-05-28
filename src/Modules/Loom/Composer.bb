@@ -429,6 +429,8 @@ Type Composer
             Composer::renderSound(self, x, scrolledBodyY, w, bodyH, mx, my, clicked, rightClicked)
         Else If kind = "music"
             Composer::renderMusic(self, x, scrolledBodyY, w, bodyH, mx, my, clicked, rightClicked)
+        Else If kind = "stats"
+            Composer::renderStats(self, x, scrolledBodyY, w, bodyH, mx, my, clicked)
         EndIf
 
         // Scrollbar indicator -- thin brass thumb on the right edge,
@@ -4194,6 +4196,174 @@ Type Composer
         // wonder where the "Used by" section went.
         If Composer::canPaintRow(self, y, CMP_ROW_H) = True
             LoomText(panelX + CMP_PAD, y + 4, "(music tracks have no in-data references)", LOOM_STONE_300_R, LOOM_STONE_300_G, LOOM_STONE_300_B)
+        EndIf
+        y = y + CMP_ROW_H
+
+        Composer::recordContentBottom(self, y)
+    End Method
+
+
+    // -------------------------------------------------------------------------
+    // renderStats -- read-only project dashboard. Counts entities,
+    // assets, issues; highlights top 5 zones by spawn density; surfaces
+    // top issue categories. Designed for "open Loom, hit Stats tab, get
+    // an immediate read on project health." No editable rows.
+    // -------------------------------------------------------------------------
+    Method renderStats(panelX%, bodyY%, panelW%, bodyH%, mx%, my%, clicked%)
+        Local y% = bodyY
+
+        // Entity counts. Use the same counting walks BrokenRefs and
+        // WorldCache use; cheap at typical project scale.
+        Local actorCount% = 0
+        Local Ac.Actor
+        For Ac = Each Actor
+            actorCount = actorCount + 1
+        Next
+        Local itemCount% = 0
+        Local It.Item
+        For It = Each Item
+            itemCount = itemCount + 1
+        Next
+        Local spellCount% = 0
+        Local Sp.Spell
+        For Sp = Each Spell
+            spellCount = spellCount + 1
+        Next
+        Local zoneCount% = 0
+        Local Ar.Area
+        For Ar = Each Area
+            zoneCount = zoneCount + 1
+        Next
+        Local factionCount% = 0
+        Local fi% = 0
+        For fi = 0 To 99
+            If FactionNames$(fi) <> "" Then factionCount = factionCount + 1
+        Next
+        Local animsetCount% = 0
+        Local As.AnimSet
+        For As = Each AnimSet
+            animsetCount = animsetCount + 1
+        Next
+
+        y = Composer::sectionHeader(self, panelX, panelW, y, "Entities")
+        y = Composer::row(self, panelX, panelW, y, "Actors",      Str(actorCount))
+        y = Composer::row(self, panelX, panelW, y, "Items",       Str(itemCount))
+        y = Composer::row(self, panelX, panelW, y, "Spells",      Str(spellCount))
+        y = Composer::row(self, panelX, panelW, y, "Zones",       Str(zoneCount))
+        y = Composer::row(self, panelX, panelW, y, "Factions",    Str(factionCount))
+        y = Composer::row(self, panelX, panelW, y, "Anim Sets",   Str(animsetCount))
+
+        // Asset catalog counts -- come straight from the *_Init module
+        // globals (TexturesTotalCount etc.). These already cost nothing
+        // to read since they're maintained at boot.
+        y = Composer::sectionHeader(self, panelX, panelW, y, "Asset catalogs")
+        y = Composer::row(self, panelX, panelW, y, "Scripts",     Str(ScriptsTotalCount)  + " .rsl files")
+        y = Composer::row(self, panelX, panelW, y, "Textures",    Str(TexturesTotalCount) + " in Textures.dat")
+        y = Composer::row(self, panelX, panelW, y, "Meshes",      Str(MeshesTotalCount)   + " in Meshes.dat")
+        y = Composer::row(self, panelX, panelW, y, "Sounds",      Str(SoundsTotalCount)   + " in Sounds.dat")
+        y = Composer::row(self, panelX, panelW, y, "Music",       Str(MusicTotalCount)    + " in Music.dat")
+
+        // Top 5 zones by spawn count. Walk Area pool, compute total
+        // defined SpawnActor slots per zone, surface the largest.
+        y = Composer::sectionHeader(self, panelX, panelW, y, "Top zones by spawn density")
+        Local zi% = 0
+        Local topName$[5]
+        Local topCount%[5]
+        Local topHandle%[5]
+        For zi = 0 To 4
+            topName[zi] = "" : topCount[zi] = 0 : topHandle[zi] = 0
+        Next
+        For Ar = Each Area
+            Local spawnSum% = 0
+            Local sci% = 0
+            For sci = 0 To 999
+                If Ar\SpawnActor[sci] > 0 Then spawnSum = spawnSum + 1
+            Next
+            // Insertion into top-5
+            Local insertAt% = -1
+            Local ti% = 0
+            For ti = 0 To 4
+                If spawnSum > topCount[ti]
+                    insertAt = ti
+                    Exit
+                EndIf
+            Next
+            If insertAt >= 0
+                // Shift down
+                Local sj% = 4
+                For sj = 4 To insertAt + 1 Step -1
+                    topName[sj]   = topName[sj - 1]
+                    topCount[sj]  = topCount[sj - 1]
+                    topHandle[sj] = topHandle[sj - 1]
+                Next
+                topName[insertAt] = Ar\Name$
+                topCount[insertAt] = spawnSum
+                topHandle[insertAt] = Handle(Ar)
+            EndIf
+        Next
+        For zi = 0 To 4
+            If topCount[zi] > 0
+                y = Composer::row(self, panelX, panelW, y, topName[zi], Str(topCount[zi]) + " spawns")
+            EndIf
+        Next
+        If topCount[0] = 0
+            If Composer::canPaintRow(self, y, CMP_ROW_H) = True
+                LoomText(panelX + CMP_PAD, y + 4, "(no zones with spawns)", LOOM_STONE_300_R, LOOM_STONE_300_G, LOOM_STONE_300_B)
+            EndIf
+            y = y + CMP_ROW_H
+        EndIf
+
+        // Issues breakdown by category. Walk the BrokenRef pool that
+        // BrokenRefs::rebuild populates (cached -- no fresh scan here).
+        y = Composer::sectionHeader(self, panelX, panelW, y, "Issues breakdown")
+        Local brBroken% = 0
+        Local brEmpty% = 0
+        Local brOrphanZone% = 0
+        Local brMissingTex% = 0
+        Local brMissingMesh% = 0
+        Local brMissingSound% = 0
+        Local brBrokenScript% = 0
+        Local brOrphanScript% = 0
+        Local brOrphanTex% = 0
+        Local brOrphanMesh% = 0
+        Local brOrphanSound% = 0
+        Local brPlayability% = 0
+        Local brOther% = 0
+        Local br.BrokenRef
+        For br = Each BrokenRef
+            // Sequential Ifs because BlitzForge doesn't chain ElseIf
+            // after a single-line Then. Each compares one category.
+            Local matched% = False
+            If br\Category = "broken-ref"      Then brBroken        = brBroken + 1        : matched = True
+            If br\Category = "empty-field"     Then brEmpty         = brEmpty + 1         : matched = True
+            If br\Category = "orphan-zone"     Then brOrphanZone    = brOrphanZone + 1    : matched = True
+            If br\Category = "missing-texture" Then brMissingTex    = brMissingTex + 1    : matched = True
+            If br\Category = "missing-mesh"    Then brMissingMesh   = brMissingMesh + 1   : matched = True
+            If br\Category = "missing-sound"   Then brMissingSound  = brMissingSound + 1  : matched = True
+            If br\Category = "broken-script"   Then brBrokenScript  = brBrokenScript + 1  : matched = True
+            If br\Category = "orphan-script"   Then brOrphanScript  = brOrphanScript + 1  : matched = True
+            If br\Category = "orphan-texture"  Then brOrphanTex     = brOrphanTex + 1     : matched = True
+            If br\Category = "orphan-mesh"     Then brOrphanMesh    = brOrphanMesh + 1    : matched = True
+            If br\Category = "orphan-sound"    Then brOrphanSound   = brOrphanSound + 1   : matched = True
+            If br\Category = "playability"     Then brPlayability   = brPlayability + 1   : matched = True
+            If matched = False Then brOther = brOther + 1
+        Next
+        y = Composer::row(self, panelX, panelW, y, "Broken refs",     Str(brBroken))
+        y = Composer::row(self, panelX, panelW, y, "Empty fields",    Str(brEmpty))
+        y = Composer::row(self, panelX, panelW, y, "Broken scripts",  Str(brBrokenScript))
+        y = Composer::row(self, panelX, panelW, y, "Missing texture", Str(brMissingTex))
+        y = Composer::row(self, panelX, panelW, y, "Missing mesh",    Str(brMissingMesh))
+        y = Composer::row(self, panelX, panelW, y, "Missing sound",   Str(brMissingSound))
+        y = Composer::row(self, panelX, panelW, y, "Orphan zone",     Str(brOrphanZone))
+        y = Composer::row(self, panelX, panelW, y, "Orphan script",   Str(brOrphanScript))
+        y = Composer::row(self, panelX, panelW, y, "Orphan texture",  Str(brOrphanTex))
+        y = Composer::row(self, panelX, panelW, y, "Orphan mesh",     Str(brOrphanMesh))
+        y = Composer::row(self, panelX, panelW, y, "Orphan sound",    Str(brOrphanSound))
+        y = Composer::row(self, panelX, panelW, y, "Playability",     Str(brPlayability))
+
+        // Open Issues hint -- Ctrl+H shortcut to drill into details
+        If Composer::canPaintRow(self, y, CMP_ROW_H) = True
+            LoomText(panelX + CMP_PAD, y + 4, "Ctrl+H opens the Issues modal for per-entry detail.", LOOM_STONE_300_R, LOOM_STONE_300_G, LOOM_STONE_300_B)
         EndIf
         y = y + CMP_ROW_H
 
