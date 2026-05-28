@@ -106,6 +106,9 @@ Include "Modules\Logging.bb"
 // since it calls Threads::focus + reads the *Saved globals).
 Include "Modules\Loom\Theme.bb"
 Include "Modules\Loom\Threads.bb"
+// Settings BEFORE Composer so the LoomCfg_* / SettingsSaved globals
+// are declared by the time Strict Composer methods reference them.
+Include "Modules\Loom\Settings.bb"
 Include "Modules\Loom\Browser.bb"
 Include "Modules\Loom\Composer.bb"
 Include "Modules\Loom\Palette.bb"
@@ -435,6 +438,11 @@ While zoneFile$ <> ""
 Wend
 CloseDir(zoneDir)
 WriteLog(LoomLog, "Loaded " + Str(TotalZones) + " zones")
+
+// Project-level config (Misc/Hosts/Other/Money .dat). Loom-side reader
+// since ClientLoaders.bb isn't included. Tolerant of missing files for
+// half-set-up projects.
+Loom_LoadSettings()
 
 WriteLog(LoomLog, "** Data load complete **")
 

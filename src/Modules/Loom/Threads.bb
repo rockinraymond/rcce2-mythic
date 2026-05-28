@@ -201,6 +201,11 @@ Type Threads
             Return ""
         EndIf
 
+        If kind = "settings"
+            // Singleton project-config "entity". refID is ignored.
+            Return "Project Settings"
+        EndIf
+
         Return ""
     End Method
 

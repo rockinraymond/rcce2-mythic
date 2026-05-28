@@ -43,6 +43,7 @@ Function SaveAll_AnyDirty%()
     If FactionsSaved = False Then Return True
     If AnimsSaved    = False Then Return True
     If ZoneSaved     = False Then Return True
+    If SettingsSaved = False Then Return True
     Return False
 End Function
 
@@ -72,6 +73,7 @@ Function SaveAll_Persist(composer.Composer)
     If FactionsSaved = False Then Composer::commitSaveForKind(composer, "faction") : count = count + 1
     If AnimsSaved = False    Then Composer::commitSaveForKind(composer, "animset") : count = count + 1
     If ZoneSaved = False     Then Composer::commitSaveForKind(composer, "zone")    : count = count + 1
+    If SettingsSaved = False Then Composer::commitSaveForKind(composer, "settings"): count = count + 1
 
     // Each commitSaveForKind already fires its own per-kind success
     // toast; the Save All summary kicks in only when there's more than
