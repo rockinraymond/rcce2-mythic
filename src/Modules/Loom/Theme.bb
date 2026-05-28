@@ -144,6 +144,20 @@ Function LoomColor(r, g, b)
     Color r, g, b
 End Function
 
+
+; Drop shadow under a card/modal rect. Two-layer fake -- Blitz3D has no
+; alpha so we approximate softness by painting a mid-stone rect at +2px
+; and a deep-stone rect at +4px. Cheap (two filled rects) and gives the
+; surface a clear visual lift from the background.
+;
+; Call BEFORE painting the surface fill so the shadow lands underneath.
+Function LoomShadowCard(x, y, w, h)
+    Color LOOM_STONE_900_R, LOOM_STONE_900_G, LOOM_STONE_900_B
+    Rect x + 2, y + 2, w, h, True
+    Color LOOM_STONE_950_R, LOOM_STONE_950_G, LOOM_STONE_950_B
+    Rect x + 4, y + 4, w, h, True
+End Function
+
 Function LoomFill(x, y, w, h, r, g, b)
     Color r, g, b
     Rect x, y, w, h, True

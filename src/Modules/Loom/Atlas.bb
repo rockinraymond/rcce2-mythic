@@ -344,6 +344,8 @@ Type Atlas
             // Blitz3D doesn't have a one-shot filled-circle primitive, so
             // for the small radius we use we draw a centered square and
             // round it visually with a 1px ring. Cheap and reads as a node.
+            // Drop shadow first for visual lift over the graph edges.
+            LoomShadowCard(sx - ATLAS_NODE_R, sy - ATLAS_NODE_R, ATLAS_NODE_R * 2, ATLAS_NODE_R * 2)
             If focused = True
                 LoomFill(sx - ATLAS_NODE_R, sy - ATLAS_NODE_R, ATLAS_NODE_R * 2, ATLAS_NODE_R * 2, LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
             Else If hovered = True

@@ -161,6 +161,7 @@ Type Timeline
         Local modalY% = (sh - TIMELINE_MODAL_H) / 3
 
         // Chrome
+        LoomShadowCard(modalX, modalY, TIMELINE_MODAL_W, TIMELINE_MODAL_H)
         LoomFill(modalX, modalY, TIMELINE_MODAL_W, TIMELINE_MODAL_H, LOOM_STONE_850_R, LOOM_STONE_850_G, LOOM_STONE_850_B)
         LoomBorder(modalX, modalY, TIMELINE_MODAL_W, TIMELINE_MODAL_H, LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
         LoomBorder(modalX + 1, modalY + 1, TIMELINE_MODAL_W - 2, TIMELINE_MODAL_H - 2, LOOM_BRASS_700_R, LOOM_BRASS_700_G, LOOM_BRASS_700_B)

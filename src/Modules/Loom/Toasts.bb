@@ -158,6 +158,7 @@ Type Toasts
     Method drawOne(t.Toast, x%, y%)
         // Background -- slightly transparent-looking via stone-800 over
         // the existing surface
+        LoomShadowCard(x, y, TOAST_W, TOAST_H)
         LoomFill(x, y, TOAST_W, TOAST_H, LOOM_STONE_800_R, LOOM_STONE_800_G, LOOM_STONE_800_B)
 
         // Border in the kind's color

@@ -74,6 +74,7 @@ Type Help
         Local modalX% = (sw - HELP_MODAL_W) / 2
         Local modalY% = (sh - HELP_MODAL_H) / 3
 
+        LoomShadowCard(modalX, modalY, HELP_MODAL_W, HELP_MODAL_H)
         LoomFill(modalX, modalY, HELP_MODAL_W, HELP_MODAL_H, LOOM_STONE_850_R, LOOM_STONE_850_G, LOOM_STONE_850_B)
         LoomBorder(modalX, modalY, HELP_MODAL_W, HELP_MODAL_H, LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
         LoomBorder(modalX + 1, modalY + 1, HELP_MODAL_W - 2, HELP_MODAL_H - 2, LOOM_BRASS_700_R, LOOM_BRASS_700_G, LOOM_BRASS_700_B)

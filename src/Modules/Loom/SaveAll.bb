@@ -164,6 +164,7 @@ Type ExitPrompt
         Local modalX% = (sw - EXITPROMPT_MODAL_W) / 2
         Local modalY% = (sh - EXITPROMPT_MODAL_H) / 3
 
+        LoomShadowCard(modalX, modalY, EXITPROMPT_MODAL_W, EXITPROMPT_MODAL_H)
         LoomFill(modalX, modalY, EXITPROMPT_MODAL_W, EXITPROMPT_MODAL_H, LOOM_STONE_850_R, LOOM_STONE_850_G, LOOM_STONE_850_B)
         LoomBorder(modalX, modalY, EXITPROMPT_MODAL_W, EXITPROMPT_MODAL_H, LOOM_WARNING_R, LOOM_WARNING_G, LOOM_WARNING_B)
         LoomBorder(modalX + 1, modalY + 1, EXITPROMPT_MODAL_W - 2, EXITPROMPT_MODAL_H - 2, LOOM_BRASS_700_R, LOOM_BRASS_700_G, LOOM_BRASS_700_B)
