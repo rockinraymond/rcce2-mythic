@@ -160,6 +160,91 @@ Function FindArea.Area(Name$)
 End Function
 
 ; Unloads all server data for an area
+; Duplicate an Area template -- allocate via ServerCreateArea then copy
+; every field from the source. Returns the new Area instance, or Null
+; if ServerCreateArea fails or the source is Null.
+;
+; The caller (EntityFactory_DuplicateZone) is responsible for fixing up
+; the name to avoid colliding with the source -- ServerSaveArea uses
+; A\Name$ as the .dat filename. We set Name$ to src.Name$ + " (copy)"
+; here; the EntityFactory layer applies UniqueZoneName$ on top for
+; subsequent collisions.
+;
+; Instances[] + FirstWater are intentionally NOT copied -- they're
+; runtime state for live area instances, not data the editor owns.
+; WeatherLinkArea pointer is also skipped (the WeatherLink$ string is
+; copied; the resolved pointer rebuilds at load).
+Function DuplicateAreaTemplate.Area(Src.Area)
+	If Src = Null Then Return Null
+
+	Local Dst.Area = ServerCreateArea()
+	If Dst = Null Then Return Null
+
+	Dst\Name$ = Src\Name$ + " (copy)"
+
+	For i = 0 To 4
+		Dst\WeatherChance[i] = Src\WeatherChance[i]
+	Next
+	Dst\Outdoors = Src\Outdoors
+	Dst\WeatherLink$ = Src\WeatherLink$
+	; WeatherLinkArea pointer skipped -- resolved at load from the string
+	Dst\EntryScript$ = Src\EntryScript$
+	Dst\ExitScript$  = Src\ExitScript$
+
+	; Triggers (X/Y/Z/Size/Script/Method) x 150
+	For i = 0 To 149
+		Dst\TriggerX#[i]    = Src\TriggerX#[i]
+		Dst\TriggerY#[i]    = Src\TriggerY#[i]
+		Dst\TriggerZ#[i]    = Src\TriggerZ#[i]
+		Dst\TriggerSize#[i] = Src\TriggerSize#[i]
+		Dst\TriggerScript$[i] = Src\TriggerScript$[i]
+		Dst\TriggerMethod$[i] = Src\TriggerMethod$[i]
+	Next
+
+	; Waypoints (X/Y/Z/Prev/NextA/NextB/Pause) x 2000. Big loop but
+	; cheap -- pure assignment, no allocation, runs once per duplicate.
+	For i = 0 To 1999
+		Dst\WaypointX#[i]    = Src\WaypointX#[i]
+		Dst\WaypointY#[i]    = Src\WaypointY#[i]
+		Dst\WaypointZ#[i]    = Src\WaypointZ#[i]
+		Dst\PrevWaypoint[i]  = Src\PrevWaypoint[i]
+		Dst\NextWaypointA[i] = Src\NextWaypointA[i]
+		Dst\NextWaypointB[i] = Src\NextWaypointB[i]
+		Dst\WaypointPause[i] = Src\WaypointPause[i]
+	Next
+
+	; Portals (Name/LinkArea/LinkName/X/Y/Z/Size/Yaw) x 100
+	For i = 0 To 99
+		Dst\PortalName$[i]      = Src\PortalName$[i]
+		Dst\PortalLinkArea$[i]  = Src\PortalLinkArea$[i]
+		Dst\PortalLinkName$[i]  = Src\PortalLinkName$[i]
+		Dst\PortalX#[i]         = Src\PortalX#[i]
+		Dst\PortalY#[i]         = Src\PortalY#[i]
+		Dst\PortalZ#[i]         = Src\PortalZ#[i]
+		Dst\PortalSize#[i]      = Src\PortalSize#[i]
+		Dst\PortalYaw#[i]       = Src\PortalYaw#[i]
+	Next
+
+	; Spawns (Actor/Waypoint/Size/Script/ActorScript/DeathScript/
+	;        Frequency/Max/Range) x 1000
+	For i = 0 To 999
+		Dst\SpawnActor[i]       = Src\SpawnActor[i]
+		Dst\SpawnWaypoint[i]    = Src\SpawnWaypoint[i]
+		Dst\SpawnSize#[i]       = Src\SpawnSize#[i]
+		Dst\SpawnScript$[i]     = Src\SpawnScript$[i]
+		Dst\SpawnActorScript$[i] = Src\SpawnActorScript$[i]
+		Dst\SpawnDeathScript$[i] = Src\SpawnDeathScript$[i]
+		Dst\SpawnFrequency[i]   = Src\SpawnFrequency[i]
+		Dst\SpawnMax[i]         = Src\SpawnMax[i]
+		Dst\SpawnRange#[i]      = Src\SpawnRange#[i]
+	Next
+
+	Dst\PvP     = Src\PvP
+	Dst\Gravity = Src\Gravity
+
+	Return Dst
+End Function
+
 Function ServerUnloadArea(A.Area)
 
 	; Walk the per-Area chain instead of the global ServerWater
