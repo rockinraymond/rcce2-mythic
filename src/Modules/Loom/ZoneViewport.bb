@@ -42,6 +42,10 @@ Const VP_SCENE_Y_OFFSET#  = 20000.0      ; isolate from mesh preview at y=10000
 Const VP_DEFAULT_CAM_DIST# = 400.0
 Const VP_MARKER_SIZE#     = 4.0
 Const VP_WAYPOINT_SIZE#   = 1.5
+Const VP_AXIS_LENGTH#     = 30.0          ; XYZ axis indicator length
+Const VP_AXIS_THICKNESS#  = 0.3           ; thin cube acting as a line
+Const VP_LINE_THICKNESS#  = 0.25          ; waypoint connection line thickness
+Const VP_MAX_LINES        = 500           ; cap connection line entities
 
 
 ; ---- Module state -----------------------------------------------------------
@@ -62,6 +66,14 @@ Global VPSceneCenterZ# = 0.0
 Global VPDragging   = False
 Global VPLastMX     = 0
 Global VPLastMY     = 0
+
+; Per-zone counts cached at load time (saves recomputing in renderer
+; just for the legend overlay).
+Global VPCountPortals  = 0
+Global VPCountSpawns   = 0
+Global VPCountTriggers = 0
+Global VPCountWaypoints = 0
+Global VPCountLines    = 0     ; total connection lines emitted
 
 
 ; =============================================================================
@@ -123,13 +135,72 @@ End Function
 
 
 ; =============================================================================
+; Loom_MakeLine -- emit a thin scaled cube positioned + oriented as the
+; segment from (x1, y1, z1) to (x2, y2, z2). Blitz3D has no native 3D
+; line primitive; this is the cheap stand-in.
+;
+; Uses the trig form: midpoint + length + atan2(dx, dz) for yaw, then
+; tilt for pitch via atan2(dy, horiz_len). Z axis is the cube's
+; "length" direction; we scale Z to the segment length and X/Y to
+; VP_LINE_THICKNESS.
+; =============================================================================
+Function Loom_MakeLine(x1#, y1#, z1#, x2#, y2#, z2#, r, g, b)
+    If VPCountLines >= VP_MAX_LINES Then Return
+
+    Local dx# = x2# - x1#
+    Local dy# = y2# - y1#
+    Local dz# = z2# - z1#
+    Local len# = Sqr(dx# * dx# + dy# * dy# + dz# * dz#)
+    If len# < 0.01 Then Return
+
+    Local en = CreateCube()
+    ScaleEntity en, VP_LINE_THICKNESS#, VP_LINE_THICKNESS#, len# / 2.0
+    EntityColor en, r, g, b
+    PositionEntity en, (x1# + x2#) / 2.0, (y1# + y2#) / 2.0, (z1# + z2#) / 2.0
+
+    ; Orient: yaw around Y (atan2 of horiz), pitch around X (atan2 of dy/horiz)
+    Local horiz# = Sqr(dx# * dx# + dz# * dz#)
+    Local yaw#   = ATan2(dx#, dz#)
+    Local pitch# = -ATan2(dy#, horiz#)
+    RotateEntity en, pitch#, yaw#, 0
+
+    Local marker.ZoneViewportMarker = New ZoneViewportMarker
+    marker\EN = en
+    VPCountLines = VPCountLines + 1
+End Function
+
+
+; =============================================================================
+; Loom_MakeAxisMarkers -- three short colored lines from the scene origin
+; along +X (red), +Y (green), +Z (blue). Gives the viewport an obvious
+; orientation reference at scene origin.
+; =============================================================================
+Function Loom_MakeAxisMarkers()
+    Local ox# = 0.0
+    Local oy# = VP_SCENE_Y_OFFSET#
+    Local oz# = 0.0
+    Loom_MakeLine ox#, oy#, oz#, ox# + VP_AXIS_LENGTH#, oy#, oz#, 220, 60, 60
+    Loom_MakeLine ox#, oy#, oz#, ox#, oy# + VP_AXIS_LENGTH#, oz#, 60, 220, 60
+    Loom_MakeLine ox#, oy#, oz#, ox#, oy#, oz# + VP_AXIS_LENGTH#, 60, 120, 220
+End Function
+
+
+; =============================================================================
 ; Loom_LoadZoneMarkers -- walk the Area's portal/spawn/trigger/waypoint
 ; arrays, instantiate a colored cube for each defined entry. Also computes
 ; the scene bbox so the camera can auto-fit.
 ; =============================================================================
 Function Loom_LoadZoneMarkers(Ar.Area)
     Loom_FreeZoneMarkers()
+    VPCountPortals  = 0
+    VPCountSpawns   = 0
+    VPCountTriggers = 0
+    VPCountWaypoints = 0
+    VPCountLines    = 0
     If Ar = Null Then Return
+
+    ; Origin axis markers go first (cheap, always 3 lines).
+    Loom_MakeAxisMarkers()
 
     Local minX# = 1000000.0
     Local minZ# = 1000000.0
@@ -147,6 +218,7 @@ Function Loom_LoadZoneMarkers(Ar.Area)
             EntityColor pEn, LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B
             Local pm.ZoneViewportMarker = New ZoneViewportMarker
             pm\EN = pEn
+            VPCountPortals = VPCountPortals + 1
             If Ar\PortalX#[i] < minX# Then minX# = Ar\PortalX#[i]
             If Ar\PortalX#[i] > maxX# Then maxX# = Ar\PortalX#[i]
             If Ar\PortalZ#[i] < minZ# Then minZ# = Ar\PortalZ#[i]
@@ -166,6 +238,7 @@ Function Loom_LoadZoneMarkers(Ar.Area)
                 EntityColor sEn, LOOM_ARCANE_500_R, LOOM_ARCANE_500_G, LOOM_ARCANE_500_B
                 Local sm.ZoneViewportMarker = New ZoneViewportMarker
                 sm\EN = sEn
+                VPCountSpawns = VPCountSpawns + 1
                 If Ar\WaypointX#[waypointIdx] < minX# Then minX# = Ar\WaypointX#[waypointIdx]
                 If Ar\WaypointX#[waypointIdx] > maxX# Then maxX# = Ar\WaypointX#[waypointIdx]
                 If Ar\WaypointZ#[waypointIdx] < minZ# Then minZ# = Ar\WaypointZ#[waypointIdx]
@@ -184,6 +257,7 @@ Function Loom_LoadZoneMarkers(Ar.Area)
             EntityColor tEn, LOOM_WARNING_R, LOOM_WARNING_G, LOOM_WARNING_B
             Local tm.ZoneViewportMarker = New ZoneViewportMarker
             tm\EN = tEn
+            VPCountTriggers = VPCountTriggers + 1
             If Ar\TriggerX#[i] < minX# Then minX# = Ar\TriggerX#[i]
             If Ar\TriggerX#[i] > maxX# Then maxX# = Ar\TriggerX#[i]
             If Ar\TriggerZ#[i] < minZ# Then minZ# = Ar\TriggerZ#[i]
@@ -201,11 +275,32 @@ Function Loom_LoadZoneMarkers(Ar.Area)
             EntityColor wEn, 140, 140, 150
             Local wm.ZoneViewportMarker = New ZoneViewportMarker
             wm\EN = wEn
+            VPCountWaypoints = VPCountWaypoints + 1
             If Ar\WaypointX#[i] < minX# Then minX# = Ar\WaypointX#[i]
             If Ar\WaypointX#[i] > maxX# Then maxX# = Ar\WaypointX#[i]
             If Ar\WaypointZ#[i] < minZ# Then minZ# = Ar\WaypointZ#[i]
             If Ar\WaypointZ#[i] > maxZ# Then maxZ# = Ar\WaypointZ#[i]
             found = True
+        EndIf
+    Next
+
+    ; Waypoint connection lines -- emit a thin line for each NextA/NextB
+    ; pointer from a defined waypoint to a defined target. Capped via
+    ; VP_MAX_LINES to keep entity count bounded on huge zones.
+    For i = 0 To 1999
+        If Ar\WaypointX#[i] <> 0.0 Or Ar\WaypointZ#[i] <> 0.0
+            Local na = Ar\NextWaypointA[i]
+            If na >= 0 And na <= 1999
+                If Ar\WaypointX#[na] <> 0.0 Or Ar\WaypointZ#[na] <> 0.0
+                    Loom_MakeLine Ar\WaypointX#[i], VP_SCENE_Y_OFFSET# + Ar\WaypointY#[i] + VP_WAYPOINT_SIZE#, Ar\WaypointZ#[i], Ar\WaypointX#[na], VP_SCENE_Y_OFFSET# + Ar\WaypointY#[na] + VP_WAYPOINT_SIZE#, Ar\WaypointZ#[na], 100, 100, 110
+                EndIf
+            EndIf
+            Local nb = Ar\NextWaypointB[i]
+            If nb >= 0 And nb <= 1999
+                If Ar\WaypointX#[nb] <> 0.0 Or Ar\WaypointZ#[nb] <> 0.0
+                    Loom_MakeLine Ar\WaypointX#[i], VP_SCENE_Y_OFFSET# + Ar\WaypointY#[i] + VP_WAYPOINT_SIZE#, Ar\WaypointZ#[i], Ar\WaypointX#[nb], VP_SCENE_Y_OFFSET# + Ar\WaypointY#[nb] + VP_WAYPOINT_SIZE#, Ar\WaypointZ#[nb], 100, 100, 110
+                EndIf
+            EndIf
         EndIf
     Next
 
@@ -314,11 +409,17 @@ Function Loom_DrawZoneViewport(zoneHandle, x, y)
     CopyRect 0, 0, VP_RT_SIZE, VP_RT_SIZE, x, y, TextureBuffer(VPRT), BackBuffer()
     LoomBorder x, y, VP_RT_SIZE, VP_RT_SIZE, LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B
 
-    ; Legend overlay
-    LoomText x + 8, y + 8,  "portals",   LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B
-    LoomText x + 8, y + 24, "spawns",    LOOM_ARCANE_500_R, LOOM_ARCANE_500_G, LOOM_ARCANE_500_B
-    LoomText x + 8, y + 40, "triggers",  LOOM_WARNING_R, LOOM_WARNING_G, LOOM_WARNING_B
-    LoomText x + 8, y + 56, "waypoints", 200, 200, 210
+    ; Legend overlay with live counts. Capitalized labels mirror the
+    ; composer section names so the user can mentally map widget colors
+    ; to the editable sections below the viewport.
+    LoomText x + 8, y + 8,  "portals "   + Str(VPCountPortals),   LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B
+    LoomText x + 8, y + 24, "spawns "    + Str(VPCountSpawns),    LOOM_ARCANE_500_R, LOOM_ARCANE_500_G, LOOM_ARCANE_500_B
+    LoomText x + 8, y + 40, "triggers "  + Str(VPCountTriggers),  LOOM_WARNING_R, LOOM_WARNING_G, LOOM_WARNING_B
+    LoomText x + 8, y + 56, "waypoints " + Str(VPCountWaypoints), 200, 200, 210
+    ; X/Y/Z axis legend (matches the colored lines at scene origin)
+    LoomText x + VP_RT_SIZE - 60, y + 8,  "X", 220, 60, 60
+    LoomText x + VP_RT_SIZE - 48, y + 8,  "Y", 60, 220, 60
+    LoomText x + VP_RT_SIZE - 36, y + 8,  "Z", 60, 120, 220
 
     If inside = True
         LoomText x + 8, y + VP_RT_SIZE - 18, "drag=orbit  wheel=zoom", LOOM_STONE_300_R, LOOM_STONE_300_G, LOOM_STONE_300_B
