@@ -113,6 +113,7 @@ Type Help
         rowY = Help::row(self, modalX, rowY, "Left-click chip",    "Jump to referenced entity")
         rowY = Help::row(self, modalX, rowY, "Right-click chip",   "Open palette as picker (swap referent)")
         rowY = Help::row(self, modalX, rowY, "Click Save / X / Discard", "Persist / delete (arm) / revert")
+        rowY = Help::row(self, modalX, rowY, "Click Dup",                "Duplicate the focused entity")
         rowY = rowY + 6
 
         rowY = Help::section(self, modalX, rowY, "Ribbon (top strip)")

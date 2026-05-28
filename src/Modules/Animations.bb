@@ -163,6 +163,31 @@ Function DeleteAnimSetTemplate(ID)
 	Return True
 End Function
 
+; Duplicate an AnimSet template. Allocate via CreateAnimSet (which
+; returns -1 if AnimList is full), copy name + every clip slot.
+; Returns the new ID or -1.
+Function DuplicateAnimSetTemplate(srcID)
+	If srcID < 0 Or srcID > 999 Then Return -1
+	Src.AnimSet = AnimList(srcID)
+	If Src = Null Then Return -1
+
+	Local newID = CreateAnimSet()
+	If newID = -1 Then Return -1
+
+	Dst.AnimSet = AnimList(newID)
+	If Dst = Null Then Return -1
+
+	Dst\Name$ = Src\Name$ + " (copy)"
+	For i = 0 To 149
+		Dst\AnimName$[i] = Src\AnimName$[i]
+		Dst\AnimStart[i] = Src\AnimStart[i]
+		Dst\AnimEnd[i]   = Src\AnimEnd[i]
+		Dst\AnimSpeed#[i] = Src\AnimSpeed#[i]
+	Next
+
+	Return newID
+End Function
+
 ; Saves all animation sets via SafeWriteOpen/Commit (atomic).
 Function SaveAnimSets(Filename$)
 

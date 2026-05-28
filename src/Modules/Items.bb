@@ -213,6 +213,61 @@ Function CreateItem.Item()
 
 End Function
 
+; Duplicate an Item template -- allocate a new ID, copy every field.
+; Used by Loom's EntityFactory_Duplicate. Returns the new ID, or -1 if
+; the ItemList is full or the source doesn't exist.
+;
+; The Attributes side-instance is deep-copied so the duplicate has its
+; own backing storage (modifying duplicate.Attributes\Value[0] mustn't
+; affect the source). Same for the Gubbins / Attributes arrays.
+Function DuplicateItemTemplate(srcID)
+	If srcID < 0 Or srcID > 65534 Then Return -1
+	Src.Item = ItemList(srcID)
+	If Src = Null Then Return -1
+
+	Dst.Item = CreateItem()
+	If Dst = Null Then Return -1   ; ItemList full
+	; CreateItem allocates a fresh Attributes; reuse it.
+
+	Dst\Name$           = Src\Name$ + " (copy)"
+	Dst\ExclusiveRace$  = Src\ExclusiveRace$
+	Dst\ExclusiveClass$ = Src\ExclusiveClass$
+	Dst\Script$         = Src\Script$
+	Dst\SMethod$        = Src\SMethod$
+	Dst\ItemType        = Src\ItemType
+	Dst\Value           = Src\Value
+	Dst\Mass            = Src\Mass
+	Dst\ThumbnailTexID  = Src\ThumbnailTexID
+	Dst\MMeshID         = Src\MMeshID
+	Dst\FMeshID         = Src\FMeshID
+	For i = 0 To 5
+		Dst\Gubbins[i] = Src\Gubbins[i]
+	Next
+	Dst\TakesDamage     = Src\TakesDamage
+	Dst\SlotType        = Src\SlotType
+	Dst\WeaponDamage    = Src\WeaponDamage
+	Dst\WeaponDamageType = Src\WeaponDamageType
+	Dst\WeaponType      = Src\WeaponType
+	Dst\RangedProjectile = Src\RangedProjectile
+	Dst\RangedAnimation$ = Src\RangedAnimation$
+	Dst\Range#          = Src\Range#
+	Dst\ArmourLevel     = Src\ArmourLevel
+	Dst\EatEffectsLength = Src\EatEffectsLength
+	Dst\ImageID         = Src\ImageID
+	Dst\MiscData$       = Src\MiscData$
+	Dst\Stackable       = Src\Stackable
+
+	; Attributes deep-copy
+	If Src\Attributes <> Null And Dst\Attributes <> Null
+		For i = 0 To 39
+			Dst\Attributes\Value[i]   = Src\Attributes\Value[i]
+			Dst\Attributes\Maximum[i] = Src\Attributes\Maximum[i]
+		Next
+	EndIf
+
+	Return Dst\ID
+End Function
+
 ; Delete an Item template. Used by Loom's entity-delete path. Strict
 ; callers can't write to ItemList directly per the Dim-inside-Method trap,
 ; so this lives here in the non-Strict module.

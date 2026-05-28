@@ -203,6 +203,136 @@ End Function
 
 
 // =============================================================================
+// EntityFactory_Duplicate -- dispatch on kind, allocate a copy of the
+// source entity, focus the duplicate so the user can immediately edit.
+// Mirrors EntityFactory_Create's contract: True on success, False on cap.
+//
+// Per-kind copy helpers live in the data modules (non-Strict so they can
+// directly assign Dim'd globals + Type Fields). Zone duplication is
+// deferred -- copying every portal / spawn / trigger / waypoint is non-
+// trivial and the underlying ServerCreateArea + per-field copy path is
+// its own sub-iteration.
+// =============================================================================
+Function EntityFactory_Duplicate%(kind$, refID%, threads.Threads)
+    If kind = "actor"   Then Return EntityFactory_DuplicateActor(refID, threads)
+    If kind = "item"    Then Return EntityFactory_DuplicateItem(refID, threads)
+    If kind = "spell"   Then Return EntityFactory_DuplicateSpell(refID, threads)
+    If kind = "animset" Then Return EntityFactory_DuplicateAnimSet(refID, threads)
+    If kind = "faction" Then Return EntityFactory_DuplicateFaction(refID, threads)
+    If kind = "zone"
+        Toast_Show("Duplicate not yet supported for zones", "warning")
+        WriteLog(LoomLog, "EntityFactory: duplicate unsupported for kind 'zone'")
+        Return False
+    EndIf
+    WriteLog(LoomLog, "EntityFactory: duplicate unknown kind '" + kind + "'")
+    Return False
+End Function
+
+
+Function EntityFactory_DuplicateActor%(srcID%, threads.Threads)
+    Local newID% = DuplicateActorTemplate(srcID)
+    If newID = -1
+        Toast_Show("Duplicate failed (ActorList full or stale)", "danger")
+        Return False
+    EndIf
+    Threads::focus(threads, "actor", newID)
+    ActorsSaved = False
+    WorldCache_Invalidate()
+    Local newA.Actor = ActorList(newID)
+    Local label$ = ""
+    If newA <> Null Then label = newA\Race$ + " [" + newA\Class$ + "]"
+    Timeline_RecordCreate("actor", newID, label)
+    Toast_Show("Duplicated actor", "success")
+    WriteLog(LoomLog, "EntityFactory: duplicated actor #" + Str(srcID) + " -> #" + Str(newID))
+    Return True
+End Function
+
+
+Function EntityFactory_DuplicateItem%(srcID%, threads.Threads)
+    Local newID% = DuplicateItemTemplate(srcID)
+    If newID = -1
+        Toast_Show("Duplicate failed (ItemList full or stale)", "danger")
+        Return False
+    EndIf
+    Threads::focus(threads, "item", newID)
+    ItemsSaved = False
+    WorldCache_Invalidate()
+    Local newI.Item = ItemList(newID)
+    Local label$ = ""
+    If newI <> Null Then label = newI\Name$
+    Timeline_RecordCreate("item", newID, label)
+    Toast_Show("Duplicated item", "success")
+    WriteLog(LoomLog, "EntityFactory: duplicated item #" + Str(srcID) + " -> #" + Str(newID))
+    Return True
+End Function
+
+
+Function EntityFactory_DuplicateSpell%(srcID%, threads.Threads)
+    Local newID% = DuplicateSpellTemplate(srcID)
+    If newID = -1
+        Toast_Show("Duplicate failed (SpellsList full or stale)", "danger")
+        Return False
+    EndIf
+    Threads::focus(threads, "spell", newID)
+    SpellsSaved = False
+    WorldCache_Invalidate()
+    Local newS.Spell = SpellsList(newID)
+    Local label$ = ""
+    If newS <> Null Then label = newS\Name$
+    Timeline_RecordCreate("spell", newID, label)
+    Toast_Show("Duplicated spell", "success")
+    WriteLog(LoomLog, "EntityFactory: duplicated spell #" + Str(srcID) + " -> #" + Str(newID))
+    Return True
+End Function
+
+
+Function EntityFactory_DuplicateAnimSet%(srcID%, threads.Threads)
+    Local newID% = DuplicateAnimSetTemplate(srcID)
+    If newID = -1
+        Toast_Show("Duplicate failed (AnimList full or stale)", "danger")
+        Return False
+    EndIf
+    Threads::focus(threads, "animset", newID)
+    AnimsSaved = False
+    WorldCache_Invalidate()
+    Timeline_RecordCreate("animset", newID, "Duplicated animation set")
+    Toast_Show("Duplicated animation set", "success")
+    WriteLog(LoomLog, "EntityFactory: duplicated animset #" + Str(srcID) + " -> #" + Str(newID))
+    Return True
+End Function
+
+
+Function EntityFactory_DuplicateFaction%(srcID%, threads.Threads)
+    If srcID < 0 Or srcID > 99 Then Return False
+    If FactionNames$(srcID) = "" Then Return False
+
+    // Find first empty slot
+    Local slot% = -1
+    Local i% = 0
+    For i = 0 To 99
+        If FactionNames$(i) = ""
+            slot = i
+            Exit
+        EndIf
+    Next
+    If slot = -1
+        Toast_Show("Duplicate failed (faction roster full)", "danger")
+        Return False
+    EndIf
+
+    Local newName$ = FactionNames$(srcID) + " (copy)"
+    SetFactionName(slot, newName)
+    Threads::focus(threads, "faction", slot)
+    FactionsSaved = False
+    WorldCache_Invalidate()
+    Timeline_RecordCreate("faction", slot, newName)
+    Toast_Show("Duplicated faction", "success")
+    WriteLog(LoomLog, "EntityFactory: duplicated faction slot " + Str(srcID) + " -> slot " + Str(slot))
+    Return True
+End Function
+
+
+// =============================================================================
 // EntityFactory_Delete -- dispatch on kind, free the entity from in-memory
 // state, mark the kind dirty, clear focus. Returns True on success.
 //
