@@ -146,11 +146,37 @@ Type Atlas
         EndIf
 
         // Title strip
-        LoomText(viewportX + 12, viewportY + 8, "ATLAS  |  " + Str(self\nodeCount) + " zones  |  portal links derived from data", LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
+        LoomText(viewportX + 12, viewportY + 8, "ATLAS  |  " + Str(self\nodeCount) + " zones  |  " + Str(Atlas::countManual(self)) + " pinned", LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
 
         Local mx% = MouseX()
         Local my% = MouseY()
         Local clicked% = Loom_MouseClicked()
+
+        // "Reset Positions" button in the title strip's right edge.
+        // Clears every node's Manual flag + triggers a fresh force-
+        // directed layout. Saves the new (un-pinned) state so the
+        // next session also boots without manual positions.
+        Local rstBtnW% = 110
+        Local rstBtnH% = 18
+        Local rstBtnX% = viewportX + viewportW - rstBtnW - 12
+        Local rstBtnY% = viewportY + 5
+        Local rstHover% = (mx >= rstBtnX And mx < rstBtnX + rstBtnW And my >= rstBtnY And my < rstBtnY + rstBtnH)
+        If rstHover = True
+            LoomFill(rstBtnX, rstBtnY, rstBtnW, rstBtnH, LOOM_ARCANE_700_R, LOOM_ARCANE_700_G, LOOM_ARCANE_700_B)
+            LoomBorder(rstBtnX, rstBtnY, rstBtnW, rstBtnH, LOOM_ARCANE_500_R, LOOM_ARCANE_500_G, LOOM_ARCANE_500_B)
+        Else
+            LoomFill(rstBtnX, rstBtnY, rstBtnW, rstBtnH, LOOM_STONE_700_R, LOOM_STONE_700_G, LOOM_STONE_700_B)
+            LoomBorder(rstBtnX, rstBtnY, rstBtnW, rstBtnH, LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
+        EndIf
+        LoomText(rstBtnX + 6, rstBtnY + 2, "reset positions", LOOM_PARCHMENT_100_R, LOOM_PARCHMENT_100_G, LOOM_PARCHMENT_100_B)
+        If rstHover = True And clicked = True
+            Atlas::resetAllPositions(self)
+            ; Consume the click so it doesn't pass through to a node
+            ; behind the button.
+            Loom_ConsumeClick()
+            clicked = False
+            WriteLog(LoomLog, "Atlas: reset all positions")
+        EndIf
 
         // Manual drag: detect LMB press inside a node -> begin drag;
         // mouse move -> reposition; release -> commit + save. Edge-
@@ -547,6 +573,35 @@ Type Atlas
                 LoomTextCentered(badgeX + badgeW / 2, badgeY + 1, Str(n\IssueCount), LOOM_PARCHMENT_100_R, LOOM_PARCHMENT_100_G, LOOM_PARCHMENT_100_B)
             EndIf
 
+            // Pin glyph (top-left corner) for nodes the user has
+            // manually positioned. Tiny brass dot + "pin" text so
+            // designers see which nodes will resist force-directed
+            // perturbation. Double-click the pin to unfreeze.
+            Local pinW% = 22
+            Local pinX% = sx - r
+            Local pinY% = sy - r
+            Local pinHovered% = False
+            If n\Manual = True
+                LoomFill(pinX, pinY, pinW, 11, LOOM_BRASS_700_R, LOOM_BRASS_700_G, LOOM_BRASS_700_B)
+                LoomBorder(pinX, pinY, pinW, 11, LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
+                LoomText(pinX + 2, pinY - 1, "pin", LOOM_PARCHMENT_100_R, LOOM_PARCHMENT_100_G, LOOM_PARCHMENT_100_B)
+                pinHovered = (mx >= pinX And mx < pinX + pinW And my >= pinY And my < pinY + 11)
+                If pinHovered = True And clicked = True
+                    // Unfreeze this node: clear Manual, save layout
+                    // (writes 0 for this node's Manual column), and
+                    // re-run force-directed so it can settle into
+                    // an organic position. We don't blank X/Y --
+                    // keeps the visual continuity (it drifts from
+                    // pinned position rather than teleporting).
+                    n\Manual = False
+                    Loom_SaveAtlasLayout()
+                    Atlas::rebuildLayout(self)
+                    Loom_ConsumeClick()
+                    hit = True
+                    WriteLog(LoomLog, "Atlas: unpinned " + n\Label$)
+                EndIf
+            EndIf
+
             // Label below
             Local labelTxt$ = n\Label
             If Len(labelTxt) > 16 Then labelTxt = Left$(labelTxt, 14) + ".."
@@ -600,6 +655,45 @@ Type Atlas
             c = c + 1
         Next
         Return c
+    End Method
+
+
+    // -------------------------------------------------------------------------
+    // countManual -- O(nodes) walk that counts AtlasNodes with Manual=True.
+    // Used by the title strip to surface "N pinned" so designers see the
+    // current manual-override scope at a glance.
+    // -------------------------------------------------------------------------
+    Method countManual%()
+        Local c% = 0
+        Local n.AtlasNode
+        For n = Each AtlasNode
+            If n\Manual = True Then c = c + 1
+        Next
+        Return c
+    End Method
+
+
+    // -------------------------------------------------------------------------
+    // resetAllPositions -- clear every node's Manual flag, then run a
+    // fresh rebuildLayout (force-directed seed + saved-layout overlay).
+    // The saved-layout overlay would re-apply any positions from disk;
+    // we DELETE the layout file first so this is a true reset rather
+    // than a half-revert. Then call Loom_SaveAtlasLayout to write an
+    // empty layout file -- so the reset persists across sessions.
+    // -------------------------------------------------------------------------
+    Method resetAllPositions()
+        Local n.AtlasNode
+        For n = Each AtlasNode
+            n\Manual = False
+        Next
+        // Delete persisted layout so applySavedLayout (called from
+        // rebuildLayout) doesn't re-impose the old positions on top
+        // of the fresh force-directed pass.
+        If FileType("Data\Loom\atlas.txt") = 1
+            DeleteFile("Data\Loom\atlas.txt")
+        EndIf
+        Atlas::rebuildLayout(self)
+        Loom_SaveAtlasLayout()
     End Method
 
 
