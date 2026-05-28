@@ -918,12 +918,133 @@ Type Composer
             If fieldId = "weather_link"   Then Ar\WeatherLink$ = value   : Return
             If fieldId = "outdoors"       Then Ar\Outdoors = (value = "1") : Return
             If fieldId = "pvp"            Then Ar\PvP      = (value = "1") : Return
-            // Portal-target reference fields: editFieldId = "portal_<i>".
+
+            // Weather chances -- 4 slots
+            If Left$(fieldId, 8) = "weather_"
+                Local wIdx% = Int(Mid$(fieldId, 9))
+                If wIdx >= 0 And wIdx <= 3 Then Ar\WeatherChance[wIdx] = Composer::parseIntClamped(self, value, Ar\WeatherChance[wIdx], 0, 1000)
+                Return
+            EndIf
+
+            // Portal coords + name -- specific prefixes MUST come before
+            // the generic "portal_" link-target catch below.
+            If Left$(fieldId, 12) = "portal_name_"
+                Local pnIdx% = Int(Mid$(fieldId, 13))
+                If pnIdx >= 0 And pnIdx <= 99 Then Ar\PortalName$[pnIdx] = value
+                Return
+            EndIf
+            If Left$(fieldId, 9) = "portal_x_"
+                Local pxIdx% = Int(Mid$(fieldId, 10))
+                If pxIdx >= 0 And pxIdx <= 99 Then Ar\PortalX#[pxIdx] = Composer::parseFloatClamped(self, value, Ar\PortalX#[pxIdx], -1000000.0, 1000000.0)
+                Return
+            EndIf
+            If Left$(fieldId, 9) = "portal_y_"
+                Local pyIdx% = Int(Mid$(fieldId, 10))
+                If pyIdx >= 0 And pyIdx <= 99 Then Ar\PortalY#[pyIdx] = Composer::parseFloatClamped(self, value, Ar\PortalY#[pyIdx], -1000000.0, 1000000.0)
+                Return
+            EndIf
+            If Left$(fieldId, 9) = "portal_z_"
+                Local pzIdx% = Int(Mid$(fieldId, 10))
+                If pzIdx >= 0 And pzIdx <= 99 Then Ar\PortalZ#[pzIdx] = Composer::parseFloatClamped(self, value, Ar\PortalZ#[pzIdx], -1000000.0, 1000000.0)
+                Return
+            EndIf
+            If Left$(fieldId, 12) = "portal_size_"
+                Local psIdx% = Int(Mid$(fieldId, 13))
+                If psIdx >= 0 And psIdx <= 99 Then Ar\PortalSize#[psIdx] = Composer::parseFloatClamped(self, value, Ar\PortalSize#[psIdx], 0.0, 10000.0)
+                Return
+            EndIf
+            If Left$(fieldId, 11) = "portal_yaw_"
+                Local pyaIdx% = Int(Mid$(fieldId, 12))
+                If pyaIdx >= 0 And pyaIdx <= 99 Then Ar\PortalYaw#[pyaIdx] = Composer::parseFloatClamped(self, value, Ar\PortalYaw#[pyaIdx], -360.0, 360.0)
+                Return
+            EndIf
+            // Portal-target reference field (link): editFieldId = "portal_<i>".
             // The picker passes the chosen zone's Name as the value (the
-            // portal stores by name, not handle).
+            // portal stores by name, not handle). Generic prefix MUST come
+            // after the specific portal_x_ / portal_y_ etc. above so they
+            // get first crack.
             If Left$(fieldId, 7) = "portal_"
                 Local portIdx% = Int(Mid$(fieldId, 8))
                 If portIdx >= 0 And portIdx <= 99 Then Ar\PortalLinkArea$[portIdx] = value
+                Return
+            EndIf
+
+            // Triggers -- 150 slots
+            If Left$(fieldId, 10) = "trigger_x_"
+                Local txIdx% = Int(Mid$(fieldId, 11))
+                If txIdx >= 0 And txIdx <= 149 Then Ar\TriggerX#[txIdx] = Composer::parseFloatClamped(self, value, Ar\TriggerX#[txIdx], -1000000.0, 1000000.0)
+                Return
+            EndIf
+            If Left$(fieldId, 10) = "trigger_y_"
+                Local tyIdx% = Int(Mid$(fieldId, 11))
+                If tyIdx >= 0 And tyIdx <= 149 Then Ar\TriggerY#[tyIdx] = Composer::parseFloatClamped(self, value, Ar\TriggerY#[tyIdx], -1000000.0, 1000000.0)
+                Return
+            EndIf
+            If Left$(fieldId, 10) = "trigger_z_"
+                Local tzIdx% = Int(Mid$(fieldId, 11))
+                If tzIdx >= 0 And tzIdx <= 149 Then Ar\TriggerZ#[tzIdx] = Composer::parseFloatClamped(self, value, Ar\TriggerZ#[tzIdx], -1000000.0, 1000000.0)
+                Return
+            EndIf
+            If Left$(fieldId, 13) = "trigger_size_"
+                Local tsIdx% = Int(Mid$(fieldId, 14))
+                If tsIdx >= 0 And tsIdx <= 149 Then Ar\TriggerSize#[tsIdx] = Composer::parseFloatClamped(self, value, Ar\TriggerSize#[tsIdx], 0.0, 10000.0)
+                Return
+            EndIf
+            If Left$(fieldId, 15) = "trigger_script_"
+                Local tscIdx% = Int(Mid$(fieldId, 16))
+                If tscIdx >= 0 And tscIdx <= 149 Then Ar\TriggerScript$[tscIdx] = value
+                Return
+            EndIf
+            If Left$(fieldId, 15) = "trigger_method_"
+                Local tmIdx% = Int(Mid$(fieldId, 16))
+                If tmIdx >= 0 And tmIdx <= 149 Then Ar\TriggerMethod$[tmIdx] = value
+                Return
+            EndIf
+
+            // Spawns -- 1000 slots, 9 fields each
+            If Left$(fieldId, 12) = "spawn_actor_"
+                Local saIdx% = Int(Mid$(fieldId, 13))
+                If saIdx >= 0 And saIdx <= 999 Then Ar\SpawnActor[saIdx] = Composer::parseIntClamped(self, value, Ar\SpawnActor[saIdx], 0, 65535)
+                Return
+            EndIf
+            If Left$(fieldId, 15) = "spawn_waypoint_"
+                Local swIdx% = Int(Mid$(fieldId, 16))
+                If swIdx >= 0 And swIdx <= 999 Then Ar\SpawnWaypoint[swIdx] = Composer::parseIntClamped(self, value, Ar\SpawnWaypoint[swIdx], 0, 1999)
+                Return
+            EndIf
+            If Left$(fieldId, 11) = "spawn_size_"
+                Local ssIdx% = Int(Mid$(fieldId, 12))
+                If ssIdx >= 0 And ssIdx <= 999 Then Ar\SpawnSize#[ssIdx] = Composer::parseFloatClamped(self, value, Ar\SpawnSize#[ssIdx], 0.0, 100000.0)
+                Return
+            EndIf
+            If Left$(fieldId, 12) = "spawn_range_"
+                Local srIdx% = Int(Mid$(fieldId, 13))
+                If srIdx >= 0 And srIdx <= 999 Then Ar\SpawnRange#[srIdx] = Composer::parseFloatClamped(self, value, Ar\SpawnRange#[srIdx], 0.0, 100000.0)
+                Return
+            EndIf
+            If Left$(fieldId, 11) = "spawn_freq_"
+                Local sfIdx% = Int(Mid$(fieldId, 12))
+                If sfIdx >= 0 And sfIdx <= 999 Then Ar\SpawnFrequency[sfIdx] = Composer::parseIntClamped(self, value, Ar\SpawnFrequency[sfIdx], 0, 3600000)
+                Return
+            EndIf
+            If Left$(fieldId, 10) = "spawn_max_"
+                Local smIdx% = Int(Mid$(fieldId, 11))
+                If smIdx >= 0 And smIdx <= 999 Then Ar\SpawnMax[smIdx] = Composer::parseIntClamped(self, value, Ar\SpawnMax[smIdx], 0, 65535)
+                Return
+            EndIf
+            If Left$(fieldId, 13) = "spawn_script_"
+                Local sscIdx% = Int(Mid$(fieldId, 14))
+                If sscIdx >= 0 And sscIdx <= 999 Then Ar\SpawnScript$[sscIdx] = value
+                Return
+            EndIf
+            If Left$(fieldId, 14) = "spawn_ascript_"
+                Local sasIdx% = Int(Mid$(fieldId, 15))
+                If sasIdx >= 0 And sasIdx <= 999 Then Ar\SpawnActorScript$[sasIdx] = value
+                Return
+            EndIf
+            If Left$(fieldId, 14) = "spawn_dscript_"
+                Local sdsIdx% = Int(Mid$(fieldId, 15))
+                If sdsIdx >= 0 And sdsIdx <= 999 Then Ar\SpawnDeathScript$[sdsIdx] = value
                 Return
             EndIf
         EndIf
@@ -2174,6 +2295,7 @@ Type Composer
         y = Composer::toggleRow(self,      panelX, panelW, y, "Outdoors", "zone", h, "outdoors", Ar\Outdoors, mx, my, clicked)
         y = Composer::toggleRow(self,      panelX, panelW, y, "PvP",      "zone", h, "pvp",      Ar\PvP,      mx, my, clicked)
         y = Composer::editableIntRow(self, panelX, panelW, y, "Gravity",  "zone", h, "gravity",  Ar\Gravity,  mx, my, clicked)
+        y = Composer::editableRow(self, panelX, panelW, y, "Weather link", "zone", h, "weather_link", Ar\WeatherLink$, mx, my, clicked)
 
         // Counts
         Local portals% = 0
@@ -2200,40 +2322,145 @@ Type Composer
         y = Composer::row(self, panelX, panelW, y, "Triggers",  Str(triggers))
         y = Composer::row(self, panelX, panelW, y, "Waypoints", Str(waypoints))
 
+        // Weather -- 4 chance slots (clear / rain / snow / etc, project-specific)
+        y = Composer::sectionHeader(self, panelX, panelW, y, "Weather chances")
+        Local wi%
+        For wi = 0 To 3
+            y = Composer::editableIntRow(self, panelX, panelW, y, "Slot " + Str(wi), "zone", h, "weather_" + Str(wi), Ar\WeatherChance[wi], mx, my, clicked)
+        Next
+
         // Scripts -- always editable
         y = Composer::sectionHeader(self, panelX, panelW, y, "Scripts")
         y = Composer::editableRow(self, panelX, panelW, y, "Entry", "zone", h, "entry_script", Ar\EntryScript$, mx, my, clicked)
         y = Composer::editableRow(self, panelX, panelW, y, "Exit",  "zone", h, "exit_script",  Ar\ExitScript$,  mx, my, clicked)
 
-        // Portal links -- one chip per portal whose target resolves to a zone
-        // we know about. The most-useful thread set zones can offer.
+        // Portals -- each non-empty PortalName$ becomes a labeled sub-section
+        // with link-target chip + coord rows (X/Y/Z/Size/Yaw). The chip
+        // remains right-clickable to swap the target zone via picker.
         If portals > 0
-            y = Composer::sectionHeader(self, panelX, panelW, y, "Portal links")
-            Local p% = 0
-            For p = 0 To 99
-                If Ar\PortalName$[p] <> ""
-                    Local targetHandle% = Composer::findZoneByName(self, Ar\PortalLinkArea$[p])
-                    If targetHandle <> 0
-                        // Portal-target chips: editable via right-click. fieldId
-                        // encodes the portal index ("portal_<i>") so writeField
-                        // can route to the right slot. Picker writes the
-                        // target zone's NAME (not handle) because the wire
-                        // format stores by string.
-                        y = Composer::chipRow(self, panelX, panelW, y, Ar\PortalName$[p], "zone", targetHandle, mx, my, clicked, rightClicked, "portal_" + Str(p))
-                    Else
-                        // Unknown target -- render a brass label that names it in danger-red.
-                        If Composer::canPaintRow(self, y, CMP_ROW_H) = True
-                            LoomText(panelX + CMP_PAD, y + 4, Ar\PortalName$[p], LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
-                            Local tgt$ = Ar\PortalLinkArea$[p]
-                            If tgt = "" Then tgt = "(no target)"
-                            LoomText(panelX + CMP_PAD + 120, y + 4, tgt, LOOM_DANGER_R, LOOM_DANGER_G, LOOM_DANGER_B)
-                        EndIf
-                        y = y + CMP_ROW_H
-                    EndIf
-                EndIf
-            Next
+            y = Composer::sectionHeader(self, panelX, panelW, y, "Portals")
+            y = Composer::renderZonePortals(self, panelX, panelW, y, Ar, h, mx, my, clicked, rightClicked)
         EndIf
+
+        // Triggers -- each non-empty TriggerScript$ becomes a sub-section
+        // with X/Y/Z/Size + Script/Method editing.
+        If triggers > 0
+            y = Composer::sectionHeader(self, panelX, panelW, y, "Triggers")
+            y = Composer::renderZoneTriggers(self, panelX, panelW, y, Ar, h, mx, my, clicked)
+        EndIf
+
+        // Spawns -- each defined SpawnActor (>0) becomes a sub-section
+        // with actor reference + waypoint + scripts + frequency cluster.
+        If spawns > 0
+            y = Composer::sectionHeader(self, panelX, panelW, y, "Spawns")
+            y = Composer::renderZoneSpawns(self, panelX, panelW, y, Ar, h, mx, my, clicked, rightClicked)
+        EndIf
+
         Composer::recordContentBottom(self, y)
+    End Method
+
+
+    // -------------------------------------------------------------------------
+    // renderZonePortals -- per-portal sub-section with link chip + 6 coord
+    // fields. Empty PortalName$ slots are skipped.
+    // -------------------------------------------------------------------------
+    Method renderZonePortals%(panelX%, panelW%, y%, Ar.Area, h%, mx%, my%, clicked%, rightClicked%)
+        Local p%
+        For p = 0 To 99
+            If Ar\PortalName$[p] <> ""
+                // Sub-header showing "Portal <i>"
+                If Composer::canPaintRow(self, y, CMP_ROW_H) = True
+                    LoomText(panelX + CMP_PAD, y + 4, "Portal " + Str(p), LOOM_ARCANE_500_R, LOOM_ARCANE_500_G, LOOM_ARCANE_500_B)
+                EndIf
+                y = y + CMP_ROW_H
+
+                y = Composer::editableRow(self, panelX, panelW, y, "Name",  "zone", h, "portal_name_" + Str(p), Ar\PortalName$[p], mx, my, clicked)
+
+                // Link chip (existing flow) -- right-click swaps via picker
+                Local targetHandle% = Composer::findZoneByName(self, Ar\PortalLinkArea$[p])
+                If targetHandle <> 0
+                    y = Composer::chipRow(self, panelX, panelW, y, "Target", "zone", targetHandle, mx, my, clicked, rightClicked, "portal_" + Str(p))
+                Else
+                    If Composer::canPaintRow(self, y, CMP_ROW_H) = True
+                        LoomText(panelX + CMP_PAD, y + 4, "Target", LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
+                        Local tgt$ = Ar\PortalLinkArea$[p]
+                        If tgt = "" Then tgt = "(no target)"
+                        LoomText(panelX + CMP_PAD + 120, y + 4, tgt, LOOM_DANGER_R, LOOM_DANGER_G, LOOM_DANGER_B)
+                    EndIf
+                    y = y + CMP_ROW_H
+                EndIf
+
+                y = Composer::editableFloatRow(self, panelX, panelW, y, "X",    "zone", h, "portal_x_"    + Str(p), Ar\PortalX#[p],    mx, my, clicked)
+                y = Composer::editableFloatRow(self, panelX, panelW, y, "Y",    "zone", h, "portal_y_"    + Str(p), Ar\PortalY#[p],    mx, my, clicked)
+                y = Composer::editableFloatRow(self, panelX, panelW, y, "Z",    "zone", h, "portal_z_"    + Str(p), Ar\PortalZ#[p],    mx, my, clicked)
+                y = Composer::editableFloatRow(self, panelX, panelW, y, "Size", "zone", h, "portal_size_" + Str(p), Ar\PortalSize#[p], mx, my, clicked)
+                y = Composer::editableFloatRow(self, panelX, panelW, y, "Yaw",  "zone", h, "portal_yaw_"  + Str(p), Ar\PortalYaw#[p],  mx, my, clicked)
+
+                y = y + 4
+            EndIf
+        Next
+        Return y
+    End Method
+
+
+    // -------------------------------------------------------------------------
+    // renderZoneTriggers -- per-trigger sub-section with X/Y/Z/Size + Script/
+    // Method. Empty TriggerScript$ slots are skipped.
+    // -------------------------------------------------------------------------
+    Method renderZoneTriggers%(panelX%, panelW%, y%, Ar.Area, h%, mx%, my%, clicked%)
+        Local t%
+        For t = 0 To 149
+            If Ar\TriggerScript$[t] <> ""
+                If Composer::canPaintRow(self, y, CMP_ROW_H) = True
+                    LoomText(panelX + CMP_PAD, y + 4, "Trigger " + Str(t), LOOM_ARCANE_500_R, LOOM_ARCANE_500_G, LOOM_ARCANE_500_B)
+                EndIf
+                y = y + CMP_ROW_H
+
+                y = Composer::editableFloatRow(self, panelX, panelW, y, "X",    "zone", h, "trigger_x_"    + Str(t), Ar\TriggerX#[t],    mx, my, clicked)
+                y = Composer::editableFloatRow(self, panelX, panelW, y, "Y",    "zone", h, "trigger_y_"    + Str(t), Ar\TriggerY#[t],    mx, my, clicked)
+                y = Composer::editableFloatRow(self, panelX, panelW, y, "Z",    "zone", h, "trigger_z_"    + Str(t), Ar\TriggerZ#[t],    mx, my, clicked)
+                y = Composer::editableFloatRow(self, panelX, panelW, y, "Size", "zone", h, "trigger_size_" + Str(t), Ar\TriggerSize#[t], mx, my, clicked)
+                y = Composer::editableRow(self,      panelX, panelW, y, "Script", "zone", h, "trigger_script_" + Str(t), Ar\TriggerScript$[t], mx, my, clicked)
+                y = Composer::editableRow(self,      panelX, panelW, y, "Method", "zone", h, "trigger_method_" + Str(t), Ar\TriggerMethod$[t], mx, my, clicked)
+
+                y = y + 4
+            EndIf
+        Next
+        Return y
+    End Method
+
+
+    // -------------------------------------------------------------------------
+    // renderZoneSpawns -- per-spawn sub-section with actor chip + waypoint +
+    // scripts + frequency/max/range cluster. Empty SpawnActor (=0) slots are
+    // skipped. Actor is shown as a clickable thread chip (right-click to swap).
+    // -------------------------------------------------------------------------
+    Method renderZoneSpawns%(panelX%, panelW%, y%, Ar.Area, h%, mx%, my%, clicked%, rightClicked%)
+        Local s%
+        For s = 0 To 999
+            If Ar\SpawnActor[s] > 0
+                If Composer::canPaintRow(self, y, CMP_ROW_H) = True
+                    LoomText(panelX + CMP_PAD, y + 4, "Spawn " + Str(s), LOOM_ARCANE_500_R, LOOM_ARCANE_500_G, LOOM_ARCANE_500_B)
+                EndIf
+                y = y + CMP_ROW_H
+
+                // Actor reference -- chip, right-click to swap. SpawnActor
+                // is an int refID into ActorList, fieldId encodes the spawn idx.
+                y = Composer::chipRow(self, panelX, panelW, y, "Actor", "actor", Ar\SpawnActor[s], mx, my, clicked, rightClicked, "spawn_actor_" + Str(s))
+
+                y = Composer::editableIntRow(self,   panelX, panelW, y, "Waypoint",   "zone", h, "spawn_waypoint_" + Str(s), Ar\SpawnWaypoint[s], mx, my, clicked)
+                y = Composer::editableFloatRow(self, panelX, panelW, y, "Size",       "zone", h, "spawn_size_"     + Str(s), Ar\SpawnSize#[s],    mx, my, clicked)
+                y = Composer::editableFloatRow(self, panelX, panelW, y, "Range",      "zone", h, "spawn_range_"    + Str(s), Ar\SpawnRange#[s],   mx, my, clicked)
+                y = Composer::editableIntRow(self,   panelX, panelW, y, "Frequency",  "zone", h, "spawn_freq_"     + Str(s), Ar\SpawnFrequency[s], mx, my, clicked)
+                y = Composer::editableIntRow(self,   panelX, panelW, y, "Max",        "zone", h, "spawn_max_"      + Str(s), Ar\SpawnMax[s],       mx, my, clicked)
+                y = Composer::editableRow(self,      panelX, panelW, y, "Script",     "zone", h, "spawn_script_"   + Str(s), Ar\SpawnScript$[s],   mx, my, clicked)
+                y = Composer::editableRow(self,      panelX, panelW, y, "Actor scr",  "zone", h, "spawn_ascript_"  + Str(s), Ar\SpawnActorScript$[s], mx, my, clicked)
+                y = Composer::editableRow(self,      panelX, panelW, y, "Death scr",  "zone", h, "spawn_dscript_"  + Str(s), Ar\SpawnDeathScript$[s], mx, my, clicked)
+
+                y = y + 4
+            EndIf
+        Next
+        Return y
     End Method
 
 
