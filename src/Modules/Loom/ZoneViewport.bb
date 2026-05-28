@@ -318,6 +318,71 @@ End Function
 
 
 ; =============================================================================
+; Loom_DeleteMarkerAtClick -- Ctrl+LMB on a marker deletes its
+; sub-entity from the Area. Pick the marker via CameraPick; if hit,
+; clear the defining field (PortalName$ / TriggerScript$ / SpawnActor)
+; following the same pattern as the composer's per-sub-entity delete
+; button (iter 30). Reload markers, mark dirty, toast.
+;
+; Waypoint deletion is currently a no-op: waypoints are shared
+; chain-link state for spawns + AI patrols, and deleting one
+; orphans every reference to it. Designers should clear waypoints
+; via the composer where the deletion semantics are more explicit.
+; =============================================================================
+Function Loom_DeleteMarkerAtClick(zoneHandle, localX, localY)
+    If VPInitOK = False Then Return
+    Local Ar.Area = Object.Area(zoneHandle)
+    If Ar = Null Then Return
+
+    CameraPick VPCam, localX, localY
+    Local picked = PickedEntity()
+    If picked = 0 Or picked = VPGround Then Return
+
+    Local m.ZoneViewportMarker
+    Local found = False
+    Local kind$ = ""
+    Local idx = -1
+    For m = Each ZoneViewportMarker
+        If m\EN = picked
+            kind$ = m\Kind
+            idx = m\IndexN
+            found = True
+            Exit
+        EndIf
+    Next
+
+    If found = False Then Return
+
+    If kind$ = "portal"
+        If idx >= 0 And idx <= 99
+            Ar\PortalName$[idx]     = ""
+            Ar\PortalLinkArea$[idx] = ""
+            Ar\PortalLinkName$[idx] = ""
+        EndIf
+    Else If kind$ = "trigger"
+        If idx >= 0 And idx <= 149
+            Ar\TriggerScript$[idx] = ""
+            Ar\TriggerMethod$[idx] = ""
+        EndIf
+    Else If kind$ = "spawn"
+        If idx >= 0 And idx <= 999 Then Ar\SpawnActor[idx] = 0
+    Else If kind$ = "waypoint"
+        ; Waypoint delete is intentionally not supported here; see
+        ; comment above. Surface a warning so the user knows the
+        ; click was registered but ignored.
+        Toast_Show("Waypoint delete not supported via viewport (use composer)", "warning")
+        Return
+    EndIf
+
+    Loom_LoadZoneMarkers(Ar)
+    VPDirty = True
+    If LoomComposer <> Null Then Composer::markDirtyForKind(LoomComposer, "zone")
+    Toast_Show("Deleted " + kind$ + " " + Str(idx), "danger")
+    WriteLog(LoomLog, "ZoneViewport: ctrl+click deleted " + kind$ + " " + Str(idx))
+End Function
+
+
+; =============================================================================
 ; Loom_AddPortalAtClick -- Shift+click on empty ground creates a new
 ; portal at the clicked XZ. Uses CameraPick to convert mouse-local coords
 ; to a world position on the ground plane. Fails silently if no portal
@@ -857,7 +922,10 @@ Function Loom_DrawZoneViewport(zoneHandle, x, y)
             Local moveDist = Abs(mx - VPDragStartMX) + Abs(my - VPDragStartMY)
             If moveDist < 4 And inside = True
                 ; KeyDown(42) = LShift, KeyDown(54) = RShift
-                If KeyDown(42) = True Or KeyDown(54) = True
+                ; KeyDown(29) = LCtrl,  KeyDown(157) = RCtrl
+                If KeyDown(29) = True Or KeyDown(157) = True
+                    Loom_DeleteMarkerAtClick(zoneHandle, mx - x, my - y)
+                Else If KeyDown(42) = True Or KeyDown(54) = True
                     Loom_AddPortalAtClick(zoneHandle, mx - x, my - y)
                 Else
                     Loom_PickZoneMarker(mx - x, my - y)
@@ -1122,7 +1190,7 @@ Function Loom_DrawZoneViewport(zoneHandle, x, y)
     EndIf
 
     If inside = True
-        LoomText x + 8, y + VP_RT_SIZE - 18, "LMB=orbit RMB=move(shift+RMB=Y) wheel=zoom MMB=pan  shift+click=add", LOOM_STONE_300_R, LOOM_STONE_300_G, LOOM_STONE_300_B
+        LoomText x + 8, y + VP_RT_SIZE - 18, "LMB=orbit RMB=move(shift+Y) wheel=zoom shift+click=add ctrl+click=del", LOOM_STONE_300_R, LOOM_STONE_300_G, LOOM_STONE_300_B
     EndIf
 
     Return True
