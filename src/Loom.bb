@@ -109,6 +109,9 @@ Include "Modules\Loom\Threads.bb"
 // Settings BEFORE Composer so the LoomCfg_* / SettingsSaved globals
 // are declared by the time Strict Composer methods reference them.
 Include "Modules\Loom\Settings.bb"
+// ImageCache also before Composer -- its globals + Loom_GetItemImage
+// helper are called from renderItem.
+Include "Modules\Loom\ImageCache.bb"
 Include "Modules\Loom\Browser.bb"
 Include "Modules\Loom\Composer.bb"
 Include "Modules\Loom\Palette.bb"

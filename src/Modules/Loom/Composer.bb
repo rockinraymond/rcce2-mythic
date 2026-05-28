@@ -2391,10 +2391,18 @@ Type Composer
         y = Composer::sectionHeader(self, panelX, panelW, y, "Consumable")
         y = Composer::editableIntRow(self, panelX, panelW, y, "Eat duration (ms)", "item", It\ID, "eat_length", It\EatEffectsLength, mx, my, clicked)
 
-        // Visuals -- texture / mesh / gubbin IDs. Loom doesn't preview
-        // these yet, but exposing the IDs lets designers see / edit them.
+        // Visuals -- texture / mesh / gubbin IDs.
         y = Composer::sectionHeader(self, panelX, panelW, y, "Visuals")
+        // Thumbnail preview: 64x64 image rect to the right of the editable
+        // ID field. Lazy-loaded via ImageCache module; missing/invalid IDs
+        // paint a "?" placeholder.
+        Local thumbY% = y
         y = Composer::editableIntRow(self, panelX, panelW, y, "Thumbnail tex",  "item", It\ID, "thumb_tex",  It\ThumbnailTexID, mx, my, clicked)
+        If Composer::canPaintRow(self, thumbY, 70) = True
+            Local thumbX% = panelX + panelW - 70 - CMP_PAD
+            Loom_DrawImageScaled(It\ThumbnailTexID, thumbX, thumbY, 64, 64)
+        EndIf
+        y = y + 50   ; padding so the next row clears the 64px-tall preview
         y = Composer::editableIntRow(self, panelX, panelW, y, "Male mesh",      "item", It\ID, "m_mesh",     It\MMeshID,        mx, my, clicked)
         y = Composer::editableIntRow(self, panelX, panelW, y, "Female mesh",    "item", It\ID, "f_mesh",     It\FMeshID,        mx, my, clicked)
         y = Composer::editableIntRow(self, panelX, panelW, y, "Image (img-typ)","item", It\ID, "image_id",   It\ImageID,        mx, my, clicked)
@@ -2440,7 +2448,14 @@ Type Composer
         y = Composer::row(self, panelX, panelW, y, "ID",          Str(S\ID))
         y = Composer::editableRow(self,    panelX, panelW, y, "Name",     "spell", S\ID, "name",        S\Name$,        mx, my, clicked)
         y = Composer::editableIntRow(self, panelX, panelW, y, "Recharge (ms)", "spell", S\ID, "recharge_ms", S\RechargeTime, mx, my, clicked)
+        Local spellThumbY% = y
         y = Composer::editableIntRow(self, panelX, panelW, y, "Thumbnail tex", "spell", S\ID, "thumb_tex",   S\ThumbnailTexID, mx, my, clicked)
+        // Thumbnail preview at the right edge -- matches the Item visuals row.
+        If Composer::canPaintRow(self, spellThumbY, 70) = True
+            Local spellThumbX% = panelX + panelW - 70 - CMP_PAD
+            Loom_DrawImageScaled(S\ThumbnailTexID, spellThumbX, spellThumbY, 64, 64)
+        EndIf
+        y = y + 50
 
         y = Composer::sectionHeader(self, panelX, panelW, y, "Description")
         y = Composer::editableRow(self, panelX, panelW, y, "Text", "spell", S\ID, "description", S\Description$, mx, my, clicked)
