@@ -66,6 +66,7 @@ Type BrokenRefs
     Field open%
     Field entryCount%
     Field scrollOffset%
+    Field categoryFilter$    // "" = all; otherwise the Category to show
 
 
     Method create.BrokenRefs(threads.Threads)
@@ -73,6 +74,7 @@ Type BrokenRefs
         self\open = False
         self\entryCount = 0
         self\scrollOffset = 0
+        self\categoryFilter = ""
         Return self
     End Method
 
@@ -85,6 +87,7 @@ Type BrokenRefs
     Method openModal()
         self\open = True
         self\scrollOffset = 0
+        self\categoryFilter = ""
         BrokenRefs::rebuild(self)
         FlushKeys
         // Eat the opening click so the modal's "click outside closes"
@@ -732,11 +735,21 @@ Type BrokenRefs
         // weapon config / spell config / orphan zones).
         Local headerTxt$ = "ISSUES  |  " + Str(self\entryCount)
         If self\entryCount >= BROKENREFS_MAX_ENTRIES Then headerTxt = headerTxt + "+ (capped)"
+        If self\categoryFilter <> ""
+            headerTxt = headerTxt + "  |  filter: " + self\categoryFilter
+        EndIf
         LoomTheme_UseDisplay()
         LoomText(modalX + BROKENREFS_PAD, modalY + 6, headerTxt, LOOM_DANGER_R, LOOM_DANGER_G, LOOM_DANGER_B)
         LoomTheme_UseBody()
 
-        BrokenRefs::drawEntries(self, modalX, modalY + BROKENREFS_HEADER_H, mx, my, clicked)
+        // Category filter chip row -- one chip per category we've
+        // emitted. Click cycles between filter-this-category and
+        // filter-clear (All). The header text always reflects the
+        // active filter so designers see the scope at a glance.
+        Local chipsY% = modalY + BROKENREFS_HEADER_H - 4
+        BrokenRefs::drawCategoryChips(self, modalX + BROKENREFS_PAD, chipsY, mx, my, clicked)
+
+        BrokenRefs::drawEntries(self, modalX, modalY + BROKENREFS_HEADER_H + 22, mx, my, clicked)
 
         // Footer hint
         Local hy% = modalY + BROKENREFS_MODAL_H - BROKENREFS_HINT_H - 4
@@ -754,7 +767,10 @@ Type BrokenRefs
 
 
     Method drawEntries(modalX%, listY%, mx%, my%, clicked%)
-        Local listH% = BROKENREFS_MODAL_H - BROKENREFS_HEADER_H - BROKENREFS_HINT_H - 12
+        // Shrink visible-list height by the chip-row strip added in
+        // renderAndUpdate so the list doesn't paint past the bottom
+        // hint area.
+        Local listH% = BROKENREFS_MODAL_H - BROKENREFS_HEADER_H - BROKENREFS_HINT_H - 34
         Local rowsVisible% = listH / BROKENREFS_ROW_H
         Local rx% = modalX + BROKENREFS_PAD
         Local rw% = BROKENREFS_MODAL_W - BROKENREFS_PAD * 2
@@ -768,6 +784,10 @@ Type BrokenRefs
         Local shown% = 0
         Local r.BrokenRef
         For r = Each BrokenRef
+            // Apply category filter (if any). Entries not matching the
+            // active filter are entirely invisible (no scroll cost too --
+            // skipped doesn't increment).
+            If self\categoryFilter <> "" And r\Category <> self\categoryFilter Then Continue
             If skipped < self\scrollOffset
                 skipped = skipped + 1
             Else
@@ -777,6 +797,119 @@ Type BrokenRefs
                 shown = shown + 1
             EndIf
         Next
+
+        // If filter is active and no rows shown, surface a hint.
+        If shown = 0 And self\categoryFilter <> ""
+            LoomText(rx, listY + 12, "No issues in category " + Chr(34) + self\categoryFilter + Chr(34) + ". Click filter chip again to clear.", LOOM_STONE_300_R, LOOM_STONE_300_G, LOOM_STONE_300_B)
+        EndIf
+    End Method
+
+
+    // -------------------------------------------------------------------------
+    // drawCategoryChips -- one chip per BrokenRef category we've emitted
+    // this rebuild. Click toggles filter (on first click sets, second
+    // click clears). Each chip shows the category name + entry count.
+    // Active filter highlighted in danger color.
+    //
+    // Categories surfaced in the order they're typically encountered.
+    // Empty categories (count=0 because the project doesn't have that
+    // issue type) are still rendered as "(0)" stone-grey so the chip
+    // bar layout stays stable across sessions.
+    // -------------------------------------------------------------------------
+    Method drawCategoryChips(chipsX%, chipsY%, mx%, my%, clicked%)
+        Local cats$[13]
+        cats[0]  = "broken-ref"
+        cats[1]  = "broken-script"
+        cats[2]  = "missing-texture"
+        cats[3]  = "missing-mesh"
+        cats[4]  = "missing-sound"
+        cats[5]  = "empty-field"
+        cats[6]  = "playability"
+        cats[7]  = "weapon-config"
+        cats[8]  = "spell-config"
+        cats[9]  = "orphan-zone"
+        cats[10] = "orphan-script"
+        cats[11] = "orphan-texture"
+        cats[12] = "orphan-mesh"
+
+        Local cx% = chipsX
+        Local cy% = chipsY
+        Local ch% = 18
+
+        // "All" chip first
+        Local allW% = 30
+        Local allHover% = (mx >= cx And mx < cx + allW And my >= cy And my < cy + ch)
+        If self\categoryFilter = ""
+            LoomFill(cx, cy, allW, ch, LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
+            LoomText(cx + 6, cy + 2, "all", LOOM_PARCHMENT_100_R, LOOM_PARCHMENT_100_G, LOOM_PARCHMENT_100_B)
+        Else If allHover = True
+            LoomFill(cx, cy, allW, ch, LOOM_ARCANE_700_R, LOOM_ARCANE_700_G, LOOM_ARCANE_700_B)
+            LoomText(cx + 6, cy + 2, "all", LOOM_PARCHMENT_100_R, LOOM_PARCHMENT_100_G, LOOM_PARCHMENT_100_B)
+        Else
+            LoomFill(cx, cy, allW, ch, LOOM_STONE_700_R, LOOM_STONE_700_G, LOOM_STONE_700_B)
+            LoomText(cx + 6, cy + 2, "all", LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
+        EndIf
+        LoomBorder(cx, cy, allW, ch, LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
+        If allHover = True And clicked = True And self\categoryFilter <> ""
+            self\categoryFilter = ""
+            self\scrollOffset = 0
+        EndIf
+        cx = cx + allW + 4
+
+        // Per-category chips
+        Local ci% = 0
+        For ci = 0 To 12
+            Local catName$ = cats[ci]
+            Local count% = BrokenRefs::countCategory(self, catName)
+            Local label$ = catName + " " + Str(count)
+            Local chipW% = StringWidth(label) + 12
+            // Wrap to a second row if we'd overflow the modal width
+            If cx + chipW > BROKENREFS_MODAL_W - BROKENREFS_PAD
+                cx = chipsX
+                cy = cy + ch + 2
+            EndIf
+
+            Local hov% = (mx >= cx And mx < cx + chipW And my >= cy And my < cy + ch)
+            Local active% = (self\categoryFilter = catName)
+            If active = True
+                LoomFill(cx, cy, chipW, ch, LOOM_DANGER_R, LOOM_DANGER_G, LOOM_DANGER_B)
+                LoomText(cx + 6, cy + 2, label, LOOM_PARCHMENT_100_R, LOOM_PARCHMENT_100_G, LOOM_PARCHMENT_100_B)
+            Else If hov = True
+                LoomFill(cx, cy, chipW, ch, LOOM_ARCANE_700_R, LOOM_ARCANE_700_G, LOOM_ARCANE_700_B)
+                LoomText(cx + 6, cy + 2, label, LOOM_PARCHMENT_100_R, LOOM_PARCHMENT_100_G, LOOM_PARCHMENT_100_B)
+            Else
+                If count = 0
+                    LoomFill(cx, cy, chipW, ch, LOOM_STONE_800_R, LOOM_STONE_800_G, LOOM_STONE_800_B)
+                    LoomText(cx + 6, cy + 2, label, LOOM_STONE_300_R, LOOM_STONE_300_G, LOOM_STONE_300_B)
+                Else
+                    LoomFill(cx, cy, chipW, ch, LOOM_STONE_700_R, LOOM_STONE_700_G, LOOM_STONE_700_B)
+                    LoomText(cx + 6, cy + 2, label, LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
+                EndIf
+            EndIf
+            LoomBorder(cx, cy, chipW, ch, LOOM_BRASS_700_R, LOOM_BRASS_700_G, LOOM_BRASS_700_B)
+            If hov = True And clicked = True And count > 0
+                // Toggle: clicking an active chip clears; otherwise sets
+                If active = True
+                    self\categoryFilter = ""
+                Else
+                    self\categoryFilter = catName
+                EndIf
+                self\scrollOffset = 0
+            EndIf
+            cx = cx + chipW + 4
+        Next
+    End Method
+
+
+    // countCategory -- O(entries) walk; cheap since BROKENREFS_MAX_ENTRIES
+    // = 250. Could cache per-rebuild but the per-frame cost is trivial.
+    Method countCategory%(catName$)
+        Local n% = 0
+        Local r.BrokenRef
+        For r = Each BrokenRef
+            If r\Category = catName Then n = n + 1
+        Next
+        Return n
     End Method
 
 
