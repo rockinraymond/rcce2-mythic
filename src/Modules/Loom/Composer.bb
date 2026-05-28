@@ -696,10 +696,12 @@ Type Composer
             Local okS% = SaveSpells("Data\Server Data\Spells.dat")
             If okS = False
                 WriteLog(LoomLog, "Composer: SaveSpells FAILED")
+                Toast_Show("Save Spells FAILED", "danger")
                 Return
             EndIf
             SpellsSaved = True
             WriteLog(LoomLog, "Composer: saved Spells.dat")
+            Toast_Show("Saved Spells.dat", "success")
             Return
         EndIf
 
@@ -707,10 +709,12 @@ Type Composer
             Local okI% = SaveItems("Data\Server Data\Items.dat")
             If okI = False
                 WriteLog(LoomLog, "Composer: SaveItems FAILED")
+                Toast_Show("Save Items FAILED", "danger")
                 Return
             EndIf
             ItemsSaved = True
             WriteLog(LoomLog, "Composer: saved Items.dat")
+            Toast_Show("Saved Items.dat", "success")
             Return
         EndIf
 
@@ -718,10 +722,12 @@ Type Composer
             Local okA% = SaveActors("Data\Server Data\Actors.dat")
             If okA = False
                 WriteLog(LoomLog, "Composer: SaveActors FAILED")
+                Toast_Show("Save Actors FAILED", "danger")
                 Return
             EndIf
             ActorsSaved = True
             WriteLog(LoomLog, "Composer: saved Actors.dat")
+            Toast_Show("Saved Actors.dat", "success")
             Return
         EndIf
 
@@ -729,10 +735,12 @@ Type Composer
             Local okF% = SaveFactions("Data\Server Data\Factions.dat")
             If okF = False
                 WriteLog(LoomLog, "Composer: SaveFactions FAILED")
+                Toast_Show("Save Factions FAILED", "danger")
                 Return
             EndIf
             FactionsSaved = True
             WriteLog(LoomLog, "Composer: saved Factions.dat")
+            Toast_Show("Saved Factions.dat", "success")
             Return
         EndIf
 
@@ -740,10 +748,12 @@ Type Composer
             Local okM% = SaveAnimSets("Data\Game Data\Animations.dat")
             If okM = False
                 WriteLog(LoomLog, "Composer: SaveAnimSets FAILED")
+                Toast_Show("Save Animations FAILED", "danger")
                 Return
             EndIf
             AnimsSaved = True
             WriteLog(LoomLog, "Composer: saved Animations.dat")
+            Toast_Show("Saved Animations.dat", "success")
             Return
         EndIf
 
@@ -751,6 +761,7 @@ Type Composer
             Local Ar.Area = Object.Area(self\threads\focusID)
             If Ar = Null
                 WriteLog(LoomLog, "Composer: ServerSaveArea -- focused area handle is stale")
+                Toast_Show("Save Zone failed (stale handle)", "danger")
                 Return
             EndIf
             ServerSaveArea(Ar)
@@ -758,6 +769,7 @@ Type Composer
             // discipline is owned by the serializer itself.
             ZoneSaved = True
             WriteLog(LoomLog, "Composer: saved zone " + Ar\Name$)
+            Toast_Show("Saved zone " + Ar\Name$, "success")
             Return
         EndIf
 
@@ -1041,11 +1053,18 @@ Type Composer
     End Method
 
 
-    // Section header -- brass rule + brass label. Returns the next Y.
+    // Section header -- 3-line brass ornament rule + display-font label.
+    // Returns the next Y. The triple rule mirrors the brand strip's
+    // separator and the card-top accent so the visual rhythm is
+    // consistent across surfaces.
     Method sectionHeader%(panelX%, panelW%, rowY%, title$)
-        LoomHRule(panelX + CMP_PAD, rowY + 6, panelW - CMP_PAD * 2, LOOM_BRASS_700_R, LOOM_BRASS_700_G, LOOM_BRASS_700_B)
-        LoomText(panelX + CMP_PAD, rowY + 10, title, LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
-        Return rowY + 28
+        LoomHRule(panelX + CMP_PAD,     rowY + 4, panelW - CMP_PAD * 2, LOOM_BRASS_700_R, LOOM_BRASS_700_G, LOOM_BRASS_700_B)
+        LoomHRule(panelX + CMP_PAD,     rowY + 5, panelW - CMP_PAD * 2, LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
+        LoomHRule(panelX + CMP_PAD,     rowY + 6, panelW - CMP_PAD * 2, LOOM_BRASS_700_R, LOOM_BRASS_700_G, LOOM_BRASS_700_B)
+        LoomTheme_UseDisplay()
+        LoomText(panelX + CMP_PAD,      rowY + 10, title, LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
+        LoomTheme_UseBody()
+        Return rowY + 34
     End Method
 
 

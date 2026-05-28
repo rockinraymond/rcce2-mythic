@@ -119,6 +119,7 @@ Include "Modules\Loom\Recents.bb"
 Include "Modules\Loom\EntityFactory.bb"
 Include "Modules\Loom\SaveAll.bb"
 Include "Modules\Loom\Help.bb"
+Include "Modules\Loom\Toasts.bb"
 
 
 // =============================================================================
@@ -141,6 +142,7 @@ Type Loom
     Field worldCache.WorldCache
     Field exitPrompt.ExitPrompt
     Field help.Help
+    Field toasts.Toasts
 
 
     Method create.Loom(windowWidth%, windowHeight%, projectName$)
@@ -219,6 +221,13 @@ Type Loom
         // Help (F1) -- static cheat sheet of every keybinding + mouse
         // interaction. No dependencies; just a paint surface.
         self\help = New Help()
+
+        // Toasts -- transient bottom-right notifications. Surfaces fire
+        // via Toast_Show facade; the singleton renders auto-fades after
+        // TOAST_TTL_MS. Same recorder-facade pattern as Timeline /
+        // Recents / WorldCache (ADR 005).
+        self\toasts = New Toasts()
+        LoomToasts = self\toasts
 
         Return self
     End Method
@@ -299,6 +308,11 @@ Type Loom
         Local exitPromptAte% = ExitPrompt::renderAndUpdate(self\exitPrompt, self\windowWidth, self\windowHeight)
         Local helpAte%       = Help::renderAndUpdate(self\help, self\windowWidth, self\windowHeight)
         Local modalAte%      = (timelineAte Or brokenRefsAte Or recentsAte Or paletteAte Or exitPromptAte Or helpAte)
+
+        // Toasts paint on top of everything (above modals) so success/
+        // failure feedback is visible even while a modal is up. They
+        // don't consume input.
+        Toasts::render(self\toasts, self\windowWidth, self\windowHeight)
 
         // If ExitPrompt's Save All / Discard All button closed the modal
         // with exitConfirmed = True, honor the user's decision NOW and
