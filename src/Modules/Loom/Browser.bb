@@ -163,8 +163,17 @@ Type Browser
     // inputEnabled gates keyboard pumping into the filter buffer -- when the
     // palette is open or the composer is in field-edit mode, those surfaces
     // own the keystrokes and the browser must stay quiet.
+    //
+    // composerWidth: 0 when the composer is hidden, else the panel's
+    // pixel width (CMP_W). The card grid uses (sw - composerWidth) for
+    // its layout so cards in the right column don't end up half-hidden
+    // behind the composer. Chrome bands (brand strip, tab bar, filter
+    // bar, footer) still span full width -- the composer renders on top
+    // of those, hiding the right end visually, which is the right
+    // behavior since the composer's own border / accent reads as
+    // continuing the chrome.
     // -------------------------------------------------------------------------
-    Method renderAndUpdate%(sw%, sh%, project$, inputEnabled%)
+    Method renderAndUpdate%(sw%, sh%, project$, inputEnabled%, composerWidth%)
         Local mx% = MouseX()
         Local my% = MouseY()
         Local clicked% = MouseHit(1)
@@ -182,14 +191,17 @@ Type Browser
         // Background gradient
         LoomGradientV(0, 0, sw, sh, LOOM_STONE_900_R, LOOM_STONE_900_G, LOOM_STONE_900_B, LOOM_STONE_950_R, LOOM_STONE_950_G, LOOM_STONE_950_B)
 
-        // Chrome
+        // Chrome -- full width; composer renders on top to occlude its
+        // right end. Cheaper than recomputing the chrome's layout when
+        // the composer toggles.
         Browser::drawTopRibbon(self, sw, project$)
         Browser::drawTabBar(self, sw, mx, my, clicked)
         Browser::drawFilterBar(self, sw, mx, my, clicked)
         Browser::drawFooter(self, sw, sh)
 
-        // Card grid
-        Browser::drawCardGrid(self, sw, sh, mx, my, clicked)
+        // Card grid -- shrink the effective width by composerWidth so
+        // cards never end up half-hidden behind the composer panel.
+        Browser::drawCardGrid(self, sw - composerWidth, sh, mx, my, clicked)
         Return self\cardClickLatch
     End Method
 

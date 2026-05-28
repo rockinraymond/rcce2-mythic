@@ -287,7 +287,11 @@ Type Loom
         If Help::isOpen(self\help) = True Then browserInput = False
         If Composer::isEditing(self\composer) = True Then browserInput = False
 
-        Browser::renderAndUpdate(self\browser, self\windowWidth, self\windowHeight, self\projectName, browserInput)
+        // Pass composer width so the browser's card grid shrinks to
+        // avoid right-column cards being half-hidden behind the panel.
+        // Composer::width returns 0 when nothing focused, else CMP_W.
+        Local composerW% = Composer::width(self\composer)
+        Browser::renderAndUpdate(self\browser, self\windowWidth, self\windowHeight, self\projectName, browserInput, composerW)
         Composer::renderAndUpdate(self\composer, self\windowWidth, self\windowHeight)
 
         // Conscience Ribbon last among the on-canvas surfaces -- it

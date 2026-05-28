@@ -25,12 +25,15 @@ Strict
 // Architecture: Type with Methods, called as `Composer::method(self, args)`.
 
 
-Const CMP_W           = 380
-Const CMP_TOP         = LOOM_TOP_RIBBON_H + 56   // matches BR_TOP_RIBBON (84)
-Const CMP_BOT_PAD     = 36     // matches BR_BOT_RIBBON
-Const CMP_PAD         = 16
-Const CMP_ROW_H       = 22
-Const CMP_CHIP_H      = 26
+Const CMP_W              = 380
+Const CMP_COLLAPSED_W    = 28      ; width when self\collapsed = True
+Const CMP_COLLAPSE_BTN_W = 18      ; chevron-button size (square)
+Const CMP_COLLAPSE_BTN_H = 22
+Const CMP_TOP            = LOOM_TOP_RIBBON_H + 56   // matches BR_TOP_RIBBON (84)
+Const CMP_BOT_PAD        = 36     // matches BR_BOT_RIBBON
+Const CMP_PAD            = 16
+Const CMP_ROW_H          = 22
+Const CMP_CHIP_H         = 26
 
 // Save button (top-right of the composer title block).
 Const CMP_SAVE_BTN_W  = 70
@@ -95,6 +98,13 @@ Type Composer
     Field bodyTop%
     Field bodyBottom%
 
+    // Collapse state -- when True, the composer renders only as a thin
+    // brass sliver on the right edge with a chevron to expand. Lets the
+    // user see the full browser card grid while keeping focus state
+    // active. Toggle via the chevron button at the top-left of the
+    // composer panel.
+    Field collapsed%
+
     // Edit-buffer state. editKind = "" means no edit in progress.
     // (kind, refID, fieldId) together identify which field of which entity
     // the user is currently typing into. editBuffer is the in-progress value
@@ -143,6 +153,7 @@ Type Composer
         self\lastContentBottom = 0
         self\bodyTop = 0
         self\bodyBottom = 0
+        self\collapsed = False
         Return self
     End Method
 
@@ -158,10 +169,12 @@ Type Composer
 
     // -------------------------------------------------------------------------
     // width -- 0 when nothing's focused (lets the Browser fill the screen
-    // without leaving an empty right gutter), else CMP_W.
+    // without leaving an empty right gutter), CMP_COLLAPSED_W when the
+    // user collapsed the panel, else CMP_W.
     // -------------------------------------------------------------------------
     Method width%()
         If self\threads\focusKind = "" Then Return 0
+        If self\collapsed = True Then Return CMP_COLLAPSED_W
         Return CMP_W
     End Method
 
@@ -231,6 +244,15 @@ Type Composer
         // don't make only the first chip see the press.
         Local rightClicked% = MouseHit(2)
 
+        // Collapsed mode short-circuits to a thin sliver-render. The
+        // browser already shrank its grid by width%() so the sliver
+        // doesn't overlap any cards. Return False (no chip click) since
+        // chip rendering is skipped in this mode.
+        If self\collapsed = True
+            Composer::renderCollapsed(self, sw, sh, mx, my, clicked)
+            Return False
+        EndIf
+
         Local x% = sw - CMP_W
         Local y% = CMP_TOP
         Local w% = CMP_W
@@ -255,6 +277,11 @@ Type Composer
 
         LoomText(x + CMP_PAD, y + CMP_PAD, kindLabel, LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
         LoomText(x + CMP_PAD, y + CMP_PAD + 16, entityName, LOOM_PARCHMENT_100_R, LOOM_PARCHMENT_100_G, LOOM_PARCHMENT_100_B)
+
+        // Collapse chevron -- top-left corner of the panel, just inside
+        // the brass left rule. Click flips self\collapsed = True; next
+        // frame the renderCollapsed short-circuit runs.
+        Composer::drawCollapseButton(self, x + 6, y + CMP_PAD - 2, mx, my, clicked, ">")
 
         // Top-right action cluster (right-to-left): Save / Discard /
         // Duplicate / Delete. Save + Discard only render when there's
@@ -892,6 +919,73 @@ Type Composer
     // No arm/confirm: makes a copy, focuses the new entity, marks dirty.
     // Zone duplicate is unsupported (logged + toasted by EntityFactory).
     // -------------------------------------------------------------------------
+    // -------------------------------------------------------------------------
+    // drawCollapseButton -- top-left chevron that flips self\collapsed.
+    // Shown only in expanded mode; the collapsed-mode renderer paints
+    // its own '<' button.
+    //
+    // glyph: ">" when expanded (click to collapse rightward), "<" when
+    // collapsed (caller passes "<" from renderCollapsed).
+    // -------------------------------------------------------------------------
+    Method drawCollapseButton(btnX%, btnY%, mx%, my%, clicked%, glyph$)
+        Local hovered% = (mx >= btnX And mx < btnX + CMP_COLLAPSE_BTN_W And my >= btnY And my < btnY + CMP_COLLAPSE_BTN_H)
+
+        If hovered = True
+            LoomFill(btnX, btnY, CMP_COLLAPSE_BTN_W, CMP_COLLAPSE_BTN_H, LOOM_STONE_700_R, LOOM_STONE_700_G, LOOM_STONE_700_B)
+            LoomBorder(btnX, btnY, CMP_COLLAPSE_BTN_W, CMP_COLLAPSE_BTN_H, LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
+        EndIf
+        LoomText(btnX + 6, btnY + 4, glyph, LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
+
+        If hovered And clicked
+            self\collapsed = (Not self\collapsed)
+            WriteLog(LoomLog, "Composer: collapsed -> " + Str(self\collapsed))
+        EndIf
+    End Method
+
+
+    // -------------------------------------------------------------------------
+    // renderCollapsed -- thin-sliver render when self\collapsed = True.
+    // Paints just the brass left rule + a chevron '<' to expand. Lets
+    // the user see the full browser card grid while the composer keeps
+    // its focused entity (so re-expanding returns to the same state).
+    // -------------------------------------------------------------------------
+    Method renderCollapsed(sw%, sh%, mx%, my%, clicked%)
+        Local x% = sw - CMP_COLLAPSED_W
+        Local y% = CMP_TOP
+        Local w% = CMP_COLLAPSED_W
+        Local h% = sh - CMP_TOP - CMP_BOT_PAD
+
+        // Sliver chrome -- subtle gradient + brass left rule like the
+        // expanded panel, just narrower.
+        LoomGradientV(x, y, w, h, LOOM_STONE_850_R, LOOM_STONE_850_G, LOOM_STONE_850_B, LOOM_STONE_900_R, LOOM_STONE_900_G, LOOM_STONE_900_B)
+        LoomBorder(x, y, w, h, LOOM_BRASS_700_R, LOOM_BRASS_700_G, LOOM_BRASS_700_B)
+        LoomFill(x, y, 3, h, LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
+
+        // Expand chevron at top
+        Composer::drawCollapseButton(self, x + 6, y + CMP_PAD - 2, mx, my, clicked, "<")
+
+        // Vertical kind label rotated... actually Blitz3D Text doesn't
+        // rotate; just paint the kind initial as a stack of letters
+        // down the sliver for orientation. e.g. "A" for actor, "I" for
+        // item, etc. -- same glyph the chips use, painted vertically.
+        Local kind$ = self\threads\focusKind
+        Local glyph$ = Composer::kindGlyphCollapsed(self, kind)
+        Local labelY% = y + CMP_PAD - 2 + CMP_COLLAPSE_BTN_H + 12
+        LoomText(x + 8, labelY, glyph, LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
+    End Method
+
+
+    Method kindGlyphCollapsed$(kind$)
+        If kind = "actor"   Then Return "A"
+        If kind = "item"    Then Return "I"
+        If kind = "spell"   Then Return "S"
+        If kind = "zone"    Then Return "Z"
+        If kind = "faction" Then Return "F"
+        If kind = "animset" Then Return "M"
+        Return "?"
+    End Method
+
+
     Method drawDuplicateButton(btnX%, btnY%, mx%, my%, clicked%, kind$, refID%)
         Local hovered% = (mx >= btnX And mx < btnX + CMP_DUP_BTN_W And my >= btnY And my < btnY + CMP_DUP_BTN_H)
 

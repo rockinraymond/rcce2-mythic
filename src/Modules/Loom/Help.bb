@@ -114,6 +114,8 @@ Type Help
         rowY = Help::row(self, modalX, rowY, "Right-click chip",   "Open palette as picker (swap referent)")
         rowY = Help::row(self, modalX, rowY, "Click Save / X / Discard", "Persist / delete (arm) / revert")
         rowY = Help::row(self, modalX, rowY, "Click Dup",                "Duplicate the focused entity")
+        rowY = Help::row(self, modalX, rowY, "Click chevron",             "Collapse / expand composer to sliver")
+        rowY = Help::row(self, modalX, rowY, "Mouse wheel",               "Scroll the composer body")
         rowY = rowY + 6
 
         rowY = Help::section(self, modalX, rowY, "Ribbon (top strip)")
