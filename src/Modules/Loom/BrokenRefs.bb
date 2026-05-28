@@ -50,6 +50,10 @@ Type BrokenRef
     Field FieldDesc$         // field name + indexer if any (e.g. "portal[3]")
     Field BadValue$          // string representation of the bad reference
     Field Diagnosis$         // human-friendly explanation
+    Field Severity$          // "error" / "warning" / "info" -- drives left-rail color
+    Field Category$          // "broken-ref" / "empty-field" / "playability" /
+                             // "weapon-config" / "spell-config" / "orphan-zone"
+                             // Used for grouping in the modal.
 End Type
 
 
@@ -115,21 +119,130 @@ Type BrokenRefs
     Method rebuild()
         BrokenRefs::clearList(self)
 
-        // Actors
+        // Actors -- broken refs (factions, anim sets) + content checks
         For Ac.Actor = Each Actor
             If self\entryCount >= BROKENREFS_MAX_ENTRIES Then Exit
             BrokenRefs::scanActor(self, Ac)
+            BrokenRefs::scanActorContent(self, Ac)
         Next
 
-        // Zones (portals)
+        // Items -- empty name, weapon w/ 0 damage
+        Local It.Item
+        For ai% = 0 To 65534
+            If self\entryCount >= BROKENREFS_MAX_ENTRIES Then Exit
+            It = ItemList(ai)
+            If It <> Null Then BrokenRefs::scanItemContent(self, It)
+        Next
+
+        // Spells -- empty name, missing script
+        Local Sp.Spell
+        For asi% = 0 To 65534
+            If self\entryCount >= BROKENREFS_MAX_ENTRIES Then Exit
+            Sp = SpellsList(asi)
+            If Sp <> Null Then BrokenRefs::scanSpellContent(self, Sp)
+        Next
+
+        // Zones -- broken portal refs + orphan zone checks
         For Ar.Area = Each Area
             If self\entryCount >= BROKENREFS_MAX_ENTRIES Then Exit
             BrokenRefs::scanZone(self, Ar)
+            BrokenRefs::scanZoneContent(self, Ar)
         Next
 
         // Clamp scroll
         If self\scrollOffset >= self\entryCount Then self\scrollOffset = self\entryCount - 1
         If self\scrollOffset < 0 Then self\scrollOffset = 0
+    End Method
+
+
+    // -------------------------------------------------------------------------
+    // scanActorContent -- non-reference checks. Severity warning (not error)
+    // since these don't crash the engine but degrade gameplay.
+    // -------------------------------------------------------------------------
+    Method scanActorContent(Ac.Actor)
+        Local label$ = Ac\Race$ + " [" + Ac\Class$ + "]"
+
+        // Playable actor but no animation set -- player char will T-pose.
+        If Ac\Playable = True
+            If Ac\MAnimationSet = 0 And Ac\Genders <> 2
+                BrokenRefs::emitFull(self, "actor", Ac\ID, label, "MAnimationSet", "0", "playable male has no anim set", "warning", "playability")
+            EndIf
+            If Ac\FAnimationSet = 0 And Ac\Genders <> 1
+                BrokenRefs::emitFull(self, "actor", Ac\ID, label, "FAnimationSet", "0", "playable female has no anim set", "warning", "playability")
+            EndIf
+        EndIf
+
+        // Race + Class both empty -- unidentifiable actor template
+        If Ac\Race$ = "" And Ac\Class$ = ""
+            BrokenRefs::emitFull(self, "actor", Ac\ID, "(unnamed)", "Race+Class", "(both empty)", "actor has no Race or Class identifier", "warning", "empty-field")
+        EndIf
+    End Method
+
+
+    // -------------------------------------------------------------------------
+    // scanItemContent -- content rules for Item templates.
+    // -------------------------------------------------------------------------
+    Method scanItemContent(It.Item)
+        // Empty name -- item won't be findable in palette / search
+        If It\Name$ = ""
+            BrokenRefs::emitFull(self, "item", It\ID, "(unnamed)", "Name", "(empty)", "item has no Name", "warning", "empty-field")
+        EndIf
+
+        // Weapon (ItemType=1) with 0 WeaponDamage -- weapon is decorative
+        If It\ItemType = 1 And It\WeaponDamage = 0
+            BrokenRefs::emitFull(self, "item", It\ID, It\Name$, "WeaponDamage", "0", "weapon does no damage", "warning", "weapon-config")
+        EndIf
+
+        // Item has a script reference (Bound name) but no method -- nothing
+        // will fire on use. Only flag when Script is set.
+        If It\Script$ <> "" And It\SMethod$ = ""
+            BrokenRefs::emitFull(self, "item", It\ID, It\Name$, "SMethod", "(empty)", "item has Bound script but no Method to call", "warning", "spell-config")
+        EndIf
+    End Method
+
+
+    // -------------------------------------------------------------------------
+    // scanSpellContent -- content rules for Spell templates.
+    // -------------------------------------------------------------------------
+    Method scanSpellContent(Sp.Spell)
+        If Sp\Name$ = ""
+            BrokenRefs::emitFull(self, "spell", Sp\ID, "(unnamed)", "Name", "(empty)", "spell has no Name", "warning", "empty-field")
+        EndIf
+
+        // Spell with no script -- casting does nothing
+        If Sp\Script$ = ""
+            BrokenRefs::emitFull(self, "spell", Sp\ID, Sp\Name$, "Script", "(empty)", "spell has no Script bound -- cast does nothing", "warning", "spell-config")
+        EndIf
+
+        // Script bound but method empty
+        If Sp\Script$ <> "" And Sp\SMethod$ = ""
+            BrokenRefs::emitFull(self, "spell", Sp\ID, Sp\Name$, "SMethod", "(empty)", "spell has Bound script but no Method", "warning", "spell-config")
+        EndIf
+    End Method
+
+
+    // -------------------------------------------------------------------------
+    // scanZoneContent -- orphan zone (no portals, no spawns, no triggers
+    // = nothing to do there).
+    // -------------------------------------------------------------------------
+    Method scanZoneContent(Ar.Area)
+        Local hasPortal% = False
+        Local hasSpawn%  = False
+        Local hasTrigger% = False
+        Local i%
+        For i = 0 To 99
+            If Ar\PortalName$[i] <> "" Then hasPortal = True : Exit
+        Next
+        For i = 0 To 999
+            If Ar\SpawnActor[i] > 0 Then hasSpawn = True : Exit
+        Next
+        For i = 0 To 149
+            If Ar\TriggerScript$[i] <> "" Then hasTrigger = True : Exit
+        Next
+
+        If hasPortal = False And hasSpawn = False And hasTrigger = False
+            BrokenRefs::emitFull(self, "zone", Handle(Ar), Ar\Name$, "(contents)", "0 portals, 0 spawns, 0 triggers", "orphan zone -- nothing for a player to do here", "info", "orphan-zone")
+        EndIf
     End Method
 
 
@@ -174,6 +287,13 @@ Type BrokenRefs
 
 
     Method emit(sourceKind$, sourceRefID%, sourceLabel$, fieldDesc$, badValue$, diagnosis$)
+        // Back-compat shape: existing scanActor / scanZone callers use this
+        // shorter signature and emit broken-ref category at error severity.
+        BrokenRefs::emitFull(self, sourceKind, sourceRefID, sourceLabel, fieldDesc, badValue, diagnosis, "error", "broken-ref")
+    End Method
+
+
+    Method emitFull(sourceKind$, sourceRefID%, sourceLabel$, fieldDesc$, badValue$, diagnosis$, severity$, category$)
         Local r.BrokenRef = New BrokenRef()
         r\SourceKind = sourceKind
         r\SourceRefID = sourceRefID
@@ -181,6 +301,8 @@ Type BrokenRefs
         r\FieldDesc = fieldDesc
         r\BadValue = badValue
         r\Diagnosis = diagnosis
+        r\Severity = severity
+        r\Category = category
         self\entryCount = self\entryCount + 1
     End Method
 
@@ -230,8 +352,11 @@ Type BrokenRefs
         LoomBorder(modalX + 1, modalY + 1, BROKENREFS_MODAL_W - 2, BROKENREFS_MODAL_H - 2, LOOM_BRASS_700_R, LOOM_BRASS_700_G, LOOM_BRASS_700_B)
         LoomFill(modalX, modalY, BROKENREFS_MODAL_W, 3, LOOM_DANGER_R, LOOM_DANGER_G, LOOM_DANGER_B)
 
-        // Header in display font
-        Local headerTxt$ = "BROKEN REFERENCES  |  " + Str(self\entryCount)
+        // Header in display font. Title broadened from "Broken References" to
+        // "Issues" now that the modal surfaces multiple categories of
+        // validation (broken refs / empty fields / playability gaps /
+        // weapon config / spell config / orphan zones).
+        Local headerTxt$ = "ISSUES  |  " + Str(self\entryCount)
         If self\entryCount >= BROKENREFS_MAX_ENTRIES Then headerTxt = headerTxt + "+ (capped)"
         LoomTheme_UseDisplay()
         LoomText(modalX + BROKENREFS_PAD, modalY + 6, headerTxt, LOOM_DANGER_R, LOOM_DANGER_G, LOOM_DANGER_B)
@@ -261,7 +386,7 @@ Type BrokenRefs
         Local rw% = BROKENREFS_MODAL_W - BROKENREFS_PAD * 2
 
         If self\entryCount = 0
-            LoomText(rx, listY + 12, "No broken references. Project is clean.", LOOM_SUCCESS_R, LOOM_SUCCESS_G, LOOM_SUCCESS_B)
+            LoomText(rx, listY + 12, "No issues. Project is clean.", LOOM_SUCCESS_R, LOOM_SUCCESS_G, LOOM_SUCCESS_B)
             Return
         EndIf
 
@@ -287,12 +412,31 @@ Type BrokenRefs
             LoomFill(rx, ry, rw, BROKENREFS_ROW_H, LOOM_STONE_700_R, LOOM_STONE_700_G, LOOM_STONE_700_B)
         EndIf
 
-        // Source: kind + label
-        LoomText(rx + 6, ry + 4, r\SourceKind + "  " + r\SourceLabel, LOOM_PARCHMENT_100_R, LOOM_PARCHMENT_100_G, LOOM_PARCHMENT_100_B)
+        // Severity left-rail (4px) -- red error / orange warning / blue info.
+        // Defaults to red for back-compat entries that pre-date the
+        // severity field (Severity = "" reads as error). Avoids reassigning
+        // Method-scope Locals from inside nested If branches per the
+        // Strict-mode trap; instead each branch fills the rail directly.
+        If r\Severity = "warning"
+            LoomFill(rx, ry, 4, BROKENREFS_ROW_H, LOOM_WARNING_R, LOOM_WARNING_G, LOOM_WARNING_B)
+        Else If r\Severity = "info"
+            LoomFill(rx, ry, 4, BROKENREFS_ROW_H, LOOM_ARCANE_500_R, LOOM_ARCANE_500_G, LOOM_ARCANE_500_B)
+        Else
+            LoomFill(rx, ry, 4, BROKENREFS_ROW_H, LOOM_DANGER_R, LOOM_DANGER_G, LOOM_DANGER_B)
+        EndIf
 
-        // Field + bad value
+        // Source: kind + label (shifted right past the rail)
+        LoomText(rx + 12, ry + 4, r\SourceKind + "  " + r\SourceLabel, LOOM_PARCHMENT_100_R, LOOM_PARCHMENT_100_G, LOOM_PARCHMENT_100_B)
+
+        // Field + bad value (colored by severity, same conditional)
         Local mid$ = r\FieldDesc + " = " + Chr(34) + BrokenRefs::truncate(self, r\BadValue, 20) + Chr(34)
-        LoomText(rx + 260, ry + 4, mid, LOOM_DANGER_R, LOOM_DANGER_G, LOOM_DANGER_B)
+        If r\Severity = "warning"
+            LoomText(rx + 260, ry + 4, mid, LOOM_WARNING_R, LOOM_WARNING_G, LOOM_WARNING_B)
+        Else If r\Severity = "info"
+            LoomText(rx + 260, ry + 4, mid, LOOM_ARCANE_500_R, LOOM_ARCANE_500_G, LOOM_ARCANE_500_B)
+        Else
+            LoomText(rx + 260, ry + 4, mid, LOOM_DANGER_R, LOOM_DANGER_G, LOOM_DANGER_B)
+        EndIf
 
         // Diagnosis on the right
         LoomText(rx + rw - StringWidth(r\Diagnosis) - 12, ry + 4, r\Diagnosis, LOOM_STONE_300_R, LOOM_STONE_300_G, LOOM_STONE_300_B)
