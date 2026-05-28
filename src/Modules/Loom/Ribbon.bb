@@ -196,6 +196,10 @@ Type Ribbon
         EndIf
         If chromeHover And clicked
             Loom_CycleChromeMode()
+            ; Persist immediately (no Save All needed) so the new mode
+            ; survives a restart. Same set-and-forget shape as a
+            ; browser zoom toggle.
+            Loom_SaveChromeMode()
             consumed = True
             WriteLog(LoomLog, "Ribbon: chrome mode -> " + Loom_ChromeMode())
         EndIf

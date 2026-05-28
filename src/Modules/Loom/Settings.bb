@@ -142,8 +142,48 @@ Function Loom_LoadSettings()
         CloseFile(F)
     EndIf
 
+    ; --- Loom-private chrome mode (Data\Loom\chrome.txt) ----------------------
+    ; Optional; if file missing or unreadable, mode stays at the declared
+    ; "balanced" default. Stored in Loom's private dir so other engine
+    ; binaries (Server/Client/GUE) never touch it.
+    Loom_LoadChromeMode()
+
     SettingsSaved = True
     WriteLog(LoomLog, "Settings: loaded project config (game=" + LoomCfg_GameName$ + ", port=" + LoomCfg_ServerPort + ")")
+End Function
+
+
+; =============================================================================
+; Loom_LoadChromeMode -- read Data\Loom\chrome.txt into LoomChromeMode$
+; (declared in ImageCache.bb). Tolerant of missing file or unrecognized
+; value -- leaves the global at whatever it was (default "balanced").
+; =============================================================================
+Function Loom_LoadChromeMode()
+    Local f = ReadFile("Data\Loom\chrome.txt")
+    If f = 0 Then Return
+    Local mode$ = Trim$(ReadLine$(f))
+    CloseFile(f)
+    If mode = "tool" Or mode = "balanced" Or mode = "in-world"
+        LoomChromeMode$ = mode
+        WriteLog(LoomLog, "Settings: chrome mode restored to " + mode)
+    EndIf
+End Function
+
+
+; =============================================================================
+; Loom_SaveChromeMode -- persist current LoomChromeMode$ to chrome.txt.
+; Creates Data\Loom\ if missing (mirrors Recents.bb's pattern).
+; Atomic-write via SafeWriteOpen/Commit so a crash mid-write doesn't
+; corrupt the file.
+; =============================================================================
+Function Loom_SaveChromeMode()
+    If FileType("Data\Loom") <> 2 Then CreateDir "Data\Loom"
+    Local finalPath$ = "Data\Loom\chrome.txt"
+    Local tempPath$ = SafeWriteOpen$(finalPath$)
+    Local f = WriteFile(tempPath$)
+    If f = 0 Then Return False
+    WriteLine f, LoomChromeMode$
+    Return SafeWriteCommit%(tempPath$, finalPath$, f)
 End Function
 
 
