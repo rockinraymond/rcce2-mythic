@@ -206,7 +206,7 @@ Type Browser
     Method renderAndUpdate%(sw%, sh%, project$, inputEnabled%, composerWidth%)
         Local mx% = MouseX()
         Local my% = MouseY()
-        Local clicked% = MouseHit(1)
+        Local clicked% = Loom_MouseClicked()
 
         // Drain keyboard. Arrow keys + Enter handled FIRST so they don't
         // dribble into the filter buffer; the filter pump skips arrows.

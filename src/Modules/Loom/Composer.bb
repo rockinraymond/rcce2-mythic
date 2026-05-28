@@ -304,12 +304,10 @@ Type Composer
 
         Local mx% = MouseX()
         Local my% = MouseY()
-        Local clicked% = MouseHit(1)
-        // Right-click captured once per frame; thread chips read it via
-        // chipRow -> renderChip to dispatch picker-mode opens. Capture
-        // here (not in chipRow) so MouseHit(2)'s consume-once semantics
-        // don't make only the first chip see the press.
-        Local rightClicked% = MouseHit(2)
+        Local clicked% = Loom_MouseClicked()
+        // Right-click also frame-cached for the same reason -- chipRow
+        // would otherwise see right-click in only the first chip.
+        Local rightClicked% = Loom_MouseRightClicked()
 
         // Collapsed mode short-circuits to a thin sliver-render. The
         // browser already shrank its grid by width%() so the sliver
@@ -1446,7 +1444,7 @@ Type Composer
 
         Local mx% = MouseX()
         Local my% = MouseY()
-        Local clicked% = MouseHit(1)
+        Local clicked% = Loom_MouseClicked()
 
         Local x% = sw - CMP_W
         Local y% = CMP_TOP

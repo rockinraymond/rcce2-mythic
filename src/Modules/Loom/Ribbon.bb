@@ -97,7 +97,7 @@ Type Ribbon
     Method renderAndUpdate%(sw%)
         Local mx% = MouseX()
         Local my% = MouseY()
-        Local clicked% = MouseHit(1)
+        Local clicked% = Loom_MouseClicked()
 
         Ribbon::recomputeCache(self)
 

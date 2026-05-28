@@ -43,14 +43,46 @@ Dim ImageCacheLarge(65535)
 ; top to reset; each first-time load increments. Over-budget = return 0.
 Global FrameImageLoadCount = 0
 
+; =============================================================================
+; Per-frame mouse cache. Blitz3D's MouseHit(b) is READ-AND-CLEAR -- the
+; first caller in a frame consumes the press count; every subsequent
+; caller sees 0. With 11+ surfaces (Browser / Composer / Ribbon / Atlas /
+; 6 modals / SaveAll) all calling MouseHit(1) independently, clicks
+; on anything except the FIRST surface to call MouseHit got silently
+; eaten. Symptom: "have to click 3 times for the composer to register".
+;
+; Fix: cache MouseHit(1) + MouseHit(2) once at the top of each frame
+; via Loom_BeginFrame(); every surface reads the cached value via
+; Loom_MouseClicked() / Loom_MouseRightClicked() instead of calling
+; MouseHit themselves. Re-entrant safe (just reads a Global).
+; =============================================================================
+Global LoomFrameMouseClicked      = False
+Global LoomFrameMouseRightClicked = False
+
 
 ; =============================================================================
-; Loom_BeginFrame -- called once per frame at the top of renderFrame to
-; reset the load budget. Without this, cumulative loads across a session
-; would still freeze later frames once you eventually crossed the budget.
+; Loom_BeginFrame -- called once per frame at the top of renderFrame.
+; Resets the image-load budget AND captures the frame's mouse-click
+; state once so every renderAndUpdate sees the same value.
 ; =============================================================================
 Function Loom_BeginFrame()
     FrameImageLoadCount = 0
+    ; Capture mouse buttons once. > 0 = pressed this frame; we treat
+    ; multi-press (rare at human click rate) as a single True since
+    ; rendering pipelines aren't equipped to handle counts.
+    LoomFrameMouseClicked      = (MouseHit(1) > 0)
+    LoomFrameMouseRightClicked = (MouseHit(2) > 0)
+End Function
+
+
+; Read-only accessors for the captured state. Renderers MUST use these
+; instead of calling MouseHit directly, or the bug returns.
+Function Loom_MouseClicked%()
+    Return LoomFrameMouseClicked
+End Function
+
+Function Loom_MouseRightClicked%()
+    Return LoomFrameMouseRightClicked
 End Function
 
 

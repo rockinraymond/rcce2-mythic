@@ -155,7 +155,7 @@ Type Timeline
 
         Local mx% = MouseX()
         Local my% = MouseY()
-        Local clicked% = MouseHit(1)
+        Local clicked% = Loom_MouseClicked()
 
         Local modalX% = (sw - TIMELINE_MODAL_W) / 2
         Local modalY% = (sh - TIMELINE_MODAL_H) / 3
