@@ -56,6 +56,10 @@ Global PreviewSpinTime#  = 0.0
 Global PreviewLastTickMs = 0          ; for delta calc
 Global PreviewMeshScale# = 1.0        ; auto-fit scale for current mesh
 
+; PreviewActorID lives in ImageCache.bb (included BEFORE Composer)
+; so the Strict Composer module can write it without the dim-write-
+; from-Strict trap. See feedback_loom_module_include_order.
+
 ; ---- Manual orbit state ----------------------------------------------------
 ; Drag-to-orbit: while LMB is held inside the preview rect, the mesh's
 ; Y/X rotation tracks the mouse delta. Releases the auto-spin while
@@ -147,6 +151,18 @@ Function Loom_LoadPreviewMesh(meshID)
     PositionEntity ent, LOOM_PREVIEW_CAM_X#, LOOM_PREVIEW_CAM_Y#, LOOM_PREVIEW_CAM_Z#
     ShowEntity ent
 
+    ; Texture pass -- when PreviewActorID > 0, the composer is showing
+    ; an actor and we should drape the actor's first defined body
+    ; texture over the mesh so the preview looks like the actual
+    ; character. First cut: whole-entity EntityTexture with body[0];
+    ; multi-surface face/body distinction is the follow-up.
+    If PreviewActorID > 0 And PreviewActorID < 65536
+        Local Ac.Actor = ActorList(PreviewActorID)
+        If Ac <> Null
+            Loom_ApplyActorTextures(ent, Ac)
+        EndIf
+    EndIf
+
     PreviewMesh = ent
     PreviewMeshID = meshID
     ; New mesh = fresh view. Reset orbit + zoom so the user doesn't
@@ -154,6 +170,72 @@ Function Loom_LoadPreviewMesh(meshID)
     Loom_ResetPreviewOrbit()
     WriteLog(LoomLog, "MeshPreview: loaded mesh ID " + meshID)
     Return True
+End Function
+
+
+; =============================================================================
+; Loom_ApplyActorTextures -- drape the actor's body/face textures over the
+; loaded mesh. Mirrors a stripped-down version of Actors3D.bb's
+; multi-surface paint:
+;   - If mesh has 2+ surfaces, paint body onto one and face onto the other,
+;     guessed from texture-name "HEAD" hint.
+;   - Otherwise EntityTexture the whole entity with body.
+; Failures are silent (no toast) -- a missing texture just leaves the
+; surface at the mesh's default appearance.
+; =============================================================================
+Function Loom_ApplyActorTextures(ent, Ac.Actor)
+    ; Pick first non-empty body / face slot; bound to 0..4
+    Local bodyIdx = 0
+    Local faceIdx = 0
+    Local bi
+    For bi = 0 To 4
+        If Ac\MaleBodyIDs[bi] > 0 And Ac\MaleBodyIDs[bi] < 65535 Then bodyIdx = bi : Exit
+    Next
+    Local fi
+    For fi = 0 To 4
+        If Ac\MaleFaceIDs[fi] > 0 And Ac\MaleFaceIDs[fi] < 65535 Then faceIdx = fi : Exit
+    Next
+
+    Local bodyTexID = Ac\MaleBodyIDs[bodyIdx]
+    Local faceTexID = Ac\MaleFaceIDs[faceIdx]
+
+    Local bodyTex = 0
+    Local faceTex = 0
+    If bodyTexID > 0 And bodyTexID < 65535 Then bodyTex = GetTexture(bodyTexID)
+    If faceTexID > 0 And faceTexID < 65535 Then faceTex = GetTexture(faceTexID)
+
+    If CountSurfaces(ent) > 1 And faceTex <> 0
+        ; Distinguish head vs body surface via texture-name hint
+        ; (mirrors the Actors3D dispatch). Default: surface 1=body, 2=face.
+        Local headSurface = GetSurface(ent, 2)
+        Local bodySurface = GetSurface(ent, 1)
+        Local probeBrush = GetSurfaceBrush(GetSurface(ent, 1))
+        Local probeTex = GetBrushTexture(probeBrush)
+        Local probeName$ = TextureName$(probeTex)
+        If probeTex <> 0 Then FreeTexture probeTex
+        If probeBrush <> 0 Then FreeBrush probeBrush
+        If Instr(Upper$(probeName$), "HEAD") > 0
+            headSurface = GetSurface(ent, 1)
+            bodySurface = GetSurface(ent, 2)
+        EndIf
+
+        Local brush = CreateBrush()
+        If bodyTex <> 0
+            BrushTexture brush, bodyTex
+            PaintSurface bodySurface, brush
+        EndIf
+        If faceTex <> 0
+            BrushTexture brush, faceTex
+            PaintSurface headSurface, brush
+        EndIf
+        FreeBrush brush
+    Else If bodyTex <> 0
+        EntityTexture ent, bodyTex
+    EndIf
+
+    ; Note: GetTexture returns CopyEntity-like handles; we don't free
+    ; them here because the brush still references them. The textures
+    ; live until the mesh entity is freed (FreeEntity cascades).
 End Function
 
 

@@ -2445,9 +2445,15 @@ Type Composer
         // shorter so the preview sits cleanly to the right.
         Local previewX% = panelX + panelW - LOOM_PREVIEW_SIZE - CMP_PAD
         Local previewY% = y
+        // Publish actor ID so MeshPreview can drape body/face textures
+        // on the mesh during load (instead of showing bare gray).
+        // Set BEFORE the draw call; cleared after to avoid bleeding
+        // into the item preview's bare-mesh expectation.
+        PreviewActorID = A\ID
         If Composer::canPaintRow(self, y, LOOM_PREVIEW_SIZE) = True
             Loom_DrawMeshPreview(A\MeshIDs[0], previewX, previewY, LOOM_PREVIEW_SIZE)
         EndIf
+        PreviewActorID = 0
 
         y = Composer::editableIntRow(self, panelX, panelW, y, "Male base",     "actor", A\ID, "mesh_0", A\MeshIDs[0], mx, my, clicked)
         y = Composer::editableIntRow(self, panelX, panelW, y, "Female base",   "actor", A\ID, "mesh_1", A\MeshIDs[1], mx, my, clicked)
