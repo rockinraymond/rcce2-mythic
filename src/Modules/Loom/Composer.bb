@@ -2707,6 +2707,13 @@ Type Composer
         If Ar = Null Then Return
         Local h% = Handle(Ar)
 
+        // Reset the viewport-highlight publish slot for this frame.
+        // Per-sub-section renderers below set it when their header
+        // lands inside the body viewport; if nothing is visible,
+        // viewport renders without a highlighted marker.
+        LoomZoneHighlightKind$ = ""
+        LoomZoneHighlightIdx   = -1
+
         Local y% = bodyY
 
         // 3D schematic viewport at the top of the composer body. Shows
@@ -2907,6 +2914,11 @@ Type Composer
                 // Sub-header + delete button
                 If Composer::canPaintRow(self, y, CMP_ROW_H) = True
                     LoomText(panelX + CMP_PAD, y + 4, "Portal " + Str(p), LOOM_ARCANE_500_R, LOOM_ARCANE_500_G, LOOM_ARCANE_500_B)
+                    // Header is on-screen -> tell the viewport to highlight
+                    // this portal marker. Last-rendered-visible wins, so
+                    // the user's scroll position naturally drives focus.
+                    LoomZoneHighlightKind$ = "portal"
+                    LoomZoneHighlightIdx   = p
                 EndIf
                 If Composer::subDeleteButton(self, panelX, panelW, y, mx, my, clicked) = True
                     Ar\PortalName$[p]     = ""
@@ -2959,6 +2971,8 @@ Type Composer
                 self\zoneAnchorTrigger[t] = y + self\scrollOffset
                 If Composer::canPaintRow(self, y, CMP_ROW_H) = True
                     LoomText(panelX + CMP_PAD, y + 4, "Trigger " + Str(t), LOOM_ARCANE_500_R, LOOM_ARCANE_500_G, LOOM_ARCANE_500_B)
+                    LoomZoneHighlightKind$ = "trigger"
+                    LoomZoneHighlightIdx   = t
                 EndIf
                 If Composer::subDeleteButton(self, panelX, panelW, y, mx, my, clicked) = True
                     Ar\TriggerScript$[t] = ""
@@ -2996,6 +3010,8 @@ Type Composer
                 self\zoneAnchorSpawn[s] = y + self\scrollOffset
                 If Composer::canPaintRow(self, y, CMP_ROW_H) = True
                     LoomText(panelX + CMP_PAD, y + 4, "Spawn " + Str(s), LOOM_ARCANE_500_R, LOOM_ARCANE_500_G, LOOM_ARCANE_500_B)
+                    LoomZoneHighlightKind$ = "spawn"
+                    LoomZoneHighlightIdx   = s
                 EndIf
                 If Composer::subDeleteButton(self, panelX, panelW, y, mx, my, clicked) = True
                     Ar\SpawnActor[s] = 0

@@ -64,6 +64,14 @@ Global LoomFrameMouseRightClicked = False
 ; double-consume the wheel tick.
 Global LoomFrameMouseWheel        = 0
 
+; Zone viewport <-> composer highlight sync. Composer's renderZone
+; sub-section renderers set these when their header lands inside
+; the visible body region; ZoneViewport reads them and scales the
+; matching marker bigger. Declared here (before Composer.bb in the
+; include order) so Strict Composer can write them.
+Global LoomZoneHighlightKind$ = ""
+Global LoomZoneHighlightIdx   = -1
+
 
 ; =============================================================================
 ; Loom_BeginFrame -- called once per frame at the top of renderFrame.

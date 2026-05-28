@@ -82,6 +82,11 @@ Global VPCountLines    = 0     ; total connection lines emitted
 ; without holding a per-call reference. Same shape as LoomWorldCache.
 Global LoomComposer.Composer = Null
 
+; LoomZoneHighlightKind$ / LoomZoneHighlightIdx live in ImageCache.bb
+; (included BEFORE Composer) so the Strict Composer module can write
+; them without the dim-write-from-Strict trap that bit Settings
+; globals. See ImageCache.bb / feedback_loom_module_include_order.
+
 
 ; =============================================================================
 ; Loom_InitZoneViewport -- one-time setup at boot.
@@ -134,6 +139,8 @@ Type ZoneViewportMarker
     Field EN
     Field Kind$        ; "portal" / "spawn" / "trigger" / "waypoint" / "" for axis/line decorations
     Field IndexN%      ; sub-entity slot index inside the zone (0..N-1 per kind)
+    Field BaseScale#   ; uniform scale applied at marker creation; used by
+                       ; highlight system to restore size when un-highlighted
 End Type
 
 Function Loom_FreeZoneMarkers()
@@ -283,6 +290,7 @@ Function Loom_LoadZoneMarkers(Ar.Area)
             pm\EN = pEn
             pm\Kind = "portal"
             pm\IndexN = i
+            pm\BaseScale = VP_MARKER_SIZE#
             VPCountPortals = VPCountPortals + 1
             If Ar\PortalX#[i] < minX# Then minX# = Ar\PortalX#[i]
             If Ar\PortalX#[i] > maxX# Then maxX# = Ar\PortalX#[i]
@@ -306,6 +314,7 @@ Function Loom_LoadZoneMarkers(Ar.Area)
                 sm\EN = sEn
                 sm\Kind = "spawn"
                 sm\IndexN = i
+                sm\BaseScale = VP_MARKER_SIZE#
                 VPCountSpawns = VPCountSpawns + 1
                 If Ar\WaypointX#[waypointIdx] < minX# Then minX# = Ar\WaypointX#[waypointIdx]
                 If Ar\WaypointX#[waypointIdx] > maxX# Then maxX# = Ar\WaypointX#[waypointIdx]
@@ -328,6 +337,7 @@ Function Loom_LoadZoneMarkers(Ar.Area)
             tm\EN = tEn
             tm\Kind = "trigger"
             tm\IndexN = i
+            tm\BaseScale = VP_MARKER_SIZE#
             VPCountTriggers = VPCountTriggers + 1
             If Ar\TriggerX#[i] < minX# Then minX# = Ar\TriggerX#[i]
             If Ar\TriggerX#[i] > maxX# Then maxX# = Ar\TriggerX#[i]
@@ -349,6 +359,7 @@ Function Loom_LoadZoneMarkers(Ar.Area)
             wm\EN = wEn
             wm\Kind = "waypoint"
             wm\IndexN = i
+            wm\BaseScale = VP_WAYPOINT_SIZE#
             VPCountWaypoints = VPCountWaypoints + 1
             If Ar\WaypointX#[i] < minX# Then minX# = Ar\WaypointX#[i]
             If Ar\WaypointX#[i] > maxX# Then maxX# = Ar\WaypointX#[i]
@@ -377,6 +388,34 @@ Function Loom_LoadZoneMarkers(Ar.Area)
             EndIf
         EndIf
     Next
+
+    ; Water rectangles -- walk the per-Area FirstWater linked list
+    ; (populated by ServerLoadArea). Render each as a flat blue slab
+    ; sized to (Width x small height x Depth) at (X, Y, Z). Damage
+    ; type encoded in the color so designers can spot lava (red) vs
+    ; acid (green) vs plain water (blue) at a glance.
+    Local W.ServerWater = Ar\FirstWater
+    While W <> Null
+        Local wEn2 = CreateCube()
+        ScaleEntity wEn2, W\Width# / 2.0, 1.0, W\Depth# / 2.0
+        PositionEntity wEn2, W\X#, VP_SCENE_Y_OFFSET# + W\Y#, W\Z#
+        ; Color by damage: 0 = water (blue), 1+ = damage type tinted
+        If W\Damage > 0
+            EntityColor wEn2, 200, 70, 70    ; harmful = red tint
+        Else
+            EntityColor wEn2, 70, 110, 200   ; neutral water = blue
+        EndIf
+        EntityAlpha wEn2, 0.5                 ; translucent so markers below are visible
+        Local wm2.ZoneViewportMarker = New ZoneViewportMarker
+        wm2\EN = wEn2
+        wm2\Kind = ""                        ; not pickable as a sub-entity
+        If W\X# - W\Width# / 2.0 < minX# Then minX# = W\X# - W\Width# / 2.0
+        If W\X# + W\Width# / 2.0 > maxX# Then maxX# = W\X# + W\Width# / 2.0
+        If W\Z# - W\Depth# / 2.0 < minZ# Then minZ# = W\Z# - W\Depth# / 2.0
+        If W\Z# + W\Depth# / 2.0 > maxZ# Then maxZ# = W\Z# + W\Depth# / 2.0
+        found = True
+        W = W\NextWater
+    Wend
 
     ; Auto-fit camera: center on midpoint of bbox, distance scaled
     ; to the larger of the two extents.
@@ -483,6 +522,20 @@ Function Loom_DrawZoneViewport(zoneHandle, x, y)
     Local cz# = VPSceneCenterZ# - Cos(VPPitch#) * Cos(VPYaw#) * VPDistance#
     PositionEntity VPCam, cx#, cy#, cz#
     PointEntity VPCam, VPGround   ; PointEntity at ground center keeps camera level
+
+    ; ---- Highlight pass: scale the focused marker 1.5x ---------------------
+    ; The composer publishes LoomZoneHighlightKind/Idx during render
+    ; (set when scrolling past a sub-section). We re-scale the matching
+    ; marker bigger so it pops in the viewport. Others stay at BaseScale.
+    Local hm.ZoneViewportMarker
+    For hm = Each ZoneViewportMarker
+        If hm\Kind = LoomZoneHighlightKind$ And hm\IndexN = LoomZoneHighlightIdx And LoomZoneHighlightKind$ <> ""
+            ScaleEntity hm\EN, hm\BaseScale * 1.6, hm\BaseScale * 1.6, hm\BaseScale * 1.6
+        Else If hm\BaseScale > 0.0
+            ; Restore base scale (might have been highlighted last frame).
+            ScaleEntity hm\EN, hm\BaseScale, hm\BaseScale, hm\BaseScale
+        EndIf
+    Next
 
     ; ---- Render -------------------------------------------------------------
     ShowEntity VPCam
