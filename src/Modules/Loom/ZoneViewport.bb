@@ -94,6 +94,8 @@ Global VPPanLastMY = 0
 ; RMB edge-detect so shift+RMB add-trigger fires once on the press
 ; instead of repeatedly while the button is held.
 Global VPRMBPrevDown = False
+; MMB edge-detect for the same reason on shift+MMB add-spawn.
+Global VPMMBPrevDown = False
 
 ; Per-zone counts cached at load time (saves recomputing in renderer
 ; just for the legend overlay).
@@ -404,6 +406,106 @@ Function Loom_AddTriggerAtClick(zoneHandle, localX, localY)
     If LoomComposer <> Null Then Composer::markDirtyForKind(LoomComposer, "zone")
     Toast_Show("Added trigger " + Str(slot) + " at (" + Int(nx#) + ", " + Int(nz#) + ")", "success")
     WriteLog(LoomLog, "ZoneViewport: shift+RMB added trigger " + Str(slot) + " at " + nx# + ", " + nz#)
+End Function
+
+
+; =============================================================================
+; Loom_AddSpawnAtClick -- shift+MMB on empty ground creates a NEW
+; waypoint at the click + a NEW spawn referencing that waypoint.
+; Default spawn actor = first defined actor in the project. Spawns
+; need a waypoint (their world position is the waypoint's position),
+; so a fresh spawn that doesn't reuse an existing waypoint creates
+; both side-by-side.
+; =============================================================================
+Function Loom_AddSpawnAtClick(zoneHandle, localX, localY)
+    If VPInitOK = False Then Return
+    Local Ar.Area = Object.Area(zoneHandle)
+    If Ar = Null Then Return
+
+    ; Force ground pick
+    Local m.ZoneViewportMarker
+    For m = Each ZoneViewportMarker
+        If m\Kind <> "" Then EntityPickMode m\EN, 0
+    Next
+    CameraPick VPCam, localX, localY
+    For m = Each ZoneViewportMarker
+        If m\Kind <> "" Then EntityPickMode m\EN, 1
+    Next
+
+    Local hit = PickedEntity()
+    If hit <> VPGround Then Return
+    Local nx# = PickedX#()
+    Local nz# = PickedZ#()
+
+    ; Find first defined actor for the spawn ref. If no actors exist,
+    ; bail with a toast -- a spawn without a valid actor is useless.
+    Local defaultActor = 0
+    Local ai
+    For ai = 1 To 65534
+        If ActorList(ai) <> Null
+            defaultActor = ai
+            Exit
+        EndIf
+    Next
+    If defaultActor = 0
+        Toast_Show("No actors defined -- create one before adding a spawn", "warning")
+        Return
+    EndIf
+
+    ; Find first empty waypoint slot. Waypoints share the X/Y/Z = 0
+    ; "empty" convention with the rest of the zone editor.
+    Local wpSlot = -1
+    Local wi
+    For wi = 0 To 1999
+        If Ar\WaypointX#[wi] = 0.0 And Ar\WaypointZ#[wi] = 0.0
+            wpSlot = wi
+            Exit
+        EndIf
+    Next
+    If wpSlot < 0
+        Toast_Show("No empty waypoint slots in this zone", "warning")
+        Return
+    EndIf
+
+    ; Find first empty spawn slot (SpawnActor = 0 = empty).
+    Local spSlot = -1
+    Local si
+    For si = 0 To 999
+        If Ar\SpawnActor[si] = 0
+            spSlot = si
+            Exit
+        EndIf
+    Next
+    If spSlot < 0
+        Toast_Show("No empty spawn slots in this zone", "warning")
+        Return
+    EndIf
+
+    ; Seed waypoint
+    Ar\WaypointX#[wpSlot] = nx#
+    Ar\WaypointY#[wpSlot] = 0.0
+    Ar\WaypointZ#[wpSlot] = nz#
+    Ar\NextWaypointA[wpSlot] = -1
+    Ar\NextWaypointB[wpSlot] = -1
+    Ar\PrevWaypoint[wpSlot]  = -1
+    Ar\WaypointPause[wpSlot] = 0
+
+    ; Seed spawn
+    Ar\SpawnActor[spSlot]        = defaultActor
+    Ar\SpawnWaypoint[spSlot]     = wpSlot
+    Ar\SpawnSize#[spSlot]        = 5.0
+    Ar\SpawnRange#[spSlot]       = 100.0
+    Ar\SpawnFrequency[spSlot]    = 30000
+    Ar\SpawnMax[spSlot]          = 1
+    Ar\SpawnScript$[spSlot]      = ""
+    Ar\SpawnActorScript$[spSlot] = ""
+    Ar\SpawnDeathScript$[spSlot] = ""
+
+    Loom_LoadZoneMarkers(Ar)
+    VPDirty = True
+    If LoomComposer <> Null Then Composer::markDirtyForKind(LoomComposer, "zone")
+    Toast_Show("Added spawn " + Str(spSlot) + " (waypoint " + Str(wpSlot) + ") at (" + Int(nx#) + ", " + Int(nz#) + ")", "success")
+    WriteLog(LoomLog, "ZoneViewport: shift+MMB added spawn " + Str(spSlot) + " + waypoint " + Str(wpSlot) + " at " + nx# + ", " + nz#)
 End Function
 
 
@@ -819,7 +921,19 @@ Function Loom_DrawZoneViewport(zoneHandle, x, y)
     ; feels natural relative to the visible camera orientation. Pan speed
     ; scales with VPDistance so farther zooms produce larger per-pixel
     ; pan steps (keeps the apparent on-screen drag rate consistent).
-    If MouseDown(3) = True And inside = True
+    Local mmbDown = MouseDown(3)
+    Local mmbJustPressed = (mmbDown = True And VPMMBPrevDown = False)
+    VPMMBPrevDown = mmbDown
+
+    ; shift+MMB-press on ground = add spawn (waypoint+spawn pair).
+    ; Edge-detect so it fires once per press, not per held frame.
+    ; Fires BEFORE the pan branch -- pan should still work with
+    ; plain MMB (shift held = override to add-spawn).
+    If mmbJustPressed = True And inside = True And (KeyDown(42) = True Or KeyDown(54) = True)
+        Loom_AddSpawnAtClick(zoneHandle, mx - x, my - y)
+    EndIf
+
+    If mmbDown = True And inside = True
         If VPPanning = False
             VPPanning = True
             VPPanLastMX = mx
@@ -953,7 +1067,7 @@ Function Loom_DrawZoneViewport(zoneHandle, x, y)
     EndIf
 
     If inside = True
-        LoomText x + 8, y + VP_RT_SIZE - 18, "LMB=orbit RMB=move wheel=zoom MMB=pan shift+L=add portal shift+R=add trigger", LOOM_STONE_300_R, LOOM_STONE_300_G, LOOM_STONE_300_B
+        LoomText x + 8, y + VP_RT_SIZE - 18, "LMB=orbit RMB=move wheel=zoom MMB=pan  shift+LMB/RMB/MMB=add portal/trigger/spawn", LOOM_STONE_300_R, LOOM_STONE_300_G, LOOM_STONE_300_B
     EndIf
 
     Return True
