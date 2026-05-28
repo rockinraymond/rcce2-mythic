@@ -462,6 +462,7 @@ Type Palette
         Local emitFaction% = (self\pickerMode = False Or self\pickerKind = "faction")
         Local emitAnimSet% = (self\pickerMode = False Or self\pickerKind = "animset")
         Local emitScript% = (self\pickerMode = False Or self\pickerKind = "script")
+        Local emitTexture% = (self\pickerMode = False Or self\pickerKind = "texture")
 
         If emitActor = True
             For Ac.Actor = Each Actor
@@ -530,6 +531,16 @@ Type Palette
                 Local scriptScore% = Palette::scoreOrBaseline(self, q, sf\Name$, showAllBaseline)
                 If scriptScore > 0
                     Palette::addResult(self, "script", sf\Index, sf\Name$ + ".rsl", "script", scriptScore)
+                EndIf
+            Next
+        EndIf
+
+        If emitTexture = True
+            // TextureEntry pool is populated by Textures_Init at boot.
+            For te.TextureEntry = Each TextureEntry
+                Local texScore% = Palette::scoreOrBaseline(self, q, te\Filename$, showAllBaseline)
+                If texScore > 0
+                    Palette::addResult(self, "texture", te\Index, te\Filename$ + " #" + Str(te\ID), "texture", texScore)
                 EndIf
             Next
         EndIf
@@ -707,6 +718,7 @@ Type Palette
         If kind = "faction" Then Return "F"
         If kind = "animset" Then Return "M"
         If kind = "script"  Then Return "x"
+        If kind = "texture" Then Return "T"
         Return "?"
     End Method
 End Type

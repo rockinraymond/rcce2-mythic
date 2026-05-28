@@ -421,6 +421,8 @@ Type Composer
             Composer::renderSettings(self, x, scrolledBodyY, w, bodyH, mx, my, clicked)
         Else If kind = "script"
             Composer::renderScript(self, x, scrolledBodyY, w, bodyH, mx, my, clicked, rightClicked)
+        Else If kind = "texture"
+            Composer::renderTexture(self, x, scrolledBodyY, w, bodyH, mx, my, clicked, rightClicked)
         EndIf
 
         // Scrollbar indicator -- thin brass thumb on the right edge,
@@ -3646,6 +3648,105 @@ Type Composer
         EndIf
         If Composer::canPaintRow(self, y, CMP_ROW_H) = True
             LoomText(panelX + CMP_PAD, y + 4, Str(itemHits) + " item(s) | " + Str(spellHits) + " spell(s) | " + Str(zoneHits) + " zone(s)", LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
+        EndIf
+        y = y + CMP_ROW_H
+
+        Composer::recordContentBottom(self, y)
+    End Method
+
+
+    // -------------------------------------------------------------------------
+    // renderTexture -- composer view for a focused texture from the
+    // TextureCatalog. Shows metadata + large preview + every entity
+    // that references this texture ID across the project.
+    //
+    // Reverse-ref scanners walk:
+    //   - Item\ThumbnailTexID
+    //   - Spell\ThumbnailTexID
+    //   - Actor\BloodTexID
+    //   - Actor\MaleFaceIDs[0..4] / FemaleFaceIDs[0..4]
+    //   - Actor\MaleBodyIDs[0..4] / FemaleBodyIDs[0..4]
+    // Each match emits a chip with a slot-tagged label so designers
+    // see which appearance slot referenced this asset.
+    // -------------------------------------------------------------------------
+    Method renderTexture(panelX%, bodyY%, panelW%, bodyH%, mx%, my%, clicked%, rightClicked%)
+        Local te.TextureEntry = Textures_GetByIndex(self\threads\focusID)
+        If te = Null Then Return
+
+        Local y% = bodyY
+        y = Composer::row(self, panelX, panelW, y, "Filename", te\Filename$)
+        y = Composer::row(self, panelX, panelW, y, "ID",       Str(te\ID))
+        y = Composer::row(self, panelX, panelW, y, "Flags",    Str(te\Flags))
+        y = Composer::row(self, panelX, panelW, y, "Path",     "Data\Textures\" + te\Filename$)
+
+        // Large preview -- reuse the 64x64 cached scaled image. Future
+        // iter could swap to a bigger size cache for full-size view.
+        y = Composer::sectionHeader(self, panelX, panelW, y, "Preview")
+        If Composer::canPaintRow(self, y, 80) = True
+            Loom_DrawThumbnailLarge(te\ID, panelX + CMP_PAD, y)
+        EndIf
+        y = y + 72
+
+        // Reverse references
+        y = Composer::sectionHeader(self, panelX, panelW, y, "Used by")
+        Local itemHits% = 0
+        Local spellHits% = 0
+        Local actorHits% = 0
+
+        // Items
+        For It.Item = Each Item
+            If It\ThumbnailTexID = te\ID
+                If itemHits < 50
+                    y = Composer::chipRow(self, panelX, panelW, y, "Thumbnail", "item", It\ID, mx, my, clicked, rightClicked, "")
+                EndIf
+                itemHits = itemHits + 1
+            EndIf
+        Next
+
+        // Spells
+        For Sp.Spell = Each Spell
+            If Sp\ThumbnailTexID = te\ID
+                If spellHits < 50
+                    y = Composer::chipRow(self, panelX, panelW, y, "Thumbnail", "spell", Sp\ID, mx, my, clicked, rightClicked, "")
+                EndIf
+                spellHits = spellHits + 1
+            EndIf
+        Next
+
+        // Actors -- iterate the array-based ActorList; check each
+        // appearance-array slot for a match. One chip per actor with
+        // a slot label so multiple slot hits don't multiply chips.
+        Local actorIdx% = 0
+        For actorIdx = 0 To 65535
+            Local Ac.Actor = ActorList(actorIdx)
+            If Ac <> Null
+                Local slotLabel$ = ""
+                If Ac\BloodTexID = te\ID Then slotLabel = slotLabel + "Blood "
+                Local ai% = 0
+                For ai = 0 To 4
+                    If Ac\MaleFaceIDs[ai]   = te\ID Then slotLabel = slotLabel + "MFace[" + Str(ai) + "] "
+                    If Ac\FemaleFaceIDs[ai] = te\ID Then slotLabel = slotLabel + "FFace[" + Str(ai) + "] "
+                    If Ac\MaleBodyIDs[ai]   = te\ID Then slotLabel = slotLabel + "MBody[" + Str(ai) + "] "
+                    If Ac\FemaleBodyIDs[ai] = te\ID Then slotLabel = slotLabel + "FBody[" + Str(ai) + "] "
+                Next
+                If slotLabel <> ""
+                    If actorHits < 50
+                        y = Composer::chipRow(self, panelX, panelW, y, slotLabel, "actor", Ac\ID, mx, my, clicked, rightClicked, "")
+                    EndIf
+                    actorHits = actorHits + 1
+                EndIf
+            EndIf
+        Next
+
+        Local totalHits% = itemHits + spellHits + actorHits
+        If totalHits = 0
+            If Composer::canPaintRow(self, y, CMP_ROW_H) = True
+                LoomText(panelX + CMP_PAD, y + 4, "(unused -- safe to remove from the catalog)", LOOM_WARNING_R, LOOM_WARNING_G, LOOM_WARNING_B)
+            EndIf
+            y = y + CMP_ROW_H
+        EndIf
+        If Composer::canPaintRow(self, y, CMP_ROW_H) = True
+            LoomText(panelX + CMP_PAD, y + 4, Str(itemHits) + " item(s) | " + Str(spellHits) + " spell(s) | " + Str(actorHits) + " actor(s)", LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
         EndIf
         y = y + CMP_ROW_H
 
