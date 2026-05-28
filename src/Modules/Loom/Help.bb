@@ -120,6 +120,10 @@ Type Help
         rowY = Help::row(self, modalX, rowY, "Shift+click a card",        "Add/remove from bulk-select set")
         rowY = rowY + 6
 
+        rowY = Help::section(self, modalX, rowY, "Bulk edit (when selection non-empty)")
+        rowY = Help::row(self, modalX, rowY, "Click Delete in panel",     "Arm bulk delete; click again to commit")
+        rowY = rowY + 6
+
         rowY = Help::section(self, modalX, rowY, "Ribbon (top strip)")
         rowY = Help::row(self, modalX, rowY, "Click dirty badge",        "Save that kind")
         rowY = Help::row(self, modalX, rowY, "Click broken-ref count",   "Open the broken-ref finder")
