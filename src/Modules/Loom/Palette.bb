@@ -463,6 +463,7 @@ Type Palette
         Local emitAnimSet% = (self\pickerMode = False Or self\pickerKind = "animset")
         Local emitScript% = (self\pickerMode = False Or self\pickerKind = "script")
         Local emitTexture% = (self\pickerMode = False Or self\pickerKind = "texture")
+        Local emitMesh% = (self\pickerMode = False Or self\pickerKind = "mesh")
 
         If emitActor = True
             For Ac.Actor = Each Actor
@@ -541,6 +542,15 @@ Type Palette
                 Local texScore% = Palette::scoreOrBaseline(self, q, te\Filename$, showAllBaseline)
                 If texScore > 0
                     Palette::addResult(self, "texture", te\Index, te\Filename$ + " #" + Str(te\ID), "texture", texScore)
+                EndIf
+            Next
+        EndIf
+
+        If emitMesh = True
+            For mh.MeshEntry = Each MeshEntry
+                Local meshScore% = Palette::scoreOrBaseline(self, q, mh\Filename$, showAllBaseline)
+                If meshScore > 0
+                    Palette::addResult(self, "mesh", mh\Index, mh\Filename$ + " #" + Str(mh\ID), "mesh", meshScore)
                 EndIf
             Next
         EndIf
@@ -719,6 +729,7 @@ Type Palette
         If kind = "animset" Then Return "M"
         If kind = "script"  Then Return "x"
         If kind = "texture" Then Return "T"
+        If kind = "mesh"    Then Return "m"
         Return "?"
     End Method
 End Type

@@ -124,6 +124,7 @@ Include "Modules\Loom\Tools.bb"
 Include "Modules\Loom\ScriptsCatalog.bb"
 Include "Modules\Loom\ScriptSearch.bb"
 Include "Modules\Loom\TextureCatalog.bb"
+Include "Modules\Loom\MeshCatalog.bb"
 Include "Modules\Loom\Recents.bb"
 Include "Modules\Loom\EntityFactory.bb"
 Include "Modules\Loom\SaveAll.bb"
@@ -444,6 +445,9 @@ WriteLog(LoomLog, "Scripts catalog: " + Str(ScriptsTotalCount) + " .rsl files in
 ; the file warm; powers the Textures browser tab.
 Textures_Init()
 WriteLog(LoomLog, "Texture catalog: " + Str(TexturesTotalCount) + " textures indexed")
+; Mesh catalog: same shape as the texture scan, against Meshes.dat.
+Meshes_Init()
+WriteLog(LoomLog, "Mesh catalog: " + Str(MeshesTotalCount) + " meshes indexed")
 
 
 // -----------------------------------------------------------------------------

@@ -423,6 +423,8 @@ Type Composer
             Composer::renderScript(self, x, scrolledBodyY, w, bodyH, mx, my, clicked, rightClicked)
         Else If kind = "texture"
             Composer::renderTexture(self, x, scrolledBodyY, w, bodyH, mx, my, clicked, rightClicked)
+        Else If kind = "mesh"
+            Composer::renderMesh(self, x, scrolledBodyY, w, bodyH, mx, my, clicked, rightClicked)
         EndIf
 
         // Scrollbar indicator -- thin brass thumb on the right edge,
@@ -3747,6 +3749,102 @@ Type Composer
         EndIf
         If Composer::canPaintRow(self, y, CMP_ROW_H) = True
             LoomText(panelX + CMP_PAD, y + 4, Str(itemHits) + " item(s) | " + Str(spellHits) + " spell(s) | " + Str(actorHits) + " actor(s)", LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
+        EndIf
+        y = y + CMP_ROW_H
+
+        Composer::recordContentBottom(self, y)
+    End Method
+
+
+    // -------------------------------------------------------------------------
+    // renderMesh -- composer view for a focused mesh from the
+    // MeshCatalog. Shows metadata + 3D orbit/zoom preview (via the
+    // existing Loom_DrawMeshPreview widget from iter 40) + every
+    // entity that references this mesh ID.
+    //
+    // Reverse-ref scanners walk:
+    //   - Item\MMeshID / Item\FMeshID
+    //   - Actor\MeshIDs[0..7] (base + 6 gubbins)
+    //   - Actor\BeardIDs[0..4]
+    //   - Actor\MaleHairIDs[0..4] / FemaleHairIDs[0..4]
+    // -------------------------------------------------------------------------
+    Method renderMesh(panelX%, bodyY%, panelW%, bodyH%, mx%, my%, clicked%, rightClicked%)
+        Local mh.MeshEntry = Meshes_GetByIndex(self\threads\focusID)
+        If mh = Null Then Return
+
+        Local y% = bodyY
+        y = Composer::row(self, panelX, panelW, y, "Filename",  mh\Filename$)
+        y = Composer::row(self, panelX, panelW, y, "ID",        Str(mh\ID))
+        y = Composer::row(self, panelX, panelW, y, "Animated",  Composer::boolLabel(self, mh\IsAnim))
+        y = Composer::row(self, panelX, panelW, y, "Path",      "Data\Meshes\" + mh\Filename$)
+
+        // 3D preview -- reuse the orbit/zoom MeshPreview widget so
+        // designers can spin / inspect the mesh in 3D. Same widget
+        // backs the Actor + Item composer mesh previews; we just
+        // hand it the focused mesh's ID + a centered rect.
+        y = Composer::sectionHeader(self, panelX, panelW, y, "Preview")
+        Local previewX% = panelX + (panelW - LOOM_PREVIEW_SIZE) / 2
+        Local previewY% = y
+        // PreviewActorID = 0 ensures the mesh draws bare (no body
+        // texture overlay) -- we don't know which actor would
+        // "own" this mesh in catalog view.
+        PreviewActorID = 0
+        If Composer::canPaintRow(self, y, LOOM_PREVIEW_SIZE) = True
+            Loom_DrawMeshPreview(mh\ID, previewX, previewY, LOOM_PREVIEW_SIZE)
+        EndIf
+        y = y + LOOM_PREVIEW_SIZE + 8
+
+        // Reverse refs
+        y = Composer::sectionHeader(self, panelX, panelW, y, "Used by")
+        Local itemHits% = 0
+        Local actorHits% = 0
+
+        For It.Item = Each Item
+            If It\MMeshID = mh\ID Or It\FMeshID = mh\ID
+                If itemHits < 50
+                    Local label$ = ""
+                    If It\MMeshID = mh\ID Then label = label + "Male "
+                    If It\FMeshID = mh\ID Then label = label + "Female "
+                    y = Composer::chipRow(self, panelX, panelW, y, label, "item", It\ID, mx, my, clicked, rightClicked, "")
+                EndIf
+                itemHits = itemHits + 1
+            EndIf
+        Next
+
+        // Actors -- check all 8 MeshIDs + beard + hair slot families
+        Local actorIdx% = 0
+        For actorIdx = 0 To 65535
+            Local Ac.Actor = ActorList(actorIdx)
+            If Ac <> Null
+                Local slotLabel$ = ""
+                Local mi% = 0
+                For mi = 0 To 7
+                    If Ac\MeshIDs[mi] = mh\ID Then slotLabel = slotLabel + "Mesh[" + Str(mi) + "] "
+                Next
+                Local bi% = 0
+                For bi = 0 To 4
+                    If Ac\BeardIDs[bi]      = mh\ID Then slotLabel = slotLabel + "Beard[" + Str(bi) + "] "
+                    If Ac\MaleHairIDs[bi]   = mh\ID Then slotLabel = slotLabel + "MHair[" + Str(bi) + "] "
+                    If Ac\FemaleHairIDs[bi] = mh\ID Then slotLabel = slotLabel + "FHair[" + Str(bi) + "] "
+                Next
+                If slotLabel <> ""
+                    If actorHits < 50
+                        y = Composer::chipRow(self, panelX, panelW, y, slotLabel, "actor", Ac\ID, mx, my, clicked, rightClicked, "")
+                    EndIf
+                    actorHits = actorHits + 1
+                EndIf
+            EndIf
+        Next
+
+        Local totalHits% = itemHits + actorHits
+        If totalHits = 0
+            If Composer::canPaintRow(self, y, CMP_ROW_H) = True
+                LoomText(panelX + CMP_PAD, y + 4, "(unused -- safe to remove from the catalog)", LOOM_WARNING_R, LOOM_WARNING_G, LOOM_WARNING_B)
+            EndIf
+            y = y + CMP_ROW_H
+        EndIf
+        If Composer::canPaintRow(self, y, CMP_ROW_H) = True
+            LoomText(panelX + CMP_PAD, y + 4, Str(itemHits) + " item(s) | " + Str(actorHits) + " actor(s)", LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
         EndIf
         y = y + CMP_ROW_H
 
