@@ -219,13 +219,45 @@ Function EntityFactory_Duplicate%(kind$, refID%, threads.Threads)
     If kind = "spell"   Then Return EntityFactory_DuplicateSpell(refID, threads)
     If kind = "animset" Then Return EntityFactory_DuplicateAnimSet(refID, threads)
     If kind = "faction" Then Return EntityFactory_DuplicateFaction(refID, threads)
-    If kind = "zone"
-        Toast_Show("Duplicate not yet supported for zones", "warning")
-        WriteLog(LoomLog, "EntityFactory: duplicate unsupported for kind 'zone'")
-        Return False
-    EndIf
+    If kind = "zone"   Then Return EntityFactory_DuplicateZone(refID, threads)
     WriteLog(LoomLog, "EntityFactory: duplicate unknown kind '" + kind + "'")
     Return False
+End Function
+
+
+// -----------------------------------------------------------------------------
+// EntityFactory_DuplicateZone -- clone an Area via DuplicateAreaTemplate
+// (which copies every portal / spawn / trigger / waypoint), then
+// re-uniqueify the name so it doesn't collide with the source's .dat
+// at save time. ServerSaveArea uses A\Name$ as the filename, so a
+// duplicate with the same name as the source would silently overwrite
+// the source's on-disk state on the next save.
+// -----------------------------------------------------------------------------
+Function EntityFactory_DuplicateZone%(srcHandle%, threads.Threads)
+    Local Src.Area = Object.Area(srcHandle)
+    If Src = Null
+        Toast_Show("Duplicate failed (stale zone handle)", "danger")
+        Return False
+    EndIf
+
+    Local Dst.Area = DuplicateAreaTemplate(Src)
+    If Dst = Null
+        Toast_Show("Duplicate failed (ServerCreateArea returned Null)", "danger")
+        Return False
+    EndIf
+
+    // DuplicateAreaTemplate set Dst\Name$ to src.Name + " (copy)". If
+    // that collides with an existing zone (e.g. duplicating something
+    // already named "Foo (copy)"), append a numeric suffix.
+    Dst\Name$ = EntityFactory_UniqueZoneName$(Dst\Name$)
+
+    Threads::focus(threads, "zone", Handle(Dst))
+    ZoneSaved = False
+    WorldCache_Invalidate()
+    Timeline_RecordCreate("zone", Handle(Dst), Dst\Name$)
+    Toast_Show("Duplicated zone " + Dst\Name$, "success")
+    WriteLog(LoomLog, "EntityFactory: duplicated zone " + Src\Name$ + " -> " + Dst\Name$)
+    Return True
 End Function
 
 
