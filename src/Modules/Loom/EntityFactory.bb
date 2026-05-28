@@ -180,16 +180,17 @@ End Function
 // EntityFactory_UniqueZoneName -- return a name with " 2" / " 3" / ...
 // appended until no existing zone matches. ServerSaveArea uses Name$ as the
 // filename, so a duplicate would silently overwrite an existing zone file.
+//
+// The dedup logic itself lives in NameUtil.bb (pure + unit-tested); here we
+// just build the set of existing zone names from the live Area list and
+// hand it to Loom_NextUniqueName.
 // -----------------------------------------------------------------------------
 Function EntityFactory_UniqueZoneName$(base$)
-    If EntityFactory_ZoneNameExists%(base) = False Then Return base
-    Local i% = 2
-    While i < 1000
-        Local candidate$ = base + " " + Str(i)
-        If EntityFactory_ZoneNameExists%(candidate) = False Then Return candidate
-        i = i + 1
-    Wend
-    Return base + " " + Str(MilliSecs())     // unreachable in practice
+    Local setStr$ = ""
+    For A.Area = Each Area
+        setStr = Loom_AddNameToSet$(setStr, A\Name$)
+    Next
+    Return Loom_NextUniqueName$(base, setStr)
 End Function
 
 
