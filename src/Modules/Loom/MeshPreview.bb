@@ -55,6 +55,12 @@ Global PreviewInitOK     = False      ; True once the camera + RT exist
 Global PreviewSpinTime#  = 0.0
 Global PreviewLastTickMs = 0          ; for delta calc
 Global PreviewMeshScale# = 1.0        ; auto-fit scale for current mesh
+Global PreviewLookTarget = 0          ; hidden pivot at character CENTER;
+                                      ; camera PointEntity-s this so the
+                                      ; view frames the body's middle, not
+                                      ; the mesh origin (which is at feet
+                                      ; for character meshes -> looking at
+                                      ; the floor is the wrong default).
 
 ; PreviewActorID lives in ImageCache.bb (included BEFORE Composer)
 ; so the Strict Composer module can write it without the dim-write-
@@ -103,6 +109,14 @@ Function Loom_InitMeshPreview()
     PositionEntity PreviewLight, LOOM_PREVIEW_CAM_X#, LOOM_PREVIEW_CAM_Y# + 20.0, LOOM_PREVIEW_CAM_Z# - 10.0
     RotateEntity   PreviewLight, 45, -30, 0
     LightColor     PreviewLight, 255, 255, 230
+
+    ; Hidden pivot the camera points at. Position set per-mesh in
+    ; Loom_LoadPreviewMesh to mesh.origin + meshHeight/2 so the view
+    ; frames the body's middle, not the feet. Until then, parked at
+    ; the camera-region origin.
+    PreviewLookTarget = CreatePivot()
+    PositionEntity PreviewLookTarget, LOOM_PREVIEW_CAM_X#, LOOM_PREVIEW_CAM_Y#, LOOM_PREVIEW_CAM_Z#
+    HideEntity PreviewLookTarget
 
     PreviewInitOK = True
     PreviewLastTickMs = MilliSecs()
@@ -165,10 +179,20 @@ Function Loom_LoadPreviewMesh(meshID)
 
     PreviewMesh = ent
     PreviewMeshID = meshID
+
+    ; Reposition the look-target pivot at the character's vertical
+    ; midline. MeshHeight returns the unscaled bbox extent in mesh
+    ; units; for typical RC actor meshes this is roughly the height
+    ; in world units after scale, so half is the centre. Cameras then
+    ; PointEntity this pivot and frame the body not the feet.
+    Local mh# = MeshHeight#(ent)
+    If mh# <= 0.0 Then mh# = 10.0   ; sane default if mesh has no bbox
+    PositionEntity PreviewLookTarget, LOOM_PREVIEW_CAM_X#, LOOM_PREVIEW_CAM_Y# + mh# / 2.0, LOOM_PREVIEW_CAM_Z#
+
     ; New mesh = fresh view. Reset orbit + zoom so the user doesn't
     ; jump into a previous mesh's last camera angle.
     Loom_ResetPreviewOrbit()
-    WriteLog(LoomLog, "MeshPreview: loaded mesh ID " + meshID)
+    WriteLog(LoomLog, "MeshPreview: loaded mesh ID " + meshID + " (height " + mh# + ")")
     Return True
 End Function
 
@@ -306,8 +330,11 @@ Function Loom_DrawMeshPreview(meshID, x, y, size)
             If PreviewCamDistance# > 500.0 Then PreviewCamDistance# = 500.0
             ; Reposition the camera at the new distance from the mesh
             PositionEntity PreviewCam, LOOM_PREVIEW_CAM_X#, LOOM_PREVIEW_CAM_Y# + 5.0, LOOM_PREVIEW_CAM_Z# - PreviewCamDistance#
-            PointEntity PreviewCam, PreviewMesh
+            PointEntity PreviewCam, PreviewLookTarget
             PreviewManualActive = True
+            ; Consume the wheel so the composer's scroll handler doesn't
+            ; ALSO see the same tick and scroll the body while we zoom.
+            Loom_ConsumeWheel()
         EndIf
     EndIf
 
@@ -361,7 +388,7 @@ Function Loom_ResetPreviewOrbit()
     PreviewCamDistance# = LOOM_PREVIEW_CAM_RANGE#
     If PreviewCam <> 0
         PositionEntity PreviewCam, LOOM_PREVIEW_CAM_X#, LOOM_PREVIEW_CAM_Y# + 5.0, LOOM_PREVIEW_CAM_Z# - PreviewCamDistance#
-        If PreviewMesh <> 0 Then PointEntity PreviewCam, PreviewMesh
+        If PreviewMesh <> 0 Then PointEntity PreviewCam, PreviewLookTarget
     EndIf
 End Function
 

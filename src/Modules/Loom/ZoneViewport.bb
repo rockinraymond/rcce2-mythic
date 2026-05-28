@@ -1035,6 +1035,8 @@ Function Loom_DrawZoneViewport(zoneHandle, x, y)
             If VPDistance# < 20.0 Then VPDistance# = 20.0
             If VPDistance# > 5000.0 Then VPDistance# = 5000.0
             VPDirty = True
+            ; Consume so composer scroll doesn't also fire.
+            Loom_ConsumeWheel()
         EndIf
     EndIf
 

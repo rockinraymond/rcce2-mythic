@@ -310,7 +310,12 @@ Type Composer
         // each tick is CMP_SCROLL_STEP pixels. Inverted: wheel-down is
         // positive Z, which should scroll the content UP (offset
         // increases, later rows come into view).
-        Local wheelTicks% = MouseZ()
+        // Use the per-frame cached wheel. Direct MouseZ() returns 0 here
+        // because Loom_BeginFrame drained it at frame start; viewports
+        // (MeshPreview / ZoneViewport / Atlas) Loom_ConsumeWheel() when
+        // the cursor is inside their rect so this scroll handler sees
+        // 0 and the wheel feels like "owned by whatever's under cursor."
+        Local wheelTicks% = Loom_MouseWheel()
         If wheelTicks <> 0
             self\scrollOffset = self\scrollOffset - wheelTicks * CMP_SCROLL_STEP
             If self\scrollOffset < 0 Then self\scrollOffset = 0
@@ -1946,7 +1951,12 @@ Type Composer
         If self\bulkEditField <> "" Then Composer::pumpBulkKeyboard(self)
 
         // Mouse wheel scroll -- same shape as focused-entity composer.
-        Local wheelTicks% = MouseZ()
+        // Use the per-frame cached wheel. Direct MouseZ() returns 0 here
+        // because Loom_BeginFrame drained it at frame start; viewports
+        // (MeshPreview / ZoneViewport / Atlas) Loom_ConsumeWheel() when
+        // the cursor is inside their rect so this scroll handler sees
+        // 0 and the wheel feels like "owned by whatever's under cursor."
+        Local wheelTicks% = Loom_MouseWheel()
         If wheelTicks <> 0
             self\scrollOffset = self\scrollOffset - wheelTicks * CMP_SCROLL_STEP
             If self\scrollOffset < 0 Then self\scrollOffset = 0
@@ -2773,6 +2783,23 @@ Type Composer
         If A = Null Then Return
 
         Local y% = bodyY
+
+        // 3D mesh preview pinned to the TOP of the composer body so
+        // it's the FIRST thing the designer sees and the LMB-drag /
+        // wheel-zoom hit-rect doesn't overlap any int input cell.
+        // Centered horizontally; field rows flow below.
+        Local actorPreviewX% = panelX + (panelW - LOOM_PREVIEW_SIZE) / 2
+        Local actorPreviewY% = y
+        // Publish actor ID so MeshPreview drapes body texture on the
+        // mesh. Cleared after the draw call to avoid bleeding into
+        // other previews.
+        PreviewActorID = A\ID
+        If Composer::canPaintRow(self, y, LOOM_PREVIEW_SIZE) = True
+            Loom_DrawMeshPreview(A\MeshIDs[0], actorPreviewX, actorPreviewY, LOOM_PREVIEW_SIZE)
+        EndIf
+        PreviewActorID = 0
+        y = y + LOOM_PREVIEW_SIZE + 8
+
         y = Composer::row(self, panelX, panelW, y, "ID",            Str(A\ID))
         y = Composer::editableRow(self, panelX, panelW, y,    "Race",          "actor", A\ID, "race",          A\Race$,        mx, my, clicked)
         y = Composer::editableRow(self, panelX, panelW, y,    "Class",         "actor", A\ID, "class",         A\Class$,       mx, my, clicked)
@@ -2826,23 +2853,10 @@ Type Composer
         // rows since mesh preview requires a 3D viewport (ADR 004).
         y = Composer::sectionHeader(self, panelX, panelW, y, "Body meshes")
 
-        // 3D mesh preview widget -- LOOM_PREVIEW_SIZE square, anchored to
-        // the panel's right side. Renders A\MeshIDs[0] (male base) with
-        // an auto-spinning camera. The editable int rows for the 8 mesh
-        // slots flow down the LEFT side of the panel underneath; the
-        // preview overlaps with them visually but the int inputs are
-        // shorter so the preview sits cleanly to the right.
-        Local previewX% = panelX + panelW - LOOM_PREVIEW_SIZE - CMP_PAD
-        Local previewY% = y
-        // Publish actor ID so MeshPreview can drape body/face textures
-        // on the mesh during load (instead of showing bare gray).
-        // Set BEFORE the draw call; cleared after to avoid bleeding
-        // into the item preview's bare-mesh expectation.
-        PreviewActorID = A\ID
-        If Composer::canPaintRow(self, y, LOOM_PREVIEW_SIZE) = True
-            Loom_DrawMeshPreview(A\MeshIDs[0], previewX, previewY, LOOM_PREVIEW_SIZE)
-        EndIf
-        PreviewActorID = 0
+        // 3D mesh preview now lives at the TOP of renderActor's body
+        // (above ID/Race/Class etc.) so it's always visible without
+        // scrolling and its hit-rect can't shadow any int input cell
+        // here. See the actorPreview* block at the top of renderActor.
 
         y = Composer::assetIntRow(self, panelX, panelW, y, "Male base",     "actor", A\ID, "mesh_0", A\MeshIDs[0], "mesh", mx, my, clicked, rightClicked)
         y = Composer::assetIntRow(self, panelX, panelW, y, "Female base",   "actor", A\ID, "mesh_1", A\MeshIDs[1], "mesh", mx, my, clicked, rightClicked)
