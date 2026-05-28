@@ -130,6 +130,11 @@ Include "Modules\Loom\Toasts.bb"
 // and after every other module that might need it. Pulls in Media.bb's
 // GetMesh + Blitz3D 3D primitives.
 Include "Modules\Loom\MeshPreview.bb"
+// Zone schematic 3D viewport -- renders portal/spawn/trigger/waypoint
+// markers in a 384x384 RT. Built on top of the same render-to-texture
+// pattern as MeshPreview but with its own camera/light at y=20000 so
+// the two previews can coexist without conflicting.
+Include "Modules\Loom\ZoneViewport.bb"
 
 
 // =============================================================================
@@ -463,6 +468,11 @@ Loom_LoadSettings()
 // at shutdown via Loom_ShutdownMeshPreview.
 Loom_InitMeshPreview()
 
+// Zone schematic viewport -- separate camera/light/RT at y=20000.
+// Used by the zone composer to show portal/spawn/trigger/waypoint
+// markers in a 3D viewport.
+Loom_InitZoneViewport()
+
 WriteLog(LoomLog, "** Data load complete **")
 
 
@@ -481,6 +491,7 @@ WriteLog(LoomLog, "** Loom shutdown **")
 If app\recents <> Null Then Recents::persist(app\recents)
 // Free 3D preview GPU resources before exit.
 Loom_ShutdownMeshPreview()
+Loom_ShutdownZoneViewport()
 CloseAllLogs()
 End
 

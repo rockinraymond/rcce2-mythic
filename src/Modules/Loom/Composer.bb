@@ -2658,6 +2658,17 @@ Type Composer
         Local h% = Handle(Ar)
 
         Local y% = bodyY
+
+        // 3D schematic viewport at the top of the composer body. Shows
+        // portal/spawn/trigger/waypoint markers in 3D space with mouse
+        // orbit + zoom. Anchored to the panel right; the editable
+        // field rows flow down the left side underneath.
+        Local zvX% = panelX + panelW - 384 - CMP_PAD
+        Local zvY% = y
+        If Composer::canPaintRow(self, y, 384) = True
+            Loom_DrawZoneViewport(h, zvX, zvY)
+        EndIf
+
         y = Composer::editableRow(self,    panelX, panelW, y, "Name",     "zone", h, "name",     Ar\Name$,    mx, my, clicked)
         y = Composer::toggleRow(self,      panelX, panelW, y, "Outdoors", "zone", h, "outdoors", Ar\Outdoors, mx, my, clicked)
         y = Composer::toggleRow(self,      panelX, panelW, y, "PvP",      "zone", h, "pvp",      Ar\PvP,      mx, my, clicked)
