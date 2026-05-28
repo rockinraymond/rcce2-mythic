@@ -472,6 +472,75 @@ Type Composer
     End Method
 
 
+    // -------------------------------------------------------------------------
+    // doubleIntRow -- [label | int input A | int input B] for two-column
+    // grids (Attributes Value | Max, etc). Each cell independently
+    // clickable / editable via a distinct fieldId.
+    // -------------------------------------------------------------------------
+    Method doubleIntRow%(panelX%, panelW%, rowY%, label$, kind$, refID%, fieldIdA$, valueA%, fieldIdB$, valueB%, mx%, my%, clicked%)
+        Local labelX% = panelX + CMP_PAD
+        Local cellW% = (panelW - CMP_PAD * 2 - 140) / 2
+        If cellW < 40 Then cellW = 40
+        Local cellAX% = panelX + CMP_PAD + 140
+        Local cellBX% = cellAX + cellW + 4
+        Local valY% = rowY - 3
+        Local valH% = CMP_ROW_H
+
+        Local visible% = Composer::canPaintRow(self, rowY, CMP_ROW_H)
+        If visible = True
+            LoomText(labelX, rowY, label, LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
+        EndIf
+
+        Composer::miniEditCell(self, cellAX, valY, cellW, valH, rowY, kind, refID, fieldIdA, Str(valueA), mx, my, clicked, visible)
+        Composer::miniEditCell(self, cellBX, valY, cellW, valH, rowY, kind, refID, fieldIdB, Str(valueB), mx, my, clicked, visible)
+
+        Return rowY + CMP_ROW_H
+    End Method
+
+
+    // -------------------------------------------------------------------------
+    // miniEditCell -- paint one editable int cell at an explicit rect.
+    // Used by doubleIntRow for compact two-column edits. Same edit
+    // dispatch as editableRow but the cell is bounded to the caller's
+    // (cellX, cellW) rather than the row's full value column.
+    // -------------------------------------------------------------------------
+    Method miniEditCell(cellX%, cellY%, cellW%, cellH%, textRowY%, kind$, refID%, fieldId$, storedValue$, mx%, my%, clicked%, visible%)
+        Local active% = (self\editKind = kind And self\editRefID = refID And self\editFieldId = fieldId)
+        Local hovered% = (mx >= cellX And mx < cellX + cellW And my >= cellY And my < cellY + cellH)
+
+        If visible = True
+            If active = True
+                LoomFill(cellX, cellY, cellW, cellH, LOOM_STONE_700_R, LOOM_STONE_700_G, LOOM_STONE_700_B)
+                LoomBorder(cellX, cellY, cellW, cellH, LOOM_ARCANE_500_R, LOOM_ARCANE_500_G, LOOM_ARCANE_500_B)
+            Else If hovered = True
+                LoomFill(cellX, cellY, cellW, cellH, LOOM_STONE_800_R, LOOM_STONE_800_G, LOOM_STONE_800_B)
+                LoomBorder(cellX, cellY, cellW, cellH, LOOM_BRASS_700_R, LOOM_BRASS_700_G, LOOM_BRASS_700_B)
+            EndIf
+
+            Local shown$
+            If active = True
+                shown = self\editBuffer
+            Else
+                shown = storedValue
+            EndIf
+            LoomText(cellX + 4, textRowY, shown, LOOM_PARCHMENT_100_R, LOOM_PARCHMENT_100_G, LOOM_PARCHMENT_100_B)
+
+            If active = True
+                If (MilliSecs() Mod CMP_CURSOR_PERIOD) < (CMP_CURSOR_PERIOD / 2)
+                    Local cursorX% = cellX + 4 + StringWidth(self\editBuffer)
+                    LoomFill(cursorX, textRowY, 2, 14, LOOM_PARCHMENT_100_R, LOOM_PARCHMENT_100_G, LOOM_PARCHMENT_100_B)
+                EndIf
+            EndIf
+        EndIf
+
+        If hovered And clicked And active = False
+            Composer::beginEdit(self, kind, refID, fieldId, storedValue)
+        Else If clicked And active = True And hovered = False
+            Composer::commitEdit(self)
+        EndIf
+    End Method
+
+
     // toggleRow -- click the value cell to flip the stored bool. Returns next Y.
     Method toggleRow%(panelX%, panelW%, rowY%, label$, kind$, refID%, fieldId$, storedValue%, mx%, my%, clicked%)
         Local valX% = panelX + CMP_PAD + 120
@@ -765,12 +834,45 @@ Type Composer
             If fieldId = "trade_mode"     Then A\TradeMode       = Composer::parseIntClamped(self, value, A\TradeMode,       0, 2) : Return
             If fieldId = "playable"       Then A\Playable    = (value = "1") : Return
             If fieldId = "rideable"       Then A\Rideable    = (value = "1") : Return
+            If fieldId = "poly_collision" Then A\PolyCollision = (value = "1") : Return
+            If fieldId = "radius"         Then A\Radius#     = Composer::parseFloatClamped(self, value, A\Radius#, 0.0, 10000.0) : Return
+            If fieldId = "environment"    Then A\Environment = Composer::parseIntClamped(self, value, A\Environment, 0, 255) : Return
+            If fieldId = "inv_slots"      Then A\InventorySlots = Composer::parseIntClamped(self, value, A\InventorySlots, 0, 65535) : Return
+            If fieldId = "default_dmg"    Then A\DefaultDamageType = Composer::parseIntClamped(self, value, A\DefaultDamageType, 0, 19) : Return
+            If fieldId = "start_area"     Then A\StartArea$ = value : Return
+            If fieldId = "start_portal"   Then A\StartPortal$ = value : Return
             // Reference fields edited via the palette picker. The picker
             // writes the chosen entity's refID as a string; clamp to the
             // valid slot range for the kind.
             If fieldId = "default_faction" Then A\DefaultFaction = Composer::parseIntClamped(self, value, A\DefaultFaction, 0, 99)   : Return
             If fieldId = "manim_set"       Then A\MAnimationSet  = Composer::parseIntClamped(self, value, A\MAnimationSet,  0, 999)  : Return
             If fieldId = "fanim_set"       Then A\FAnimationSet  = Composer::parseIntClamped(self, value, A\FAnimationSet,  0, 999)  : Return
+
+            // Attributes table -- fieldId pattern "attribute_value_<i>" /
+            // "attribute_max_<i>" with i in 0..39.
+            If Left$(fieldId, 16) = "attribute_value_"
+                Local aiV% = Int(Mid$(fieldId, 17))
+                If aiV >= 0 And aiV <= 39 And A\Attributes <> Null
+                    A\Attributes\Value[aiV] = Composer::parseIntClamped(self, value, A\Attributes\Value[aiV], -2000000000, 2000000000)
+                EndIf
+                Return
+            EndIf
+            If Left$(fieldId, 14) = "attribute_max_"
+                Local aiM% = Int(Mid$(fieldId, 15))
+                If aiM >= 0 And aiM <= 39 And A\Attributes <> Null
+                    A\Attributes\Maximum[aiM] = Composer::parseIntClamped(self, value, A\Attributes\Maximum[aiM], -2000000000, 2000000000)
+                EndIf
+                Return
+            EndIf
+
+            // Resistances -- fieldId pattern "resistance_<i>" with i in 0..19.
+            If Left$(fieldId, 11) = "resistance_"
+                Local riR% = Int(Mid$(fieldId, 12))
+                If riR >= 0 And riR <= 19
+                    A\Resistances[riR] = Composer::parseIntClamped(self, value, A\Resistances[riR], -10000, 10000)
+                EndIf
+                Return
+            EndIf
         EndIf
 
         // ---- ZONE -----------------------------------------------------------
@@ -1847,10 +1949,20 @@ Type Composer
         y = Composer::toggleRow(self,    panelX, panelW, y, "Rideable",      "actor", A\ID, "rideable",      A\Rideable,     mx, my, clicked)
         y = Composer::editableIntRow(self, panelX, panelW, y, "XP multiplier", "actor", A\ID, "xpmult",        A\XPMultiplier, mx, my, clicked)
         y = Composer::editableFloatRow(self, panelX, panelW, y, "Scale",       "actor", A\ID, "scale",         A\Scale#,       mx, my, clicked)
+        y = Composer::editableFloatRow(self, panelX, panelW, y, "Radius",      "actor", A\ID, "radius",        A\Radius#,      mx, my, clicked)
+        y = Composer::editableIntRow(self, panelX, panelW, y, "Environment",  "actor", A\ID, "environment",   A\Environment,  mx, my, clicked)
+        y = Composer::editableIntRow(self, panelX, panelW, y, "Inv slots",    "actor", A\ID, "inv_slots",     A\InventorySlots, mx, my, clicked)
+        y = Composer::editableIntRow(self, panelX, panelW, y, "Default DT",   "actor", A\ID, "default_dmg",   A\DefaultDamageType, mx, my, clicked)
+        y = Composer::editableIntRow(self, panelX, panelW, y, "Trade mode",   "actor", A\ID, "trade_mode",    A\TradeMode,    mx, my, clicked)
+        y = Composer::toggleRow(self,    panelX, panelW, y, "Poly collide",  "actor", A\ID, "poly_collision", A\PolyCollision, mx, my, clicked)
 
         // Description -- a long string; show as editable text field. Word
         // wrap is a future enhancement.
         y = Composer::editableRow(self, panelX, panelW, y, "Description", "actor", A\ID, "description", A\Description$, mx, my, clicked)
+
+        y = Composer::sectionHeader(self, panelX, panelW, y, "Start location")
+        y = Composer::editableRow(self, panelX, panelW, y, "Start area",   "actor", A\ID, "start_area",   A\StartArea$,   mx, my, clicked)
+        y = Composer::editableRow(self, panelX, panelW, y, "Start portal", "actor", A\ID, "start_portal", A\StartPortal$, mx, my, clicked)
 
         y = Composer::sectionHeader(self, panelX, panelW, y, "Threads")
 
@@ -1860,7 +1972,61 @@ Type Composer
         y = Composer::chipRow(self, panelX, panelW, y, "Faction",    "faction", A\DefaultFaction, mx, my, clicked, rightClicked, "default_faction")
         y = Composer::chipRow(self, panelX, panelW, y, "M anim set", "animset", A\MAnimationSet,  mx, my, clicked, rightClicked, "manim_set")
         y = Composer::chipRow(self, panelX, panelW, y, "F anim set", "animset", A\FAnimationSet,  mx, my, clicked, rightClicked, "fanim_set")
+
+        // Attributes table -- 40 rows of (Name | Value | Maximum). Skip
+        // rows with empty AttributeNames so designers see only the
+        // project's defined attributes. Both columns are editable via
+        // fieldId pattern "attribute_value_<i>" / "attribute_max_<i>".
+        y = Composer::sectionHeader(self, panelX, panelW, y, "Attributes (Value | Max)")
+        y = Composer::renderAttributesTable(self, panelX, panelW, y, A, mx, my, clicked)
+
+        // Resistances -- 19 damage-type resistances (defined in
+        // DamageTypes$()). Each is a single int. Skip rows with empty
+        // DamageTypes name (lets a project define fewer than 20 types).
+        y = Composer::sectionHeader(self, panelX, panelW, y, "Resistances")
+        y = Composer::renderResistancesTable(self, panelX, panelW, y, A, mx, my, clicked)
+
         Composer::recordContentBottom(self, y)
+    End Method
+
+
+    // -------------------------------------------------------------------------
+    // renderAttributesTable -- 40-row Value | Max grid scoped to the focused
+    // Actor's Attributes sub-instance. Empty-name rows are skipped so the
+    // table only shows what the project has defined in Attributes.dat.
+    //
+    // Layout: [label | value-int-input | max-int-input]. Each input
+    // routes through writeField with a synthetic fieldId encoding the
+    // attribute index ("attribute_value_<i>" / "attribute_max_<i>") so
+    // the dispatch table can branch on the prefix.
+    // -------------------------------------------------------------------------
+    Method renderAttributesTable%(panelX%, panelW%, y%, A.Actor, mx%, my%, clicked%)
+        If A\Attributes = Null Then Return y
+        Local i%
+        For i = 0 To 39
+            If AttributeNames$(i) <> ""
+                Local fidV$ = "attribute_value_" + Str(i)
+                Local fidM$ = "attribute_max_"   + Str(i)
+                y = Composer::doubleIntRow(self, panelX, panelW, y, AttributeNames$(i), "actor", A\ID, fidV, A\Attributes\Value[i], fidM, A\Attributes\Maximum[i], mx, my, clicked)
+            EndIf
+        Next
+        Return y
+    End Method
+
+
+    // -------------------------------------------------------------------------
+    // renderResistancesTable -- 19 damage-type resistance rows. The label
+    // for each comes from DamageTypes$(i); empty names skipped.
+    // -------------------------------------------------------------------------
+    Method renderResistancesTable%(panelX%, panelW%, y%, A.Actor, mx%, my%, clicked%)
+        Local i%
+        For i = 0 To 19
+            If DamageTypes$(i) <> ""
+                Local fid$ = "resistance_" + Str(i)
+                y = Composer::editableIntRow(self, panelX, panelW, y, DamageTypes$(i), "actor", A\ID, fid, A\Resistances[i], mx, my, clicked)
+            EndIf
+        Next
+        Return y
     End Method
 
 
