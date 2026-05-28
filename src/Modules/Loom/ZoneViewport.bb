@@ -1135,6 +1135,55 @@ Function Loom_DrawZoneViewport(zoneHandle, x, y)
         ShowEntity VPCam
         SetBuffer TextureBuffer(VPRT)
         RenderWorld
+
+        ; ---- Ground grid overlay -----------------------------------------------
+        ; Paint axis-aligned grid lines on top of the rendered scene to
+        ; convey scale. CameraProject converts world (x, scene_y, z) to
+        ; RT-local screen coords; we draw 2D Lines between projected
+        ; endpoints. Lines outside the RT clip naturally because the
+        ; buffer is bounded.
+        ;
+        ; Step 250 world units = 16 lines across the 4000-unit ground
+        ; we render -- dense enough to read but not noisy.
+        Color 70, 70, 80      ; muted stone-grey for grid
+        Local gridSpan# = 2000.0
+        Local gridStep# = 250.0
+        Local g# = -gridSpan#
+        While g# <= gridSpan#
+            ; X-direction line: constant z = g, x varies -gridSpan..+gridSpan
+            CameraProject VPCam, -gridSpan#, VP_SCENE_Y_OFFSET#, g#
+            Local ax = ProjectedX()
+            Local ay = ProjectedY()
+            CameraProject VPCam,  gridSpan#, VP_SCENE_Y_OFFSET#, g#
+            Local bx = ProjectedX()
+            Local by = ProjectedY()
+            Line ax, ay, bx, by
+            ; Z-direction line: constant x = g, z varies
+            CameraProject VPCam, g#, VP_SCENE_Y_OFFSET#, -gridSpan#
+            Local cx2 = ProjectedX()
+            Local cy2 = ProjectedY()
+            CameraProject VPCam, g#, VP_SCENE_Y_OFFSET#,  gridSpan#
+            Local dx2 = ProjectedX()
+            Local dy2 = ProjectedY()
+            Line cx2, cy2, dx2, dy2
+            g# = g# + gridStep#
+        Wend
+
+        ; Compass labels at +N (north) +S +E +W positions on the ground.
+        ; In Loom's coord convention +Z is "north" (mirrors how the GUE
+        ; in-game camera + minimap orient). Letters projected through
+        ; the same camera so they tilt with view -- gives an intuitive
+        ; "you are facing N" cue when orbit changes.
+        Color 200, 200, 110   ; brass-light for compass letters
+        CameraProject VPCam, 0,             VP_SCENE_Y_OFFSET#,  gridSpan#
+        Text ProjectedX(), ProjectedY(), "N", True, True
+        CameraProject VPCam, 0,             VP_SCENE_Y_OFFSET#, -gridSpan#
+        Text ProjectedX(), ProjectedY(), "S", True, True
+        CameraProject VPCam,  gridSpan#,    VP_SCENE_Y_OFFSET#, 0
+        Text ProjectedX(), ProjectedY(), "E", True, True
+        CameraProject VPCam, -gridSpan#,    VP_SCENE_Y_OFFSET#, 0
+        Text ProjectedX(), ProjectedY(), "W", True, True
+
         SetBuffer BackBuffer()
         HideEntity VPCam
 
