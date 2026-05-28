@@ -51,6 +51,13 @@ Const CMP_DELETE_ARM_MS = 4000
 Const CMP_DISCARD_BTN_W  = 60
 Const CMP_DISCARD_BTN_H  = 22
 
+// Duplicate button (top-right cluster). Allocates a copy of the focused
+// entity via EntityFactory_Duplicate. No arm/confirm -- duplicate is
+// non-destructive (just creates more state); user can delete the
+// duplicate if it was a mistake.
+Const CMP_DUP_BTN_W  = 56
+Const CMP_DUP_BTN_H  = 22
+
 // Edit-buffer cursor blink rate (ms). MilliSecs() Mod CMP_CURSOR_PERIOD < half = visible.
 Const CMP_CURSOR_PERIOD = 1000
 
@@ -203,20 +210,23 @@ Type Composer
         LoomText(x + CMP_PAD, y + CMP_PAD, kindLabel, LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
         LoomText(x + CMP_PAD, y + CMP_PAD + 16, entityName, LOOM_PARCHMENT_100_R, LOOM_PARCHMENT_100_G, LOOM_PARCHMENT_100_B)
 
-        // Top-right action cluster (right-to-left): Save / Discard / Delete.
-        // Save + Discard only render when there's pending dirty state for
-        // this kind. Delete always renders (any focused entity can be
-        // deleted; arm/confirm guards against accidents).
+        // Top-right action cluster (right-to-left): Save / Discard /
+        // Duplicate / Delete. Save + Discard only render when there's
+        // pending dirty state for this kind. Duplicate + Delete always
+        // render (arm/confirm guards against Delete accidents; Duplicate
+        // is non-destructive so no arm needed).
         Local btnY% = y + CMP_PAD - 2
         Local btnX% = x + w - CMP_SAVE_BTN_W - CMP_PAD
         If dirty = True
             Composer::drawSaveButton(self, btnX, btnY, mx, my, clicked, kind)
             btnX = btnX - CMP_DISCARD_BTN_W - 6
             Composer::drawDiscardButton(self, btnX, btnY, mx, my, clicked, kind)
-            btnX = btnX - CMP_DELETE_BTN_W - 6
+            btnX = btnX - CMP_DUP_BTN_W - 6
         Else
-            btnX = btnX + CMP_SAVE_BTN_W - CMP_DELETE_BTN_W
+            btnX = btnX + CMP_SAVE_BTN_W - CMP_DUP_BTN_W
         EndIf
+        Composer::drawDuplicateButton(self, btnX, btnY, mx, my, clicked, kind, refID)
+        btnX = btnX - CMP_DELETE_BTN_W - 6
         Composer::drawDeleteButton(self, btnX, btnY, mx, my, clicked, kind, refID)
 
         LoomHRule(x + CMP_PAD, y + CMP_PAD + 38, w - CMP_PAD * 2, LOOM_BRASS_700_R, LOOM_BRASS_700_G, LOOM_BRASS_700_B)
@@ -782,6 +792,38 @@ Type Composer
         EndIf
 
         WriteLog(LoomLog, "Composer: commitSaveForKind -- no handler for " + kind)
+    End Method
+
+
+    // -------------------------------------------------------------------------
+    // drawDeleteButton -- destructive action with arm/confirm. First click
+    // arms (button turns red, footer hint updates); second click on the
+    // same focus within CMP_DELETE_ARM_MS commits via EntityFactory_Delete.
+    // Focus change / other-button click / timeout cancels.
+    // -------------------------------------------------------------------------
+    // -------------------------------------------------------------------------
+    // drawDuplicateButton -- non-destructive clone of the focused entity.
+    // No arm/confirm: makes a copy, focuses the new entity, marks dirty.
+    // Zone duplicate is unsupported (logged + toasted by EntityFactory).
+    // -------------------------------------------------------------------------
+    Method drawDuplicateButton(btnX%, btnY%, mx%, my%, clicked%, kind$, refID%)
+        Local hovered% = (mx >= btnX And mx < btnX + CMP_DUP_BTN_W And my >= btnY And my < btnY + CMP_DUP_BTN_H)
+
+        If hovered = True
+            LoomFill(btnX, btnY, CMP_DUP_BTN_W, CMP_DUP_BTN_H, LOOM_ARCANE_700_R, LOOM_ARCANE_700_G, LOOM_ARCANE_700_B)
+            LoomBorder(btnX, btnY, CMP_DUP_BTN_W, CMP_DUP_BTN_H, LOOM_ARCANE_500_R, LOOM_ARCANE_500_G, LOOM_ARCANE_500_B)
+        Else
+            LoomFill(btnX, btnY, CMP_DUP_BTN_W, CMP_DUP_BTN_H, LOOM_STONE_800_R, LOOM_STONE_800_G, LOOM_STONE_800_B)
+            LoomBorder(btnX, btnY, CMP_DUP_BTN_W, CMP_DUP_BTN_H, LOOM_ARCANE_500_R, LOOM_ARCANE_500_G, LOOM_ARCANE_500_B)
+        EndIf
+        LoomText(btnX + 8, btnY + 4, "Dup", LOOM_PARCHMENT_100_R, LOOM_PARCHMENT_100_G, LOOM_PARCHMENT_100_B)
+
+        If hovered And clicked
+            // Commit any in-progress edit so the source state matches
+            // what the user sees before we copy it.
+            If self\editKind <> "" Then Composer::commitEdit(self)
+            EntityFactory_Duplicate(kind, refID, self\threads)
+        EndIf
     End Method
 
 

@@ -50,6 +50,29 @@ Function DeleteSpellTemplate(ID)
 	Return True
 End Function
 
+; Duplicate a Spell template. Allocate a new ID, copy every field, append
+; " (copy)" to the name. Returns the new ID or -1 if SpellsList full /
+; source missing.
+Function DuplicateSpellTemplate(srcID)
+	If srcID < 0 Or srcID > 65534 Then Return -1
+	Src.Spell = SpellsList(srcID)
+	If Src = Null Then Return -1
+
+	Dst.Spell = CreateSpell()
+	If Dst = Null Then Return -1
+
+	Dst\Name$           = Src\Name$ + " (copy)"
+	Dst\Description$    = Src\Description$
+	Dst\ThumbnailTexID  = Src\ThumbnailTexID
+	Dst\ExclusiveRace$  = Src\ExclusiveRace$
+	Dst\ExclusiveClass$ = Src\ExclusiveClass$
+	Dst\RechargeTime    = Src\RechargeTime
+	Dst\Script$         = Src\Script$
+	Dst\SMethod$        = Src\SMethod$
+
+	Return Dst\ID
+End Function
+
 ; Loads all spells from file
 Function LoadSpells(Filename$)
 

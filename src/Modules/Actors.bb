@@ -1256,6 +1256,80 @@ Function SetFactionName(Index, Name$)
 	FactionNames$(Index) = Name$
 End Function
 
+; Duplicate an Actor template -- allocate a new ID via CreateActor, copy
+; every field including the Attributes side-instance (deep-copied so the
+; clone has its own backing storage). Returns the new ID, or -1 if
+; ActorList is full or the source doesn't exist.
+;
+; Race$ + Class$ get " (copy)" appended on the Class$ since that's the
+; secondary display field; if both were copied verbatim the user could
+; confuse the duplicate with the original.
+Function DuplicateActorTemplate(srcID)
+	If srcID < 0 Or srcID > 65535 Then Return -1
+	Src.Actor = ActorList(srcID)
+	If Src = Null Then Return -1
+
+	Dst.Actor = CreateActor()
+	If Dst = Null Then Return -1
+
+	Dst\Race$        = Src\Race$
+	Dst\Class$       = Src\Class$ + " (copy)"
+	Dst\Description$ = Src\Description$
+	Dst\StartArea$   = Src\StartArea$
+	Dst\StartPortal$ = Src\StartPortal$
+	Dst\Radius#      = Src\Radius#
+	Dst\Scale#       = Src\Scale#
+
+	For i = 0 To 7
+		Dst\MeshIDs[i] = Src\MeshIDs[i]
+	Next
+	For i = 0 To 4
+		Dst\BeardIDs[i]      = Src\BeardIDs[i]
+		Dst\MaleHairIDs[i]   = Src\MaleHairIDs[i]
+		Dst\FemaleHairIDs[i] = Src\FemaleHairIDs[i]
+		Dst\MaleFaceIDs[i]   = Src\MaleFaceIDs[i]
+		Dst\FemaleFaceIDs[i] = Src\FemaleFaceIDs[i]
+		Dst\MaleBodyIDs[i]   = Src\MaleBodyIDs[i]
+		Dst\FemaleBodyIDs[i] = Src\FemaleBodyIDs[i]
+	Next
+	For i = 0 To 15
+		Dst\MSpeechIDs[i] = Src\MSpeechIDs[i]
+		Dst\FSpeechIDs[i] = Src\FSpeechIDs[i]
+		Dst\HairColours[i] = Src\HairColours[i]
+	Next
+
+	Dst\BloodTexID   = Src\BloodTexID
+	Dst\Genders      = Src\Genders
+
+	For i = 0 To 19
+		Dst\Resistances[i] = Src\Resistances[i]
+	Next
+
+	Dst\MAnimationSet = Src\MAnimationSet
+	Dst\FAnimationSet = Src\FAnimationSet
+	Dst\Playable      = Src\Playable
+	Dst\Rideable      = Src\Rideable
+	Dst\Aggressiveness = Src\Aggressiveness
+	Dst\AggressiveRange = Src\AggressiveRange
+	Dst\TradeMode     = Src\TradeMode
+	Dst\Environment   = Src\Environment
+	Dst\InventorySlots = Src\InventorySlots
+	Dst\DefaultDamageType = Src\DefaultDamageType
+	Dst\DefaultFaction = Src\DefaultFaction
+	Dst\XPMultiplier   = Src\XPMultiplier
+	Dst\PolyCollision  = Src\PolyCollision
+
+	; Attributes deep-copy. CreateActor already allocated Dst\Attributes.
+	If Src\Attributes <> Null And Dst\Attributes <> Null
+		For i = 0 To 39
+			Dst\Attributes\Value[i]   = Src\Attributes\Value[i]
+			Dst\Attributes\Maximum[i] = Src\Attributes\Maximum[i]
+		Next
+	EndIf
+
+	Return Dst\ID
+End Function
+
 ; Delete an Actor template (NOT an ActorInstance). Used by Loom's entity-
 ; delete path. Frees the Type instance and clears the ActorList slot so a
 ; subsequent CreateActor can reuse the ID. Strict callers can't write to
