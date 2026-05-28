@@ -125,12 +125,14 @@ Type BrokenRefs
 
         // Actors -- broken refs (factions, anim sets) + content checks +
         // missing-mesh (base body meshes only -- iterating all appearance
-        // arrays would dwarf the modal).
+        // arrays would dwarf the modal). Also missing-sound checks
+        // against the SoundCatalog for speech slots.
         For Ac.Actor = Each Actor
             If self\entryCount >= BROKENREFS_MAX_ENTRIES Then Exit
             BrokenRefs::scanActor(self, Ac)
             BrokenRefs::scanActorContent(self, Ac)
             BrokenRefs::scanActorAssets(self, Ac)
+            BrokenRefs::scanActorSounds(self, Ac)
         Next
 
         // Items -- empty name, weapon w/ 0 damage, asset checks (thumb +
@@ -168,11 +170,16 @@ Type BrokenRefs
             BrokenRefs::scanZoneScripts(self, Ar)
         Next
 
-        // Orphan-script scan -- scripts in catalog that no entity
-        // references. Capped at the global entry limit but typically
-        // far below. Helps designers prune dead .rsl files that
-        // accumulate across project iterations.
+        // Orphan asset scans -- scripts / textures / meshes / sounds
+        // in their respective catalogs that no entity references.
+        // Designers use these to prune dead assets that accumulate
+        // across project iterations. Each scan respects the global
+        // entry-count cap; orphan-script runs first since it has the
+        // smallest catalog typically.
         BrokenRefs::scanOrphanScripts(self)
+        BrokenRefs::scanOrphanTextures(self)
+        BrokenRefs::scanOrphanMeshes(self)
+        BrokenRefs::scanOrphanSounds(self)
 
         // Clamp scroll
         If self\scrollOffset >= self\entryCount Then self\scrollOffset = self\entryCount - 1
@@ -516,6 +523,146 @@ Type BrokenRefs
             Next
         Next
 
+        Return False
+    End Method
+
+
+    // -------------------------------------------------------------------------
+    // scanActorSounds -- emit missing-sound issues when an actor's
+    // speech-slot IDs point at sounds not in the catalog. Empty (id=0)
+    // slots are normal (actor just has fewer voice clips); non-zero
+    // IDs that don't resolve indicate referencing a deleted asset.
+    //
+    // Per-actor cap 10 emits so an actor with all 32 slots broken
+    // doesn't flood; surplus rolls into the global "+N more" pattern.
+    // -------------------------------------------------------------------------
+    Method scanActorSounds(Ac.Actor)
+        Local label$ = Ac\Race$ + " [" + Ac\Class$ + "]"
+        Local emits% = 0
+        Local maxPer% = 10
+        Local si% = 0
+        For si = 0 To 15
+            If emits >= maxPer Then Exit
+            If Ac\MSpeechIDs[si] > 0 And Sounds_GetByID(Ac\MSpeechIDs[si]) = Null
+                BrokenRefs::emitFull(self, "actor", Ac\ID, label, "MSpeechIDs[" + Str(si) + "]", Str(Ac\MSpeechIDs[si]), "sound ID not in catalog", "warning", "missing-sound")
+                emits = emits + 1
+            EndIf
+            If Ac\FSpeechIDs[si] > 0 And Sounds_GetByID(Ac\FSpeechIDs[si]) = Null
+                BrokenRefs::emitFull(self, "actor", Ac\ID, label, "FSpeechIDs[" + Str(si) + "]", Str(Ac\FSpeechIDs[si]), "sound ID not in catalog", "warning", "missing-sound")
+                emits = emits + 1
+            EndIf
+        Next
+    End Method
+
+
+    // -------------------------------------------------------------------------
+    // scanOrphanTextures -- emit info-severity issues per TextureEntry
+    // that no entity references. Walk shape matches scanOrphanScripts.
+    // -------------------------------------------------------------------------
+    Method scanOrphanTextures()
+        For te.TextureEntry = Each TextureEntry
+            If self\entryCount >= BROKENREFS_MAX_ENTRIES Then Return
+            If BrokenRefs::textureIsReferenced(self, te) = False
+                BrokenRefs::emitFull(self, "texture", te\Index, te\Filename$ + " #" + Str(te\ID), "(referenced by)", "0 entities", "orphan texture -- safe to drop from the catalog", "info", "orphan-texture")
+            EndIf
+        Next
+    End Method
+
+
+    Method textureIsReferenced%(te.TextureEntry)
+        Local id% = te\ID
+        For It.Item = Each Item
+            If It\ThumbnailTexID = id Then Return True
+            If It\ImageID = id Then Return True
+        Next
+        For Sp.Spell = Each Spell
+            If Sp\ThumbnailTexID = id Then Return True
+        Next
+        Local actorIdx% = 0
+        For actorIdx = 0 To 65535
+            Local Ac.Actor = ActorList(actorIdx)
+            If Ac <> Null
+                If Ac\BloodTexID = id Then Return True
+                Local ai% = 0
+                For ai = 0 To 4
+                    If Ac\MaleFaceIDs[ai]   = id Then Return True
+                    If Ac\FemaleFaceIDs[ai] = id Then Return True
+                    If Ac\MaleBodyIDs[ai]   = id Then Return True
+                    If Ac\FemaleBodyIDs[ai] = id Then Return True
+                Next
+            EndIf
+        Next
+        Return False
+    End Method
+
+
+    // -------------------------------------------------------------------------
+    // scanOrphanMeshes -- same shape; checks Item.MMeshID/FMeshID +
+    // Actor.MeshIDs[0..7] + BeardIDs + MaleHair/FemaleHair.
+    // -------------------------------------------------------------------------
+    Method scanOrphanMeshes()
+        For mh.MeshEntry = Each MeshEntry
+            If self\entryCount >= BROKENREFS_MAX_ENTRIES Then Return
+            If BrokenRefs::meshIsReferenced(self, mh) = False
+                BrokenRefs::emitFull(self, "mesh", mh\Index, mh\Filename$ + " #" + Str(mh\ID), "(referenced by)", "0 entities", "orphan mesh -- safe to drop from the catalog", "info", "orphan-mesh")
+            EndIf
+        Next
+    End Method
+
+
+    Method meshIsReferenced%(mh.MeshEntry)
+        Local id% = mh\ID
+        For It.Item = Each Item
+            If It\MMeshID = id Then Return True
+            If It\FMeshID = id Then Return True
+        Next
+        Local actorIdx% = 0
+        For actorIdx = 0 To 65535
+            Local Ac.Actor = ActorList(actorIdx)
+            If Ac <> Null
+                Local mi% = 0
+                For mi = 0 To 7
+                    If Ac\MeshIDs[mi] = id Then Return True
+                Next
+                Local bi% = 0
+                For bi = 0 To 4
+                    If Ac\BeardIDs[bi]      = id Then Return True
+                    If Ac\MaleHairIDs[bi]   = id Then Return True
+                    If Ac\FemaleHairIDs[bi] = id Then Return True
+                Next
+            EndIf
+        Next
+        Return False
+    End Method
+
+
+    // -------------------------------------------------------------------------
+    // scanOrphanSounds -- same shape; checks Actor.MSpeechIDs[0..15] +
+    // FSpeechIDs[0..15]. Items + Spells don't reference sounds.
+    // -------------------------------------------------------------------------
+    Method scanOrphanSounds()
+        For sd.SoundEntry = Each SoundEntry
+            If self\entryCount >= BROKENREFS_MAX_ENTRIES Then Return
+            If BrokenRefs::soundIsReferenced(self, sd) = False
+                BrokenRefs::emitFull(self, "sound", sd\Index, sd\Filename$ + " #" + Str(sd\ID), "(referenced by)", "0 entities", "orphan sound -- safe to drop from the catalog", "info", "orphan-sound")
+            EndIf
+        Next
+    End Method
+
+
+    Method soundIsReferenced%(sd.SoundEntry)
+        Local id% = sd\ID
+        Local actorIdx% = 0
+        For actorIdx = 0 To 65535
+            Local Ac.Actor = ActorList(actorIdx)
+            If Ac <> Null
+                Local si% = 0
+                For si = 0 To 15
+                    If Ac\MSpeechIDs[si] = id Then Return True
+                    If Ac\FSpeechIDs[si] = id Then Return True
+                Next
+            EndIf
+        Next
         Return False
     End Method
 
