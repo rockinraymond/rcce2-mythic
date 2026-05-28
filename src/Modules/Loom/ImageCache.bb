@@ -72,6 +72,12 @@ Global LoomFrameMouseWheel        = 0
 Global LoomZoneHighlightKind$ = ""
 Global LoomZoneHighlightIdx   = -1
 
+; Actor-context publish for MeshPreview: composer sets this to the
+; current actor's ID before Loom_DrawMeshPreview so the loader can
+; drape the actor's body/face textures over the bare mesh. Declared
+; here for the same Strict-mode write reason.
+Global PreviewActorID = 0
+
 
 ; =============================================================================
 ; Loom_BeginFrame -- called once per frame at the top of renderFrame.
