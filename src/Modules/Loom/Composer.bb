@@ -313,10 +313,15 @@ Type Composer
         //
         // Gated to the cursor being over THIS panel (mx >= panel left) so
         // scrolling here doesn't also scroll the browser card grid behind
-        // the composer. Loom_ConsumeWheel() then zeroes the cached delta
-        // so no other surface this frame double-applies the same tick.
+        // the composer. Also gated OUT when the cursor is over the pinned
+        // viewport band -- there the wheel is the viewport's zoom, not body
+        // scroll (the viewport calls Loom_ConsumeWheel itself when it draws,
+        // but it draws AFTER this handler, so we must skip here too).
+        // Loom_ConsumeWheel() then zeroes the cached delta so no other
+        // surface this frame double-applies the same tick.
+        Local overVP% = Composer::cursorOverViewportBand(self, kind, sw)
         Local wheelTicks% = Loom_MouseWheel()
-        If wheelTicks <> 0 And self\collapsed = False And MouseX() >= (sw - CMP_W)
+        If wheelTicks <> 0 And self\collapsed = False And overVP = False And MouseX() >= (sw - CMP_W)
             self\scrollOffset = self\scrollOffset - wheelTicks * CMP_SCROLL_STEP
             If self\scrollOffset < 0 Then self\scrollOffset = 0
             // Clamp to last-frame's measured content height -- if the
@@ -424,10 +429,28 @@ Type Composer
         // frame can clamp scrollOffset.
         Local bodyY% = y + CMP_PAD + 50
         Local bodyH% = h - (bodyY - y) - 24
-        self\bodyTop    = bodyY
+
+        // Pinned viewport band. Kinds with a 3D viewport (actor / item /
+        // mesh / zone) reserve a fixed, NON-scrolling band at the top of
+        // the body; the field rows scroll BELOW it. Pinning (vs. letting
+        // the viewport scroll with the body) means: the RenderWorld/CopyRect
+        // rect never lands over the header (no bleed), the preview stays
+        // visible while you edit fields, and the wheel split is clean
+        // (cursor-over-viewport = zoom, cursor-over-fields = scroll).
+        Local vpBandH% = 0
+        If Composer::kindHasViewport(self, kind) = True
+            vpBandH = Composer::viewportSize(self, kind) + 10
+        EndIf
+
+        self\bodyTop    = bodyY + vpBandH
         self\bodyBottom = bodyY + bodyH
-        Local scrolledBodyY% = bodyY - self\scrollOffset
+        Local scrolledBodyY% = self\bodyTop - self\scrollOffset
         self\chipHit = False
+
+        // Draw the pinned viewport first, at the fixed band top (unscrolled).
+        If vpBandH > 0
+            Composer::drawPinnedViewport(self, kind, refID, x, w, bodyY)
+        EndIf
 
         If kind = "actor"
             Composer::renderActor(self, x, scrolledBodyY, w, bodyH, mx, my, clicked, rightClicked)
@@ -2768,6 +2791,74 @@ Type Composer
         If kind = "faction" Then Return "FACTION"
         If kind = "animset" Then Return "ANIMATION SET"
         Return Upper$(kind)
+    End Method
+
+
+    // -------------------------------------------------------------------------
+    // Pinned-viewport helpers. The 3D preview surfaces (actor/item/mesh mesh
+    // preview, zone schematic) live in a fixed, non-scrolling band at the
+    // top of the composer body. These helpers tell renderAndUpdate which
+    // kinds get a band, how tall it is, whether the cursor is over it (so
+    // the wheel zooms instead of scrolls), and dispatch the actual draw.
+    // -------------------------------------------------------------------------
+    Method kindHasViewport%(kind$)
+        If kind = "actor" Then Return True
+        If kind = "item"  Then Return True
+        If kind = "mesh"  Then Return True
+        If kind = "zone"  Then Return True
+        Return False
+    End Method
+
+    // Square edge of the viewport for this kind. Zone uses the larger
+    // schematic (VP_RT_SIZE); the others use the mesh-preview square.
+    Method viewportSize%(kind$)
+        If kind = "zone" Then Return VP_RT_SIZE
+        If Composer::kindHasViewport(self, kind) = True Then Return LOOM_PREVIEW_SIZE
+        Return 0
+    End Method
+
+    // True when the cursor is inside the pinned viewport rect for the
+    // focused kind. Computed from constants (panel is right-anchored at
+    // sw - CMP_W; the band top is bodyY = CMP_TOP + CMP_PAD + 50) so the
+    // scroll handler can call it BEFORE the body layout runs.
+    Method cursorOverViewportBand%(kind$, sw%)
+        If Composer::kindHasViewport(self, kind) = False Then Return False
+        If self\collapsed = True Then Return False
+        Local vpSize% = Composer::viewportSize(self, kind)
+        Local vpX% = (sw - CMP_W) + (CMP_W - vpSize) / 2
+        Local vpY% = CMP_TOP + CMP_PAD + 50
+        Local mxp% = MouseX()
+        Local myp% = MouseY()
+        If mxp >= vpX And mxp < vpX + vpSize And myp >= vpY And myp < vpY + vpSize Then Return True
+        Return False
+    End Method
+
+    // Draw the pinned viewport at the fixed band (centered in the panel).
+    // Re-resolves the entity by refID and dispatches to the right widget.
+    Method drawPinnedViewport(kind$, refID%, panelX%, panelW%, vpY%)
+        Local vpSize% = Composer::viewportSize(self, kind)
+        Local vpX% = panelX + (panelW - vpSize) / 2
+        If kind = "actor"
+            If refID >= 0 And refID <= 65535
+                Local A.Actor = ActorList(refID)
+                If A <> Null
+                    PreviewActorID = A\ID
+                    Loom_DrawMeshPreview(A\MeshIDs[0], vpX, vpY, LOOM_PREVIEW_SIZE)
+                    PreviewActorID = 0
+                EndIf
+            EndIf
+        Else If kind = "item"
+            If refID >= 0 And refID <= 65535
+                Local It.Item = ItemList(refID)
+                If It <> Null Then Loom_DrawMeshPreview(It\MMeshID, vpX, vpY, LOOM_PREVIEW_SIZE)
+            EndIf
+        Else If kind = "mesh"
+            Local mh.MeshEntry = Meshes_GetByIndex(refID)
+            If mh <> Null Then Loom_DrawMeshPreview(mh\ID, vpX, vpY, LOOM_PREVIEW_SIZE)
+        Else If kind = "zone"
+            Local Ar.Area = Object.Area(refID)
+            If Ar <> Null Then Loom_DrawZoneViewport(refID, vpX, vpY)
+        EndIf
     End Method
 
 

@@ -102,6 +102,15 @@ Function Loom_InitMeshPreview()
     PointEntity   PreviewCam, 0   ; will be re-pointed at the mesh each frame
     CameraClsColor PreviewCam, 16, 16, 22   ; dark stone-950 background
     CameraRange    PreviewCam, 0.1, 1000.0
+    ; CRITICAL: confine the camera to the render-target's pixel rect.
+    ; CreateCamera() seeds a camera's viewport from the CURRENT buffer at
+    ; creation time (bbCreateCamera -> gx_canvas->getViewport) -- which is
+    ; the full back buffer here. Without this override, RenderWorld paints
+    ; PreviewCam across the WHOLE window (the grey-mesh bleed), because the
+    ; viewport stays full-screen even when SetBuffer points at the small RT.
+    ; ZoneViewport's VPCam already does this; MeshPreview didn't, which is
+    ; the entire bug. Match the RT dimensions exactly.
+    CameraViewport PreviewCam, 0, 0, LOOM_PREVIEW_SIZE, LOOM_PREVIEW_SIZE
     HideEntity     PreviewCam     ; only show when actively rendering
 
     ; Single directional light so the mesh is visible.
