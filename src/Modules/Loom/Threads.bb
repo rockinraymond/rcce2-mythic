@@ -234,6 +234,13 @@ Type Threads
             Return sd\Filename$ + " #" + Str(sd\ID)
         EndIf
 
+        If kind = "music"
+            // refID is the MusicEntry\Index from Music_Init.
+            Local mu.MusicEntry = Music_GetByIndex(refID)
+            If mu = Null Then Return ""
+            Return mu\Filename$ + " #" + Str(mu\ID)
+        EndIf
+
         Return ""
     End Method
 
@@ -330,6 +337,7 @@ Type Threads
         If kind = "texture" Then Return "T"
         If kind = "mesh"    Then Return "m"
         If kind = "sound"   Then Return "s"
+        If kind = "music"   Then Return "M"
         Return "?"
     End Method
 End Type

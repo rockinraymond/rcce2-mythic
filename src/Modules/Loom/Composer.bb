@@ -427,6 +427,8 @@ Type Composer
             Composer::renderMesh(self, x, scrolledBodyY, w, bodyH, mx, my, clicked, rightClicked)
         Else If kind = "sound"
             Composer::renderSound(self, x, scrolledBodyY, w, bodyH, mx, my, clicked, rightClicked)
+        Else If kind = "music"
+            Composer::renderMusic(self, x, scrolledBodyY, w, bodyH, mx, my, clicked, rightClicked)
         EndIf
 
         // Scrollbar indicator -- thin brass thumb on the right edge,
@@ -4036,6 +4038,57 @@ Type Composer
         EndIf
         If Composer::canPaintRow(self, y, CMP_ROW_H) = True
             LoomText(panelX + CMP_PAD, y + 4, Str(actorHits) + " actor(s)", LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
+        EndIf
+        y = y + CMP_ROW_H
+
+        Composer::recordContentBottom(self, y)
+    End Method
+
+
+    // -------------------------------------------------------------------------
+    // renderMusic -- composer view for a focused music track. Shape
+    // mirrors renderSound but without the "Used by" section -- music
+    // isn't statically referenced from data Loom edits. The Play
+    // button still earns its keep: designers cataloging their music
+    // library no longer have to launch the full Server + Client to
+    // hear a specific track.
+    // -------------------------------------------------------------------------
+    Method renderMusic(panelX%, bodyY%, panelW%, bodyH%, mx%, my%, clicked%, rightClicked%)
+        Local mu.MusicEntry = Music_GetByIndex(self\threads\focusID)
+        If mu = Null Then Return
+
+        Local y% = bodyY
+        y = Composer::row(self, panelX, panelW, y, "Filename", mu\Filename$)
+        y = Composer::row(self, panelX, panelW, y, "ID",       Str(mu\ID))
+        y = Composer::row(self, panelX, panelW, y, "Path",     "Data\Music\" + mu\Filename$)
+
+        y = Composer::sectionHeader(self, panelX, panelW, y, "Audition")
+        Local btnW% = 80
+        Local btnH% = 26
+        Local btnX% = panelX + CMP_PAD
+        Local btnY% = y
+        Local btnHovered% = (mx >= btnX And mx < btnX + btnW And my >= btnY And my < btnY + btnH)
+        If Composer::canPaintRow(self, y, btnH) = True
+            If btnHovered = True
+                LoomFill(btnX, btnY, btnW, btnH, LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
+                LoomBorder(btnX, btnY, btnW, btnH, LOOM_PARCHMENT_100_R, LOOM_PARCHMENT_100_G, LOOM_PARCHMENT_100_B)
+                LoomText(btnX + 18, btnY + 6, "> play", LOOM_PARCHMENT_100_R, LOOM_PARCHMENT_100_G, LOOM_PARCHMENT_100_B)
+            Else
+                LoomFill(btnX, btnY, btnW, btnH, LOOM_STONE_700_R, LOOM_STONE_700_G, LOOM_STONE_700_B)
+                LoomBorder(btnX, btnY, btnW, btnH, LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
+                LoomText(btnX + 18, btnY + 6, "> play", LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
+            EndIf
+        EndIf
+        If btnHovered = True And clicked = True
+            Music_Play(self\threads\focusID)
+        EndIf
+        y = y + btnH + 4
+
+        // No reverse refs section -- music isn't referenced from data
+        // Loom edits. The composer footer notes this so designers don't
+        // wonder where the "Used by" section went.
+        If Composer::canPaintRow(self, y, CMP_ROW_H) = True
+            LoomText(panelX + CMP_PAD, y + 4, "(music tracks have no in-data references)", LOOM_STONE_300_R, LOOM_STONE_300_G, LOOM_STONE_300_B)
         EndIf
         y = y + CMP_ROW_H
 
