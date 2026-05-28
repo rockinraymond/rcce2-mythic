@@ -793,6 +793,7 @@ Type Composer
             If fieldId = "name"           Then S\Name$ = value         : Return
             If fieldId = "description"    Then S\Description$ = value  : Return
             If fieldId = "recharge_ms"    Then S\RechargeTime = Composer::parseIntClamped(self, value, S\RechargeTime, 0, 3600000) : Return
+            If fieldId = "thumb_tex"      Then S\ThumbnailTexID = Composer::parseIntClamped(self, value, S\ThumbnailTexID, 0, 65535) : Return
             If fieldId = "script"         Then S\Script$ = value       : Return
             If fieldId = "smethod"        Then S\SMethod$ = value      : Return
             If fieldId = "race"           Then S\ExclusiveRace$ = value  : Return
@@ -1065,6 +1066,31 @@ Type Composer
             For As2 = Each AnimSet
                 If As2\ID = refID
                     If fieldId = "name" Then As2\Name$ = value : Return
+
+                    // Per-clip fields. AnimSet has 150 slots (0..149); each
+                    // has Name/Start/End/Speed. fieldId encodes the slot
+                    // index. Prefix order matters: clip_speed_ before any
+                    // shorter clip_ prefix would catch it.
+                    If Left$(fieldId, 10) = "clip_name_"
+                        Local cnIdx% = Int(Mid$(fieldId, 11))
+                        If cnIdx >= 0 And cnIdx <= 149 Then As2\AnimName$[cnIdx] = value
+                        Return
+                    EndIf
+                    If Left$(fieldId, 11) = "clip_start_"
+                        Local csIdx% = Int(Mid$(fieldId, 12))
+                        If csIdx >= 0 And csIdx <= 149 Then As2\AnimStart[csIdx] = Composer::parseIntClamped(self, value, As2\AnimStart[csIdx], 0, 100000)
+                        Return
+                    EndIf
+                    If Left$(fieldId, 9) = "clip_end_"
+                        Local ceIdx% = Int(Mid$(fieldId, 10))
+                        If ceIdx >= 0 And ceIdx <= 149 Then As2\AnimEnd[ceIdx] = Composer::parseIntClamped(self, value, As2\AnimEnd[ceIdx], 0, 100000)
+                        Return
+                    EndIf
+                    If Left$(fieldId, 11) = "clip_speed_"
+                        Local cspIdx% = Int(Mid$(fieldId, 12))
+                        If cspIdx >= 0 And cspIdx <= 149 Then As2\AnimSpeed#[cspIdx] = Composer::parseFloatClamped(self, value, As2\AnimSpeed#[cspIdx], -100.0, 100.0)
+                        Return
+                    EndIf
                     Exit
                 EndIf
             Next
@@ -2270,6 +2296,7 @@ Type Composer
         y = Composer::row(self, panelX, panelW, y, "ID",          Str(S\ID))
         y = Composer::editableRow(self,    panelX, panelW, y, "Name",     "spell", S\ID, "name",        S\Name$,        mx, my, clicked)
         y = Composer::editableIntRow(self, panelX, panelW, y, "Recharge (ms)", "spell", S\ID, "recharge_ms", S\RechargeTime, mx, my, clicked)
+        y = Composer::editableIntRow(self, panelX, panelW, y, "Thumbnail tex", "spell", S\ID, "thumb_tex",   S\ThumbnailTexID, mx, my, clicked)
 
         y = Composer::sectionHeader(self, panelX, panelW, y, "Description")
         y = Composer::editableRow(self, panelX, panelW, y, "Text", "spell", S\ID, "description", S\Description$, mx, my, clicked)
@@ -2536,7 +2563,90 @@ Type Composer
             EndIf
             y = y + CMP_ROW_H
         EndIf
+
+        // Per-clip editor. AnimSet has 150 slots; render a sub-section for
+        // each clip that's either named OR is a well-known required clip
+        // (Anim_Walk = 149, Anim_Run = 148, etc) even if currently empty
+        // -- so designers can populate a known-empty slot.
+        y = Composer::sectionHeader(self, panelX, panelW, y, "Clips (Name | Start | End | Speed)")
+        y = Composer::renderAnimSetClips(self, panelX, panelW, y, A, mx, my, clicked)
+
         Composer::recordContentBottom(self, y)
+    End Method
+
+
+    // -------------------------------------------------------------------------
+    // renderAnimSetClips -- walk 0..149 and render a sub-section per clip
+    // that's either defined or known-required. Each clip row group:
+    //   [Slot N -- Anim_XYZ]      (header in arcane cyan)
+    //   Name:  [editable string]
+    //   Start: [int] | End: [int]  (side-by-side via doubleIntRow)
+    //   Speed: [float]
+    //
+    // Well-known anim names (Anim_Walk=149 etc) come from animSlotLabel
+    // below. Slots that are both empty AND not well-known are skipped so
+    // the panel doesn't show 150 blank entries on a fresh AnimSet.
+    // -------------------------------------------------------------------------
+    Method renderAnimSetClips%(panelX%, panelW%, y%, A.AnimSet, mx%, my%, clicked%)
+        Local i%
+        For i = 0 To 149
+            Local known$ = Composer::animSlotLabel(self, i)
+            Local defined% = (A\AnimName$[i] <> "")
+            If defined = True Or known <> ""
+                If Composer::canPaintRow(self, y, CMP_ROW_H) = True
+                    Local hdr$ = "Slot " + Str(i)
+                    If known <> "" Then hdr = hdr + " (" + known + ")"
+                    LoomText(panelX + CMP_PAD, y + 4, hdr, LOOM_ARCANE_500_R, LOOM_ARCANE_500_G, LOOM_ARCANE_500_B)
+                EndIf
+                y = y + CMP_ROW_H
+
+                y = Composer::editableRow(self, panelX, panelW, y, "Name",  "animset", A\ID, "clip_name_"  + Str(i), A\AnimName$[i],  mx, my, clicked)
+                y = Composer::doubleIntRow(self, panelX, panelW, y, "S | E", "animset", A\ID, "clip_start_" + Str(i), A\AnimStart[i], "clip_end_" + Str(i), A\AnimEnd[i], mx, my, clicked)
+                y = Composer::editableFloatRow(self, panelX, panelW, y, "Speed", "animset", A\ID, "clip_speed_" + Str(i), A\AnimSpeed#[i], mx, my, clicked)
+                y = y + 4
+            EndIf
+        Next
+        Return y
+    End Method
+
+
+    // -------------------------------------------------------------------------
+    // animSlotLabel -- returns the friendly name for one of the well-known
+    // animation indices (Anim_Walk etc), else "". Used by the AnimSet clip
+    // sub-section header so designers see "Slot 149 (Walk)" not just
+    // "Slot 149".
+    // -------------------------------------------------------------------------
+    Method animSlotLabel$(idx%)
+        If idx = 149 Then Return "Walk"
+        If idx = 148 Then Return "Run"
+        If idx = 147 Then Return "Swim idle"
+        If idx = 146 Then Return "Swim slow"
+        If idx = 145 Then Return "Swim fast"
+        If idx = 144 Then Return "Ride idle"
+        If idx = 143 Then Return "Ride walk"
+        If idx = 142 Then Return "Ride run"
+        If idx = 141 Then Return "Attack (default)"
+        If idx = 140 Then Return "Attack (right)"
+        If idx = 139 Then Return "Attack (2H)"
+        If idx = 138 Then Return "Attack (staff)"
+        If idx = 137 Then Return "Parry (default)"
+        If idx = 136 Then Return "Parry (right)"
+        If idx = 135 Then Return "Parry (2H)"
+        If idx = 134 Then Return "Parry (staff)"
+        If idx = 133 Then Return "Parry (shield)"
+        If idx = 132 Then Return "Last hit"
+        If idx = 130 Then Return "First hit"
+        If idx = 129 Then Return "Last death"
+        If idx = 127 Then Return "First death"
+        If idx = 126 Then Return "Jump"
+        If idx = 125 Then Return "Idle"
+        If idx = 124 Then Return "Yawn"
+        If idx = 123 Then Return "Look round"
+        If idx = 122 Then Return "Sit down"
+        If idx = 121 Then Return "Sit idle"
+        If idx = 120 Then Return "Stand up"
+        If idx = 119 Then Return "Strafe right"
+        Return ""
     End Method
 
 
