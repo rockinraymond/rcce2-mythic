@@ -84,6 +84,13 @@ Global VPMarkerDragKind$  = ""
 Global VPMarkerDragIdx    = -1
 Global VPMarkerDragArH    = 0            ; Handle(Area) of the zone being edited
 
+; Shift held at drag-start = Y-axis mode: vertical mouse delta becomes Y
+; delta instead of CameraPick-on-ground driving XZ. Locked at press time
+; (not re-sampled mid-drag) so the user can release shift after the press
+; without breaking the gesture.
+Global VPMarkerDragYMode = False
+Global VPMarkerDragLastMY = 0    ; per-frame Y delta basis
+
 ; MMB pan state. Middle-mouse drag translates VPSceneCenterX/Z in
 ; camera-aligned screen-right and screen-forward directions so the
 ; user can scroll the view to focus on a particular zone corner.
@@ -284,6 +291,27 @@ Function Loom_CommitMarkerCoord(zoneHandle, kind$, idx, newX#, newZ#)
                 Ar\WaypointX#[wpIdx] = newX#
                 Ar\WaypointZ#[wpIdx] = newZ#
             EndIf
+        EndIf
+    EndIf
+End Function
+
+
+; =============================================================================
+; Loom_CommitMarkerY -- companion to Loom_CommitMarkerCoord for Y-mode
+; drags. Spawn case updates the referenced waypoint's Y (same data
+; model rule as Loom_CommitMarkerCoord for X/Z).
+; =============================================================================
+Function Loom_CommitMarkerY(zoneHandle, kind$, idx, newY#)
+    Local Ar.Area = Object.Area(zoneHandle)
+    If Ar = Null Then Return
+    If kind$ = "portal"
+        If idx >= 0 And idx <= 99 Then Ar\PortalY#[idx] = newY#
+    Else If kind$ = "trigger"
+        If idx >= 0 And idx <= 149 Then Ar\TriggerY#[idx] = newY#
+    Else If kind$ = "spawn"
+        If idx >= 0 And idx <= 999
+            Local wpIdx = Ar\SpawnWaypoint[idx]
+            If wpIdx >= 0 And wpIdx <= 1999 Then Ar\WaypointY#[wpIdx] = newY#
         EndIf
     EndIf
 End Function
@@ -865,6 +893,11 @@ Function Loom_DrawZoneViewport(zoneHandle, x, y)
                         VPMarkerDragKind$ = pm\Kind
                         VPMarkerDragIdx  = pm\IndexN
                         VPMarkerDragArH  = zoneHandle
+                        ; Shift at press = Y-axis drag mode (locked for
+                        ; the duration of the drag; user can release
+                        ; shift mid-drag and Y mode persists).
+                        VPMarkerDragYMode = (KeyDown(42) = True Or KeyDown(54) = True)
+                        VPMarkerDragLastMY = my
                         Exit
                     EndIf
                 Next
@@ -874,21 +907,42 @@ Function Loom_DrawZoneViewport(zoneHandle, x, y)
                 Loom_AddTriggerAtClick(zoneHandle, mx - x, my - y)
             EndIf
         Else
-            ; Drag: re-pick against the ground, hide the dragged marker
-            ; first so the ray passes through it.
-            HideEntity VPMarkerDragEN
-            CameraPick VPCam, mx - x, my - y
-            ShowEntity VPMarkerDragEN
-            Local groundEN = PickedEntity()
-            If groundEN = VPGround
-                Local newX# = PickedX#()
-                Local newZ# = PickedZ#()
-                ; Update marker position
-                PositionEntity VPMarkerDragEN, newX#, EntityY#(VPMarkerDragEN), newZ#
-                ; Update the underlying Area field via the existing zone
-                ; setter dispatch (handles Strict-mode dim-write trap).
-                Loom_CommitMarkerCoord(VPMarkerDragArH, VPMarkerDragKind$, VPMarkerDragIdx, newX#, newZ#)
-                VPDirty = True
+            If VPMarkerDragYMode = True
+                ; Y-mode drag: vertical mouse delta = Y delta. Scale
+                ; by camera distance so the apparent feel stays
+                ; consistent at different zooms. Mouse UP = move UP
+                ; (negative dy in screen coords becomes positive Y).
+                Local dyPx = my - VPMarkerDragLastMY
+                VPMarkerDragLastMY = my
+                If dyPx <> 0
+                    Local yDelta# = Float(-dyPx) * (VPDistance# / 200.0)
+                    Local curY# = EntityY#(VPMarkerDragEN)
+                    Local curX# = EntityX#(VPMarkerDragEN)
+                    Local curZ# = EntityZ#(VPMarkerDragEN)
+                    Local newY# = curY# + yDelta#
+                    PositionEntity VPMarkerDragEN, curX#, newY#, curZ#
+                    ; Convert to scene-relative Y (subtract VP_SCENE_Y_OFFSET).
+                    Loom_CommitMarkerY(VPMarkerDragArH, VPMarkerDragKind$, VPMarkerDragIdx, newY# - VP_SCENE_Y_OFFSET#)
+                    VPDirty = True
+                EndIf
+            Else
+                ; XZ-mode drag (default): re-pick against the ground,
+                ; hide the dragged marker first so the ray passes
+                ; through it.
+                HideEntity VPMarkerDragEN
+                CameraPick VPCam, mx - x, my - y
+                ShowEntity VPMarkerDragEN
+                Local groundEN = PickedEntity()
+                If groundEN = VPGround
+                    Local newX# = PickedX#()
+                    Local newZ# = PickedZ#()
+                    ; Update marker position
+                    PositionEntity VPMarkerDragEN, newX#, EntityY#(VPMarkerDragEN), newZ#
+                    ; Update the underlying Area field via the existing zone
+                    ; setter dispatch (handles Strict-mode dim-write trap).
+                    Loom_CommitMarkerCoord(VPMarkerDragArH, VPMarkerDragKind$, VPMarkerDragIdx, newX#, newZ#)
+                    VPDirty = True
+                EndIf
             EndIf
         EndIf
     Else
@@ -902,6 +956,7 @@ Function Loom_DrawZoneViewport(zoneHandle, x, y)
             VPMarkerDragEN   = 0
             VPMarkerDragKind$ = ""
             VPMarkerDragIdx  = -1
+            VPMarkerDragYMode = False
         EndIf
     EndIf
 
@@ -1067,7 +1122,7 @@ Function Loom_DrawZoneViewport(zoneHandle, x, y)
     EndIf
 
     If inside = True
-        LoomText x + 8, y + VP_RT_SIZE - 18, "LMB=orbit RMB=move wheel=zoom MMB=pan  shift+LMB/RMB/MMB=add portal/trigger/spawn", LOOM_STONE_300_R, LOOM_STONE_300_G, LOOM_STONE_300_B
+        LoomText x + 8, y + VP_RT_SIZE - 18, "LMB=orbit RMB=move(shift+RMB=Y) wheel=zoom MMB=pan  shift+click=add", LOOM_STONE_300_R, LOOM_STONE_300_G, LOOM_STONE_300_B
     EndIf
 
     Return True
