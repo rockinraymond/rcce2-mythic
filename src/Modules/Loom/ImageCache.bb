@@ -109,6 +109,15 @@ Function Loom_MouseWheel%()
     Return LoomFrameMouseWheel
 End Function
 
+; Loom_ConsumeWheel -- zero the per-frame wheel cache so later
+; surfaces in the same frame see 0. Used by viewports (MeshPreview,
+; ZoneViewport, Atlas) when the cursor is inside their rect and
+; they're handling the wheel for zoom -- prevents the composer's
+; scroll handler from ALSO consuming the same tick.
+Function Loom_ConsumeWheel()
+    LoomFrameMouseWheel = 0
+End Function
+
 
 ; =============================================================================
 ; Chrome immersion toggle (Tool / Balanced / In-world). Three-mode slider

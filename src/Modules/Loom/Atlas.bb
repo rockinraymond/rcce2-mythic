@@ -180,6 +180,10 @@ Type Atlas
                 self\viewZoom# = self\viewZoom# * (1.0 + Float(wheel) * 0.1)
                 If self\viewZoom# < 0.25 Then self\viewZoom# = 0.25
                 If self\viewZoom# > 4.0  Then self\viewZoom# = 4.0
+                // Atlas is browser-pane so doesn't conflict with the
+                // composer scroll, but consuming anyway keeps the
+                // facade contract consistent.
+                Loom_ConsumeWheel()
             EndIf
 
             // MMB pan -- edge-detect: MouseDown(3) press initiates,
