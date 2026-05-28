@@ -71,6 +71,11 @@ Const CMP_SCROLL_STEP = 22
 // Scrollbar indicator track width on the right edge of the panel.
 Const CMP_SCROLLBAR_W = 4
 
+; bulk field broadcast -- "Apply to all" button width inside the bulk-edit panel
+Const CMP_BULK_APPLY_W  = 56
+Const CMP_BULK_APPLY_H  = 22
+Const CMP_BULK_INPUT_W  = 140
+
 
 // -----------------------------------------------------------------------------
 // BulkDeleteTarget -- per-iteration snapshot of (kind, refID) for the
@@ -128,6 +133,15 @@ Type Composer
     // within CMP_DELETE_ARM_MS commits to delete every selected entity.
     Field bulkDeleteArmAt%
 
+    // Bulk-field-broadcast state. Lets the user "Apply to all" a single
+    // value across every selected entity of a homogeneous selection.
+    // bulkEditField = "" means no bulk field edit in progress. The
+    // (kind, fieldId) pair identifies which field of which kind is
+    // being broadcast; we don't store the kind separately because the
+    // panel is only shown when homogeneousSelectionKind returns nonempty.
+    Field bulkEditField$
+    Field bulkEditBuffer$
+
     // Edit-buffer state. editKind = "" means no edit in progress.
     // (kind, refID, fieldId) together identify which field of which entity
     // the user is currently typing into. editBuffer is the in-progress value
@@ -179,6 +193,8 @@ Type Composer
         self\collapsed = False
         self\browser = Null
         self\bulkDeleteArmAt = 0
+        self\bulkEditField = ""
+        self\bulkEditBuffer = ""
         Return self
     End Method
 
@@ -226,6 +242,7 @@ Type Composer
     // -------------------------------------------------------------------------
     Method isEditing%()
         If self\editKind <> "" Then Return True
+        If self\bulkEditField <> "" Then Return True
         Return False
     End Method
 
@@ -1050,6 +1067,10 @@ Type Composer
     // canPaintRow / recordContentBottom.
     // -------------------------------------------------------------------------
     Method renderBulkEdit(sw%, sh%)
+        // Pump keyboard for in-progress bulk-field input first so the
+        // typed buffer is up-to-date when the Apply button reads it.
+        If self\bulkEditField <> "" Then Composer::pumpBulkKeyboard(self)
+
         // Mouse wheel scroll -- same shape as focused-entity composer.
         Local wheelTicks% = MouseZ()
         If wheelTicks <> 0
@@ -1096,6 +1117,18 @@ Type Composer
         self\bodyTop = bodyY
         self\bodyBottom = bodyY + bodyH
         Local rowY% = bodyY - self\scrollOffset
+
+        // ---- Apply-to-all section (homogeneous selections only) -------------
+        // When every selected entity is the same kind we can offer a
+        // small set of broadcast-editable fields. Heterogeneous
+        // selections only get the entity list + delete -- mixed-kind
+        // fields don't share enough semantics to bulk-edit safely.
+        Local homKind$ = Composer::homogeneousSelectionKind(self)
+        If homKind <> ""
+            rowY = Composer::sectionHeader(self, x, w, rowY, "Apply to all (" + homKind + ")")
+            rowY = Composer::renderBulkFieldsFor(self, x, w, rowY, homKind, mx, my, clicked)
+            rowY = rowY + 6
+        EndIf
 
         rowY = Composer::sectionHeader(self, x, w, rowY, "Selected entities")
 
@@ -1248,6 +1281,217 @@ Type Composer
         Toast_Show("Bulk delete: " + Str(deleted) + " of " + Str(count) + " entities removed", "danger")
         WriteLog(LoomLog, "Composer: bulk-deleted " + Str(deleted) + " entities")
     End Method
+
+
+    // -------------------------------------------------------------------------
+    // homogeneousSelectionKind -- returns the single shared Kind when every
+    // selected entity is the same kind, else "". The bulk-field-broadcast
+    // panel only shows when this returns nonempty -- mixed-kind selections
+    // don't share enough field semantics for safe broadcast edits.
+    // -------------------------------------------------------------------------
+    Method homogeneousSelectionKind$()
+        Local seenKind$ = ""
+        Local e.SelectedEntity
+        For e = Each SelectedEntity
+            If seenKind = ""
+                seenKind = e\Kind
+            Else
+                If e\Kind <> seenKind Then Return ""
+            EndIf
+        Next
+        Return seenKind
+    End Method
+
+
+    // -------------------------------------------------------------------------
+    // renderBulkFieldsFor -- renders the per-kind bulk-editable field rows.
+    // Returns the next y position so the caller can continue the layout.
+    //
+    // Each kind has a curated 2-4 field subset that's safe to broadcast:
+    //   item:    value, mass, weapon_damage, armour_level
+    //   spell:   recharge_ms
+    //   actor:   xpmult, scale, aggressiveness, agg_range, default_faction
+    //   zone:    gravity, outdoors, pvp
+    //   faction: (no useful broadcast field -- 0 fields rendered)
+    //   animset: (no useful broadcast field -- 0 fields rendered)
+    //
+    // We deliberately omit name + script + race/class restriction fields
+    // -- broadcasting those would clobber per-entity identity / behavior.
+    // -------------------------------------------------------------------------
+    Method renderBulkFieldsFor%(panelX%, panelW%, y%, kind$, mx%, my%, clicked%)
+        If kind = "item"
+            y = Composer::bulkFieldRow(self, panelX, panelW, y, "Value",         "value",         mx, my, clicked)
+            y = Composer::bulkFieldRow(self, panelX, panelW, y, "Mass",          "mass",          mx, my, clicked)
+            y = Composer::bulkFieldRow(self, panelX, panelW, y, "Damage",        "weapon_damage", mx, my, clicked)
+            y = Composer::bulkFieldRow(self, panelX, panelW, y, "Armour level",  "armour_level",  mx, my, clicked)
+            Return y
+        EndIf
+        If kind = "spell"
+            y = Composer::bulkFieldRow(self, panelX, panelW, y, "Recharge (ms)", "recharge_ms",   mx, my, clicked)
+            Return y
+        EndIf
+        If kind = "actor"
+            y = Composer::bulkFieldRow(self, panelX, panelW, y, "XP multiplier", "xpmult",         mx, my, clicked)
+            y = Composer::bulkFieldRow(self, panelX, panelW, y, "Scale",         "scale",          mx, my, clicked)
+            y = Composer::bulkFieldRow(self, panelX, panelW, y, "Aggression",    "aggressiveness", mx, my, clicked)
+            y = Composer::bulkFieldRow(self, panelX, panelW, y, "Aggro range",   "agg_range",      mx, my, clicked)
+            y = Composer::bulkFieldRow(self, panelX, panelW, y, "Faction",       "default_faction", mx, my, clicked)
+            Return y
+        EndIf
+        If kind = "zone"
+            y = Composer::bulkFieldRow(self, panelX, panelW, y, "Gravity",       "gravity",       mx, my, clicked)
+            Return y
+        EndIf
+        // faction / animset: no useful broadcast field -- leave the section
+        // header in place but show a single explanatory row.
+        LoomText(panelX + CMP_PAD, y + 4, "(no broadcast-safe fields for this kind)", LOOM_STONE_300_R, LOOM_STONE_300_G, LOOM_STONE_300_B)
+        Return y + CMP_ROW_H
+    End Method
+
+
+    // -------------------------------------------------------------------------
+    // bulkFieldRow -- one row in the bulk-edit panel. Layout:
+    //
+    //   [label]   [input box (typing target)]   [Apply]
+    //
+    // The input box is the click target to start editing -- clicking it
+    // sets bulkEditField and clears the buffer (typing freshly is the
+    // expected interaction; no inherited "current value" since selection
+    // has many values).
+    //
+    // Apply button click commits the buffer to writeField for every
+    // SelectedEntity. Buffer is preserved after commit so the user can
+    // re-apply if they want.
+    // -------------------------------------------------------------------------
+    Method bulkFieldRow%(panelX%, panelW%, y%, label$, fieldId$, mx%, my%, clicked%)
+        // Only paint when row is inside the scroll viewport
+        If Composer::canPaintRow(self, y, CMP_ROW_H) = False Then Return y + CMP_ROW_H + 4
+
+        LoomText(panelX + CMP_PAD, y + 4, label, LOOM_PARCHMENT_100_R, LOOM_PARCHMENT_100_G, LOOM_PARCHMENT_100_B)
+
+        // Input box
+        Local inputX% = panelX + CMP_PAD + 110
+        Local inputY% = y
+        Local inputH% = CMP_ROW_H - 4
+        Local active% = (self\bulkEditField = fieldId)
+
+        If active = True
+            LoomFill(inputX, inputY, CMP_BULK_INPUT_W, inputH, LOOM_STONE_900_R, LOOM_STONE_900_G, LOOM_STONE_900_B)
+            LoomBorder(inputX, inputY, CMP_BULK_INPUT_W, inputH, LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
+            Local cursor$ = ""
+            If (MilliSecs() Mod CMP_CURSOR_PERIOD) < (CMP_CURSOR_PERIOD / 2) Then cursor = "|"
+            LoomText(inputX + 4, inputY + 3, self\bulkEditBuffer + cursor, LOOM_PARCHMENT_100_R, LOOM_PARCHMENT_100_G, LOOM_PARCHMENT_100_B)
+        Else
+            LoomFill(inputX, inputY, CMP_BULK_INPUT_W, inputH, LOOM_STONE_800_R, LOOM_STONE_800_G, LOOM_STONE_800_B)
+            LoomBorder(inputX, inputY, CMP_BULK_INPUT_W, inputH, LOOM_STONE_700_R, LOOM_STONE_700_G, LOOM_STONE_700_B)
+            Local placeholder$ = self\bulkEditBuffer
+            If placeholder = "" Then placeholder = "type & Apply..."
+            LoomText(inputX + 4, inputY + 3, placeholder, LOOM_STONE_300_R, LOOM_STONE_300_G, LOOM_STONE_300_B)
+        EndIf
+
+        // Input click -> start editing this field
+        If clicked = True
+            If mx >= inputX And mx < inputX + CMP_BULK_INPUT_W And my >= inputY And my < inputY + inputH
+                // Commit any in-progress single-field edit first to avoid
+                // a stuck editKind interfering with palette / keyboard pumping
+                If self\editKind <> "" Then Composer::commitEdit(self)
+                self\bulkEditField = fieldId
+                self\bulkEditBuffer = ""
+                FlushKeys
+            EndIf
+        EndIf
+
+        // Apply button
+        Local btnX% = inputX + CMP_BULK_INPUT_W + 8
+        Local btnY% = y
+        Local hovered% = (mx >= btnX And mx < btnX + CMP_BULK_APPLY_W And my >= btnY And my < btnY + CMP_BULK_APPLY_H)
+        Local canApply% = (self\bulkEditField = fieldId And self\bulkEditBuffer <> "")
+
+        If canApply = True
+            If hovered = True
+                LoomFill(btnX, btnY, CMP_BULK_APPLY_W, CMP_BULK_APPLY_H, LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
+            Else
+                LoomFill(btnX, btnY, CMP_BULK_APPLY_W, CMP_BULK_APPLY_H, LOOM_BRASS_700_R, LOOM_BRASS_700_G, LOOM_BRASS_700_B)
+            EndIf
+            LoomBorder(btnX, btnY, CMP_BULK_APPLY_W, CMP_BULK_APPLY_H, LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
+            LoomText(btnX + 8, btnY + 4, "Apply", LOOM_PARCHMENT_100_R, LOOM_PARCHMENT_100_G, LOOM_PARCHMENT_100_B)
+        Else
+            LoomFill(btnX, btnY, CMP_BULK_APPLY_W, CMP_BULK_APPLY_H, LOOM_STONE_800_R, LOOM_STONE_800_G, LOOM_STONE_800_B)
+            LoomBorder(btnX, btnY, CMP_BULK_APPLY_W, CMP_BULK_APPLY_H, LOOM_STONE_700_R, LOOM_STONE_700_G, LOOM_STONE_700_B)
+            LoomText(btnX + 8, btnY + 4, "Apply", LOOM_STONE_300_R, LOOM_STONE_300_G, LOOM_STONE_300_B)
+        EndIf
+
+        If hovered = True And clicked = True And canApply = True
+            Composer::commitBulkField(self, fieldId, self\bulkEditBuffer)
+        EndIf
+
+        Return y + CMP_ROW_H + 4
+    End Method
+
+
+    // -------------------------------------------------------------------------
+    // commitBulkField -- broadcast a single value to fieldId on every
+    // SelectedEntity that matches the homogeneous kind. Marks the kind's
+    // *Saved global False (one mark, not per-entity). Timeline records a
+    // single rolled-up entry rather than N edits to avoid spamming
+    // history with bulk operations.
+    // -------------------------------------------------------------------------
+    Method commitBulkField(fieldId$, value$)
+        Local homKind$ = Composer::homogeneousSelectionKind(self)
+        If homKind = "" Then Return
+
+        Local applied% = 0
+        Local e.SelectedEntity
+        For e = Each SelectedEntity
+            If e\Kind = homKind
+                Composer::writeField(self, e\Kind, e\RefID, fieldId, value)
+                applied = applied + 1
+            EndIf
+        Next
+
+        If applied > 0
+            Composer::markDirtyForKind(self, homKind)
+            WorldCache_Invalidate()
+            Timeline_RecordEdit(homKind, -1, fieldId, "bulk-" + Str(applied), value, "Bulk edit " + Str(applied) + " " + homKind + "s")
+            Toast_Show("Bulk: " + fieldId + " <- " + value + " on " + Str(applied) + " " + homKind + "s", "success")
+        EndIf
+
+        WriteLog(LoomLog, "Composer: bulk-field " + homKind + "." + fieldId + " <- " + Chr(34) + value + Chr(34) + " (n=" + Str(applied) + ")")
+    End Method
+
+
+    // -------------------------------------------------------------------------
+    // pumpBulkKeyboard -- called per-frame when bulkEditField is nonempty.
+    // Drains the keyboard queue into bulkEditBuffer with the same shape as
+    // pumpKeyboard for single-edit. Enter does NOT auto-apply (would be
+    // surprising for a destructive broadcast); user must click Apply.
+    // Esc cancels (clears field+buffer).
+    // -------------------------------------------------------------------------
+    Method pumpBulkKeyboard()
+        If self\bulkEditField = "" Then Return
+
+        // Backspace
+        If KeyHit(14) And Len(self\bulkEditBuffer) > 0
+            self\bulkEditBuffer = Left$(self\bulkEditBuffer, Len(self\bulkEditBuffer) - 1)
+        EndIf
+
+        // Esc -- cancel
+        If KeyHit(1)
+            self\bulkEditField = ""
+            self\bulkEditBuffer = ""
+            Return
+        EndIf
+
+        // Printable chars
+        Local k% = GetKey()
+        While k > 0
+            If k >= 32 And k <= 126
+                self\bulkEditBuffer = self\bulkEditBuffer + Chr(k)
+            EndIf
+            k = GetKey()
+        Wend
+    End Method
+
 
 
     Method drawDuplicateButton(btnX%, btnY%, mx%, my%, clicked%, kind$, refID%)
