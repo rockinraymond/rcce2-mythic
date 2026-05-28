@@ -161,6 +161,11 @@ Type Browser
         // Editor, etc.). Not an entity kind, so the composer / new / save
         // affordances don't apply on this tab -- it's pure launch surface.
         Browser::addCategory(self, "tools",   "Tools")
+        // Scripts tab: every .rsl file in Data\Server Data\Scripts\ as
+        // a clickable card. Composer view shows content preview + reverse
+        // refs (which Zone/Item/Spell references this script). Closes
+        // the "what scripts exist?" gap that GUE doesn't fill either.
+        Browser::addCategory(self, "script",  "Scripts")
         // Settings tab: project-level configuration singleton (Misc.dat /
         // Other.dat / Money.dat / Hosts.dat). Clicking the tab focuses
         // the singleton composer view directly -- no card grid since
@@ -415,7 +420,7 @@ Type Browser
         Local nbW% = 96
         Local nbH% = 22
         Local nbHover% = False
-        If self\category <> "tools"
+        If self\category <> "tools" And self\category <> "script"
             nbHover = (mx >= nbX And mx < nbX + nbW And my >= nbY And my < nbY + nbH)
 
             If nbHover = True
@@ -525,6 +530,7 @@ Type Browser
         If kind = "zone"    Then Return "Zone"
         If kind = "faction" Then Return "Faction"
         If kind = "animset" Then Return "Anim Set"
+        If kind = "script"  Then Return "Script"
         Return kind
     End Method
 
@@ -673,6 +679,9 @@ Type Browser
         EndIf
         If cat = "tools"
             count = Browser::drawToolsGrid(self, sw, sh, mx, my, clicked, gridX, gridY, cols)
+        EndIf
+        If cat = "script"
+            count = Browser::drawScriptsGrid(self, sw, sh, mx, my, clicked, gridX, gridY, cols)
         EndIf
         If cat = "settings"
             count = Browser::drawSettingsCard(self, sw, sh, mx, my, clicked, gridX, gridY)
@@ -969,6 +978,77 @@ Type Browser
         // Keyboard Enter on the selected tool card -- same dispatch.
         If selected = True And self\pendingEnter = True
             Tools_Launch(t)
+            self\cardClickLatch = True
+            self\pendingEnter = False
+        EndIf
+    End Method
+
+
+    // -------------------------------------------------------------------------
+    // drawScriptsGrid -- one card per .rsl file in the project's Scripts
+    // dir (populated at boot by Scripts_Init). Hover/click focuses the
+    // composer to a script preview + reverse-ref view. Filter applies
+    // against the script basename.
+    // -------------------------------------------------------------------------
+    Method drawScriptsGrid%(sw%, sh%, mx%, my%, clicked%, gridX%, gridY%, cols%)
+        Local col% = 0
+        Local row% = 0
+        Local count% = 0
+        For sf.ScriptFile = Each ScriptFile
+            If Browser::matchesFilter(self, sf\Name$) = True
+                Local cx% = gridX + col * (BR_CARD_W + BR_CARD_GAP)
+                Local cy% = gridY + row * (BR_CARD_H + BR_CARD_GAP)
+                If cy + BR_CARD_H < sh - BR_BOT_RIBBON
+                    Browser::drawScriptCard(self, sf, cx, cy, mx, my, clicked, count)
+                EndIf
+                count = count + 1
+                col = col + 1
+                If col >= cols Then col = 0 : row = row + 1
+            EndIf
+        Next
+        Return count
+    End Method
+
+
+    // -------------------------------------------------------------------------
+    // drawScriptCard -- one .rsl file card. Shape mirrors the entity-card
+    // chrome (shadow + brass border + top accent rule + body). Click
+    // focuses the composer to the script preview via Threads::focus.
+    // -------------------------------------------------------------------------
+    Method drawScriptCard(sf.ScriptFile, x%, y%, mx%, my%, clicked%, cardIdx%)
+        Local hovered% = (mx >= x And mx < x + BR_CARD_W And my >= y And my < y + BR_CARD_H)
+        Local selected% = (cardIdx = self\selectedIndex)
+
+        LoomShadowCard(x, y, BR_CARD_W, BR_CARD_H)
+        LoomFill(x, y, BR_CARD_W, BR_CARD_H, LOOM_STONE_800_R, LOOM_STONE_800_G, LOOM_STONE_800_B)
+
+        If hovered = True
+            LoomBorder(x, y, BR_CARD_W, BR_CARD_H, LOOM_ARCANE_500_R, LOOM_ARCANE_500_G, LOOM_ARCANE_500_B)
+            LoomBorder(x + 1, y + 1, BR_CARD_W - 2, BR_CARD_H - 2, LOOM_ARCANE_500_R, LOOM_ARCANE_500_G, LOOM_ARCANE_500_B)
+        Else If selected = True
+            LoomBorder(x, y, BR_CARD_W, BR_CARD_H, LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
+            LoomBorder(x + 1, y + 1, BR_CARD_W - 2, BR_CARD_H - 2, LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
+        Else
+            LoomBorder(x, y, BR_CARD_W, BR_CARD_H, LOOM_BRASS_700_R, LOOM_BRASS_700_G, LOOM_BRASS_700_B)
+        EndIf
+
+        // Top brass accent rule
+        LoomHRule(x + 12, y + 8, BR_CARD_W - 24, LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
+
+        // Body: name (truncated) + size + line count + filetype hint
+        Local nm$ = sf\Name$
+        If Len(nm) > 22 Then nm = Left$(nm, 21) + "~"
+        LoomText(x + 12, y + 18, nm, LOOM_PARCHMENT_100_R, LOOM_PARCHMENT_100_G, LOOM_PARCHMENT_100_B)
+        LoomText(x + 12, y + 44, Scripts_FormatSize(sf\SizeBytes) + " | " + Str(sf\LineCount) + " lines", LOOM_STONE_200_R, LOOM_STONE_200_G, LOOM_STONE_200_B)
+        LoomText(x + BR_CARD_W - 50, y + 72, ".rsl", LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
+
+        If hovered And clicked
+            Threads::focus(self\threads, "script", sf\Index)
+            self\cardClickLatch = True
+        EndIf
+
+        If selected = True And self\pendingEnter = True
+            Threads::focus(self\threads, "script", sf\Index)
             self\cardClickLatch = True
             self\pendingEnter = False
         EndIf
