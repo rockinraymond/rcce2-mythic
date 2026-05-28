@@ -54,6 +54,7 @@ Type AtlasNode
     Field SpawnCount%   // total defined SpawnActor slots; node size scales
     Field IssueCount%   // # of issues affecting this zone (computed at build)
     Field Outdoors%     // tint hint -- leafy fill for outdoors, stone for indoor
+    Field Manual%       // True if user dragged this node; force layout skips it
 End Type
 
 
@@ -85,12 +86,26 @@ Type Atlas
     // Local from inside nested For/If blocks.
     Field iterTemp#
 
+    // Manual-drag state. draggedNode is set when LMB went down inside
+    // a node; cleared on LMB release. dragOffsetX/Y is the offset from
+    // node center to mouse point at press time so the drag doesn't
+    // snap to mouse center.
+    Field draggedNode.AtlasNode
+    Field dragOffsetX%, dragOffsetY%
+    Field dragMoved%      // True if mouse moved during drag; gates the
+                          //   save-on-release path so a click-without-drag
+                          //   doesn't churn the layout file
+    Field lmbPrevDown%    // edge detector for LMB press vs held
+
 
     Method create.Atlas(threads.Threads)
         self\threads = threads
         self\nodeCount = 0
         self\minX# = 0.0 : self\minY# = 0.0 : self\maxX# = 1.0 : self\maxY# = 1.0
         self\temperature# = ATLAS_INITIAL_TEMP#
+        self\draggedNode = Null
+        self\dragMoved = False
+        self\lmbPrevDown = False
         Return self
     End Method
 
@@ -137,11 +152,34 @@ Type Atlas
         Local my% = MouseY()
         Local clicked% = Loom_MouseClicked()
 
+        // Manual drag: detect LMB press inside a node -> begin drag;
+        // mouse move -> reposition; release -> commit + save. Edge-
+        // detected against lmbPrevDown so the per-frame Loom_MouseClicked
+        // signal (one-shot press) can still drive Threads::focus on a
+        // click-without-drag.
+        Local lmbNow% = MouseDown(1)
+        Atlas::pumpDrag(self, viewportX, viewportY + 28, viewportW, viewportH - 28, mx, my, lmbNow)
+        self\lmbPrevDown = lmbNow
+
         // Draw edges first so node disks paint on top of them.
         Atlas::drawEdges(self, viewportX, viewportY + 28, viewportW, viewportH - 28)
 
+        // Suppress the click pass-through to drawNodes when a drag is
+        // active (or just finished with movement) -- otherwise the
+        // mouse-up at the drag terminus would also focus the zone and
+        // surprise the user with a tab switch.
+        Local effectiveClick% = clicked
+        If self\draggedNode <> Null Or self\dragMoved = True Then effectiveClick = False
+
         // Draw nodes + hit-test.
-        Local hit% = Atlas::drawNodes(self, viewportX, viewportY + 28, viewportW, viewportH - 28, mx, my, clicked)
+        Local hit% = Atlas::drawNodes(self, viewportX, viewportY + 28, viewportW, viewportH - 28, mx, my, effectiveClick)
+
+        // dragMoved is consumed by the click-suppression above; clear
+        // it AFTER drawNodes so a fresh frame starts clean. dragMoved
+        // is set inside pumpDrag whenever the cursor moves while LMB
+        // is held on a node.
+        If self\draggedNode = Null Then self\dragMoved = False
+
         Return hit
     End Method
 
@@ -215,6 +253,11 @@ Type Atlas
             If self\temperature# < ATLAS_MIN_TEMP# Then self\temperature# = ATLAS_MIN_TEMP#
         Next
 
+        // Overlay any saved manual positions from Data\Loom\atlas.txt.
+        // Done AFTER force-directed so saved positions completely
+        // override the computed ones for the matching zones.
+        Atlas::applySavedLayout(self)
+
         Atlas::recenterLayout(self)
     End Method
 
@@ -271,9 +314,12 @@ Type Atlas
             EndIf
         Next
 
-        // Apply displacement, clamped by temperature
+        // Apply displacement, clamped by temperature. Skip nodes the
+        // user has manually placed -- their position is a deliberate
+        // designer choice, not subject to force-directed perturbation.
         Local napp.AtlasNode
         For napp = Each AtlasNode
+            If napp\Manual = True Then Continue
             Local d# = Sqr#(napp\DX# * napp\DX# + napp\DY# * napp\DY#)
             If d# < 0.01 Then d# = 0.01
             Local scale# = self\temperature#
@@ -319,6 +365,91 @@ Type Atlas
         Local span# = self\maxY# - self\minY#
         Local norm# = (wy# - self\minY#) / span#
         Return vy + ATLAS_VIEWPORT_PAD + Int(norm# * Float(vh - ATLAS_VIEWPORT_PAD * 2))
+    End Method
+
+
+    // -------------------------------------------------------------------------
+    // screenToWorldX / screenToWorldY -- inverse of worldToScreen*. Drag
+    // converts screen-space mouse positions back to world-space so the
+    // node tracks the cursor regardless of viewport size.
+    // -------------------------------------------------------------------------
+    Method screenToWorldX#(vx%, vw%, sx%)
+        Local span# = self\maxX# - self\minX#
+        Local inner% = vw - ATLAS_VIEWPORT_PAD * 2
+        If inner <= 0 Then Return self\minX#
+        Local norm# = Float(sx - vx - ATLAS_VIEWPORT_PAD) / Float(inner)
+        Return self\minX# + norm# * span#
+    End Method
+
+
+    Method screenToWorldY#(vy%, vh%, sy%)
+        Local span# = self\maxY# - self\minY#
+        Local inner% = vh - ATLAS_VIEWPORT_PAD * 2
+        If inner <= 0 Then Return self\minY#
+        Local norm# = Float(sy - vy - ATLAS_VIEWPORT_PAD) / Float(inner)
+        Return self\minY# + norm# * span#
+    End Method
+
+
+    // -------------------------------------------------------------------------
+    // pumpDrag -- detect LMB press inside a node, track mouse during
+    // drag, commit + save on release. Edge-detected against lmbPrevDown
+    // so the per-frame state machine doesn't re-fire press logic.
+    //
+    // Drag behavior:
+    //   - Press inside a node: capture as draggedNode + dragOffset
+    //   - Hold + move: update node\X#/Y# from screenToWorld(mouse)
+    //   - Move during drag: set dragMoved (gates the click-suppress +
+    //     save-on-release path)
+    //   - Release: if dragMoved, mark node Manual + persist layout
+    // -------------------------------------------------------------------------
+    Method pumpDrag(vx%, vy%, vw%, vh%, mx%, my%, lmbNow%)
+        // Press detection: lmbNow True + previous frame down False
+        If lmbNow = True And self\lmbPrevDown = False
+            // Walk nodes to find one under the cursor. Stop at first hit.
+            Local n.AtlasNode
+            For n = Each AtlasNode
+                Local sx% = Atlas::worldToScreenX(self, vx, vw, n\X#)
+                Local sy% = Atlas::worldToScreenY(self, vy, vh, n\Y#)
+                Local dx% = mx - sx
+                Local dy% = my - sy
+                Local r% = ATLAS_NODE_R     // press radius uses base size; close enough
+                If dx * dx + dy * dy < r * r
+                    self\draggedNode = n
+                    self\dragOffsetX = dx
+                    self\dragOffsetY = dy
+                    self\dragMoved = False
+                    Exit
+                EndIf
+            Next
+        EndIf
+
+        // Held + moving: update node position from cursor (minus offset
+        // so the grab point stays under the cursor).
+        If lmbNow = True And self\draggedNode <> Null
+            Local targetSX% = mx - self\dragOffsetX
+            Local targetSY% = my - self\dragOffsetY
+            Local newWX# = Atlas::screenToWorldX(self, vx, vw, targetSX)
+            Local newWY# = Atlas::screenToWorldY(self, vy, vh, targetSY)
+            If newWX# <> self\draggedNode\X# Or newWY# <> self\draggedNode\Y#
+                self\draggedNode\X# = newWX#
+                self\draggedNode\Y# = newWY#
+                self\dragMoved = True
+            EndIf
+        EndIf
+
+        // Release: if the drag actually moved the node, mark it Manual
+        // (force layout skips Manual nodes) and persist.
+        If lmbNow = False And self\draggedNode <> Null
+            If self\dragMoved = True
+                self\draggedNode\Manual = True
+                Loom_SaveAtlasLayout()
+                WriteLog(LoomLog, "Atlas: drag commit + save")
+            EndIf
+            self\draggedNode = Null
+            // dragMoved gets cleared in renderAndUpdate next frame; it
+            // suppresses the click pass-through to drawNodes this frame.
+        EndIf
     End Method
 
 
@@ -505,4 +636,90 @@ Type Atlas
             Delete e
         Next
     End Method
+
+
+    // -------------------------------------------------------------------------
+    // applySavedLayout -- called after rebuildLayout's force-directed
+    // pass. Reads Data/Loom/atlas.txt (if it exists) and overrides each
+    // node's X/Y position (and Manual flag) for matching zone names.
+    // Force-directed positions remain for any zone not in the saved file.
+    // -------------------------------------------------------------------------
+    Method applySavedLayout()
+        Local F.BBStream = ReadFile("Data\Loom\atlas.txt")
+        If F = Null Then Return
+
+        Local applied% = 0
+        While Not Eof(F)
+            Local L$ = ReadLine(F)
+            // Format: ZoneName | X | Y | Manual
+            // Split manually on " | " delimiter.
+            If L <> ""
+                Local pipe1% = Instr(L, " | ")
+                If pipe1 > 0
+                    Local name$ = Left$(L, pipe1 - 1)
+                    Local rest1$ = Mid$(L, pipe1 + 3)
+                    Local pipe2% = Instr(rest1, " | ")
+                    If pipe2 > 0
+                        Local xS$ = Left$(rest1, pipe2 - 1)
+                        Local rest2$ = Mid$(rest1, pipe2 + 3)
+                        Local pipe3% = Instr(rest2, " | ")
+                        If pipe3 > 0
+                            Local yS$ = Left$(rest2, pipe3 - 1)
+                            Local manS$ = Mid$(rest2, pipe3 + 3)
+                            Local n.AtlasNode
+                            For n = Each AtlasNode
+                                If n\Label = name
+                                    n\X# = Float(xS)
+                                    n\Y# = Float(yS)
+                                    n\Manual = (manS = "1")
+                                    applied = applied + 1
+                                    Exit
+                                EndIf
+                            Next
+                        EndIf
+                    EndIf
+                EndIf
+            EndIf
+        Wend
+        CloseFile(F)
+
+        WriteLog(LoomLog, "Atlas: applied saved layout (" + Str(applied) + " nodes)")
+    End Method
 End Type
+
+
+// =============================================================================
+// Loom_SaveAtlasLayout / Loom_LoadAtlasLayout -- free functions called
+// from inside the Atlas class (after a drag commit) and from Loom.bb's
+// boot/shutdown. Stored under Data\Loom\atlas.txt via SafeWriteOpen/Commit
+// so a crash mid-write doesn't corrupt the layout file.
+//
+// File format (one node per line):
+//   ZoneName | X | Y | Manual
+//   X / Y are floats with default Str formatting.
+//   Manual is "0" or "1" (1 = user dragged it; force layout skips).
+//
+// Non-Atlas-method form so call sites don't need the instance handle.
+// Walks the global AtlasNode pool directly.
+// =============================================================================
+Function Loom_SaveAtlasLayout()
+    Local path$ = "Data\Loom\atlas.txt"
+    Local tempPath$ = SafeWriteOpen$(path)
+    Local F.BBStream = WriteFile(tempPath)
+    If F = Null Then Return
+
+    Local n.AtlasNode
+    For n = Each AtlasNode
+        Local manS$ = "0"
+        If n\Manual = True Then manS = "1"
+        WriteLine(F, n\Label + " | " + Str(n\X#) + " | " + Str(n\Y#) + " | " + manS)
+    Next
+
+    // Close the stream ourselves, then pass 0 as the int F arg to
+    // SafeWriteCommit -- it tolerates F=0 (skips its own CloseFile).
+    // This avoids the Strict BBStream->Int conversion barrier; the
+    // non-Strict Logging.bb signature takes an untyped F.
+    CloseFile(F)
+    SafeWriteCommit%(tempPath, path, 0)
+End Function
+
