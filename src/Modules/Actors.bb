@@ -1256,6 +1256,15 @@ Function SetFactionName(Index, Name$)
 	FactionNames$(Index) = Name$
 End Function
 
+; Non-Strict setter for the 100x100 FactionDefaultRatings grid. Strict
+; callers in Modules/Loom/Composer.bb route through here per the Dim-write-
+; from-Strict trap (same shape as SetFactionName above).
+Function SetFactionRelation(FromIdx, ToIdx, Rating)
+	If FromIdx < 0 Or FromIdx > 99 Then Return
+	If ToIdx   < 0 Or ToIdx   > 99 Then Return
+	FactionDefaultRatings(FromIdx, ToIdx) = Rating
+End Function
+
 ; Duplicate an Actor template -- allocate a new ID via CreateActor, copy
 ; every field including the Attributes side-instance (deep-copied so the
 ; clone has its own backing storage). Returns the new ID, or -1 if

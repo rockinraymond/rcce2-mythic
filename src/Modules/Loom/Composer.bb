@@ -1057,8 +1057,17 @@ Type Composer
             If refID < 0 Or refID > 99 Then Return
             // SetFactionName lives in Actors.bb (non-Strict) -- direct write
             // to the FactionNames$ global from this Strict file would error
-            // per the Dim-inside-Method gotcha.
+            // per the Dim-inside-Method gotcha. Same shape applies to
+            // SetFactionRelation for the 100x100 FactionDefaultRatings grid.
             If fieldId = "name" Then SetFactionName(refID, value) : Return
+            // Relations -- fieldId pattern "rel_<j>" where j is the target
+            // faction index. Clamps 0..255 (byte storage).
+            If Left$(fieldId, 4) = "rel_"
+                Local relJ% = Int(Mid$(fieldId, 5))
+                Local relV% = Composer::parseIntClamped(self, value, FactionDefaultRatings(refID, relJ), 0, 255)
+                SetFactionRelation(refID, relJ, relV)
+                Return
+            EndIf
         EndIf
 
         // ---- SETTINGS (project config singleton) ----------------------------
@@ -2756,6 +2765,32 @@ Type Composer
             EndIf
             y = y + CMP_ROW_H
         EndIf
+
+        // Relations -- per-other-faction integer rating. This faction's
+        // view of every OTHER defined faction. Editing one cell only
+        // affects this faction's outbound rating; the other direction
+        // is editable from that faction's own composer view.
+        //
+        // Convention (matches GUE): 0 = friendly, 1000 = hostile, 500 =
+        // neutral. The byte storage clamps 0..255 on disk per
+        // SaveFactions; in-memory we accept the same range.
+        y = Composer::sectionHeader(self, panelX, panelW, y, "Relations (this -> other)")
+        Local relCount% = 0
+        Local j%
+        For j = 0 To 99
+            If FactionNames$(j) <> "" And j <> idx
+                Local fid$ = "rel_" + Str(j)
+                y = Composer::editableIntRow(self, panelX, panelW, y, FactionNames$(j), "faction", idx, fid, FactionDefaultRatings(idx, j), mx, my, clicked)
+                relCount = relCount + 1
+            EndIf
+        Next
+        If relCount = 0
+            If Composer::canPaintRow(self, y, CMP_ROW_H) = True
+                LoomText(panelX + CMP_PAD, y + 4, "(no other factions)", LOOM_STONE_300_R, LOOM_STONE_300_G, LOOM_STONE_300_B)
+            EndIf
+            y = y + CMP_ROW_H
+        EndIf
+
         Composer::recordContentBottom(self, y)
     End Method
 
