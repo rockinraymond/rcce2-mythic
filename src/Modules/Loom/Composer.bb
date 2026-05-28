@@ -906,6 +906,69 @@ Type Composer
                 EndIf
                 Return
             EndIf
+
+            // Appearance arrays: mesh_<i> (0..7), beard_<i> (0..4),
+            // mhair_<i> / fhair_<i> (0..4), mface_<i> / fface_<i> (0..4),
+            // mbody_<i> / fbody_<i> (0..4), haircol_<i> (0..15),
+            // mspeech_<i> / fspeech_<i> (0..15), plus flat blood_tex.
+            // All clamp to 0..65535 (texture/mesh/sound IDs).
+            If fieldId = "blood_tex" Then A\BloodTexID = Composer::parseIntClamped(self, value, A\BloodTexID, 0, 65535) : Return
+
+            If Left$(fieldId, 5) = "mesh_"
+                Local mIdx% = Int(Mid$(fieldId, 6))
+                If mIdx >= 0 And mIdx <= 7 Then A\MeshIDs[mIdx] = Composer::parseIntClamped(self, value, A\MeshIDs[mIdx], 0, 65535)
+                Return
+            EndIf
+            If Left$(fieldId, 6) = "beard_"
+                Local bdIdx% = Int(Mid$(fieldId, 7))
+                If bdIdx >= 0 And bdIdx <= 4 Then A\BeardIDs[bdIdx] = Composer::parseIntClamped(self, value, A\BeardIDs[bdIdx], 0, 65535)
+                Return
+            EndIf
+            If Left$(fieldId, 6) = "mhair_"
+                Local mhIdx% = Int(Mid$(fieldId, 7))
+                If mhIdx >= 0 And mhIdx <= 4 Then A\MaleHairIDs[mhIdx] = Composer::parseIntClamped(self, value, A\MaleHairIDs[mhIdx], 0, 65535)
+                Return
+            EndIf
+            If Left$(fieldId, 6) = "fhair_"
+                Local fhIdx% = Int(Mid$(fieldId, 7))
+                If fhIdx >= 0 And fhIdx <= 4 Then A\FemaleHairIDs[fhIdx] = Composer::parseIntClamped(self, value, A\FemaleHairIDs[fhIdx], 0, 65535)
+                Return
+            EndIf
+            If Left$(fieldId, 6) = "mface_"
+                Local mfIdx% = Int(Mid$(fieldId, 7))
+                If mfIdx >= 0 And mfIdx <= 4 Then A\MaleFaceIDs[mfIdx] = Composer::parseIntClamped(self, value, A\MaleFaceIDs[mfIdx], 0, 65535)
+                Return
+            EndIf
+            If Left$(fieldId, 6) = "fface_"
+                Local ffIdx% = Int(Mid$(fieldId, 7))
+                If ffIdx >= 0 And ffIdx <= 4 Then A\FemaleFaceIDs[ffIdx] = Composer::parseIntClamped(self, value, A\FemaleFaceIDs[ffIdx], 0, 65535)
+                Return
+            EndIf
+            If Left$(fieldId, 6) = "mbody_"
+                Local mbIdx% = Int(Mid$(fieldId, 7))
+                If mbIdx >= 0 And mbIdx <= 4 Then A\MaleBodyIDs[mbIdx] = Composer::parseIntClamped(self, value, A\MaleBodyIDs[mbIdx], 0, 65535)
+                Return
+            EndIf
+            If Left$(fieldId, 6) = "fbody_"
+                Local fbIdx% = Int(Mid$(fieldId, 7))
+                If fbIdx >= 0 And fbIdx <= 4 Then A\FemaleBodyIDs[fbIdx] = Composer::parseIntClamped(self, value, A\FemaleBodyIDs[fbIdx], 0, 65535)
+                Return
+            EndIf
+            If Left$(fieldId, 8) = "haircol_"
+                Local hcIdx% = Int(Mid$(fieldId, 9))
+                If hcIdx >= 0 And hcIdx <= 15 Then A\HairColours[hcIdx] = Composer::parseIntClamped(self, value, A\HairColours[hcIdx], -2147483647, 2147483647)
+                Return
+            EndIf
+            If Left$(fieldId, 8) = "mspeech_"
+                Local msIdx% = Int(Mid$(fieldId, 9))
+                If msIdx >= 0 And msIdx <= 15 Then A\MSpeechIDs[msIdx] = Composer::parseIntClamped(self, value, A\MSpeechIDs[msIdx], 0, 65535)
+                Return
+            EndIf
+            If Left$(fieldId, 8) = "fspeech_"
+                Local fsIdx% = Int(Mid$(fieldId, 9))
+                If fsIdx >= 0 And fsIdx <= 15 Then A\FSpeechIDs[fsIdx] = Composer::parseIntClamped(self, value, A\FSpeechIDs[fsIdx], 0, 65535)
+                Return
+            EndIf
         EndIf
 
         // ---- ZONE -----------------------------------------------------------
@@ -2307,7 +2370,92 @@ Type Composer
         y = Composer::sectionHeader(self, panelX, panelW, y, "Resistances")
         y = Composer::renderResistancesTable(self, panelX, panelW, y, A, mx, my, clicked)
 
+        // Appearance -- meshes, beards, hair, face, body, hair colours,
+        // speech, blood. Texture fields (Face/Body/Blood) get thumbnails
+        // via the existing ImageCache. Mesh fields render as plain int
+        // rows since mesh preview requires a 3D viewport (ADR 004).
+        y = Composer::sectionHeader(self, panelX, panelW, y, "Body meshes")
+        y = Composer::editableIntRow(self, panelX, panelW, y, "Male base",     "actor", A\ID, "mesh_0", A\MeshIDs[0], mx, my, clicked)
+        y = Composer::editableIntRow(self, panelX, panelW, y, "Female base",   "actor", A\ID, "mesh_1", A\MeshIDs[1], mx, my, clicked)
+        Local mi%
+        For mi = 2 To 7
+            y = Composer::editableIntRow(self, panelX, panelW, y, "Gubbin " + Str(mi - 2), "actor", A\ID, "mesh_" + Str(mi), A\MeshIDs[mi], mx, my, clicked)
+        Next
+
+        y = Composer::sectionHeader(self, panelX, panelW, y, "Beard meshes (male)")
+        Local bi%
+        For bi = 0 To 4
+            y = Composer::editableIntRow(self, panelX, panelW, y, "Slot " + Str(bi), "actor", A\ID, "beard_" + Str(bi), A\BeardIDs[bi], mx, my, clicked)
+        Next
+
+        y = Composer::sectionHeader(self, panelX, panelW, y, "Hair meshes")
+        Local hi%
+        For hi = 0 To 4
+            y = Composer::editableIntRow(self, panelX, panelW, y, "Male " + Str(hi),   "actor", A\ID, "mhair_" + Str(hi), A\MaleHairIDs[hi],   mx, my, clicked)
+        Next
+        For hi = 0 To 4
+            y = Composer::editableIntRow(self, panelX, panelW, y, "Female " + Str(hi), "actor", A\ID, "fhair_" + Str(hi), A\FemaleHairIDs[hi], mx, my, clicked)
+        Next
+
+        y = Composer::sectionHeader(self, panelX, panelW, y, "Face textures")
+        Local fi%
+        For fi = 0 To 4
+            y = Composer::renderActorTextureRow(self, panelX, panelW, y, "Male " + Str(fi),   "actor", A\ID, "mface_" + Str(fi), A\MaleFaceIDs[fi],   mx, my, clicked)
+        Next
+        For fi = 0 To 4
+            y = Composer::renderActorTextureRow(self, panelX, panelW, y, "Female " + Str(fi), "actor", A\ID, "fface_" + Str(fi), A\FemaleFaceIDs[fi], mx, my, clicked)
+        Next
+
+        y = Composer::sectionHeader(self, panelX, panelW, y, "Body textures")
+        Local bdi%
+        For bdi = 0 To 4
+            y = Composer::renderActorTextureRow(self, panelX, panelW, y, "Male " + Str(bdi),   "actor", A\ID, "mbody_" + Str(bdi), A\MaleBodyIDs[bdi],   mx, my, clicked)
+        Next
+        For bdi = 0 To 4
+            y = Composer::renderActorTextureRow(self, panelX, panelW, y, "Female " + Str(bdi), "actor", A\ID, "fbody_" + Str(bdi), A\FemaleBodyIDs[bdi], mx, my, clicked)
+        Next
+
+        y = Composer::sectionHeader(self, panelX, panelW, y, "Hair colours (packed RGB)")
+        Local ci%
+        For ci = 0 To 15
+            y = Composer::editableIntRow(self, panelX, panelW, y, "Slot " + Str(ci), "actor", A\ID, "haircol_" + Str(ci), A\HairColours[ci], mx, my, clicked)
+        Next
+
+        y = Composer::sectionHeader(self, panelX, panelW, y, "Speech sounds (male)")
+        Local si%
+        For si = 0 To 15
+            y = Composer::editableIntRow(self, panelX, panelW, y, "Slot " + Str(si), "actor", A\ID, "mspeech_" + Str(si), A\MSpeechIDs[si], mx, my, clicked)
+        Next
+
+        y = Composer::sectionHeader(self, panelX, panelW, y, "Speech sounds (female)")
+        For si = 0 To 15
+            y = Composer::editableIntRow(self, panelX, panelW, y, "Slot " + Str(si), "actor", A\ID, "fspeech_" + Str(si), A\FSpeechIDs[si], mx, my, clicked)
+        Next
+
+        y = Composer::sectionHeader(self, panelX, panelW, y, "Blood")
+        y = Composer::renderActorTextureRow(self, panelX, panelW, y, "Blood tex", "actor", A\ID, "blood_tex", A\BloodTexID, mx, my, clicked)
+
         Composer::recordContentBottom(self, y)
+    End Method
+
+
+    // -------------------------------------------------------------------------
+    // renderActorTextureRow -- like editableIntRow but with a 32x32 thumbnail
+    // anchored at the right side of the row. Used for actor face/body/blood
+    // texture references so designers can SEE the asset, not just edit
+    // the int ID. Thumbnail comes from the same ImageCache as the Item /
+    // Spell composer thumbnails (so the cache stays warm across kinds).
+    // -------------------------------------------------------------------------
+    Method renderActorTextureRow%(panelX%, panelW%, rowY%, label$, kind$, refID%, fieldId$, storedValue%, mx%, my%, clicked%)
+        Local nextY% = Composer::editableIntRow(self, panelX, panelW, rowY, label, kind, refID, fieldId, storedValue, mx, my, clicked)
+        // Thumbnail anchored to the right side of the row -- doesn't
+        // disturb the click-target rect for the int input cell.
+        If Composer::canPaintRow(self, rowY, CMP_ROW_H) = True
+            Local tx% = panelX + panelW - 36
+            Local ty% = rowY - 4
+            Loom_DrawThumbnailSmall(storedValue, tx, ty)
+        EndIf
+        Return nextY
     End Method
 
 
