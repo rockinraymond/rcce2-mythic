@@ -220,6 +220,13 @@ Type Threads
             Return te\Filename$ + " #" + Str(te\ID)
         EndIf
 
+        If kind = "mesh"
+            // refID is the MeshEntry\Index from Meshes_Init.
+            Local mh.MeshEntry = Meshes_GetByIndex(refID)
+            If mh = Null Then Return ""
+            Return mh\Filename$ + " #" + Str(mh\ID)
+        EndIf
+
         Return ""
     End Method
 
@@ -314,6 +321,7 @@ Type Threads
         If kind = "animset" Then Return "M"
         If kind = "script"  Then Return "x"      ; ".rsl" looks like an x-ish glyph
         If kind = "texture" Then Return "T"
+        If kind = "mesh"    Then Return "m"
         Return "?"
     End Method
 End Type
