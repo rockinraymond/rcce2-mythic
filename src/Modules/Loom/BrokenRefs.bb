@@ -119,27 +119,37 @@ Type BrokenRefs
     Method rebuild()
         BrokenRefs::clearList(self)
 
-        // Actors -- broken refs (factions, anim sets) + content checks
+        // Actors -- broken refs (factions, anim sets) + content checks +
+        // missing-mesh (base body meshes only -- iterating all appearance
+        // arrays would dwarf the modal).
         For Ac.Actor = Each Actor
             If self\entryCount >= BROKENREFS_MAX_ENTRIES Then Exit
             BrokenRefs::scanActor(self, Ac)
             BrokenRefs::scanActorContent(self, Ac)
+            BrokenRefs::scanActorAssets(self, Ac)
         Next
 
-        // Items -- empty name, weapon w/ 0 damage
+        // Items -- empty name, weapon w/ 0 damage, asset checks (thumb +
+        // M/F mesh)
         Local It.Item
         For ai% = 0 To 65534
             If self\entryCount >= BROKENREFS_MAX_ENTRIES Then Exit
             It = ItemList(ai)
-            If It <> Null Then BrokenRefs::scanItemContent(self, It)
+            If It <> Null
+                BrokenRefs::scanItemContent(self, It)
+                BrokenRefs::scanItemAssets(self, It)
+            EndIf
         Next
 
-        // Spells -- empty name, missing script
+        // Spells -- empty name, missing script + thumbnail asset check
         Local Sp.Spell
         For asi% = 0 To 65534
             If self\entryCount >= BROKENREFS_MAX_ENTRIES Then Exit
             Sp = SpellsList(asi)
-            If Sp <> Null Then BrokenRefs::scanSpellContent(self, Sp)
+            If Sp <> Null
+                BrokenRefs::scanSpellContent(self, Sp)
+                BrokenRefs::scanSpellAssets(self, Sp)
+            EndIf
         Next
 
         // Zones -- broken portal refs + orphan zone checks
@@ -152,6 +162,82 @@ Type BrokenRefs
         // Clamp scroll
         If self\scrollOffset >= self\entryCount Then self\scrollOffset = self\entryCount - 1
         If self\scrollOffset < 0 Then self\scrollOffset = 0
+    End Method
+
+
+    // -------------------------------------------------------------------------
+    // scanActorAssets -- check that the actor's primary mesh references
+    // resolve to files on disk. Only checks MeshIDs[0] + MeshIDs[1]
+    // (base male + female bodies); checking every gubbin + hair/beard/
+    // face/body would balloon the modal for projects with intentional
+    // empty slots.
+    // -------------------------------------------------------------------------
+    Method scanActorAssets(Ac.Actor)
+        Local label$ = Ac\Race$ + " [" + Ac\Class$ + "]"
+        If Ac\MeshIDs[0] > 0 And BrokenRefs::meshFileExists(self, Ac\MeshIDs[0]) = False
+            BrokenRefs::emitFull(self, "actor", Ac\ID, label, "MeshIDs[0] (male base)", Str(Ac\MeshIDs[0]), "mesh ID has no file on disk", "warning", "missing-mesh")
+        EndIf
+        If Ac\MeshIDs[1] > 0 And BrokenRefs::meshFileExists(self, Ac\MeshIDs[1]) = False
+            BrokenRefs::emitFull(self, "actor", Ac\ID, label, "MeshIDs[1] (female base)", Str(Ac\MeshIDs[1]), "mesh ID has no file on disk", "warning", "missing-mesh")
+        EndIf
+        If Ac\BloodTexID > 0 And BrokenRefs::textureFileExists(self, Ac\BloodTexID) = False
+            BrokenRefs::emitFull(self, "actor", Ac\ID, label, "BloodTexID", Str(Ac\BloodTexID), "texture ID has no file on disk", "warning", "missing-texture")
+        EndIf
+    End Method
+
+
+    // -------------------------------------------------------------------------
+    // scanItemAssets -- check Item's headline visual refs.
+    // -------------------------------------------------------------------------
+    Method scanItemAssets(It.Item)
+        If It\ThumbnailTexID > 0 And BrokenRefs::textureFileExists(self, It\ThumbnailTexID) = False
+            BrokenRefs::emitFull(self, "item", It\ID, It\Name$, "ThumbnailTexID", Str(It\ThumbnailTexID), "texture ID has no file on disk", "warning", "missing-texture")
+        EndIf
+        If It\MMeshID > 0 And BrokenRefs::meshFileExists(self, It\MMeshID) = False
+            BrokenRefs::emitFull(self, "item", It\ID, It\Name$, "MMeshID", Str(It\MMeshID), "mesh ID has no file on disk", "warning", "missing-mesh")
+        EndIf
+        If It\FMeshID > 0 And BrokenRefs::meshFileExists(self, It\FMeshID) = False
+            BrokenRefs::emitFull(self, "item", It\ID, It\Name$, "FMeshID", Str(It\FMeshID), "mesh ID has no file on disk", "warning", "missing-mesh")
+        EndIf
+    End Method
+
+
+    // -------------------------------------------------------------------------
+    // scanSpellAssets -- check Spell's thumbnail.
+    // -------------------------------------------------------------------------
+    Method scanSpellAssets(Sp.Spell)
+        If Sp\ThumbnailTexID > 0 And BrokenRefs::textureFileExists(self, Sp\ThumbnailTexID) = False
+            BrokenRefs::emitFull(self, "spell", Sp\ID, Sp\Name$, "ThumbnailTexID", Str(Sp\ThumbnailTexID), "texture ID has no file on disk", "warning", "missing-texture")
+        EndIf
+    End Method
+
+
+    // -------------------------------------------------------------------------
+    // textureFileExists -- True if GetTextureName$(ID) resolves to a real
+    // file under Data\Textures\. The cached lookup name has a trailing
+    // flag byte (per Media.bb's GetTexture); strip it.
+    // -------------------------------------------------------------------------
+    Method textureFileExists%(ID%)
+        Local NameAndFlags$ = GetTextureName$(ID)
+        If NameAndFlags = "" Then Return False
+        Local NameLen% = Len(NameAndFlags) - 1
+        If NameLen < 1 Then Return False
+        Local Name$ = Left$(NameAndFlags, NameLen)
+        If Name = "" Then Return False
+        If FileType("Data\Textures\" + Name) = 1 Then Return True
+        Return False
+    End Method
+
+
+    // -------------------------------------------------------------------------
+    // meshFileExists -- True if GetMeshNameClean$(ID) resolves to a file
+    // under Data\Meshes\.
+    // -------------------------------------------------------------------------
+    Method meshFileExists%(ID%)
+        Local Name$ = GetMeshNameClean$(ID)
+        If Name = "" Then Return False
+        If FileType("Data\Meshes\" + Name) = 1 Then Return True
+        Return False
     End Method
 
 
