@@ -125,6 +125,7 @@ Include "Modules\Loom\ScriptsCatalog.bb"
 Include "Modules\Loom\ScriptSearch.bb"
 Include "Modules\Loom\TextureCatalog.bb"
 Include "Modules\Loom\MeshCatalog.bb"
+Include "Modules\Loom\SoundCatalog.bb"
 Include "Modules\Loom\Recents.bb"
 Include "Modules\Loom\EntityFactory.bb"
 Include "Modules\Loom\SaveAll.bb"
@@ -448,6 +449,10 @@ WriteLog(LoomLog, "Texture catalog: " + Str(TexturesTotalCount) + " textures ind
 ; Mesh catalog: same shape as the texture scan, against Meshes.dat.
 Meshes_Init()
 WriteLog(LoomLog, "Mesh catalog: " + Str(MeshesTotalCount) + " meshes indexed")
+; Sound catalog: completes the asset trio. Composer view gets a Play
+; button for in-place audition -- not present in GUE at all.
+Sounds_Init()
+WriteLog(LoomLog, "Sound catalog: " + Str(SoundsTotalCount) + " sounds indexed")
 
 
 // -----------------------------------------------------------------------------

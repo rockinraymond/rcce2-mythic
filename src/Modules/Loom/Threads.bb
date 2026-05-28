@@ -227,6 +227,13 @@ Type Threads
             Return mh\Filename$ + " #" + Str(mh\ID)
         EndIf
 
+        If kind = "sound"
+            // refID is the SoundEntry\Index from Sounds_Init.
+            Local sd.SoundEntry = Sounds_GetByIndex(refID)
+            If sd = Null Then Return ""
+            Return sd\Filename$ + " #" + Str(sd\ID)
+        EndIf
+
         Return ""
     End Method
 
@@ -322,6 +329,7 @@ Type Threads
         If kind = "script"  Then Return "x"      ; ".rsl" looks like an x-ish glyph
         If kind = "texture" Then Return "T"
         If kind = "mesh"    Then Return "m"
+        If kind = "sound"   Then Return "s"
         Return "?"
     End Method
 End Type
