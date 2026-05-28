@@ -64,14 +64,25 @@ End Function
 Function SaveAll_Persist(composer.Composer)
     If composer = Null Then Return
 
-    If ActorsSaved = False   Then Composer::commitSaveForKind(composer, "actor")
-    If ItemsSaved = False    Then Composer::commitSaveForKind(composer, "item")
-    If SpellsSaved = False   Then Composer::commitSaveForKind(composer, "spell")
-    If FactionsSaved = False Then Composer::commitSaveForKind(composer, "faction")
-    If AnimsSaved = False    Then Composer::commitSaveForKind(composer, "animset")
-    If ZoneSaved = False     Then Composer::commitSaveForKind(composer, "zone")
+    // Count what we save so the trailing toast is informative
+    Local count% = 0
+    If ActorsSaved = False   Then Composer::commitSaveForKind(composer, "actor")   : count = count + 1
+    If ItemsSaved = False    Then Composer::commitSaveForKind(composer, "item")    : count = count + 1
+    If SpellsSaved = False   Then Composer::commitSaveForKind(composer, "spell")   : count = count + 1
+    If FactionsSaved = False Then Composer::commitSaveForKind(composer, "faction") : count = count + 1
+    If AnimsSaved = False    Then Composer::commitSaveForKind(composer, "animset") : count = count + 1
+    If ZoneSaved = False     Then Composer::commitSaveForKind(composer, "zone")    : count = count + 1
 
-    WriteLog(LoomLog, "SaveAll: persisted every dirty kind")
+    // Each commitSaveForKind already fires its own per-kind success
+    // toast; the Save All summary kicks in only when there's more than
+    // one kind to save (otherwise the single per-kind toast suffices).
+    If count > 1
+        Toast_Show("Save All: " + Str(count) + " kinds persisted", "success")
+    Else If count = 0
+        Toast_Show("Nothing to save", "info")
+    EndIf
+
+    WriteLog(LoomLog, "SaveAll: persisted " + Str(count) + " dirty kinds")
 End Function
 
 
