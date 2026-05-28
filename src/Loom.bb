@@ -121,6 +121,7 @@ Include "Modules\Loom\Ribbon.bb"
 Include "Modules\Loom\Atlas.bb"
 Include "Modules\Loom\Timeline.bb"
 Include "Modules\Loom\Tools.bb"
+Include "Modules\Loom\ScriptsCatalog.bb"
 Include "Modules\Loom\Recents.bb"
 Include "Modules\Loom\EntityFactory.bb"
 Include "Modules\Loom\SaveAll.bb"
@@ -417,6 +418,12 @@ WriteLog(LoomLog, "Project name: " + projectName$)
 
 LoomTheme_Init()
 Tools_Init()
+; Scripts catalog: scan Data\Server Data\Scripts\*.rsl so the Scripts
+; browser tab + reverse-ref scanners have something to walk. Tolerant
+; of a missing dir (fresh project); logs ScriptsScanError$ for ribbon
+; surfacing on a permission/disk failure.
+Scripts_Init()
+WriteLog(LoomLog, "Scripts catalog: " + Str(ScriptsTotalCount) + " .rsl files indexed")
 
 
 // -----------------------------------------------------------------------------

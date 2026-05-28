@@ -206,6 +206,13 @@ Type Threads
             Return "Project Settings"
         EndIf
 
+        If kind = "script"
+            // refID is the ScriptFile\Index from Scripts_Init.
+            Local sf.ScriptFile = Scripts_GetByIndex(refID)
+            If sf = Null Then Return ""
+            Return sf\Name$ + ".rsl"
+        EndIf
+
         Return ""
     End Method
 

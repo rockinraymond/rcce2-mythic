@@ -419,6 +419,8 @@ Type Composer
             Composer::renderAnimSet(self, x, scrolledBodyY, w, bodyH, mx, my, clicked, rightClicked)
         Else If kind = "settings"
             Composer::renderSettings(self, x, scrolledBodyY, w, bodyH, mx, my, clicked)
+        Else If kind = "script"
+            Composer::renderScript(self, x, scrolledBodyY, w, bodyH, mx, my, clicked, rightClicked)
         EndIf
 
         // Scrollbar indicator -- thin brass thumb on the right edge,
@@ -3401,6 +3403,170 @@ Type Composer
             y = Composer::toggleRow(self,   panelX, panelW, y, "Hidden", "settings", 0, "attr_hidden_" + Str(ai), AttributeHidden(ai),    mx, my, clicked)
             y = y + 4
         Next
+
+        Composer::recordContentBottom(self, y)
+    End Method
+
+
+    // -------------------------------------------------------------------------
+    // renderScript -- preview a .rsl file's content + show every entity
+    // that references it. refID is the ScriptFile catalog index from
+    // Scripts_Init. Read-only view (no inline editing of script source --
+    // designers use an external editor for that).
+    //
+    // Reverse-ref scanners walk every Area's 5 script-string field
+    // families (Entry/Exit/Trigger/SpawnScript/SpawnActorScript/SpawnDeathScript)
+    // plus Items.Script + Spells.Script. Each hit emits a chip that
+    // focuses the referencing entity. Case-insensitive + extension-tolerant
+    // match via Scripts_NormalizeName$.
+    // -------------------------------------------------------------------------
+    Method renderScript(panelX%, bodyY%, panelW%, bodyH%, mx%, my%, clicked%, rightClicked%)
+        Local sf.ScriptFile = Scripts_GetByIndex(self\threads\focusID)
+        If sf = Null Then Return
+
+        Local y% = bodyY
+        y = Composer::row(self, panelX, panelW, y, "Name",      sf\Name$)
+        y = Composer::row(self, panelX, panelW, y, "Path",      sf\FullPath$)
+        y = Composer::row(self, panelX, panelW, y, "Size",      Scripts_FormatSize(sf\SizeBytes))
+        y = Composer::row(self, panelX, panelW, y, "Lines",     Str(sf\LineCount))
+
+        // -- Source preview (read-only) ---------------------------------------
+        // Lazy-loaded on every paint -- the read is cheap (typical script
+        // is < 5KB) and avoids stashing potentially-stale content in a
+        // cache that would have to invalidate on file change.
+        y = Composer::sectionHeader(self, panelX, panelW, y, "Source preview")
+        Local content$ = Scripts_GetContent(sf\Name$)
+        If content = ""
+            If Composer::canPaintRow(self, y, CMP_ROW_H) = True
+                LoomText(panelX + CMP_PAD, y + 4, "(could not read file)", LOOM_DANGER_R, LOOM_DANGER_G, LOOM_DANGER_B)
+            EndIf
+            y = y + CMP_ROW_H
+        Else
+            // Render line-by-line until we run out of content or hit a
+            // reasonable preview cap (200 lines). Long scripts get a
+            // truncation footer.
+            Local maxLines% = 200
+            Local lineNum% = 0
+            Local cursor% = 1
+            Local clen% = Len(content)
+            While cursor <= clen And lineNum < maxLines
+                Local nl% = cursor
+                While nl <= clen And Mid$(content, nl, 1) <> Chr(10)
+                    nl = nl + 1
+                Wend
+                Local L$ = Mid$(content, cursor, nl - cursor)
+                // Tabs -> 4 spaces for legibility; LoomText is monospace
+                // friendly via the body font.
+                L = Replace$(L, Chr(9), "    ")
+                If Composer::canPaintRow(self, y, 16) = True
+                    // Faded line number gutter (col 4..30), code in
+                    // parchment from col 38.
+                    LoomText(panelX + CMP_PAD, y + 2, Str(lineNum + 1), LOOM_STONE_300_R, LOOM_STONE_300_G, LOOM_STONE_300_B)
+                    LoomText(panelX + CMP_PAD + 36, y + 2, L, LOOM_PARCHMENT_100_R, LOOM_PARCHMENT_100_G, LOOM_PARCHMENT_100_B)
+                EndIf
+                y = y + 16
+                cursor = nl + 1
+                lineNum = lineNum + 1
+            Wend
+            If lineNum >= maxLines And cursor <= clen
+                If Composer::canPaintRow(self, y, CMP_ROW_H) = True
+                    LoomText(panelX + CMP_PAD, y + 4, "(+ more lines -- open externally to see the rest)", LOOM_STONE_300_R, LOOM_STONE_300_G, LOOM_STONE_300_B)
+                EndIf
+                y = y + CMP_ROW_H
+            EndIf
+        EndIf
+
+        // -- Reverse references -----------------------------------------------
+        // Walk every Zone's 5 script-string field families + every Item +
+        // every Spell looking for a normalised-name match. Each hit emits
+        // a chip that focuses the referencing entity. Cap each section
+        // at 50 to keep the panel scrollable even for a heavily-shared
+        // script like "In-game Commands".
+        y = Composer::sectionHeader(self, panelX, panelW, y, "Used by")
+
+        Local key$ = Scripts_NormalizeName$(sf\Name$)
+        Local hitsTotal% = 0
+
+        // Items
+        Local itemHits% = 0
+        For It.Item = Each Item
+            If It\Script$ <> ""
+                If Scripts_NormalizeName$(It\Script$) = key
+                    If itemHits < 50
+                        y = Composer::chipRow(self, panelX, panelW, y, "Item", "item", It\ID, mx, my, clicked, rightClicked, "")
+                    EndIf
+                    itemHits = itemHits + 1
+                EndIf
+            EndIf
+        Next
+
+        // Spells
+        Local spellHits% = 0
+        For Sp.Spell = Each Spell
+            If Sp\Script$ <> ""
+                If Scripts_NormalizeName$(Sp\Script$) = key
+                    If spellHits < 50
+                        y = Composer::chipRow(self, panelX, panelW, y, "Spell", "spell", Sp\ID, mx, my, clicked, rightClicked, "")
+                    EndIf
+                    spellHits = spellHits + 1
+                EndIf
+            EndIf
+        Next
+
+        // Zones -- 5 script families per zone. Emit ONE chip per zone
+        // (not one per script slot) and tag the source family in the
+        // label so designers see "Trigger / Entry / SpawnAct / SpawnDth".
+        Local zoneHits% = 0
+        Local zIter.Area = Null
+        For zIter = Each Area
+            Local label$ = ""
+            // EntryScript / ExitScript
+            If zIter\EntryScript$ <> "" And Scripts_NormalizeName$(zIter\EntryScript$) = key Then label = label + "Entry "
+            If zIter\ExitScript$  <> "" And Scripts_NormalizeName$(zIter\ExitScript$)  = key Then label = label + "Exit "
+            // Triggers (150)
+            Local trIdx% = 0
+            For trIdx = 0 To 149
+                If zIter\TriggerScript$[trIdx] <> "" And Scripts_NormalizeName$(zIter\TriggerScript$[trIdx]) = key
+                    label = label + "Trigger "
+                    trIdx = 149 : Exit   ; one mention per zone is enough
+                EndIf
+            Next
+            // Spawn scripts (1000 each, three families)
+            Local spIdx% = 0
+            For spIdx = 0 To 999
+                If zIter\SpawnScript$[spIdx] <> "" And Scripts_NormalizeName$(zIter\SpawnScript$[spIdx]) = key
+                    label = label + "Spawn " : spIdx = 999 : Exit
+                EndIf
+            Next
+            For spIdx = 0 To 999
+                If zIter\SpawnActorScript$[spIdx] <> "" And Scripts_NormalizeName$(zIter\SpawnActorScript$[spIdx]) = key
+                    label = label + "SpAct " : spIdx = 999 : Exit
+                EndIf
+            Next
+            For spIdx = 0 To 999
+                If zIter\SpawnDeathScript$[spIdx] <> "" And Scripts_NormalizeName$(zIter\SpawnDeathScript$[spIdx]) = key
+                    label = label + "SpDth " : spIdx = 999 : Exit
+                EndIf
+            Next
+            If label <> ""
+                If zoneHits < 50
+                    y = Composer::chipRow(self, panelX, panelW, y, label, "zone", Handle(zIter), mx, my, clicked, rightClicked, "")
+                EndIf
+                zoneHits = zoneHits + 1
+            EndIf
+        Next
+
+        hitsTotal = itemHits + spellHits + zoneHits
+        If hitsTotal = 0
+            If Composer::canPaintRow(self, y, CMP_ROW_H) = True
+                LoomText(panelX + CMP_PAD, y + 4, "(unused -- safe to delete)", LOOM_WARNING_R, LOOM_WARNING_G, LOOM_WARNING_B)
+            EndIf
+            y = y + CMP_ROW_H
+        EndIf
+        If Composer::canPaintRow(self, y, CMP_ROW_H) = True
+            LoomText(panelX + CMP_PAD, y + 4, Str(itemHits) + " item(s) | " + Str(spellHits) + " spell(s) | " + Str(zoneHits) + " zone(s)", LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
+        EndIf
+        y = y + CMP_ROW_H
 
         Composer::recordContentBottom(self, y)
     End Method
