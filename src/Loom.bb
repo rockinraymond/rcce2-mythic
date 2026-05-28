@@ -118,6 +118,7 @@ Include "Modules\Loom\Tools.bb"
 Include "Modules\Loom\Recents.bb"
 Include "Modules\Loom\EntityFactory.bb"
 Include "Modules\Loom\SaveAll.bb"
+Include "Modules\Loom\Help.bb"
 
 
 // =============================================================================
@@ -139,6 +140,7 @@ Type Loom
     Field recents.Recents
     Field worldCache.WorldCache
     Field exitPrompt.ExitPrompt
+    Field help.Help
 
 
     Method create.Loom(windowWidth%, windowHeight%, projectName$)
@@ -214,6 +216,10 @@ Type Loom
         // handler at exit time (see the chain below).
         self\exitPrompt = New ExitPrompt(self\composer)
 
+        // Help (F1) -- static cheat sheet of every keybinding + mouse
+        // interaction. No dependencies; just a paint surface.
+        self\help = New Help()
+
         Return self
     End Method
 
@@ -240,7 +246,7 @@ Type Loom
         // no-ops if already open). Detect BEFORE any other input handler
         // so openModal's FlushKeys swallows the K/H keystroke before it
         // can land in a query buffer.
-        If Palette::isOpen(self\palette) = False And Timeline::isOpen(self\timeline) = False And BrokenRefs::isOpen(self\brokenRefs) = False And Recents::isOpen(self\recents) = False And ExitPrompt::isOpen(self\exitPrompt) = False
+        If Palette::isOpen(self\palette) = False And Timeline::isOpen(self\timeline) = False And BrokenRefs::isOpen(self\brokenRefs) = False And Recents::isOpen(self\recents) = False And ExitPrompt::isOpen(self\exitPrompt) = False And Help::isOpen(self\help) = False
             If (KeyDown(29) Or KeyDown(157)) And KeyHit(37)
                 Palette::openModal(self\palette)
             Else If (KeyDown(29) Or KeyDown(157)) And KeyHit(35)
@@ -253,6 +259,10 @@ Type Loom
                 // to write everything; the per-kind Save buttons are
                 // for when you only want to save one tab's state.
                 SaveAll_Persist(self\composer)
+            Else If KeyHit(59)
+                // F1 -- cheat sheet. No Ctrl required since F-keys are
+                // unambiguous discovery affordances.
+                Help::openModal(self\help)
             EndIf
         EndIf
 
@@ -265,6 +275,7 @@ Type Loom
         If BrokenRefs::isOpen(self\brokenRefs) = True Then browserInput = False
         If Recents::isOpen(self\recents) = True Then browserInput = False
         If ExitPrompt::isOpen(self\exitPrompt) = True Then browserInput = False
+        If Help::isOpen(self\help) = True Then browserInput = False
         If Composer::isEditing(self\composer) = True Then browserInput = False
 
         Browser::renderAndUpdate(self\browser, self\windowWidth, self\windowHeight, self\projectName, browserInput)
@@ -286,7 +297,8 @@ Type Loom
         Local recentsAte%    = Recents::renderAndUpdate(self\recents, self\windowWidth, self\windowHeight)
         Local paletteAte%    = Palette::renderAndUpdate(self\palette, self\windowWidth, self\windowHeight)
         Local exitPromptAte% = ExitPrompt::renderAndUpdate(self\exitPrompt, self\windowWidth, self\windowHeight)
-        Local modalAte%      = (timelineAte Or brokenRefsAte Or recentsAte Or paletteAte Or exitPromptAte)
+        Local helpAte%       = Help::renderAndUpdate(self\help, self\windowWidth, self\windowHeight)
+        Local modalAte%      = (timelineAte Or brokenRefsAte Or recentsAte Or paletteAte Or exitPromptAte Or helpAte)
 
         // If ExitPrompt's Save All / Discard All button closed the modal
         // with exitConfirmed = True, honor the user's decision NOW and

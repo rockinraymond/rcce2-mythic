@@ -360,7 +360,9 @@ Type Recents
         LoomBorder(modalX + 1, modalY + 1, RECENTS_MODAL_W - 2, RECENTS_MODAL_H - 2, LOOM_BRASS_700_R, LOOM_BRASS_700_G, LOOM_BRASS_700_B)
         LoomFill(modalX, modalY, RECENTS_MODAL_W, 3, LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
 
-        LoomText(modalX + RECENTS_PAD, modalY + 10, "RECENTS  |  " + Str(self\entryCount) + " entries", LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
+        LoomTheme_UseDisplay()
+        LoomText(modalX + RECENTS_PAD, modalY + 6, "RECENTS  |  " + Str(self\entryCount) + " entries", LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
+        LoomTheme_UseBody()
 
         Recents::drawEntries(self, modalX, modalY + RECENTS_HEADER_H, mx, my, clicked)
 
