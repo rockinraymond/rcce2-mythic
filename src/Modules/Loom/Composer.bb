@@ -1684,21 +1684,16 @@ Type Composer
     // -> clamp-to-lo is minimal -- the user sees the wrong value and
     // re-edits. The clamp is the real protection here, not the validator.
     // -------------------------------------------------------------------------
+    // Thin delegates to the pure, unit-tested helpers in Clamp.bb. Kept as
+    // methods so the ~80 Composer::parseIntClamped(self, ...) call sites are
+    // unchanged; the clamping contract is pinned by ClampTest.bb.
     Method parseIntClamped%(s$, fallback%, lo%, hi%)
-        If Trim$(s) = "" Then Return fallback
-        Local v% = Int(s)
-        If v < lo Then v = lo
-        If v > hi Then v = hi
-        Return v
+        Return Loom_ParseIntClamped(s, fallback, lo, hi)
     End Method
 
 
     Method parseFloatClamped#(s$, fallback#, lo#, hi#)
-        If Trim$(s) = "" Then Return fallback
-        Local v# = Float(s)
-        If v# < lo# Then v# = lo#
-        If v# > hi# Then v# = hi#
-        Return v#
+        Return Loom_ParseFloatClamped(s, fallback, lo, hi)
     End Method
 
 
