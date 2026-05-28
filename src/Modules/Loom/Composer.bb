@@ -509,6 +509,91 @@ Type Composer
 
 
     // -------------------------------------------------------------------------
+    // assetIntRow -- editableIntRow variant for entity fields that hold
+    // a texture / mesh / sound ID. Renders the existing editable int
+    // field PLUS, when the value resolves in the corresponding catalog,
+    // paints a small "jump >>" brass pill at the right edge. Click pill
+    // -> Threads::jump to the catalog entry (Esc back-stacks to the
+    // originating entity). Right-click anywhere in the value cell opens
+    // the palette as a picker filtered to that asset kind.
+    //
+    // assetKind: "texture" | "mesh" | "sound" -- selects the catalog
+    //            and palette filter
+    //
+    // Value 0 typically means "no asset bound" (engine convention); we
+    // skip the pill in that case to avoid jumping to a non-existent
+    // catalog entry. Resolved 0 (e.g. ID 0 actually present) still
+    // gets the pill since the catalog walk finds it.
+    //
+    // Same shape as scriptStringRow from iter 61.
+    // -------------------------------------------------------------------------
+    Method assetIntRow%(panelX%, panelW%, rowY%, label$, kind$, refID%, fieldId$, storedValue%, assetKind$, mx%, my%, clicked%, rightClicked%)
+        Local nextY% = Composer::editableIntRow(self, panelX, panelW, rowY, label, kind, refID, fieldId, storedValue, mx, my, clicked)
+
+        // Right-click on the value cell -> open picker for that asset
+        // kind. Hit-test matches editableRow's value rect.
+        Local valX% = panelX + CMP_PAD + 120
+        Local valW% = panelW - CMP_PAD * 2 - 120
+        Local valHovered% = (mx >= valX And mx < valX + valW And my >= rowY - 3 And my < rowY - 3 + CMP_ROW_H)
+        If valHovered = True And rightClicked = True And self\palette <> Null
+            Palette::openAsPicker(self\palette, assetKind, kind, refID, fieldId)
+        EndIf
+
+        // Skip pill when scrolled off or asset is unset (ID 0 has no
+        // catalog entry in the shipped data; treat as "no binding").
+        If storedValue = 0 Then Return nextY
+        If Composer::canPaintRow(self, rowY, CMP_ROW_H) = False Then Return nextY
+
+        // Catalog lookup per asset kind.
+        Local resolved% = False
+        Local catalogIdx% = -1
+        If assetKind = "texture"
+            Local te.TextureEntry = Textures_GetByID(storedValue)
+            If te <> Null Then resolved = True : catalogIdx = te\Index
+        EndIf
+        If assetKind = "mesh"
+            Local mh.MeshEntry = Meshes_GetByID(storedValue)
+            If mh <> Null Then resolved = True : catalogIdx = mh\Index
+        EndIf
+        If assetKind = "sound"
+            Local sd.SoundEntry = Sounds_GetByID(storedValue)
+            If sd <> Null Then resolved = True : catalogIdx = sd\Index
+        EndIf
+
+        // Paint pill at right edge of value cell
+        Local pillW% = 48
+        Local pillH% = CMP_ROW_H - 2
+        Local pillX% = panelX + panelW - CMP_PAD - pillW
+        Local pillY% = rowY - 2
+        Local pillHovered% = (mx >= pillX And mx < pillX + pillW And my >= pillY And my < pillY + pillH)
+
+        If resolved = False
+            // ID set but not in catalog: orange "missing" pill (less
+            // severe than the broken-script "danger" red since assets
+            // can be runtime-loaded outside the catalog by content).
+            LoomFill(pillX, pillY, pillW, pillH, LOOM_WARNING_R, LOOM_WARNING_G, LOOM_WARNING_B)
+            LoomText(pillX + 4, rowY, "missing", LOOM_PARCHMENT_100_R, LOOM_PARCHMENT_100_G, LOOM_PARCHMENT_100_B)
+        Else
+            If pillHovered = True
+                LoomFill(pillX, pillY, pillW, pillH, LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
+                LoomBorder(pillX, pillY, pillW, pillH, LOOM_PARCHMENT_100_R, LOOM_PARCHMENT_100_G, LOOM_PARCHMENT_100_B)
+                LoomText(pillX + 6, rowY, "jump >>", LOOM_PARCHMENT_100_R, LOOM_PARCHMENT_100_G, LOOM_PARCHMENT_100_B)
+            Else
+                LoomFill(pillX, pillY, pillW, pillH, LOOM_STONE_700_R, LOOM_STONE_700_G, LOOM_STONE_700_B)
+                LoomBorder(pillX, pillY, pillW, pillH, LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
+                LoomText(pillX + 6, rowY, "jump >>", LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
+            EndIf
+
+            If pillHovered = True And clicked = True
+                Threads::jump(self\threads, assetKind, catalogIdx)
+            EndIf
+        EndIf
+
+        Return nextY
+    End Method
+
+
+    // -------------------------------------------------------------------------
     // doubleIntRow -- [label | int input A | int input B] for two-column
     // grids (Attributes Value | Max, etc). Each cell independently
     // clickable / editable via a distinct fieldId.
@@ -2550,44 +2635,44 @@ Type Composer
         EndIf
         PreviewActorID = 0
 
-        y = Composer::editableIntRow(self, panelX, panelW, y, "Male base",     "actor", A\ID, "mesh_0", A\MeshIDs[0], mx, my, clicked)
-        y = Composer::editableIntRow(self, panelX, panelW, y, "Female base",   "actor", A\ID, "mesh_1", A\MeshIDs[1], mx, my, clicked)
+        y = Composer::assetIntRow(self, panelX, panelW, y, "Male base",     "actor", A\ID, "mesh_0", A\MeshIDs[0], "mesh", mx, my, clicked, rightClicked)
+        y = Composer::assetIntRow(self, panelX, panelW, y, "Female base",   "actor", A\ID, "mesh_1", A\MeshIDs[1], "mesh", mx, my, clicked, rightClicked)
         Local mi%
         For mi = 2 To 7
-            y = Composer::editableIntRow(self, panelX, panelW, y, "Gubbin " + Str(mi - 2), "actor", A\ID, "mesh_" + Str(mi), A\MeshIDs[mi], mx, my, clicked)
+            y = Composer::assetIntRow(self, panelX, panelW, y, "Gubbin " + Str(mi - 2), "actor", A\ID, "mesh_" + Str(mi), A\MeshIDs[mi], "mesh", mx, my, clicked, rightClicked)
         Next
 
         y = Composer::sectionHeader(self, panelX, panelW, y, "Beard meshes (male)")
         Local bi%
         For bi = 0 To 4
-            y = Composer::editableIntRow(self, panelX, panelW, y, "Slot " + Str(bi), "actor", A\ID, "beard_" + Str(bi), A\BeardIDs[bi], mx, my, clicked)
+            y = Composer::assetIntRow(self, panelX, panelW, y, "Slot " + Str(bi), "actor", A\ID, "beard_" + Str(bi), A\BeardIDs[bi], "mesh", mx, my, clicked, rightClicked)
         Next
 
         y = Composer::sectionHeader(self, panelX, panelW, y, "Hair meshes")
         Local hi%
         For hi = 0 To 4
-            y = Composer::editableIntRow(self, panelX, panelW, y, "Male " + Str(hi),   "actor", A\ID, "mhair_" + Str(hi), A\MaleHairIDs[hi],   mx, my, clicked)
+            y = Composer::assetIntRow(self, panelX, panelW, y, "Male " + Str(hi),   "actor", A\ID, "mhair_" + Str(hi), A\MaleHairIDs[hi],   "mesh", mx, my, clicked, rightClicked)
         Next
         For hi = 0 To 4
-            y = Composer::editableIntRow(self, panelX, panelW, y, "Female " + Str(hi), "actor", A\ID, "fhair_" + Str(hi), A\FemaleHairIDs[hi], mx, my, clicked)
+            y = Composer::assetIntRow(self, panelX, panelW, y, "Female " + Str(hi), "actor", A\ID, "fhair_" + Str(hi), A\FemaleHairIDs[hi], "mesh", mx, my, clicked, rightClicked)
         Next
 
         y = Composer::sectionHeader(self, panelX, panelW, y, "Face textures")
         Local fi%
         For fi = 0 To 4
-            y = Composer::renderActorTextureRow(self, panelX, panelW, y, "Male " + Str(fi),   "actor", A\ID, "mface_" + Str(fi), A\MaleFaceIDs[fi],   mx, my, clicked)
+            y = Composer::renderActorTextureRow(self, panelX, panelW, y, "Male " + Str(fi),   "actor", A\ID, "mface_" + Str(fi), A\MaleFaceIDs[fi],   mx, my, clicked, rightClicked)
         Next
         For fi = 0 To 4
-            y = Composer::renderActorTextureRow(self, panelX, panelW, y, "Female " + Str(fi), "actor", A\ID, "fface_" + Str(fi), A\FemaleFaceIDs[fi], mx, my, clicked)
+            y = Composer::renderActorTextureRow(self, panelX, panelW, y, "Female " + Str(fi), "actor", A\ID, "fface_" + Str(fi), A\FemaleFaceIDs[fi], mx, my, clicked, rightClicked)
         Next
 
         y = Composer::sectionHeader(self, panelX, panelW, y, "Body textures")
         Local bdi%
         For bdi = 0 To 4
-            y = Composer::renderActorTextureRow(self, panelX, panelW, y, "Male " + Str(bdi),   "actor", A\ID, "mbody_" + Str(bdi), A\MaleBodyIDs[bdi],   mx, my, clicked)
+            y = Composer::renderActorTextureRow(self, panelX, panelW, y, "Male " + Str(bdi),   "actor", A\ID, "mbody_" + Str(bdi), A\MaleBodyIDs[bdi],   mx, my, clicked, rightClicked)
         Next
         For bdi = 0 To 4
-            y = Composer::renderActorTextureRow(self, panelX, panelW, y, "Female " + Str(bdi), "actor", A\ID, "fbody_" + Str(bdi), A\FemaleBodyIDs[bdi], mx, my, clicked)
+            y = Composer::renderActorTextureRow(self, panelX, panelW, y, "Female " + Str(bdi), "actor", A\ID, "fbody_" + Str(bdi), A\FemaleBodyIDs[bdi], mx, my, clicked, rightClicked)
         Next
 
         y = Composer::sectionHeader(self, panelX, panelW, y, "Hair colours (packed RGB)")
@@ -2599,16 +2684,16 @@ Type Composer
         y = Composer::sectionHeader(self, panelX, panelW, y, "Speech sounds (male)")
         Local si%
         For si = 0 To 15
-            y = Composer::editableIntRow(self, panelX, panelW, y, "Slot " + Str(si), "actor", A\ID, "mspeech_" + Str(si), A\MSpeechIDs[si], mx, my, clicked)
+            y = Composer::assetIntRow(self, panelX, panelW, y, "Slot " + Str(si), "actor", A\ID, "mspeech_" + Str(si), A\MSpeechIDs[si], "sound", mx, my, clicked, rightClicked)
         Next
 
         y = Composer::sectionHeader(self, panelX, panelW, y, "Speech sounds (female)")
         For si = 0 To 15
-            y = Composer::editableIntRow(self, panelX, panelW, y, "Slot " + Str(si), "actor", A\ID, "fspeech_" + Str(si), A\FSpeechIDs[si], mx, my, clicked)
+            y = Composer::assetIntRow(self, panelX, panelW, y, "Slot " + Str(si), "actor", A\ID, "fspeech_" + Str(si), A\FSpeechIDs[si], "sound", mx, my, clicked, rightClicked)
         Next
 
         y = Composer::sectionHeader(self, panelX, panelW, y, "Blood")
-        y = Composer::renderActorTextureRow(self, panelX, panelW, y, "Blood tex", "actor", A\ID, "blood_tex", A\BloodTexID, mx, my, clicked)
+        y = Composer::renderActorTextureRow(self, panelX, panelW, y, "Blood tex", "actor", A\ID, "blood_tex", A\BloodTexID, mx, my, clicked, rightClicked)
 
         // Reverse references -- "Spawned in zones" -- walk every Area's
         // 1000-slot SpawnActor table for any match against this actor.
@@ -2668,15 +2753,37 @@ Type Composer
     // the int ID. Thumbnail comes from the same ImageCache as the Item /
     // Spell composer thumbnails (so the cache stays warm across kinds).
     // -------------------------------------------------------------------------
-    Method renderActorTextureRow%(panelX%, panelW%, rowY%, label$, kind$, refID%, fieldId$, storedValue%, mx%, my%, clicked%)
+    Method renderActorTextureRow%(panelX%, panelW%, rowY%, label$, kind$, refID%, fieldId$, storedValue%, mx%, my%, clicked%, rightClicked%)
         Local nextY% = Composer::editableIntRow(self, panelX, panelW, rowY, label, kind, refID, fieldId, storedValue, mx, my, clicked)
-        // Thumbnail anchored to the right side of the row -- doesn't
-        // disturb the click-target rect for the int input cell.
+
+        // Thumbnail anchored to the right side of the row. The thumbnail
+        // itself is the jump target: click it to focus the texture
+        // catalog entry. Right-click the thumbnail opens the palette
+        // as a texture picker for this field.
+        Local tx% = panelX + panelW - 36
+        Local ty% = rowY - 4
+        Local tSize% = 32
+        Local tHovered% = (mx >= tx And mx < tx + tSize And my >= ty And my < ty + tSize)
+
         If Composer::canPaintRow(self, rowY, CMP_ROW_H) = True
-            Local tx% = panelX + panelW - 36
-            Local ty% = rowY - 4
             Loom_DrawThumbnailSmall(storedValue, tx, ty)
+            // Brass outline + "jump" cue on hover so users discover
+            // the click-to-focus pattern.
+            If tHovered = True
+                LoomBorder(tx - 1, ty - 1, tSize + 2, tSize + 2, LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
+            EndIf
         EndIf
+
+        If tHovered = True And clicked = True And storedValue <> 0
+            Local te.TextureEntry = Textures_GetByID(storedValue)
+            If te <> Null
+                Threads::jump(self\threads, "texture", te\Index)
+            EndIf
+        EndIf
+        If tHovered = True And rightClicked = True And self\palette <> Null
+            Palette::openAsPicker(self\palette, "texture", kind, refID, fieldId)
+        EndIf
+
         Return nextY
     End Method
 
@@ -2765,7 +2872,7 @@ Type Composer
         // ID field. Lazy-loaded via ImageCache module; missing/invalid IDs
         // paint a "?" placeholder.
         Local thumbY% = y
-        y = Composer::editableIntRow(self, panelX, panelW, y, "Thumbnail tex",  "item", It\ID, "thumb_tex",  It\ThumbnailTexID, mx, my, clicked)
+        y = Composer::assetIntRow(self, panelX, panelW, y, "Thumbnail tex",  "item", It\ID, "thumb_tex",  It\ThumbnailTexID, "texture", mx, my, clicked, rightClicked)
         If Composer::canPaintRow(self, thumbY, 70) = True
             Local thumbX% = panelX + panelW - 70 - CMP_PAD
             Loom_DrawThumbnailLarge(It\ThumbnailTexID, thumbX, thumbY)
@@ -2782,9 +2889,9 @@ Type Composer
             Loom_DrawMeshPreview(It\MMeshID, itemPreviewX, itemPreviewY, LOOM_PREVIEW_SIZE)
         EndIf
 
-        y = Composer::editableIntRow(self, panelX, panelW, y, "Male mesh",      "item", It\ID, "m_mesh",     It\MMeshID,        mx, my, clicked)
-        y = Composer::editableIntRow(self, panelX, panelW, y, "Female mesh",    "item", It\ID, "f_mesh",     It\FMeshID,        mx, my, clicked)
-        y = Composer::editableIntRow(self, panelX, panelW, y, "Image (img-typ)","item", It\ID, "image_id",   It\ImageID,        mx, my, clicked)
+        y = Composer::assetIntRow(self, panelX, panelW, y, "Male mesh",      "item", It\ID, "m_mesh",     It\MMeshID,        "mesh",    mx, my, clicked, rightClicked)
+        y = Composer::assetIntRow(self, panelX, panelW, y, "Female mesh",    "item", It\ID, "f_mesh",     It\FMeshID,        "mesh",    mx, my, clicked, rightClicked)
+        y = Composer::assetIntRow(self, panelX, panelW, y, "Image (img-typ)","item", It\ID, "image_id",   It\ImageID,        "texture", mx, my, clicked, rightClicked)
         // Gubbins -- 5 equip-slot activation flags (booleans 0/1)
         Local gi%
         For gi = 0 To 4
@@ -2828,7 +2935,7 @@ Type Composer
         y = Composer::editableRow(self,    panelX, panelW, y, "Name",     "spell", S\ID, "name",        S\Name$,        mx, my, clicked)
         y = Composer::editableIntRow(self, panelX, panelW, y, "Recharge (ms)", "spell", S\ID, "recharge_ms", S\RechargeTime, mx, my, clicked)
         Local spellThumbY% = y
-        y = Composer::editableIntRow(self, panelX, panelW, y, "Thumbnail tex", "spell", S\ID, "thumb_tex",   S\ThumbnailTexID, mx, my, clicked)
+        y = Composer::assetIntRow(self, panelX, panelW, y, "Thumbnail tex", "spell", S\ID, "thumb_tex",   S\ThumbnailTexID, "texture", mx, my, clicked, rightClicked)
         // Thumbnail preview at the right edge -- matches the Item visuals row.
         If Composer::canPaintRow(self, spellThumbY, 70) = True
             Local spellThumbX% = panelX + panelW - 70 - CMP_PAD
