@@ -117,6 +117,7 @@ Type Help
         rowY = Help::row(self, modalX, rowY, "Click Dup",                "Duplicate the focused entity")
         rowY = Help::row(self, modalX, rowY, "Click chevron",             "Collapse / expand composer to sliver")
         rowY = Help::row(self, modalX, rowY, "Mouse wheel",               "Scroll the composer body")
+        rowY = Help::row(self, modalX, rowY, "Shift+click a card",        "Add/remove from bulk-select set")
         rowY = rowY + 6
 
         rowY = Help::section(self, modalX, rowY, "Ribbon (top strip)")
