@@ -56,6 +56,18 @@ Global PreviewSpinTime#  = 0.0
 Global PreviewLastTickMs = 0          ; for delta calc
 Global PreviewMeshScale# = 1.0        ; auto-fit scale for current mesh
 
+; ---- Manual orbit state ----------------------------------------------------
+; Drag-to-orbit: while LMB is held inside the preview rect, the mesh's
+; Y/X rotation tracks the mouse delta. Releases the auto-spin while
+; dragging; resumes when LMB releases. Wheel adjusts camera distance.
+Global PreviewManualYaw#   = 0.0       ; user-controlled yaw override
+Global PreviewManualPitch# = 0.0       ; user-controlled pitch override
+Global PreviewManualActive = False     ; True if user has interacted (kills auto-spin)
+Global PreviewDragging     = False     ; True between LMB-down + LMB-up inside rect
+Global PreviewLastDragMX   = 0
+Global PreviewLastDragMY   = 0
+Global PreviewCamDistance# = LOOM_PREVIEW_CAM_RANGE#   ; runtime-zoomable
+
 
 ; =============================================================================
 ; Loom_InitMeshPreview -- one-time setup of camera + light + render target.
@@ -137,6 +149,9 @@ Function Loom_LoadPreviewMesh(meshID)
 
     PreviewMesh = ent
     PreviewMeshID = meshID
+    ; New mesh = fresh view. Reset orbit + zoom so the user doesn't
+    ; jump into a previous mesh's last camera angle.
+    Loom_ResetPreviewOrbit()
     WriteLog(LoomLog, "MeshPreview: loaded mesh ID " + meshID)
     Return True
 End Function
@@ -159,34 +174,113 @@ Function Loom_DrawMeshPreview(meshID, x, y, size)
         Return False
     EndIf
 
-    ; Tick auto-spin in degrees, based on real wall-clock delta so the
-    ; spin rate stays consistent even if frame time varies.
+    ; ---- Input handling -----------------------------------------------------
+    ; Check whether mouse is inside the preview rect. All orbit/zoom
+    ; input gated on this so dragging outside the rect doesn't affect
+    ; the preview.
+    Local mx = MouseX()
+    Local my = MouseY()
+    Local inside = (mx >= x And mx < x + LOOM_PREVIEW_SIZE And my >= y And my < y + LOOM_PREVIEW_SIZE)
+
+    ; Drag-to-orbit -- LMB held inside the rect rotates the mesh.
+    ; Uses MouseDown (not MouseHit/Loom_MouseClicked) since we want
+    ; continuous state, not the single press event.
+    If MouseDown(1) = True And inside = True
+        If PreviewDragging = False
+            ; Drag just started -- seed last position so the first
+            ; frame's delta is zero (no instant snap).
+            PreviewDragging = True
+            PreviewLastDragMX = mx
+            PreviewLastDragMY = my
+        Else
+            ; Accumulate delta into manual rotation. 1 pixel = 0.5 deg
+            ; gives a comfortable feel without too much sensitivity.
+            Local dx = mx - PreviewLastDragMX
+            Local dy = my - PreviewLastDragMY
+            PreviewManualYaw#   = PreviewManualYaw#   + Float(dx) * 0.5
+            PreviewManualPitch# = PreviewManualPitch# + Float(dy) * 0.5
+            ; Clamp pitch so the mesh doesn't flip upside-down
+            If PreviewManualPitch# > 89.0 Then PreviewManualPitch# = 89.0
+            If PreviewManualPitch# < -89.0 Then PreviewManualPitch# = -89.0
+            PreviewLastDragMX = mx
+            PreviewLastDragMY = my
+            PreviewManualActive = True   ; kills auto-spin permanently for this session
+        EndIf
+    Else
+        PreviewDragging = False
+    EndIf
+
+    ; Mouse wheel -- adjust camera distance. Uses the cached
+    ; LoomFrameMouseWheel so multiple previews on screen don't race
+    ; for the wheel state (and the same one preview doesn't
+    ; double-consume between input check and render).
+    If inside = True
+        Local wheel = Loom_MouseWheel()
+        If wheel <> 0
+            ; Each tick = 5% of current distance. Smooth zoom feel.
+            PreviewCamDistance# = PreviewCamDistance# - Float(wheel) * (PreviewCamDistance# * 0.05)
+            ; Clamp so we don't zoom into / past the mesh
+            If PreviewCamDistance# < 2.0 Then PreviewCamDistance# = 2.0
+            If PreviewCamDistance# > 500.0 Then PreviewCamDistance# = 500.0
+            ; Reposition the camera at the new distance from the mesh
+            PositionEntity PreviewCam, LOOM_PREVIEW_CAM_X#, LOOM_PREVIEW_CAM_Y# + 5.0, LOOM_PREVIEW_CAM_Z# - PreviewCamDistance#
+            PointEntity PreviewCam, PreviewMesh
+            PreviewManualActive = True
+        EndIf
+    EndIf
+
+    ; ---- Rotation: manual override OR auto-spin -----------------------------
     Local nowMs = MilliSecs()
     Local deltaMs = nowMs - PreviewLastTickMs
     If deltaMs < 0 Then deltaMs = 0
     If deltaMs > 1000 Then deltaMs = 1000   ; clamp giant deltas (alt-tab away/back)
     PreviewLastTickMs = nowMs
-    PreviewSpinTime# = PreviewSpinTime# + (Float(deltaMs) / 1000.0) * LOOM_PREVIEW_AUTOSPIN_DEG_PER_SEC#
-    If PreviewSpinTime# >= 360.0 Then PreviewSpinTime# = PreviewSpinTime# - 360.0
 
-    ; Apply spin to the mesh's Y rotation. Camera stays fixed.
-    RotateEntity PreviewMesh, 0, PreviewSpinTime#, 0
+    If PreviewManualActive = True
+        ; User has driven the camera; use their orbit values directly.
+        RotateEntity PreviewMesh, PreviewManualPitch#, PreviewManualYaw#, 0
+    Else
+        ; Auto-spin (delta-time based for consistency under variable frame rate).
+        PreviewSpinTime# = PreviewSpinTime# + (Float(deltaMs) / 1000.0) * LOOM_PREVIEW_AUTOSPIN_DEG_PER_SEC#
+        If PreviewSpinTime# >= 360.0 Then PreviewSpinTime# = PreviewSpinTime# - 360.0
+        RotateEntity PreviewMesh, 0, PreviewSpinTime#, 0
+    EndIf
 
-    ; Render the scene into the RT. SetBuffer must be restored to
-    ; BackBuffer afterward or all 2D drawing breaks.
+    ; ---- Render to texture --------------------------------------------------
     ShowEntity PreviewCam
     SetBuffer TextureBuffer(PreviewRT)
     RenderWorld
     SetBuffer BackBuffer()
     HideEntity PreviewCam
 
-    ; Draw the RT as an Image. CreateTexture with flag 256 produces a
-    ; texture-buffer that doubles as an image source; DrawImage works
-    ; via Blitz3D's TextureBuffer/CopyRect dance. Easiest: use
-    ; CopyRect into a regular image. For first cut, just blit the
-    ; texture directly via a temporary image.
     Loom_BlitPreviewTexture(PreviewRT, x, y, size)
+
+    ; Hover hint: tiny text in the bottom-left corner of the widget
+    ; describing the controls. Only painted when the mouse is inside
+    ; so the widget reads as clean when ignored.
+    If inside = True
+        LoomText x + 6, y + LOOM_PREVIEW_SIZE - 18, "drag=orbit  wheel=zoom", LOOM_STONE_300_R, LOOM_STONE_300_G, LOOM_STONE_300_B
+    EndIf
+
     Return True
+End Function
+
+
+; =============================================================================
+; Loom_ResetPreviewOrbit -- restore auto-spin + reset zoom. Called from a
+; future "reset view" button (not wired in this iter) and could be
+; invoked on mesh change to give a fresh start per actor.
+; =============================================================================
+Function Loom_ResetPreviewOrbit()
+    PreviewManualActive = False
+    PreviewManualYaw#   = 0.0
+    PreviewManualPitch# = 0.0
+    PreviewSpinTime#    = 0.0
+    PreviewCamDistance# = LOOM_PREVIEW_CAM_RANGE#
+    If PreviewCam <> 0
+        PositionEntity PreviewCam, LOOM_PREVIEW_CAM_X#, LOOM_PREVIEW_CAM_Y# + 5.0, LOOM_PREVIEW_CAM_Z# - PreviewCamDistance#
+        If PreviewMesh <> 0 Then PointEntity PreviewCam, PreviewMesh
+    EndIf
 End Function
 
 
