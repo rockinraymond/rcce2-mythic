@@ -122,6 +122,8 @@ Type Help
 
         rowY = Help::section(self, modalX, rowY, "Bulk edit (when selection non-empty)")
         rowY = Help::row(self, modalX, rowY, "Click Delete in panel",     "Arm bulk delete; click again to commit")
+        rowY = Help::row(self, modalX, rowY, "Click input field",         "Start typing a broadcast value (homogeneous kinds only)")
+        rowY = Help::row(self, modalX, rowY, "Click Apply",               "Broadcast typed value to every selected entity")
         rowY = rowY + 6
 
         rowY = Help::section(self, modalX, rowY, "Ribbon (top strip)")

@@ -36,7 +36,8 @@ Shipped, next, and deferred. Read this when picking what to build next.
 - **Responsive browser grid + collapsible composer** — Browser's card grid shrinks by `Composer::width()` so right-column cards aren't half-hidden behind the panel. New chevron button at the top-left of the composer toggles a **collapsed mode** — the panel shrinks to a 28px brass sliver showing just the focused entity's kind glyph, letting the user see the full card grid while keeping focus state intact. Click `<` to expand, `>` to collapse. Mode persists across re-focuses. ([#355](https://github.com/RydeTec/rcce2/pull/355))
 - **Drop shadows on cards + modals + atlas nodes** — new `LoomShadowCard(x, y, w, h)` primitive in `Theme.bb` paints a 2-layer fake (stone-900 at +2px, stone-950 at +4px). Wired into every Browser card (entity + tool), every modal (Palette / Timeline / Recents / BrokenRefs / ExitPrompt / Help), every Toast, and every Atlas node. Surfaces now read as physical tiles lifted off their background rather than printed-on labels. ([#356](https://github.com/RydeTec/recce2/pull/356))
 - **Browser selection set** (bulk-edit foundation) — new `Type SelectedEntity` collection holds (kind, refID) pairs across kinds. Shift+Click a card adds/removes it from the selection; plain click clears + focuses (preserves the single-edit flow). Selected cards paint with a warning-orange border + brass-tinted fill. Browser footer hint updates to `"N selected | shift+click to add/remove | Esc to clear"` when non-empty. Esc priority chain extended: `modal > filter clear > selection clear > back stack > exit`. Bulk-edit composer view comes in the follow-up iteration. ([#357](https://github.com/RydeTec/recce2/pull/357))
-- **Bulk-edit composer + bulk delete** — when Browser has a non-empty selection AND no single entity is focused, the composer renders a **warning-bordered bulk-edit panel** instead of nothing. Shows selection count, distinct-kinds summary ("actor, item"), scrollable list of every selected entity (with stale-entry detection), and a **Bulk Delete** button with arm/confirm. Confirmed click snapshots (kind, refID) pairs upfront (decouples the delete iteration from concurrent SelectedEntity mutation) then dispatches `EntityFactory_Delete` per entity; trailing toast summary so per-entity toasts don't spam. Per-field broadcast edits come in the next iteration.
+- **Bulk-edit composer + bulk delete** — when Browser has a non-empty selection AND no single entity is focused, the composer renders a **warning-bordered bulk-edit panel** instead of nothing. Shows selection count, distinct-kinds summary ("actor, item"), scrollable list of every selected entity (with stale-entry detection), and a **Bulk Delete** button with arm/confirm. Confirmed click snapshots (kind, refID) pairs upfront (decouples the delete iteration from concurrent SelectedEntity mutation) then dispatches `EntityFactory_Delete` per entity; trailing toast summary so per-entity toasts don't spam.
+- **Bulk field broadcast** — for **homogeneous selections** (all selected entities the same kind), the bulk-edit panel grows an "Apply to all" section with per-kind curated broadcast-safe field inputs: item gains Value/Mass/Damage/Armour, spell gains Recharge, actor gains XPMultiplier/Scale/Aggression/AggroRange/Faction, zone gains Gravity. Click input → type → click Apply broadcasts the value to every selected entity of that kind via the existing `Composer::writeField` dispatch, marks the kind dirty once, invalidates the world cache once, records a single rolled-up Timeline entry (`bulk-N → value`). Faction/animset show a `(no broadcast-safe fields)` row. Heterogeneous selections only show delete since cross-kind fields don't share semantics. Buffer preserved after commit so the user can re-apply quickly. Closes the design's "bump every weapon's damage by 10%" pitch.
 
 All six original "next up" roadmap items are shipped, plus eight scope-expanded surfaces (palette, search-within-category, entity creation, deletion, discard, conscience ribbon, broken-ref finder, keyboard nav, atlas, ref-field editing, timeline scrubber, recents, tools tab). Loom is now in **beta** — every primary GUE workflow has a Loom equivalent.
 
@@ -46,19 +47,13 @@ Beta vs alpha distinction: alpha was read-only browsing; beta covers full editin
 
 The next-tier roadmap items, in rough order of leverage:
 
-### 1. Bulk edit / multi-select
-
-Select multiple cards via Shift+Click on the grid; opening the composer shows a unified property panel where edits apply to every selected entity. Useful for "bump every weapon's damage by 10%." Today the composer is single-focus only.
-
-Estimated scope: 400-600 LOC. Touches Browser (selection set), Composer (multi-focus rendering), writeField (broadcast).
-
-### 2. Asset preview (textures + meshes)
+### 1. Asset preview (textures + meshes)
 
 Item / Actor reference textures and meshes by integer ID. The composer shows the ID but not the asset itself. A small preview panel in the composer (or a hover-thumbnail on the chip) would surface the asset directly. Needs the texture / mesh loaders Loom currently avoids — likely a Loom-side decoder rather than pulling in GUE's media stack.
 
 Estimated scope: 500-800 LOC. Significant new surface.
 
-### 3. Aesthetic immersion toggle (Tool / Balanced / In-world)
+### 2. Aesthetic immersion toggle (Tool / Balanced / In-world)
 
 The design's slider for chrome-density: utilitarian "Tool" mode at one end, fully-immersive "In-world" parchment-scroll aesthetic at the other. Current Loom chrome is "Balanced." Add a toggle in the Conscience Ribbon's right-side that re-themes the surfaces. Mostly a Theme.bb palette swap + a few layout tweaks per mode.
 
