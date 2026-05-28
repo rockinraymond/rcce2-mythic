@@ -324,11 +324,22 @@ Type Composer
         Local h% = sh - CMP_TOP - CMP_BOT_PAD
 
         // Panel chrome -- brass left rule signals the primary surface.
-        // Subtle stone-850 -> stone-900 gradient gives the panel depth
-        // rather than reading as a flat slab pasted onto the browser.
-        LoomGradientV(x, y, w, h, LOOM_STONE_850_R, LOOM_STONE_850_G, LOOM_STONE_850_B, LOOM_STONE_900_R, LOOM_STONE_900_G, LOOM_STONE_900_B)
+        // Mode-varied background: tool=flat, balanced=subtle gradient,
+        // in-world=dramatic darker gradient.
+        If Loom_ChromeIsTool() = True
+            LoomFill(x, y, w, h, LOOM_STONE_850_R, LOOM_STONE_850_G, LOOM_STONE_850_B)
+        Else If Loom_ChromeIsInWorld() = True
+            LoomGradientV(x, y, w, h, LOOM_STONE_700_R, LOOM_STONE_700_G, LOOM_STONE_700_B, LOOM_STONE_950_R, LOOM_STONE_950_G, LOOM_STONE_950_B)
+        Else
+            LoomGradientV(x, y, w, h, LOOM_STONE_850_R, LOOM_STONE_850_G, LOOM_STONE_850_B, LOOM_STONE_900_R, LOOM_STONE_900_G, LOOM_STONE_900_B)
+        EndIf
         LoomBorder(x, y, w, h, LOOM_BRASS_700_R, LOOM_BRASS_700_G, LOOM_BRASS_700_B)
         LoomFill(x, y, 3, h, LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
+        // In-world mode adds a second brass rule on the right edge as a
+        // mirror flourish (book-spine effect with the left edge).
+        If Loom_ChromeIsInWorld() = True
+            LoomFill(x + w - 3, y, 3, h, LOOM_BRASS_700_R, LOOM_BRASS_700_G, LOOM_BRASS_700_B)
+        EndIf
 
         // Title block
         Local kindLabel$ = Composer::kindLabel(self, kind)

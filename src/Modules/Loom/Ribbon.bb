@@ -171,9 +171,34 @@ Type Ribbon
             EndIf
         EndIf
 
-        // Right side: total entity counts (compact)
+        // Right side: chrome immersion toggle + total entity counts (compact)
         Local totals$ = Str(self\cachedTotalActors) + "A | " + Str(self\cachedTotalItems) + "I | " + Str(self\cachedTotalSpells) + "S | " + Str(self\cachedTotalZones) + "Z | " + Str(self\cachedTotalFactions) + "F | " + Str(self\cachedTotalAnimSets) + "M"
-        LoomText(sw - StringWidth(totals) - RIBBON_PAD, 6, totals, LOOM_STONE_300_R, LOOM_STONE_300_G, LOOM_STONE_300_B)
+        Local totalsW% = StringWidth(totals)
+        LoomText(sw - totalsW - RIBBON_PAD, 6, totals, LOOM_STONE_300_R, LOOM_STONE_300_G, LOOM_STONE_300_B)
+
+        // Chrome toggle pill -- cycles tool / balanced / in-world.
+        // Sits to the LEFT of the totals so it doesn't get cut off by
+        // narrow window widths. Click cycles the global mode; the
+        // brand strip + cards + composer panel re-render in the new
+        // mode immediately on the next frame.
+        Local chromeLabel$ = "[" + Loom_ChromeMode() + "]"
+        Local chromeW% = StringWidth(chromeLabel) + 16
+        Local chromeX% = sw - totalsW - RIBBON_PAD - chromeW - 12
+        Local chromeY% = 4
+        Local chromeH% = RIBBON_BADGE_H
+        Local chromeHover% = (mx >= chromeX And mx < chromeX + chromeW And my >= chromeY And my < chromeY + chromeH)
+        If chromeHover = True
+            LoomFill(chromeX, chromeY, chromeW, chromeH, LOOM_STONE_800_R, LOOM_STONE_800_G, LOOM_STONE_800_B)
+            LoomBorder(chromeX, chromeY, chromeW, chromeH, LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
+            LoomText(chromeX + 8, chromeY + 4, chromeLabel, LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
+        Else
+            LoomText(chromeX + 8, chromeY + 4, chromeLabel, LOOM_STONE_300_R, LOOM_STONE_300_G, LOOM_STONE_300_B)
+        EndIf
+        If chromeHover And clicked
+            Loom_CycleChromeMode()
+            consumed = True
+            WriteLog(LoomLog, "Ribbon: chrome mode -> " + Loom_ChromeMode())
+        EndIf
 
         Return consumed
     End Method

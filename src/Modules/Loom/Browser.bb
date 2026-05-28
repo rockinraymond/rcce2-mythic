@@ -546,12 +546,28 @@ Type Browser
     // -------------------------------------------------------------------------
     Method drawTopRibbon(sw%, project$)
         Local stripY% = LOOM_TOP_RIBBON_H
-        // Subtle stone-800 -> stone-850 gradient gives the brand strip
-        // a sculpted look instead of the previous flat stone-850 panel.
-        LoomGradientV(0, stripY, sw, BR_BRAND_STRIP_H, LOOM_STONE_800_R, LOOM_STONE_800_G, LOOM_STONE_800_B, LOOM_STONE_850_R, LOOM_STONE_850_G, LOOM_STONE_850_B)
-        LoomHRule(0, BR_TOP_RIBBON - 1, sw, LOOM_BRASS_700_R, LOOM_BRASS_700_G, LOOM_BRASS_700_B)
-        LoomHRule(0, BR_TOP_RIBBON,     sw, LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
-        LoomHRule(0, BR_TOP_RIBBON + 1, sw, LOOM_BRASS_700_R, LOOM_BRASS_700_G, LOOM_BRASS_700_B)
+        // Chrome-mode varies the brand strip:
+        //   tool      -- flat stone-900, single brass rule (utilitarian)
+        //   balanced  -- subtle stone-800 -> stone-850 gradient + triple
+        //                brass rule (current default)
+        //   in-world  -- dramatic stone-700 -> stone-900 gradient + thick
+        //                triple brass rule (more "engraved" feel)
+        If Loom_ChromeIsTool() = True
+            LoomFill(0, stripY, sw, BR_BRAND_STRIP_H, LOOM_STONE_900_R, LOOM_STONE_900_G, LOOM_STONE_900_B)
+            LoomHRule(0, BR_TOP_RIBBON, sw, LOOM_BRASS_700_R, LOOM_BRASS_700_G, LOOM_BRASS_700_B)
+        Else If Loom_ChromeIsInWorld() = True
+            LoomGradientV(0, stripY, sw, BR_BRAND_STRIP_H, LOOM_STONE_700_R, LOOM_STONE_700_G, LOOM_STONE_700_B, LOOM_STONE_900_R, LOOM_STONE_900_G, LOOM_STONE_900_B)
+            LoomHRule(0, BR_TOP_RIBBON - 2, sw, LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
+            LoomHRule(0, BR_TOP_RIBBON - 1, sw, LOOM_BRASS_700_R, LOOM_BRASS_700_G, LOOM_BRASS_700_B)
+            LoomHRule(0, BR_TOP_RIBBON,     sw, LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
+            LoomHRule(0, BR_TOP_RIBBON + 1, sw, LOOM_BRASS_700_R, LOOM_BRASS_700_G, LOOM_BRASS_700_B)
+            LoomHRule(0, BR_TOP_RIBBON + 2, sw, LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
+        Else
+            LoomGradientV(0, stripY, sw, BR_BRAND_STRIP_H, LOOM_STONE_800_R, LOOM_STONE_800_G, LOOM_STONE_800_B, LOOM_STONE_850_R, LOOM_STONE_850_G, LOOM_STONE_850_B)
+            LoomHRule(0, BR_TOP_RIBBON - 1, sw, LOOM_BRASS_700_R, LOOM_BRASS_700_G, LOOM_BRASS_700_B)
+            LoomHRule(0, BR_TOP_RIBBON,     sw, LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
+            LoomHRule(0, BR_TOP_RIBBON + 1, sw, LOOM_BRASS_700_R, LOOM_BRASS_700_G, LOOM_BRASS_700_B)
+        EndIf
 
         // Brand mark in display font for visual weight; project name in
         // display font too since it's the user's anchor. Sub-label
@@ -981,12 +997,19 @@ Type Browser
         // read as physical tiles rather than printed-on labels.
         LoomShadowCard(x, y, BR_CARD_W, BR_CARD_H)
 
-        // Subtle stone-800 -> stone-850 gradient gives each card a
-        // raised-tile feel instead of reading as a flat colored rectangle.
-        // Selection set members get a slightly different fill so they
-        // read as "in the bulk-edit batch" at a glance.
+        // Card chrome varies by mode: tool=flat, balanced=subtle gradient,
+        // in-world=dramatic gradient with darker bottom. Selection set
+        // members get a brass-tinted variant regardless of mode.
         If inSelectionSet = True
-            LoomGradientV(x, y, BR_CARD_W, BR_CARD_H, LOOM_BRASS_800_R, LOOM_BRASS_800_G, LOOM_BRASS_800_B, LOOM_STONE_800_R, LOOM_STONE_800_G, LOOM_STONE_800_B)
+            If Loom_ChromeIsTool() = True
+                LoomFill(x, y, BR_CARD_W, BR_CARD_H, LOOM_BRASS_800_R, LOOM_BRASS_800_G, LOOM_BRASS_800_B)
+            Else
+                LoomGradientV(x, y, BR_CARD_W, BR_CARD_H, LOOM_BRASS_800_R, LOOM_BRASS_800_G, LOOM_BRASS_800_B, LOOM_STONE_800_R, LOOM_STONE_800_G, LOOM_STONE_800_B)
+            EndIf
+        Else If Loom_ChromeIsTool() = True
+            LoomFill(x, y, BR_CARD_W, BR_CARD_H, LOOM_STONE_800_R, LOOM_STONE_800_G, LOOM_STONE_800_B)
+        Else If Loom_ChromeIsInWorld() = True
+            LoomGradientV(x, y, BR_CARD_W, BR_CARD_H, LOOM_STONE_700_R, LOOM_STONE_700_G, LOOM_STONE_700_B, LOOM_STONE_900_R, LOOM_STONE_900_G, LOOM_STONE_900_B)
         Else
             LoomGradientV(x, y, BR_CARD_W, BR_CARD_H, LOOM_STONE_800_R, LOOM_STONE_800_G, LOOM_STONE_800_B, LOOM_STONE_850_R, LOOM_STONE_850_G, LOOM_STONE_850_B)
         EndIf
