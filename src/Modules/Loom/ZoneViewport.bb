@@ -1159,36 +1159,47 @@ Function Loom_DrawZoneViewport(zoneHandle, x, y, w, h)
     Local gridStep# = 250.0
     Local g# = -gridSpan#
     While g# <= gridSpan#
-        ; X-direction line: constant z = g, x varies -gridSpan..+gridSpan
+        ; X-direction line: constant z = g, x varies -gridSpan..+gridSpan.
+        ; CameraProject is a void command; it leaves ProjectedZ()=0 (and
+        ; X/Y at 0) for points outside the frustum (behind the camera / past
+        ; the far plane). Drawing those produced the fan of lines converging
+        ; on the top-left corner. ProjectedZ()>0 means the point is in view;
+        ; capture each endpoint's values before the next CameraProject
+        ; overwrites them, and only draw when BOTH endpoints are visible.
         CameraProject VPCam, -gridSpan#, VP_SCENE_Y_OFFSET#, g#
         Local ax = x + ProjectedX()
         Local ay = y + ProjectedY()
+        Local az# = ProjectedZ#()
         CameraProject VPCam,  gridSpan#, VP_SCENE_Y_OFFSET#, g#
         Local bx = x + ProjectedX()
         Local by = y + ProjectedY()
-        Line ax, ay, bx, by
+        Local bz# = ProjectedZ#()
+        If az# > 0.0 And bz# > 0.0 Then Line ax, ay, bx, by
         ; Z-direction line: constant x = g, z varies
         CameraProject VPCam, g#, VP_SCENE_Y_OFFSET#, -gridSpan#
         Local cx2 = x + ProjectedX()
         Local cy2 = y + ProjectedY()
+        Local cz2# = ProjectedZ#()
         CameraProject VPCam, g#, VP_SCENE_Y_OFFSET#,  gridSpan#
         Local dx2 = x + ProjectedX()
         Local dy2 = y + ProjectedY()
-        Line cx2, cy2, dx2, dy2
+        Local dz2# = ProjectedZ#()
+        If cz2# > 0.0 And dz2# > 0.0 Then Line cx2, cy2, dx2, dy2
         g# = g# + gridStep#
     Wend
 
     ; Compass labels at +N/+S/+E/+W on the ground (project through the same
-    ; camera so they tilt with the view).
+    ; camera so they tilt with the view). Only draw when in view, else they'd
+    ; stack in the top-left corner like the grid lines did.
     Color 200, 200, 110   ; brass-light for compass letters
-    CameraProject VPCam, 0,             VP_SCENE_Y_OFFSET#,  gridSpan#
-    Text x + ProjectedX(), y + ProjectedY(), "N", True, True
-    CameraProject VPCam, 0,             VP_SCENE_Y_OFFSET#, -gridSpan#
-    Text x + ProjectedX(), y + ProjectedY(), "S", True, True
-    CameraProject VPCam,  gridSpan#,    VP_SCENE_Y_OFFSET#, 0
-    Text x + ProjectedX(), y + ProjectedY(), "E", True, True
-    CameraProject VPCam, -gridSpan#,    VP_SCENE_Y_OFFSET#, 0
-    Text x + ProjectedX(), y + ProjectedY(), "W", True, True
+    CameraProject VPCam, 0, VP_SCENE_Y_OFFSET#, gridSpan#
+    If ProjectedZ#() > 0.0 Then Text x + ProjectedX(), y + ProjectedY(), "N", True, True
+    CameraProject VPCam, 0, VP_SCENE_Y_OFFSET#, -gridSpan#
+    If ProjectedZ#() > 0.0 Then Text x + ProjectedX(), y + ProjectedY(), "S", True, True
+    CameraProject VPCam, gridSpan#, VP_SCENE_Y_OFFSET#, 0
+    If ProjectedZ#() > 0.0 Then Text x + ProjectedX(), y + ProjectedY(), "E", True, True
+    CameraProject VPCam, -gridSpan#, VP_SCENE_Y_OFFSET#, 0
+    If ProjectedZ#() > 0.0 Then Text x + ProjectedX(), y + ProjectedY(), "W", True, True
     Viewport 0, 0, GraphicsWidth(), GraphicsHeight()
 
     LoomBorder x, y, w, h, LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B
