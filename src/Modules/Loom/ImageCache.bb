@@ -58,11 +58,17 @@ Global FrameImageLoadCount = 0
 ; =============================================================================
 Global LoomFrameMouseClicked      = False
 Global LoomFrameMouseRightClicked = False
-; MouseZ() is also read-and-clear (cumulative wheel delta since last
-; call). Same per-frame cache shape as the click state -- without
-; caching, two renderers calling MouseZ in the same frame would
-; double-consume the wheel tick.
+; MouseZ() returns the CUMULATIVE wheel position (a running total since
+; program start), NOT a per-frame delta -- verified in BlitzForge's
+; gxinput.cpp (wm_mousewheel does axis_states[2] += dz; MouseZ reads
+; that accumulator without resetting). The earlier code treated MouseZ
+; as a delta and multiplied it by the scroll step every frame, so a
+; single non-zero wheel position drove scrollOffset to its clamp on
+; every subsequent frame -- the "won't scroll, then jumps to the
+; bottom" bug. Fix: cache the per-frame DELTA here (current absolute
+; minus last frame's absolute) so Loom_MouseWheel() returns true ticks.
 Global LoomFrameMouseWheel        = 0
+Global LoomPrevMouseWheelAbs      = 0
 
 ; Zone viewport <-> composer highlight sync. Composer's renderZone
 ; sub-section renderers set these when their header lands inside
@@ -91,7 +97,11 @@ Function Loom_BeginFrame()
     ; rendering pipelines aren't equipped to handle counts.
     LoomFrameMouseClicked      = (MouseHit(1) > 0)
     LoomFrameMouseRightClicked = (MouseHit(2) > 0)
-    LoomFrameMouseWheel        = MouseZ()
+    ; Per-frame wheel delta = current cumulative position - last frame's.
+    ; MouseZ() never resets, so this is the only correct way to read it.
+    Local rawWheel% = MouseZ()
+    LoomFrameMouseWheel = rawWheel - LoomPrevMouseWheelAbs
+    LoomPrevMouseWheelAbs = rawWheel
 End Function
 
 

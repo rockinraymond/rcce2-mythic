@@ -306,17 +306,17 @@ Type Composer
         // advance the active edit on Tab.
         self\rowFieldCount = 0
 
-        // Mouse wheel scroll. MouseZ() returns ticks since last poll;
-        // each tick is CMP_SCROLL_STEP pixels. Inverted: wheel-down is
-        // positive Z, which should scroll the content UP (offset
-        // increases, later rows come into view).
-        // Use the per-frame cached wheel. Direct MouseZ() returns 0 here
-        // because Loom_BeginFrame drained it at frame start; viewports
-        // (MeshPreview / ZoneViewport / Atlas) Loom_ConsumeWheel() when
-        // the cursor is inside their rect so this scroll handler sees
-        // 0 and the wheel feels like "owned by whatever's under cursor."
+        // Mouse wheel scroll. Loom_MouseWheel() is the per-frame wheel
+        // DELTA (Loom_BeginFrame derives it from MouseZ's cumulative
+        // value); each tick is CMP_SCROLL_STEP pixels. Inverted: wheel-up
+        // is positive, which scrolls content toward the top.
+        //
+        // Gated to the cursor being over THIS panel (mx >= panel left) so
+        // scrolling here doesn't also scroll the browser card grid behind
+        // the composer. Loom_ConsumeWheel() then zeroes the cached delta
+        // so no other surface this frame double-applies the same tick.
         Local wheelTicks% = Loom_MouseWheel()
-        If wheelTicks <> 0
+        If wheelTicks <> 0 And self\collapsed = False And MouseX() >= (sw - CMP_W)
             self\scrollOffset = self\scrollOffset - wheelTicks * CMP_SCROLL_STEP
             If self\scrollOffset < 0 Then self\scrollOffset = 0
             // Clamp to last-frame's measured content height -- if the
@@ -327,6 +327,7 @@ Type Composer
             Local maxScroll% = self\lastContentBottom - self\bodyBottom
             If maxScroll < 0 Then maxScroll = 0
             If self\scrollOffset > maxScroll Then self\scrollOffset = maxScroll
+            Loom_ConsumeWheel()
         EndIf
 
         // Drain keyboard into editBuffer if an edit is active. Consumes Esc
@@ -1950,19 +1951,18 @@ Type Composer
         // typed buffer is up-to-date when the Apply button reads it.
         If self\bulkEditField <> "" Then Composer::pumpBulkKeyboard(self)
 
-        // Mouse wheel scroll -- same shape as focused-entity composer.
-        // Use the per-frame cached wheel. Direct MouseZ() returns 0 here
-        // because Loom_BeginFrame drained it at frame start; viewports
-        // (MeshPreview / ZoneViewport / Atlas) Loom_ConsumeWheel() when
-        // the cursor is inside their rect so this scroll handler sees
-        // 0 and the wheel feels like "owned by whatever's under cursor."
+        // Mouse wheel scroll -- same shape (and same cursor-region gate +
+        // consume) as the focused-entity composer. Loom_MouseWheel() is a
+        // true per-frame delta; gate to the panel so the browser grid
+        // behind it doesn't scroll too.
         Local wheelTicks% = Loom_MouseWheel()
-        If wheelTicks <> 0
+        If wheelTicks <> 0 And MouseX() >= (sw - CMP_W)
             self\scrollOffset = self\scrollOffset - wheelTicks * CMP_SCROLL_STEP
             If self\scrollOffset < 0 Then self\scrollOffset = 0
             Local maxScroll% = self\lastContentBottom - self\bodyBottom
             If maxScroll < 0 Then maxScroll = 0
             If self\scrollOffset > maxScroll Then self\scrollOffset = maxScroll
+            Loom_ConsumeWheel()
         EndIf
 
         Local mx% = MouseX()
@@ -2784,21 +2784,12 @@ Type Composer
 
         Local y% = bodyY
 
-        // 3D mesh preview pinned to the TOP of the composer body so
-        // it's the FIRST thing the designer sees and the LMB-drag /
-        // wheel-zoom hit-rect doesn't overlap any int input cell.
-        // Centered horizontally; field rows flow below.
-        Local actorPreviewX% = panelX + (panelW - LOOM_PREVIEW_SIZE) / 2
-        Local actorPreviewY% = y
-        // Publish actor ID so MeshPreview drapes body texture on the
-        // mesh. Cleared after the draw call to avoid bleeding into
-        // other previews.
-        PreviewActorID = A\ID
-        If Composer::canPaintRow(self, y, LOOM_PREVIEW_SIZE) = True
-            Loom_DrawMeshPreview(A\MeshIDs[0], actorPreviewX, actorPreviewY, LOOM_PREVIEW_SIZE)
-        EndIf
-        PreviewActorID = 0
-        y = y + LOOM_PREVIEW_SIZE + 8
+        // No 3D mesh preview here. The embedded MeshPreview camera had no
+        // CameraViewport sub-rect, so its RenderWorld painted the mesh to
+        // the FULL backbuffer (the grey mesh bleeding across the whole
+        // window) and it consumed the wheel, fighting the body scroll.
+        // 3D inspection belongs in a dedicated surface, not the scrollable
+        // property panel -- see ADR 004. Mesh IDs render as plain rows.
 
         y = Composer::row(self, panelX, panelW, y, "ID",            Str(A\ID))
         y = Composer::editableRow(self, panelX, panelW, y,    "Race",          "actor", A\ID, "race",          A\Race$,        mx, my, clicked)
@@ -3100,18 +3091,11 @@ Type Composer
             Local thumbX% = panelX + panelW - 70 - CMP_PAD
             Loom_DrawThumbnailLarge(It\ThumbnailTexID, thumbX, thumbY)
         EndIf
-        y = y + 50   ; padding so the next row clears the 64px-tall preview
+        y = y + 50   ; padding so the next row clears the 64px-tall thumbnail
 
-        // 3D mesh preview of the male item mesh (sword model, etc.).
-        // Same widget shape as the actor composer; sits anchored to the
-        // right of the int rows. Skipped if MMeshID is 0 (placeholder
-        // paints in that case via Loom_DrawMeshPreview's own check).
-        Local itemPreviewX% = panelX + panelW - LOOM_PREVIEW_SIZE - CMP_PAD
-        Local itemPreviewY% = y
-        If Composer::canPaintRow(self, y, LOOM_PREVIEW_SIZE) = True
-            Loom_DrawMeshPreview(It\MMeshID, itemPreviewX, itemPreviewY, LOOM_PREVIEW_SIZE)
-        EndIf
-
+        // No embedded 3D mesh preview (removed: full-backbuffer bleed +
+        // wheel conflict with the body scroll -- see renderActor). The
+        // 2D thumbnail above stays; mesh IDs render as plain asset rows.
         y = Composer::assetIntRow(self, panelX, panelW, y, "Male mesh",      "item", It\ID, "m_mesh",     It\MMeshID,        "mesh",    mx, my, clicked, rightClicked)
         y = Composer::assetIntRow(self, panelX, panelW, y, "Female mesh",    "item", It\ID, "f_mesh",     It\FMeshID,        "mesh",    mx, my, clicked, rightClicked)
         y = Composer::assetIntRow(self, panelX, panelW, y, "Image (img-typ)","item", It\ID, "image_id",   It\ImageID,        "texture", mx, my, clicked, rightClicked)
@@ -3185,34 +3169,13 @@ Type Composer
         If Ar = Null Then Return
         Local h% = Handle(Ar)
 
-        // Reset the viewport-highlight publish slot for this frame.
-        // Per-sub-section renderers below set it when their header
-        // lands inside the body viewport; if nothing is visible,
-        // viewport renders without a highlighted marker.
-        LoomZoneHighlightKind$ = ""
-        LoomZoneHighlightIdx   = -1
-
         Local y% = bodyY
 
-        // 3D schematic viewport at the top of the composer body. Sized
-        // to fit inside the panel width (VP_RT_SIZE = 320 leaves
-        // CMP_PAD on each side of CMP_W = 380). Centered horizontally
-        // so the panel breathing room is symmetric.
-        //
-        // Field rows flow BELOW the viewport (y += viewport height +
-        // padding) -- earlier layout had them overlapping with the
-        // viewport's overlay text, producing the "jumbled" composer
-        // a user reported.
-        Local vpW = VP_RT_SIZE
-        Local zvX% = panelX + (panelW - vpW) / 2
-        Local zvY% = y
-        If Composer::canPaintRow(self, y, vpW) = True
-            Loom_DrawZoneViewport(h, zvX, zvY)
-        EndIf
-        // Push past the viewport (with a small gap) regardless of
-        // whether it painted -- the field-flow layout below assumes
-        // a fixed offset so all zones see the same vertical rhythm.
-        y = y + vpW + 8
+        // No embedded 3D zone viewport here. Like the actor/item mesh
+        // preview, the VPCam RenderWorld competed for the wheel with the
+        // body scroll and the spatial view belongs on its own surface
+        // (the Zones tab "Atlas" toggle already gives a 2D portal-graph
+        // view). The composer shows zone metadata + portal-target chips.
 
         y = Composer::editableRow(self,    panelX, panelW, y, "Name",     "zone", h, "name",     Ar\Name$,    mx, my, clicked)
         y = Composer::toggleRow(self,      panelX, panelW, y, "Outdoors", "zone", h, "outdoors", Ar\Outdoors, mx, my, clicked)
@@ -4110,21 +4073,9 @@ Type Composer
         y = Composer::row(self, panelX, panelW, y, "Animated",  Composer::boolLabel(self, mh\IsAnim))
         y = Composer::row(self, panelX, panelW, y, "Path",      "Data\Meshes\" + mh\Filename$)
 
-        // 3D preview -- reuse the orbit/zoom MeshPreview widget so
-        // designers can spin / inspect the mesh in 3D. Same widget
-        // backs the Actor + Item composer mesh previews; we just
-        // hand it the focused mesh's ID + a centered rect.
-        y = Composer::sectionHeader(self, panelX, panelW, y, "Preview")
-        Local previewX% = panelX + (panelW - LOOM_PREVIEW_SIZE) / 2
-        Local previewY% = y
-        // PreviewActorID = 0 ensures the mesh draws bare (no body
-        // texture overlay) -- we don't know which actor would
-        // "own" this mesh in catalog view.
-        PreviewActorID = 0
-        If Composer::canPaintRow(self, y, LOOM_PREVIEW_SIZE) = True
-            Loom_DrawMeshPreview(mh\ID, previewX, previewY, LOOM_PREVIEW_SIZE)
-        EndIf
-        y = y + LOOM_PREVIEW_SIZE + 8
+        // No 3D preview here (removed: full-backbuffer bleed + wheel
+        // conflict with the body scroll -- see renderActor / ADR 004).
+        // The catalog row + "Used by" reverse-refs are the value here.
 
         // Reverse refs
         y = Composer::sectionHeader(self, panelX, panelW, y, "Used by")
