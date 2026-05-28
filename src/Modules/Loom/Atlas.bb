@@ -51,6 +51,9 @@ Type AtlasNode
     Field Label$        // cached A\Name$ for display
     Field X#, Y#        // current world-space position
     Field DX#, DY#      // accumulated displacement this iteration
+    Field SpawnCount%   // total defined SpawnActor slots; node size scales
+    Field IssueCount%   // # of issues affecting this zone (computed at build)
+    Field Outdoors%     // tint hint -- leafy fill for outdoors, stone for indoor
 End Type
 
 
@@ -111,6 +114,12 @@ Type Atlas
             Atlas::rebuildLayout(self)
         EndIf
 
+        // Refresh per-node IssueCount from the current BrokenRef pool.
+        // O(nodes + entries) per frame -- both capped well below 1000.
+        // Cheap and lets the issue badges track Issues modal state live
+        // without an explicit invalidation hook.
+        Atlas::refreshIssueCounts(self)
+
         // Background -- darker tint than the browser to read as a distinct
         // surface, with a brass border around the viewport rect.
         LoomFill(viewportX, viewportY, viewportW, viewportH, LOOM_STONE_900_R, LOOM_STONE_900_G, LOOM_STONE_900_B)
@@ -163,6 +172,19 @@ Type Atlas
             n\Y# = Sin#(theta * 57.2958) * r
             n\DX# = 0.0
             n\DY# = 0.0
+            // Count defined spawn slots up front so we don't re-scan
+            // 1000 indices every frame in drawNodes. Atlas rebuilds on
+            // zone add / delete; spawn-count changes within a zone
+            // require a manual rebuild (acceptable since the at-a-glance
+            // signal is for project structure, not live tuning).
+            Local sci% = 0
+            Local scnt% = 0
+            For sci = 0 To 999
+                If Ar\SpawnActor[sci] > 0 Then scnt = scnt + 1
+            Next
+            n\SpawnCount = scnt
+            n\Outdoors = Ar\Outdoors
+            n\IssueCount = 0   ; populated by Atlas_RefreshIssueCounts after BrokenRefs rebuild
             theta = theta + arc
             self\nodeCount = self\nodeCount + 1
         Next
@@ -334,10 +356,22 @@ Type Atlas
             Local sx% = Atlas::worldToScreenX(self, vx, vw, n\X#)
             Local sy% = Atlas::worldToScreenY(self, vy, vh, n\Y#)
 
+            // Per-node radius scales with spawn density. Small zones
+            // stay at the base size (ATLAS_NODE_R); a zone with 100
+            // spawns ends up 1.5x as big. sqrt() keeps the visual
+            // dynamic range usable -- linear scale would make a 1000-spawn
+            // zone obliterate everything else.
+            Local r% = ATLAS_NODE_R
+            If n\SpawnCount > 0
+                Local extra# = Sqr(Float(n\SpawnCount)) * 1.2
+                If extra > Float(ATLAS_NODE_R) / 2.0 Then extra = Float(ATLAS_NODE_R) / 2.0
+                r = ATLAS_NODE_R + Int(extra)
+            EndIf
+
             Local dx% = mx - sx
             Local dy% = my - sy
             Local dist2% = dx * dx + dy * dy
-            Local hovered% = (dist2 < ATLAS_NODE_R * ATLAS_NODE_R)
+            Local hovered% = (dist2 < r * r)
             Local focused% = (self\threads\focusKind = "zone" And self\threads\focusID = n\ZoneHandle)
 
             // Node disk -- approximate circle via successive filled rects.
@@ -345,22 +379,47 @@ Type Atlas
             // for the small radius we use we draw a centered square and
             // round it visually with a 1px ring. Cheap and reads as a node.
             // Drop shadow first for visual lift over the graph edges.
-            LoomShadowCard(sx - ATLAS_NODE_R, sy - ATLAS_NODE_R, ATLAS_NODE_R * 2, ATLAS_NODE_R * 2)
+            LoomShadowCard(sx - r, sy - r, r * 2, r * 2)
             If focused = True
-                LoomFill(sx - ATLAS_NODE_R, sy - ATLAS_NODE_R, ATLAS_NODE_R * 2, ATLAS_NODE_R * 2, LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
+                LoomFill(sx - r, sy - r, r * 2, r * 2, LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
             Else If hovered = True
-                LoomFill(sx - ATLAS_NODE_R, sy - ATLAS_NODE_R, ATLAS_NODE_R * 2, ATLAS_NODE_R * 2, LOOM_ARCANE_700_R, LOOM_ARCANE_700_G, LOOM_ARCANE_700_B)
+                LoomFill(sx - r, sy - r, r * 2, r * 2, LOOM_ARCANE_700_R, LOOM_ARCANE_700_G, LOOM_ARCANE_700_B)
             Else
-                LoomFill(sx - ATLAS_NODE_R, sy - ATLAS_NODE_R, ATLAS_NODE_R * 2, ATLAS_NODE_R * 2, LOOM_STONE_700_R, LOOM_STONE_700_G, LOOM_STONE_700_B)
+                // Outdoors zones get a slightly warmer/lighter stone fill
+                // so designers can scan the map for "is the forest the
+                // big green cluster?" without opening each zone.
+                If n\Outdoors = True
+                    LoomFill(sx - r, sy - r, r * 2, r * 2, LOOM_STONE_500_R, LOOM_STONE_500_G, LOOM_STONE_500_B)
+                Else
+                    LoomFill(sx - r, sy - r, r * 2, r * 2, LOOM_STONE_700_R, LOOM_STONE_700_G, LOOM_STONE_700_B)
+                EndIf
             EndIf
 
             // Outer brass ring
-            LoomBorder(sx - ATLAS_NODE_R, sy - ATLAS_NODE_R, ATLAS_NODE_R * 2, ATLAS_NODE_R * 2, LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
+            LoomBorder(sx - r, sy - r, r * 2, r * 2, LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
+
+            // Spawn count inside the node -- "12" if non-zero, else
+            // blank. Quick "is this zone empty?" cue.
+            If n\SpawnCount > 0
+                LoomTextCentered(sx, sy - 6, Str(n\SpawnCount), LOOM_PARCHMENT_100_R, LOOM_PARCHMENT_100_G, LOOM_PARCHMENT_100_B)
+            EndIf
+
+            // Issue-count badge top-right corner -- only when issues
+            // exist. Small danger-red pill with the count. Designers
+            // scanning the atlas see broken/dangerous zones immediately.
+            If n\IssueCount > 0
+                Local badgeW% = 16
+                Local badgeX% = sx + r - badgeW
+                Local badgeY% = sy - r
+                LoomFill(badgeX, badgeY, badgeW, 14, LOOM_DANGER_R, LOOM_DANGER_G, LOOM_DANGER_B)
+                LoomBorder(badgeX, badgeY, badgeW, 14, LOOM_PARCHMENT_100_R, LOOM_PARCHMENT_100_G, LOOM_PARCHMENT_100_B)
+                LoomTextCentered(badgeX + badgeW / 2, badgeY + 1, Str(n\IssueCount), LOOM_PARCHMENT_100_R, LOOM_PARCHMENT_100_G, LOOM_PARCHMENT_100_B)
+            EndIf
 
             // Label below
             Local labelTxt$ = n\Label
             If Len(labelTxt) > 16 Then labelTxt = Left$(labelTxt, 14) + ".."
-            LoomTextCentered(sx, sy + ATLAS_NODE_R + 4, labelTxt, LOOM_PARCHMENT_100_R, LOOM_PARCHMENT_100_G, LOOM_PARCHMENT_100_B)
+            LoomTextCentered(sx, sy + r + 4, labelTxt, LOOM_PARCHMENT_100_R, LOOM_PARCHMENT_100_G, LOOM_PARCHMENT_100_B)
 
             If hovered = True And clicked = True
                 Threads::focus(self\threads, "zone", n\ZoneHandle)
@@ -369,6 +428,34 @@ Type Atlas
             EndIf
         Next
         Return hit
+    End Method
+
+
+    // -------------------------------------------------------------------------
+    // refreshIssueCounts -- zero each node's IssueCount, then walk the
+    // current BrokenRef pool and increment per-node for any entry whose
+    // SourceKind = "zone" and SourceRefID matches a node's ZoneHandle.
+    // Cheap O(nodes + entries) -- both capped well under 1000.
+    // -------------------------------------------------------------------------
+    Method refreshIssueCounts()
+        Local n.AtlasNode
+        For n = Each AtlasNode
+            n\IssueCount = 0
+        Next
+
+        Local br.BrokenRef
+        For br = Each BrokenRef
+            If br\SourceKind = "zone"
+                // Linear scan to find matching node -- typically <50 nodes
+                // so the inner walk is trivial; keeps refresh simple.
+                For n = Each AtlasNode
+                    If n\ZoneHandle = br\SourceRefID
+                        n\IssueCount = n\IssueCount + 1
+                        Exit
+                    EndIf
+                Next
+            EndIf
+        Next
     End Method
 
 
