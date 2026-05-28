@@ -103,6 +103,7 @@ Type Timeline
         self\open = True
         self\scrollOffset = 0
         FlushKeys
+        Loom_ConsumeClick()
         WriteLog(LoomLog, "Timeline: open (" + Str(self\entryCount) + " entries)")
     End Method
 

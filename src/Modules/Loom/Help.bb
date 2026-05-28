@@ -47,6 +47,7 @@ Type Help
     Method openModal()
         self\open = True
         FlushKeys
+        Loom_ConsumeClick()
         WriteLog(LoomLog, "Help: open")
     End Method
 

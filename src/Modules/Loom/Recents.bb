@@ -89,6 +89,7 @@ Type Recents
         self\open = True
         self\scrollOffset = 0
         FlushKeys
+        Loom_ConsumeClick()
         WriteLog(LoomLog, "Recents: open (" + Str(self\entryCount) + " entries)")
     End Method
 

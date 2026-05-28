@@ -132,6 +132,7 @@ Type ExitPrompt
         self\open = True
         self\exitConfirmed = False
         FlushKeys
+        Loom_ConsumeClick()
         WriteLog(LoomLog, "ExitPrompt: open (dirty kinds present)")
     End Method
 

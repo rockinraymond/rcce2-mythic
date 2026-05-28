@@ -87,6 +87,31 @@ End Function
 
 
 ; =============================================================================
+; Loom_ConsumeClick -- mark the current frame's click as handled so no
+; subsequent renderer in this frame reacts to it. Call this when an action
+; fires that conceptually "uses up" the click, e.g. openModal triggered
+; from a ribbon button.
+;
+; Why it's needed: before the MouseHit-cache hotfix, Blitz3D's
+; MouseHit(b) drained on first call -- the modal that opened from a
+; ribbon click never saw the click again, because Ribbon::MouseHit had
+; already drained it. With the cache, every surface sees the SAME
+; click; the newly-opened modal's "click outside modal = close"
+; check then fires on the very click that opened it. The modal opens
+; and immediately closes on the same frame.
+;
+; Sites: every openModal that's triggered by a click (BrokenRefs /
+; Palette / Timeline / Recents / Help / ExitPrompt). Keyboard
+; activations (Ctrl+K / F1 etc) don't need this since they don't set
+; LoomFrameMouseClicked in the first place.
+; =============================================================================
+Function Loom_ConsumeClick()
+    LoomFrameMouseClicked      = False
+    LoomFrameMouseRightClicked = False
+End Function
+
+
+; =============================================================================
 ; Loom_GetThumbnailSized -- internal helper that returns a cached image
 ; handle pre-scaled to (size x size). Lazy loads + scales on first
 ; request per (ID, size). Returns 0 if can't be loaded (missing file,
