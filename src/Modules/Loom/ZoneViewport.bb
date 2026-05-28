@@ -79,6 +79,13 @@ Global VPMarkerDragKind$  = ""
 Global VPMarkerDragIdx    = -1
 Global VPMarkerDragArH    = 0            ; Handle(Area) of the zone being edited
 
+; MMB pan state. Middle-mouse drag translates VPSceneCenterX/Z in
+; camera-aligned screen-right and screen-forward directions so the
+; user can scroll the view to focus on a particular zone corner.
+Global VPPanning   = False
+Global VPPanLastMX = 0
+Global VPPanLastMY = 0
+
 ; Per-zone counts cached at load time (saves recomputing in renderer
 ; just for the legend overlay).
 Global VPCountPortals  = 0
@@ -619,6 +626,39 @@ Function Loom_DrawZoneViewport(zoneHandle, x, y)
         EndIf
     EndIf
 
+    ; ---- MMB pan camera ----------------------------------------------------
+    ; Middle-mouse drag translates the orbit center in camera-aligned
+    ; XZ. Forward/right vectors derived from the current VPYaw so panning
+    ; feels natural relative to the visible camera orientation. Pan speed
+    ; scales with VPDistance so farther zooms produce larger per-pixel
+    ; pan steps (keeps the apparent on-screen drag rate consistent).
+    If MouseDown(3) = True And inside = True
+        If VPPanning = False
+            VPPanning = True
+            VPPanLastMX = mx
+            VPPanLastMY = my
+        Else
+            Local pdx = mx - VPPanLastMX
+            Local pdy = my - VPPanLastMY
+            Local panSpeed# = VPDistance# / 200.0
+            ; Camera-relative axes in world XZ (yaw=0 looks along -Z):
+            ;   forward (away from camera) = (Sin(yaw), 0, -Cos(yaw))
+            ;   right                       = (Cos(yaw), 0, Sin(yaw))
+            Local fwdX# = Sin(VPYaw#)
+            Local fwdZ# = -Cos(VPYaw#)
+            Local rgtX# = Cos(VPYaw#)
+            Local rgtZ# = Sin(VPYaw#)
+            ; Drag right (positive pdx) should slide scene LEFT under
+            ; the camera, so subtract pdx * right.
+            VPSceneCenterX# = VPSceneCenterX# - Float(pdx) * rgtX# * panSpeed# + Float(pdy) * fwdX# * panSpeed#
+            VPSceneCenterZ# = VPSceneCenterZ# - Float(pdx) * rgtZ# * panSpeed# + Float(pdy) * fwdZ# * panSpeed#
+            VPPanLastMX = mx
+            VPPanLastMY = my
+        EndIf
+    Else
+        VPPanning = False
+    EndIf
+
     ; ---- Position camera by orbit math -------------------------------------
     Local yawRad# = VPYaw# * 3.14159 / 180.0
     Local pitchRad# = VPPitch# * 3.14159 / 180.0
@@ -666,7 +706,7 @@ Function Loom_DrawZoneViewport(zoneHandle, x, y)
     LoomText x + VP_RT_SIZE - 36, y + 8,  "Z", 60, 120, 220
 
     If inside = True
-        LoomText x + 8, y + VP_RT_SIZE - 18, "drag=orbit  wheel=zoom", LOOM_STONE_300_R, LOOM_STONE_300_G, LOOM_STONE_300_B
+        LoomText x + 8, y + VP_RT_SIZE - 18, "LMB=orbit  MMB=pan  wheel=zoom", LOOM_STONE_300_R, LOOM_STONE_300_G, LOOM_STONE_300_B
     EndIf
 
     Return True
