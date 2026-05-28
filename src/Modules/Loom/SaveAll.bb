@@ -161,7 +161,7 @@ Type ExitPrompt
 
         Local mx% = MouseX()
         Local my% = MouseY()
-        Local clicked% = MouseHit(1)
+        Local clicked% = Loom_MouseClicked()
 
         Local modalX% = (sw - EXITPROMPT_MODAL_W) / 2
         Local modalY% = (sh - EXITPROMPT_MODAL_H) / 3

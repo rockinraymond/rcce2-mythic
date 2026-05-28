@@ -341,7 +341,7 @@ Type BrokenRefs
 
         Local mx% = MouseX()
         Local my% = MouseY()
-        Local clicked% = MouseHit(1)
+        Local clicked% = Loom_MouseClicked()
 
         Local modalX% = (sw - BROKENREFS_MODAL_W) / 2
         Local modalY% = (sh - BROKENREFS_MODAL_H) / 3

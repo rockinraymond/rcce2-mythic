@@ -237,7 +237,7 @@ Type Palette
         // Centered modal
         Local mx_screen% = MouseX()
         Local my_screen% = MouseY()
-        Local clicked%   = MouseHit(1)
+        Local clicked%   = Loom_MouseClicked()
 
         Local modalX% = (sw - PAL_MODAL_W) / 2
         Local modalY% = (sh - PAL_MODAL_H) / 3      // upper third, closer to eye line

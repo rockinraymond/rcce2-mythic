@@ -206,7 +206,7 @@ Type Browser
     Method renderAndUpdate%(sw%, sh%, project$, inputEnabled%, composerWidth%)
         Local mx% = MouseX()
         Local my% = MouseY()
-        Local clicked% = MouseHit(1)
+        Local clicked% = Loom_MouseClicked()
 
         // Drain keyboard. Arrow keys + Enter handled FIRST so they don't
         // dribble into the filter buffer; the filter pump skips arrows.
@@ -1087,7 +1087,7 @@ Type Browser
         // texture. Lazy-loaded via the same ImageCache module that
         // serves the composer thumbnail. Missing/invalid IDs paint
         // the cache's "?" placeholder so the layout stays stable.
-        Loom_DrawImageScaled(It\ThumbnailTexID, x + BR_CARD_W - 44, y + BR_CARD_H - 44, 32, 32)
+        Loom_DrawThumbnailSmall(It\ThumbnailTexID, x + BR_CARD_W - 44, y + BR_CARD_H - 44)
     End Method
 
 
@@ -1114,7 +1114,7 @@ Type Browser
         EndIf
 
         // Bottom-right thumbnail -- 32x32 preview of the spell icon
-        Loom_DrawImageScaled(Sp\ThumbnailTexID, x + BR_CARD_W - 44, y + BR_CARD_H - 44, 32, 32)
+        Loom_DrawThumbnailSmall(Sp\ThumbnailTexID, x + BR_CARD_W - 44, y + BR_CARD_H - 44)
     End Method
 
 

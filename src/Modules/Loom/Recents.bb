@@ -350,7 +350,7 @@ Type Recents
 
         Local mx% = MouseX()
         Local my% = MouseY()
-        Local clicked% = MouseHit(1)
+        Local clicked% = Loom_MouseClicked()
 
         Local modalX% = (sw - RECENTS_MODAL_W) / 2
         Local modalY% = (sh - RECENTS_MODAL_H) / 3

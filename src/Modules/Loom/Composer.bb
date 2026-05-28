@@ -304,12 +304,10 @@ Type Composer
 
         Local mx% = MouseX()
         Local my% = MouseY()
-        Local clicked% = MouseHit(1)
-        // Right-click captured once per frame; thread chips read it via
-        // chipRow -> renderChip to dispatch picker-mode opens. Capture
-        // here (not in chipRow) so MouseHit(2)'s consume-once semantics
-        // don't make only the first chip see the press.
-        Local rightClicked% = MouseHit(2)
+        Local clicked% = Loom_MouseClicked()
+        // Right-click also frame-cached for the same reason -- chipRow
+        // would otherwise see right-click in only the first chip.
+        Local rightClicked% = Loom_MouseRightClicked()
 
         // Collapsed mode short-circuits to a thin sliver-render. The
         // browser already shrank its grid by width%() so the sliver
@@ -1446,7 +1444,7 @@ Type Composer
 
         Local mx% = MouseX()
         Local my% = MouseY()
-        Local clicked% = MouseHit(1)
+        Local clicked% = Loom_MouseClicked()
 
         Local x% = sw - CMP_W
         Local y% = CMP_TOP
@@ -2400,7 +2398,7 @@ Type Composer
         y = Composer::editableIntRow(self, panelX, panelW, y, "Thumbnail tex",  "item", It\ID, "thumb_tex",  It\ThumbnailTexID, mx, my, clicked)
         If Composer::canPaintRow(self, thumbY, 70) = True
             Local thumbX% = panelX + panelW - 70 - CMP_PAD
-            Loom_DrawImageScaled(It\ThumbnailTexID, thumbX, thumbY, 64, 64)
+            Loom_DrawThumbnailLarge(It\ThumbnailTexID, thumbX, thumbY)
         EndIf
         y = y + 50   ; padding so the next row clears the 64px-tall preview
         y = Composer::editableIntRow(self, panelX, panelW, y, "Male mesh",      "item", It\ID, "m_mesh",     It\MMeshID,        mx, my, clicked)
@@ -2453,7 +2451,7 @@ Type Composer
         // Thumbnail preview at the right edge -- matches the Item visuals row.
         If Composer::canPaintRow(self, spellThumbY, 70) = True
             Local spellThumbX% = panelX + panelW - 70 - CMP_PAD
-            Loom_DrawImageScaled(S\ThumbnailTexID, spellThumbX, spellThumbY, 64, 64)
+            Loom_DrawThumbnailLarge(S\ThumbnailTexID, spellThumbX, spellThumbY)
         EndIf
         y = y + 50
 

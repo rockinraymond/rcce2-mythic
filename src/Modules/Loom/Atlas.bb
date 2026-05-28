@@ -126,7 +126,7 @@ Type Atlas
 
         Local mx% = MouseX()
         Local my% = MouseY()
-        Local clicked% = MouseHit(1)
+        Local clicked% = Loom_MouseClicked()
 
         // Draw edges first so node disks paint on top of them.
         Atlas::drawEdges(self, viewportX, viewportY + 28, viewportW, viewportH - 28)

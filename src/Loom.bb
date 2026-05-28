@@ -262,6 +262,12 @@ Type Loom
     Method renderFrame%()
         Cls
 
+        // Reset per-frame image load budget (ImageCache.bb). Bounds how
+        // many fresh disk loads any one frame does so a tab switch with
+        // many uncached thumbnails doesn't freeze the frame and tank
+        // input responsiveness. Subsequent frames warm the cache.
+        Loom_BeginFrame()
+
         // Ctrl+K opens the palette / Ctrl+H opens the timeline (each
         // no-ops if already open). Detect BEFORE any other input handler
         // so openModal's FlushKeys swallows the K/H keystroke before it
