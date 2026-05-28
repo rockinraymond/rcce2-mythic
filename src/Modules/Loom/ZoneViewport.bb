@@ -77,6 +77,11 @@ Global VPCountTriggers = 0
 Global VPCountWaypoints = 0
 Global VPCountLines    = 0     ; total connection lines emitted
 
+; Module-level Composer pointer set by Loom.bb after construction.
+; Lets Loom_PickZoneMarker dispatch into Composer::scrollToZoneSubEntity
+; without holding a per-call reference. Same shape as LoomWorldCache.
+Global LoomComposer.Composer = Null
+
 
 ; =============================================================================
 ; Loom_InitZoneViewport -- one-time setup at boot.
@@ -220,7 +225,20 @@ Function Loom_PickZoneMarker(localX, localY)
     For m = Each ZoneViewportMarker
         If m\EN = picked
             If m\Kind <> ""
-                Toast_Show("Picked " + m\Kind + " " + Str(m\IndexN), "info")
+                ; Dispatch to composer scroll-to-section if available
+                ; (waypoint clicks don't have a section to scroll to;
+                ; they're rendered inline with other waypoints rather
+                ; than as per-slot sub-sections, so we still toast).
+                If LoomComposer <> Null And (m\Kind = "portal" Or m\Kind = "trigger" Or m\Kind = "spawn")
+                    Local ok = Composer::scrollToZoneSubEntity(LoomComposer, m\Kind, m\IndexN)
+                    If ok = True
+                        Toast_Show("Jumped to " + m\Kind + " " + Str(m\IndexN), "info")
+                    Else
+                        Toast_Show("Picked " + m\Kind + " " + Str(m\IndexN) + " (anchor not ready)", "warning")
+                    EndIf
+                Else
+                    Toast_Show("Picked " + m\Kind + " " + Str(m\IndexN), "info")
+                EndIf
                 WriteLog(LoomLog, "ZoneViewport: picked " + m\Kind + " " + Str(m\IndexN))
             EndIf
             Return
