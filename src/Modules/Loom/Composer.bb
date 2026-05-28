@@ -2521,6 +2521,53 @@ Type Composer
         y = Composer::sectionHeader(self, panelX, panelW, y, "Blood")
         y = Composer::renderActorTextureRow(self, panelX, panelW, y, "Blood tex", "actor", A\ID, "blood_tex", A\BloodTexID, mx, my, clicked)
 
+        // Reverse references -- "Spawned in zones" -- walk every Area's
+        // 1000-slot SpawnActor table for any match against this actor.
+        // Closes the design's "every reference is a clickable thread,
+        // both directions" gap for actors. A designer asking "where does
+        // this NPC actually appear?" previously had to grep Zone .dat
+        // files; now it's a click. Heavy walk in the worst case (areas
+        // * 1000) so we cap the listing at 50 zones to keep the panel
+        // legible on a project with thousands of spawns of one creature.
+        y = Composer::sectionHeader(self, panelX, panelW, y, "Spawned in zones")
+        Local spawnHitCount% = 0
+        Local spawnZoneCount% = 0
+        Local zoneIter.Area = Null
+        For zoneIter = Each Area
+            Local hitInZone% = False
+            Local si2%
+            For si2 = 0 To 999
+                If zoneIter\SpawnActor[si2] = A\ID
+                    hitInZone = True
+                    spawnHitCount = spawnHitCount + 1
+                EndIf
+            Next
+            If hitInZone = True
+                If spawnZoneCount < 50
+                    y = Composer::chipRow(self, panelX, panelW, y, "", "zone", Handle(zoneIter), mx, my, clicked, rightClicked, "")
+                EndIf
+                spawnZoneCount = spawnZoneCount + 1
+            EndIf
+        Next
+        If spawnZoneCount = 0
+            If Composer::canPaintRow(self, y, CMP_ROW_H) = True
+                LoomText(panelX + CMP_PAD, y + 4, "(not spawned in any zone)", LOOM_STONE_300_R, LOOM_STONE_300_G, LOOM_STONE_300_B)
+            EndIf
+            y = y + CMP_ROW_H
+        EndIf
+        If spawnZoneCount > 50
+            If Composer::canPaintRow(self, y, CMP_ROW_H) = True
+                LoomText(panelX + CMP_PAD, y + 4, "(+ " + Str(spawnZoneCount - 50) + " more zones)", LOOM_STONE_300_R, LOOM_STONE_300_G, LOOM_STONE_300_B)
+            EndIf
+            y = y + CMP_ROW_H
+        EndIf
+        If spawnHitCount > 0
+            If Composer::canPaintRow(self, y, CMP_ROW_H) = True
+                LoomText(panelX + CMP_PAD, y + 4, Str(spawnHitCount) + " spawn slot(s) across " + Str(spawnZoneCount) + " zone(s)", LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
+            EndIf
+            y = y + CMP_ROW_H
+        EndIf
+
         Composer::recordContentBottom(self, y)
     End Method
 
@@ -2835,6 +2882,44 @@ Type Composer
             EndIf
         EndIf
         y = Composer::renderZoneSpawns(self, panelX, panelW, y, Ar, h, mx, my, clicked, rightClicked)
+
+        // Reverse references -- "Inbound portals" -- walk every other
+        // Area's 100-slot portal table for any portal targeting THIS
+        // zone (matched by PortalLinkArea$ = Ar\Name$). Closes the
+        // design's bidirectional-thread gap for zones. Designer asking
+        // "what zones lead here?" previously had to grep every other
+        // zone's portal list; now it's a click.
+        y = Composer::sectionHeader(self, panelX, panelW, y, "Inbound portals")
+        Local inboundCount% = 0
+        Local otherZone.Area = Null
+        Local portIdx% = 0
+        For otherZone = Each Area
+            If otherZone <> Ar
+                For portIdx = 0 To 99
+                    If otherZone\PortalName$[portIdx] <> "" And Lower$(otherZone\PortalLinkArea$[portIdx]) = Lower$(Ar\Name$)
+                        If inboundCount < 50
+                            // Label with the source portal name so the
+                            // designer can distinguish multiple portals
+                            // from the same source zone.
+                            y = Composer::chipRow(self, panelX, panelW, y, otherZone\PortalName$[portIdx], "zone", Handle(otherZone), mx, my, clicked, rightClicked, "")
+                        EndIf
+                        inboundCount = inboundCount + 1
+                    EndIf
+                Next
+            EndIf
+        Next
+        If inboundCount = 0
+            If Composer::canPaintRow(self, y, CMP_ROW_H) = True
+                LoomText(panelX + CMP_PAD, y + 4, "(no inbound portals)", LOOM_STONE_300_R, LOOM_STONE_300_G, LOOM_STONE_300_B)
+            EndIf
+            y = y + CMP_ROW_H
+        EndIf
+        If inboundCount > 50
+            If Composer::canPaintRow(self, y, CMP_ROW_H) = True
+                LoomText(panelX + CMP_PAD, y + 4, "(+ " + Str(inboundCount - 50) + " more)", LOOM_STONE_300_R, LOOM_STONE_300_G, LOOM_STONE_300_B)
+            EndIf
+            y = y + CMP_ROW_H
+        EndIf
 
         Composer::recordContentBottom(self, y)
     End Method
