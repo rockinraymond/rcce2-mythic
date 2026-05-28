@@ -461,6 +461,7 @@ Type Palette
         Local emitZone% = (self\pickerMode = False Or self\pickerKind = "zone")
         Local emitFaction% = (self\pickerMode = False Or self\pickerKind = "faction")
         Local emitAnimSet% = (self\pickerMode = False Or self\pickerKind = "animset")
+        Local emitScript% = (self\pickerMode = False Or self\pickerKind = "script")
 
         If emitActor = True
             For Ac.Actor = Each Actor
@@ -516,6 +517,19 @@ Type Palette
                 Local mScore% = Palette::scoreOrBaseline(self, q, As\Name$, showAllBaseline)
                 If mScore > 0
                     Palette::addResult(self, "animset", As\ID, As\Name$, "anim set", mScore)
+                EndIf
+            Next
+        EndIf
+
+        If emitScript = True
+            // ScriptFile pool is populated by Scripts_Init at boot.
+            // The display name surfaces ".rsl" so designers see the file
+            // identity in the result list; matchers strip the extension
+            // tolerantly via Scripts_NormalizeName$ on commit.
+            For sf.ScriptFile = Each ScriptFile
+                Local scriptScore% = Palette::scoreOrBaseline(self, q, sf\Name$, showAllBaseline)
+                If scriptScore > 0
+                    Palette::addResult(self, "script", sf\Index, sf\Name$ + ".rsl", "script", scriptScore)
                 EndIf
             Next
         EndIf
@@ -645,13 +659,18 @@ Type Palette
             EndIf
 
             // Encode the chosen value for the target field. For zone
-            // portals (string-by-name) we'd write the entity name; all
-            // other ref fields take the integer ID as string.
-            Local val$
-            If k = "zone"
-                val = nm        // for any future zone-by-name field
-            Else
-                val = Str(id)
+            // portals (string-by-name) we'd write the entity name; for
+            // script-bound fields the value is the script basename
+            // WITHOUT the .rsl extension (matches the storage shape on
+            // disk -- Server expects "Click_Test" not "Click_Test.rsl").
+            // All other ref fields take the integer ID as string.
+            Local val$ = Str(id)
+            If k = "zone" Then val = nm
+            If k = "script"
+                // DisplayName is "Name.rsl"; strip the extension.
+                Local scriptBase$ = nm
+                If Right$(nm, 4) = ".rsl" Then scriptBase = Left$(nm, Len(nm) - 4)
+                val = scriptBase
             EndIf
 
             // Capture the old display value for the timeline -- best
@@ -687,6 +706,7 @@ Type Palette
         If kind = "zone"    Then Return "Z"
         If kind = "faction" Then Return "F"
         If kind = "animset" Then Return "M"
+        If kind = "script"  Then Return "x"
         Return "?"
     End Method
 End Type

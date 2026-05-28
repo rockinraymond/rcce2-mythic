@@ -305,6 +305,7 @@ Type Threads
         If kind = "zone"    Then Return "Z"
         If kind = "faction" Then Return "F"
         If kind = "animset" Then Return "M"
+        If kind = "script"  Then Return "x"      ; ".rsl" looks like an x-ish glyph
         Return "?"
     End Method
 End Type
