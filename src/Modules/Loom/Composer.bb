@@ -430,26 +430,31 @@ Type Composer
         Local bodyY% = y + CMP_PAD + 50
         Local bodyH% = h - (bodyY - y) - 24
 
-        // Pinned viewport band. Kinds with a 3D viewport (actor / item /
-        // mesh / zone) reserve a fixed, NON-scrolling band at the top of
-        // the body; the field rows scroll BELOW it. Pinning (vs. letting
-        // the viewport scroll with the body) means: the RenderWorld/CopyRect
-        // rect never lands over the header (no bleed), the preview stays
-        // visible while you edit fields, and the wheel split is clean
-        // (cursor-over-viewport = zoom, cursor-over-fields = scroll).
+        // Pinned viewport band. Mesh-preview kinds (actor / item / mesh)
+        // reserve a fixed, NON-scrolling band at the top of the body; the
+        // field rows scroll BELOW it. viewportSize()=0 for zone, so it
+        // reserves NO band -- zone renders full-screen on the left instead
+        // (see the zone branch below), and its fields fill the full panel.
+        Local vpSz% = Composer::viewportSize(self, kind)
         Local vpBandH% = 0
-        If Composer::kindHasViewport(self, kind) = True
-            vpBandH = Composer::viewportSize(self, kind) + 10
-        EndIf
+        If vpSz > 0 Then vpBandH = vpSz + 10
 
         self\bodyTop    = bodyY + vpBandH
         self\bodyBottom = bodyY + bodyH
         Local scrolledBodyY% = self\bodyTop - self\scrollOffset
         self\chipHit = False
 
-        // Draw the pinned viewport first, at the fixed band top (unscrolled).
+        // Draw the pinned mesh-preview box first, at the fixed band top.
         If vpBandH > 0
             Composer::drawPinnedViewport(self, kind, refID, x, w, bodyY)
+        EndIf
+
+        // Zone gets a full-screen fly-around viewport in the left content
+        // area (left of the composer panel). Direct-to-back-buffer; the
+        // composer panel overlays on the right so the zone fields stay
+        // editable while flying.
+        If kind = "zone"
+            Composer::drawZoneFullscreen(self, refID, sw, sh)
         EndIf
 
         If kind = "actor"
@@ -2804,10 +2809,13 @@ Type Composer
         Return False
     End Method
 
-    // Square edge of the viewport for this kind. Zone uses the larger
-    // schematic (VP_RT_SIZE); the others use the mesh-preview square.
+    // Square edge of the PINNED-BOX viewport for this kind (mesh preview).
+    // Zone returns 0: it doesn't use a composer band -- it renders as a
+    // full-screen fly-around viewport in the left content area instead
+    // (see the zone branch in renderAndUpdate). 0 means no band reserved,
+    // so the zone fields fill the full composer height on the right.
     Method viewportSize%(kind$)
-        If kind = "zone" Then Return VP_RT_SIZE
+        If kind = "zone" Then Return 0
         If Composer::kindHasViewport(self, kind) = True Then Return LOOM_PREVIEW_SIZE
         Return 0
     End Method
@@ -2850,10 +2858,26 @@ Type Composer
         Else If kind = "mesh"
             Local mh.MeshEntry = Meshes_GetByIndex(refID)
             If mh <> Null Then Loom_DrawMeshPreview(mh\ID, vpX, vpY, LOOM_PREVIEW_SIZE)
-        Else If kind = "zone"
-            Local Ar.Area = Object.Area(refID)
-            If Ar <> Null Then Loom_DrawZoneViewport(refID, vpX, vpY)
         EndIf
+        // Zone is intentionally NOT here -- it renders full-screen via
+        // Composer::drawZoneFullscreen in renderAndUpdate, not as a box.
+    End Method
+
+
+    // Full-screen zone fly-around viewport. Fills the left content area --
+    // everything left of the composer panel, between the browser filter bar
+    // (tabs/filter stay usable above) and the footer. Loom_DrawZoneViewport
+    // renders the 3D scene directly to the back buffer at this rect with
+    // orbit / pan / zoom + click-to-edit markers. The composer panel
+    // overlays on the right, so zone fields stay editable while flying.
+    Method drawZoneFullscreen(refID%, sw%, sh%)
+        Local zvX% = 0
+        Local zvY% = BR_TOP_RIBBON + BR_TAB_BAR_H + BR_FILTER_BAR_H
+        Local zvW% = sw - CMP_W
+        Local zvH% = sh - zvY - BR_BOT_RIBBON
+        If zvW < 120 Or zvH < 120 Then Return
+        Local Ar.Area = Object.Area(refID)
+        If Ar <> Null Then Loom_DrawZoneViewport(refID, zvX, zvY, zvW, zvH)
     End Method
 
 

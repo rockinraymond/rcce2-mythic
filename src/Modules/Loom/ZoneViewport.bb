@@ -863,18 +863,26 @@ End Function
 ; zone if the zone handle changed since last frame. Then handles orbit/
 ; zoom input, repositions the camera, renders to RT, blits to back buffer.
 ; =============================================================================
-Function Loom_DrawZoneViewport(zoneHandle, x, y)
+; Loom_DrawZoneViewport -- render the zone 3D scene into the screen rect
+; (x, y, w, h). Full-screen capable: the composer passes the whole left area
+; so the designer can fly around and edit markers directly. Renders the
+; camera DIRECTLY to the back buffer at (x,y,w,h) -- render-to-texture does
+; not capture 3D in this BlitzForge build (see MeshPreview note), so we aim
+; the camera's viewport at the on-screen rect instead. CameraPick coords are
+; viewport-relative (mx-x, my-y); CameraProject results are too, so the 2D
+; grid/compass overlays are offset by (x,y) when drawn to the back buffer.
+Function Loom_DrawZoneViewport(zoneHandle, x, y, w, h)
     If VPInitOK = False
-        LoomFill x, y, VP_RT_SIZE, VP_RT_SIZE, LOOM_STONE_900_R, LOOM_STONE_900_G, LOOM_STONE_900_B
-        LoomBorder x, y, VP_RT_SIZE, VP_RT_SIZE, LOOM_STONE_700_R, LOOM_STONE_700_G, LOOM_STONE_700_B
+        LoomFill x, y, w, h, LOOM_STONE_900_R, LOOM_STONE_900_G, LOOM_STONE_900_B
+        LoomBorder x, y, w, h, LOOM_STONE_700_R, LOOM_STONE_700_G, LOOM_STONE_700_B
         LoomText x + 8, y + 8, "viewport init failed", LOOM_STONE_300_R, LOOM_STONE_300_G, LOOM_STONE_300_B
         Return False
     EndIf
 
     Local Ar.Area = Object.Area(zoneHandle)
     If Ar = Null
-        LoomFill x, y, VP_RT_SIZE, VP_RT_SIZE, LOOM_STONE_900_R, LOOM_STONE_900_G, LOOM_STONE_900_B
-        LoomBorder x, y, VP_RT_SIZE, VP_RT_SIZE, LOOM_STONE_700_R, LOOM_STONE_700_G, LOOM_STONE_700_B
+        LoomFill x, y, w, h, LOOM_STONE_900_R, LOOM_STONE_900_G, LOOM_STONE_900_B
+        LoomBorder x, y, w, h, LOOM_STONE_700_R, LOOM_STONE_700_G, LOOM_STONE_700_B
         LoomText x + 8, y + 8, "no zone focused", LOOM_STONE_300_R, LOOM_STONE_300_G, LOOM_STONE_300_B
         Return False
     EndIf
@@ -886,10 +894,15 @@ Function Loom_DrawZoneViewport(zoneHandle, x, y)
         WriteLog(LoomLog, "ZoneViewport: loaded zone " + Ar\Name$)
     EndIf
 
+    ; Aim the camera's viewport at the on-screen rect up front so the
+    ; CameraPick calls below (which run before this frame's RenderWorld)
+    ; use the current rect. Picks are viewport-relative -> (mx-x, my-y).
+    CameraViewport VPCam, x, y, w, h
+
     ; ---- Input handling -----------------------------------------------------
     Local mx = MouseX()
     Local my = MouseY()
-    Local inside = (mx >= x And mx < x + VP_RT_SIZE And my >= y And my < y + VP_RT_SIZE)
+    Local inside = (mx >= x And mx < x + w And my >= y And my < y + h)
 
     If MouseDown(1) = True And inside = True
         If VPDragging = False
@@ -1120,80 +1133,76 @@ Function Loom_DrawZoneViewport(zoneHandle, x, y)
         VPDirty = True
     EndIf
 
-    ; ---- Re-render to texture only when something changed ------------------
-    ; Camera orbit/pan/zoom + marker drags + highlight transitions all
-    ; set VPDirty = True. Static frames skip RenderWorld + the camera
-    ; re-position math; the cached texture from the last render gets
-    ; CopyRect'd to the back buffer below.
-    If VPDirty = True
-        Local cx# = VPSceneCenterX# + Cos(VPPitch#) * Sin(VPYaw#) * VPDistance#
-        Local cy# = VP_SCENE_Y_OFFSET# + VPSceneCenterY# + Sin(VPPitch#) * VPDistance#
-        Local cz# = VPSceneCenterZ# - Cos(VPPitch#) * Cos(VPYaw#) * VPDistance#
-        PositionEntity VPCam, cx#, cy#, cz#
-        PointEntity VPCam, VPGround
+    ; ---- Render the scene directly to the back buffer, every frame ---------
+    ; The back buffer is cleared at the top of renderFrame, so unlike the old
+    ; render-to-texture path (which doesn't capture 3D in this BlitzForge
+    ; build anyway) we re-render each frame. CameraViewport (set above)
+    ; confines RenderWorld's clear + draw to the (x,y,w,h) rect.
+    Local cx# = VPSceneCenterX# + Cos(VPPitch#) * Sin(VPYaw#) * VPDistance#
+    Local cy# = VP_SCENE_Y_OFFSET# + VPSceneCenterY# + Sin(VPPitch#) * VPDistance#
+    Local cz# = VPSceneCenterZ# - Cos(VPPitch#) * Cos(VPYaw#) * VPDistance#
+    PositionEntity VPCam, cx#, cy#, cz#
+    PointEntity VPCam, VPGround
 
-        ShowEntity VPCam
-        SetBuffer TextureBuffer(VPRT)
-        RenderWorld
+    ShowEntity VPCam
+    RenderWorld
+    HideEntity VPCam
+    VPDirty = False
 
-        ; ---- Ground grid overlay -----------------------------------------------
-        ; Paint axis-aligned grid lines on top of the rendered scene to
-        ; convey scale. CameraProject converts world (x, scene_y, z) to
-        ; RT-local screen coords; we draw 2D Lines between projected
-        ; endpoints. Lines outside the RT clip naturally because the
-        ; buffer is bounded.
-        ;
-        ; Step 250 world units = 16 lines across the 4000-unit ground
-        ; we render -- dense enough to read but not noisy.
-        Color 70, 70, 80      ; muted stone-grey for grid
-        Local gridSpan# = 2000.0
-        Local gridStep# = 250.0
-        Local g# = -gridSpan#
-        While g# <= gridSpan#
-            ; X-direction line: constant z = g, x varies -gridSpan..+gridSpan
-            CameraProject VPCam, -gridSpan#, VP_SCENE_Y_OFFSET#, g#
-            Local ax = ProjectedX()
-            Local ay = ProjectedY()
-            CameraProject VPCam,  gridSpan#, VP_SCENE_Y_OFFSET#, g#
-            Local bx = ProjectedX()
-            Local by = ProjectedY()
-            Line ax, ay, bx, by
-            ; Z-direction line: constant x = g, z varies
-            CameraProject VPCam, g#, VP_SCENE_Y_OFFSET#, -gridSpan#
-            Local cx2 = ProjectedX()
-            Local cy2 = ProjectedY()
-            CameraProject VPCam, g#, VP_SCENE_Y_OFFSET#,  gridSpan#
-            Local dx2 = ProjectedX()
-            Local dy2 = ProjectedY()
-            Line cx2, cy2, dx2, dy2
-            g# = g# + gridStep#
-        Wend
+    ; ---- 2D overlays (grid + compass) on the back buffer -------------------
+    ; CameraProject results are viewport-relative, so offset by (x,y). The 2D
+    ; Viewport clips them to the rect so projected lines/labels can't bleed
+    ; onto the composer panel or window chrome. Reset to full buffer after.
+    Viewport x, y, w, h
+    Color 70, 70, 80      ; muted stone-grey for grid
+    Local gridSpan# = 2000.0
+    Local gridStep# = 250.0
+    Local g# = -gridSpan#
+    While g# <= gridSpan#
+        ; X-direction line: constant z = g, x varies -gridSpan..+gridSpan.
+        ; CameraProject is a void command; it leaves ProjectedZ()=0 (and
+        ; X/Y at 0) for points outside the frustum (behind the camera / past
+        ; the far plane). Drawing those produced the fan of lines converging
+        ; on the top-left corner. ProjectedZ()>0 means the point is in view;
+        ; capture each endpoint's values before the next CameraProject
+        ; overwrites them, and only draw when BOTH endpoints are visible.
+        CameraProject VPCam, -gridSpan#, VP_SCENE_Y_OFFSET#, g#
+        Local ax = x + ProjectedX()
+        Local ay = y + ProjectedY()
+        Local az# = ProjectedZ#()
+        CameraProject VPCam,  gridSpan#, VP_SCENE_Y_OFFSET#, g#
+        Local bx = x + ProjectedX()
+        Local by = y + ProjectedY()
+        Local bz# = ProjectedZ#()
+        If az# > 0.0 And bz# > 0.0 Then Line ax, ay, bx, by
+        ; Z-direction line: constant x = g, z varies
+        CameraProject VPCam, g#, VP_SCENE_Y_OFFSET#, -gridSpan#
+        Local cx2 = x + ProjectedX()
+        Local cy2 = y + ProjectedY()
+        Local cz2# = ProjectedZ#()
+        CameraProject VPCam, g#, VP_SCENE_Y_OFFSET#,  gridSpan#
+        Local dx2 = x + ProjectedX()
+        Local dy2 = y + ProjectedY()
+        Local dz2# = ProjectedZ#()
+        If cz2# > 0.0 And dz2# > 0.0 Then Line cx2, cy2, dx2, dy2
+        g# = g# + gridStep#
+    Wend
 
-        ; Compass labels at +N (north) +S +E +W positions on the ground.
-        ; In Loom's coord convention +Z is "north" (mirrors how the GUE
-        ; in-game camera + minimap orient). Letters projected through
-        ; the same camera so they tilt with view -- gives an intuitive
-        ; "you are facing N" cue when orbit changes.
-        Color 200, 200, 110   ; brass-light for compass letters
-        CameraProject VPCam, 0,             VP_SCENE_Y_OFFSET#,  gridSpan#
-        Text ProjectedX(), ProjectedY(), "N", True, True
-        CameraProject VPCam, 0,             VP_SCENE_Y_OFFSET#, -gridSpan#
-        Text ProjectedX(), ProjectedY(), "S", True, True
-        CameraProject VPCam,  gridSpan#,    VP_SCENE_Y_OFFSET#, 0
-        Text ProjectedX(), ProjectedY(), "E", True, True
-        CameraProject VPCam, -gridSpan#,    VP_SCENE_Y_OFFSET#, 0
-        Text ProjectedX(), ProjectedY(), "W", True, True
+    ; Compass labels at +N/+S/+E/+W on the ground (project through the same
+    ; camera so they tilt with the view). Only draw when in view, else they'd
+    ; stack in the top-left corner like the grid lines did.
+    Color 200, 200, 110   ; brass-light for compass letters
+    CameraProject VPCam, 0, VP_SCENE_Y_OFFSET#, gridSpan#
+    If ProjectedZ#() > 0.0 Then Text x + ProjectedX(), y + ProjectedY(), "N", True, True
+    CameraProject VPCam, 0, VP_SCENE_Y_OFFSET#, -gridSpan#
+    If ProjectedZ#() > 0.0 Then Text x + ProjectedX(), y + ProjectedY(), "S", True, True
+    CameraProject VPCam, gridSpan#, VP_SCENE_Y_OFFSET#, 0
+    If ProjectedZ#() > 0.0 Then Text x + ProjectedX(), y + ProjectedY(), "E", True, True
+    CameraProject VPCam, -gridSpan#, VP_SCENE_Y_OFFSET#, 0
+    If ProjectedZ#() > 0.0 Then Text x + ProjectedX(), y + ProjectedY(), "W", True, True
+    Viewport 0, 0, GraphicsWidth(), GraphicsHeight()
 
-        SetBuffer BackBuffer()
-        HideEntity VPCam
-
-        VPDirty = False
-    EndIf
-
-    ; Blit cached texture to back buffer every frame (back buffer is
-    ; cleared at the top of renderFrame so we always need to repaint).
-    CopyRect 0, 0, VP_RT_SIZE, VP_RT_SIZE, x, y, TextureBuffer(VPRT), BackBuffer()
-    LoomBorder x, y, VP_RT_SIZE, VP_RT_SIZE, LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B
+    LoomBorder x, y, w, h, LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B
 
     ; Legend overlay with live counts. Capitalized labels mirror the
     ; composer section names so the user can mentally map widget colors
@@ -1203,15 +1212,15 @@ Function Loom_DrawZoneViewport(zoneHandle, x, y)
     LoomText x + 8, y + 40, "triggers "  + Str(VPCountTriggers),  LOOM_WARNING_R, LOOM_WARNING_G, LOOM_WARNING_B
     LoomText x + 8, y + 56, "waypoints " + Str(VPCountWaypoints), 200, 200, 210
     ; X/Y/Z axis legend (matches the colored lines at scene origin)
-    LoomText x + VP_RT_SIZE - 60, y + 26, "X", 220, 60, 60
-    LoomText x + VP_RT_SIZE - 48, y + 26, "Y", 60, 220, 60
-    LoomText x + VP_RT_SIZE - 36, y + 26, "Z", 60, 120, 220
+    LoomText x + w - 60, y + 26, "X", 220, 60, 60
+    LoomText x + w - 48, y + 26, "Y", 60, 220, 60
+    LoomText x + w - 36, y + 26, "Z", 60, 120, 220
 
     ; Reset View pill -- top-right corner. Click restores auto-fit
     ; camera + clears orbit/zoom for the loaded zone. Useful when
     ; the user has spun the camera so far they can't find anything.
     Local rsW = 60
-    Local rsX = x + VP_RT_SIZE - rsW - 6
+    Local rsX = x + w - rsW - 6
     Local rsY = y + 6
     Local rsHover = (mx >= rsX And mx < rsX + rsW And my >= rsY And my < rsY + 16)
     If rsHover = True
@@ -1243,7 +1252,7 @@ Function Loom_DrawZoneViewport(zoneHandle, x, y)
                     ; Clamp inside widget rect so the text doesn't
                     ; leak outside the viewport border.
                     If pxL < x + 4 Then pxL = x + 4
-                    If pxL + lblW > x + VP_RT_SIZE - 4 Then pxL = x + VP_RT_SIZE - lblW - 4
+                    If pxL + lblW > x + w - 4 Then pxL = x + w - lblW - 4
                     If pyL < y + 4 Then pyL = y + 4
                     LoomFill pxL, pyL, lblW, 14, LOOM_STONE_900_R, LOOM_STONE_900_G, LOOM_STONE_900_B
                     LoomBorder pxL, pyL, lblW, 14, LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B
@@ -1255,7 +1264,7 @@ Function Loom_DrawZoneViewport(zoneHandle, x, y)
     EndIf
 
     If inside = True
-        LoomText x + 8, y + VP_RT_SIZE - 18, "LMB=orbit RMB=move(shift+Y) wheel=zoom shift+click=add ctrl+click=del", LOOM_STONE_300_R, LOOM_STONE_300_G, LOOM_STONE_300_B
+        LoomText x + 8, y + h - 18, "LMB=orbit RMB=move(shift+Y) wheel=zoom shift+click=add ctrl+click=del", LOOM_STONE_300_R, LOOM_STONE_300_G, LOOM_STONE_300_B
     EndIf
 
     Return True
