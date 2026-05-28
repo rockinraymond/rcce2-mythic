@@ -876,6 +876,15 @@ Type Browser
     Method drawActorCardBody(Ac.Actor, x%, y%)
         LoomText(x + 12, y + 18, Ac\Race$ + " [" + Ac\Class$ + "]", LOOM_PARCHMENT_100_R, LOOM_PARCHMENT_100_G, LOOM_PARCHMENT_100_B)
 
+        // Top-right kind/status badge -- prioritized: PLAYABLE > RIDEABLE > NPC
+        If Ac\Playable = True
+            Browser::drawBadge(self, x + BR_CARD_W - 12, y + 18, "PLAYABLE", LOOM_ARCANE_500_R, LOOM_ARCANE_500_G, LOOM_ARCANE_500_B)
+        Else If Ac\Rideable = True
+            Browser::drawBadge(self, x + BR_CARD_W - 12, y + 18, "RIDEABLE", LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
+        Else
+            Browser::drawBadge(self, x + BR_CARD_W - 12, y + 18, "NPC", LOOM_STONE_500_R, LOOM_STONE_500_G, LOOM_STONE_500_B)
+        EndIf
+
         Local facName$ = FactionNames$(Ac\DefaultFaction)
         If facName = "" Then facName = "(no faction)"
         LoomText(x + 12, y + 44, "Faction", LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
@@ -890,6 +899,10 @@ Type Browser
         LoomText(x + 12, y + 18, It\Name$, LOOM_PARCHMENT_100_R, LOOM_PARCHMENT_100_G, LOOM_PARCHMENT_100_B)
 
         Local typeLabel$ = Browser::itemTypeLabel(self, It\ItemType)
+        // Item-type badge -- color per type so a glance distinguishes
+        // weapons from armour from potions.
+        Browser::drawBadge(self, x + BR_CARD_W - 12, y + 18, Upper$(typeLabel), Browser::itemTypeBadgeR(self, It\ItemType), Browser::itemTypeBadgeG(self, It\ItemType), Browser::itemTypeBadgeB(self, It\ItemType))
+
         LoomText(x + 12, y + 44, "Type", LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
         LoomText(x + 12, y + 60, typeLabel, LOOM_PARCHMENT_100_R, LOOM_PARCHMENT_100_G, LOOM_PARCHMENT_100_B)
 
@@ -901,8 +914,19 @@ Type Browser
     Method drawSpellCardBody(Sp.Spell, x%, y%)
         LoomText(x + 12, y + 18, Sp\Name$, LOOM_PARCHMENT_100_R, LOOM_PARCHMENT_100_G, LOOM_PARCHMENT_100_B)
 
+        // Recharge badge -- color cue by speed (fast = arcane / slow = warning)
+        Local rechargeSec% = Sp\RechargeTime / 1000
+        Local rechargeBadge$ = Str(rechargeSec) + "S"
+        If rechargeSec <= 2
+            Browser::drawBadge(self, x + BR_CARD_W - 12, y + 18, rechargeBadge, LOOM_ARCANE_500_R, LOOM_ARCANE_500_G, LOOM_ARCANE_500_B)
+        Else If rechargeSec <= 10
+            Browser::drawBadge(self, x + BR_CARD_W - 12, y + 18, rechargeBadge, LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
+        Else
+            Browser::drawBadge(self, x + BR_CARD_W - 12, y + 18, rechargeBadge, LOOM_WARNING_R, LOOM_WARNING_G, LOOM_WARNING_B)
+        EndIf
+
         LoomText(x + 12, y + 44, "Recharge", LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
-        LoomText(x + 12, y + 60, Str(Sp\RechargeTime / 1000) + " s", LOOM_PARCHMENT_100_R, LOOM_PARCHMENT_100_G, LOOM_PARCHMENT_100_B)
+        LoomText(x + 12, y + 60, Str(rechargeSec) + " s", LOOM_PARCHMENT_100_R, LOOM_PARCHMENT_100_G, LOOM_PARCHMENT_100_B)
 
         If Sp\Script$ <> ""
             LoomText(x + 180, y + 44, "Script", LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
@@ -913,6 +937,16 @@ Type Browser
 
     Method drawZoneCardBody(Ar.Area, x%, y%)
         LoomText(x + 12, y + 18, Ar\Name$, LOOM_PARCHMENT_100_R, LOOM_PARCHMENT_100_G, LOOM_PARCHMENT_100_B)
+
+        // Top-right badge -- PVP > OUTDOOR > INDOOR (PVP is the most
+        // load-bearing zone-level flag for design decisions)
+        If Ar\PvP = True
+            Browser::drawBadge(self, x + BR_CARD_W - 12, y + 18, "PVP", LOOM_DANGER_R, LOOM_DANGER_G, LOOM_DANGER_B)
+        Else If Ar\Outdoors = True
+            Browser::drawBadge(self, x + BR_CARD_W - 12, y + 18, "OUTDOOR", LOOM_ARCANE_500_R, LOOM_ARCANE_500_G, LOOM_ARCANE_500_B)
+        Else
+            Browser::drawBadge(self, x + BR_CARD_W - 12, y + 18, "INDOOR", LOOM_STONE_500_R, LOOM_STONE_500_G, LOOM_STONE_500_B)
+        EndIf
 
         Local portals% = 0
         Local spawns% = 0
@@ -946,6 +980,11 @@ Type Browser
             If Ac\DefaultFaction = idx Then members = members + 1
         Next
 
+        // Top-right badge -- member count as a chip with brass color so
+        // the user can scan the faction grid for "the ones with people"
+        // vs "the ones nobody belongs to"
+        Browser::drawBadge(self, x + BR_CARD_W - 12, y + 18, Str(members) + " MEMBER", LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
+
         LoomText(x + 12, y + 44, "Members", LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
         LoomText(x + 12, y + 60, Str(members), LOOM_PARCHMENT_100_R, LOOM_PARCHMENT_100_G, LOOM_PARCHMENT_100_B)
     End Method
@@ -966,10 +1005,70 @@ Type Browser
             If Ac\MAnimationSet = As\ID Or Ac\FAnimationSet = As\ID Then users = users + 1
         Next
 
+        // Top-right badge -- ORPHAN if no actors use it (cleanup candidate);
+        // user-count brass chip otherwise.
+        If users = 0
+            Browser::drawBadge(self, x + BR_CARD_W - 12, y + 18, "ORPHAN", LOOM_DANGER_R, LOOM_DANGER_G, LOOM_DANGER_B)
+        Else
+            Browser::drawBadge(self, x + BR_CARD_W - 12, y + 18, Str(users) + " IN USE", LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
+        EndIf
+
         LoomText(x + 12,  y + 44, "Clips", LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
         LoomText(x + 12,  y + 60, Str(clips), LOOM_PARCHMENT_100_R, LOOM_PARCHMENT_100_G, LOOM_PARCHMENT_100_B)
         LoomText(x + 110, y + 44, "Used by",  LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
         LoomText(x + 110, y + 60, Str(users), LOOM_PARCHMENT_100_R, LOOM_PARCHMENT_100_G, LOOM_PARCHMENT_100_B)
+    End Method
+
+
+    // -------------------------------------------------------------------------
+    // drawBadge -- right-anchored pill of `label` painted with `fillR/G/B`
+    // background; parchment text inside. (rightX, y) is the top-right
+    // corner of the pill so callers pass `x + BR_CARD_W - 12` and the
+    // badge sizes itself based on label width.
+    //
+    // 16px tall, ~6px text padding each side, parchment border.
+    // -------------------------------------------------------------------------
+    Method drawBadge(rightX%, y%, label$, fillR%, fillG%, fillB%)
+        Local bw% = StringWidth(label) + 12
+        Local bh% = 16
+        Local bx% = rightX - bw
+        LoomFill(bx, y, bw, bh, fillR, fillG, fillB)
+        LoomBorder(bx, y, bw, bh, LOOM_PARCHMENT_100_R, LOOM_PARCHMENT_100_G, LOOM_PARCHMENT_100_B)
+        LoomText(bx + 6, y + 1, label, LOOM_PARCHMENT_100_R, LOOM_PARCHMENT_100_G, LOOM_PARCHMENT_100_B)
+    End Method
+
+
+    // -------------------------------------------------------------------------
+    // itemTypeBadgeR/G/B -- color cue per Item.ItemType. Channel split
+    // (not a packed return) to dodge the Strict-mode reassign-Local-
+    // from-nested-If trap. Same shape as Toasts::kindR/G/B,
+    // ExitPrompt::actionR/G/B.
+    // -------------------------------------------------------------------------
+    Method itemTypeBadgeR%(t%)
+        If t = 1 Then Return LOOM_DANGER_R    ; Weapon -- aggressive red
+        If t = 2 Then Return LOOM_ARCANE_500_R ; Armour -- defensive blue
+        If t = 3 Then Return LOOM_BRASS_500_R  ; Ring -- ornament brass
+        If t = 4 Then Return LOOM_SUCCESS_R    ; Potion -- alchemy green
+        If t = 5 Then Return LOOM_WARNING_R    ; Food -- warm orange
+        Return LOOM_STONE_500_R                ; Other / Image / misc
+    End Method
+
+    Method itemTypeBadgeG%(t%)
+        If t = 1 Then Return LOOM_DANGER_G
+        If t = 2 Then Return LOOM_ARCANE_500_G
+        If t = 3 Then Return LOOM_BRASS_500_G
+        If t = 4 Then Return LOOM_SUCCESS_G
+        If t = 5 Then Return LOOM_WARNING_G
+        Return LOOM_STONE_500_G
+    End Method
+
+    Method itemTypeBadgeB%(t%)
+        If t = 1 Then Return LOOM_DANGER_B
+        If t = 2 Then Return LOOM_ARCANE_500_B
+        If t = 3 Then Return LOOM_BRASS_500_B
+        If t = 4 Then Return LOOM_SUCCESS_B
+        If t = 5 Then Return LOOM_WARNING_B
+        Return LOOM_STONE_500_B
     End Method
 
 

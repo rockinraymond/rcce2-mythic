@@ -385,6 +385,14 @@ Type Composer
             EndIf
         EndIf
 
+        // Hover affordance -- a small "edit" cue on the right edge of
+        // the cell so users discover the click-to-edit pattern without
+        // having to click first. Only shown when hovering AND not
+        // currently editing this field.
+        If hovered = True And active = False
+            LoomText(valX + valW - 26, rowY, "edit", LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
+        EndIf
+
         // Click to begin / commit. Click on the value rect while NOT editing
         // begins; click outside while editing commits (handled here by no-op
         // -- the next-frame check at top of renderAndUpdate sees mismatched
