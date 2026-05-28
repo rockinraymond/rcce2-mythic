@@ -284,6 +284,72 @@ End Function
 
 
 ; =============================================================================
+; Loom_AddPortalAtClick -- Shift+click on empty ground creates a new
+; portal at the clicked XZ. Uses CameraPick to convert mouse-local coords
+; to a world position on the ground plane. Fails silently if no portal
+; slot is available or the click missed the ground.
+;
+; After adding: reload markers so the new portal gets a visible cube,
+; mark the zone dirty, fire toast. Composer's zoneAnchorPortal will
+; refresh on the next frame's renderZone.
+; =============================================================================
+Function Loom_AddPortalAtClick(zoneHandle, localX, localY)
+    If VPInitOK = False Then Return
+    Local Ar.Area = Object.Area(zoneHandle)
+    If Ar = Null Then Return
+
+    ; Pick against the ground plane only -- if we hit a marker, fall
+    ; through (the marker pick already happened on this click). To
+    ; force ground-only, briefly disable marker pick modes.
+    Local m.ZoneViewportMarker
+    For m = Each ZoneViewportMarker
+        If m\Kind <> "" Then EntityPickMode m\EN, 0
+    Next
+    CameraPick VPCam, localX, localY
+    For m = Each ZoneViewportMarker
+        If m\Kind <> "" Then EntityPickMode m\EN, 1
+    Next
+
+    Local hit = PickedEntity()
+    If hit <> VPGround Then Return
+    Local nx# = PickedX#()
+    Local nz# = PickedZ#()
+
+    ; Find first empty portal slot
+    Local i
+    Local slot = -1
+    For i = 0 To 99
+        If Ar\PortalName$[i] = ""
+            slot = i
+            Exit
+        EndIf
+    Next
+    If slot < 0
+        Toast_Show("No empty portal slots in this zone", "warning")
+        Return
+    EndIf
+
+    ; Seed defaults (mirrors Composer::zoneAddPortal but with the
+    ; clicked position instead of (0, 0)).
+    Ar\PortalName$[slot]     = "New portal " + Str(slot)
+    Ar\PortalLinkArea$[slot] = Ar\Name$
+    Ar\PortalLinkName$[slot] = ""
+    Ar\PortalX#[slot]        = nx#
+    Ar\PortalY#[slot]        = 0.0
+    Ar\PortalZ#[slot]        = nz#
+    Ar\PortalSize#[slot]     = 5.0
+    Ar\PortalYaw#[slot]      = 0.0
+
+    ; Refresh viewport markers + composer state
+    Loom_LoadZoneMarkers(Ar)
+    VPDirty = True
+    If LoomComposer <> Null Then Composer::markDirtyForKind(LoomComposer, "zone")
+    Toast_Show("Added portal " + Str(slot) + " at (" + Int(nx#) + ", " + Int(nz#) + ")", "success")
+    WriteLog(LoomLog, "ZoneViewport: shift+click added portal " + Str(slot) + " at " + nx# + ", " + nz#)
+End Function
+
+
+; =============================================================================
 ; Loom_PickZoneMarker -- cast a ray from the camera through the requested
 ; local widget coords (0..VP_RT_SIZE), find which marker (if any) was
 ; hit. On hit, fire a toast naming the sub-entity. Iter 45 will turn
@@ -594,13 +660,20 @@ Function Loom_DrawZoneViewport(zoneHandle, x, y)
         EndIf
     Else
         ; On LMB release: if the press-to-release total movement was
-        ; small (no real drag), treat as a click and try to pick a
-        ; marker. Loom_MouseClicked() is False here (it fires on PRESS
-        ; not release), so check VPDragging transitioning to False.
+        ; small (no real drag), treat as a click. Shift held =
+        ; add a new portal at the clicked ground position; else
+        ; treat as marker pick. Loom_MouseClicked() is False here
+        ; (it fires on PRESS not release), so check VPDragging
+        ; transitioning to False.
         If VPDragging = True
             Local moveDist = Abs(mx - VPDragStartMX) + Abs(my - VPDragStartMY)
             If moveDist < 4 And inside = True
-                Loom_PickZoneMarker(mx - x, my - y)
+                ; KeyDown(42) = LShift, KeyDown(54) = RShift
+                If KeyDown(42) = True Or KeyDown(54) = True
+                    Loom_AddPortalAtClick(zoneHandle, mx - x, my - y)
+                Else
+                    Loom_PickZoneMarker(mx - x, my - y)
+                EndIf
             EndIf
         EndIf
         VPDragging = False
@@ -814,7 +887,7 @@ Function Loom_DrawZoneViewport(zoneHandle, x, y)
     EndIf
 
     If inside = True
-        LoomText x + 8, y + VP_RT_SIZE - 18, "LMB=orbit  MMB=pan  wheel=zoom  RMB=move", LOOM_STONE_300_R, LOOM_STONE_300_G, LOOM_STONE_300_B
+        LoomText x + 8, y + VP_RT_SIZE - 18, "LMB=orbit  MMB=pan  RMB=move  wheel=zoom  shift+click=add portal", LOOM_STONE_300_R, LOOM_STONE_300_G, LOOM_STONE_300_B
     EndIf
 
     Return True
