@@ -87,6 +87,46 @@ End Function
 
 
 ; =============================================================================
+; Chrome immersion toggle (Tool / Balanced / In-world). Three-mode slider
+; from the original design (roadmap #2). Session-only for this first cut;
+; persistence comes in a follow-up via Settings.bb / Loom_SaveSettings.
+;
+; Each renderer that wants to vary its chrome by mode calls one of the
+; predicate helpers (Loom_ChromeIsTool / Loom_ChromeIsInWorld) and
+; branches inline. The default ("balanced") matches the pre-toggle
+; rendering exactly, so no behavior change for users who never click
+; the toggle.
+; =============================================================================
+Global LoomChromeMode$ = "balanced"
+
+Function Loom_ChromeMode$()
+    Return LoomChromeMode$
+End Function
+
+Function Loom_ChromeIsTool%()
+    Return (LoomChromeMode$ = "tool")
+End Function
+
+Function Loom_ChromeIsBalanced%()
+    Return (LoomChromeMode$ = "balanced")
+End Function
+
+Function Loom_ChromeIsInWorld%()
+    Return (LoomChromeMode$ = "in-world")
+End Function
+
+Function Loom_CycleChromeMode()
+    If LoomChromeMode$ = "tool"
+        LoomChromeMode$ = "balanced"
+    Else If LoomChromeMode$ = "balanced"
+        LoomChromeMode$ = "in-world"
+    Else
+        LoomChromeMode$ = "tool"
+    EndIf
+End Function
+
+
+; =============================================================================
 ; Loom_ConsumeClick -- mark the current frame's click as handled so no
 ; subsequent renderer in this frame reacts to it. Call this when an action
 ; fires that conceptually "uses up" the click, e.g. openModal triggered
