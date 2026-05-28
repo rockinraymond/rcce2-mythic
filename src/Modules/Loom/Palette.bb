@@ -141,6 +141,7 @@ Type Palette
         self\pickerTargetFieldId = ""
         Palette::clearResults(self)
         FlushKeys
+        Loom_ConsumeClick()
         WriteLog(LoomLog, "Palette: open (navigator)")
     End Method
 
@@ -166,6 +167,7 @@ Type Palette
         self\pickerTargetFieldId = targetFieldId
         Palette::clearResults(self)
         FlushKeys
+        Loom_ConsumeClick()
         WriteLog(LoomLog, "Palette: open (picker " + pickerKind + " -> " + targetKind + "#" + Str(targetRefID) + "." + targetFieldId + ")")
     End Method
 

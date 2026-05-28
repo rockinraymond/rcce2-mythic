@@ -87,6 +87,10 @@ Type BrokenRefs
         self\scrollOffset = 0
         BrokenRefs::rebuild(self)
         FlushKeys
+        // Eat the opening click so the modal's "click outside closes"
+        // check doesn't fire on the same frame (MouseHit cache makes
+        // all surfaces see the same click; see ImageCache.bb).
+        Loom_ConsumeClick()
         WriteLog(LoomLog, "BrokenRefs: open (" + Str(self\entryCount) + " entries)")
     End Method
 
