@@ -183,6 +183,10 @@ Type Browser
         // music IDs aren't statically referenced from data Loom edits.
         // Audition + browse only.
         Browser::addCategory(self, "music",   "Music")
+        // Stats tab: singleton read-only dashboard showing project
+        // health at a glance. Entity counts, top zones by spawn
+        // density, asset catalog sizes, issue breakdown.
+        Browser::addCategory(self, "stats",   "Stats")
         // Settings tab: project-level configuration singleton (Misc.dat /
         // Other.dat / Money.dat / Hosts.dat). Clicking the tab focuses
         // the singleton composer view directly -- no card grid since
@@ -437,7 +441,7 @@ Type Browser
         Local nbW% = 96
         Local nbH% = 22
         Local nbHover% = False
-        If self\category <> "tools" And self\category <> "script" And self\category <> "texture" And self\category <> "mesh" And self\category <> "sound" And self\category <> "music"
+        If self\category <> "tools" And self\category <> "script" And self\category <> "texture" And self\category <> "mesh" And self\category <> "sound" And self\category <> "music" And self\category <> "stats"
             nbHover = (mx >= nbX And mx < nbX + nbW And my >= nbY And my < nbY + nbH)
 
             If nbHover = True
@@ -552,6 +556,7 @@ Type Browser
         If kind = "mesh"    Then Return "Mesh"
         If kind = "sound"   Then Return "Sound"
         If kind = "music"   Then Return "Music"
+        If kind = "stats"   Then Return "Stats"
         Return kind
     End Method
 
@@ -715,6 +720,9 @@ Type Browser
         EndIf
         If cat = "music"
             count = Browser::drawMusicGrid(self, sw, sh, mx, my, clicked, gridX, gridY, cols)
+        EndIf
+        If cat = "stats"
+            count = Browser::drawStatsCard(self, sw, sh, mx, my, clicked, gridX, gridY)
         EndIf
         If cat = "settings"
             count = Browser::drawSettingsCard(self, sw, sh, mx, my, clicked, gridX, gridY)
@@ -924,6 +932,41 @@ Type Browser
             WriteLog(LoomLog, "Browser: opened Settings singleton")
         EndIf
 
+        Return 1
+    End Method
+
+
+    // -------------------------------------------------------------------------
+    // drawStatsCard -- Stats tab body. Singleton "Project Stats" card
+    // that focuses the read-only dashboard composer view on click.
+    // Mirrors drawSettingsCard's shape.
+    // -------------------------------------------------------------------------
+    Method drawStatsCard%(sw%, sh%, mx%, my%, clicked%, gridX%, gridY%)
+        Local cx% = gridX
+        Local cy% = gridY
+        Local cw% = BR_CARD_W * 2 + BR_CARD_GAP
+        Local ch% = BR_CARD_H
+        Local hovered% = (mx >= cx And mx < cx + cw And my >= cy And my < cy + ch)
+
+        LoomShadowCard(cx, cy, cw, ch)
+        If hovered = True
+            LoomFill(cx, cy, cw, ch, LOOM_STONE_700_R, LOOM_STONE_700_G, LOOM_STONE_700_B)
+        Else
+            LoomFill(cx, cy, cw, ch, LOOM_STONE_800_R, LOOM_STONE_800_G, LOOM_STONE_800_B)
+        EndIf
+        LoomBorder(cx, cy, cw, ch, LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
+        LoomFill(cx, cy, cw, 3, LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
+
+        LoomTheme_UseDisplay()
+        LoomText(cx + 16, cy + 16, "PROJECT STATS", LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
+        LoomTheme_UseBody()
+        LoomText(cx + 16, cy + 44, "Entity counts | top zones | asset catalog sizes | issue breakdown", LOOM_STONE_200_R, LOOM_STONE_200_G, LOOM_STONE_200_B)
+        LoomText(cx + 16, cy + ch - 24, "Click to open >>", LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
+
+        If hovered = True And clicked = True
+            Threads::focus(self\threads, "stats", 0)
+            WriteLog(LoomLog, "Browser: opened Stats singleton")
+        EndIf
         Return 1
     End Method
 
