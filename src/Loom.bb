@@ -329,6 +329,8 @@ Type Loom
         If modalAte = False And KeyHit(1)   // Esc
             If Browser::hasFilter(self\browser) = True
                 Browser::clearFilter(self\browser)
+            Else If Browser::hasSelection(self\browser) = True
+                Browser::clearSelection(self\browser)
             Else If Threads::back(self\threads) = False
                 If self\threads\focusKind <> ""
                     // Close composer back to plain browser.

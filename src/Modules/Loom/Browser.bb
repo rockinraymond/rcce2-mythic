@@ -52,6 +52,24 @@ Type BrowserCategory
 End Type
 
 
+// -----------------------------------------------------------------------------
+// SelectedEntity -- one entry in the bulk-edit selection set. Allocated by
+// Browser::toggleInSelection on Shift+Click; freed by clearSelection or by
+// toggleInSelection when the kind+refID is already in the set.
+//
+// Selection is across-kind by design ("I want to bump the value on these
+// five potions AND those three rings"). The composer's bulk-edit view
+// (coming in a follow-up iteration) handles per-kind dispatch.
+//
+// Manual Delete -- no EnableGC in Loom modules; mirror of LoomFocusEntry's
+// lifecycle pattern.
+// -----------------------------------------------------------------------------
+Type SelectedEntity
+    Field Kind$
+    Field RefID%
+End Type
+
+
 // =============================================================================
 // Browser -- everything-grid surface.
 // =============================================================================
@@ -86,6 +104,12 @@ Type Browser
     // last setting). Defaults to card-mode.
     Field atlas.Atlas
     Field atlasMode%
+
+    // Bulk-edit selection count -- the actual Each-SelectedEntity pool
+    // is the source of truth; this Field is a cheap accessor for the
+    // hot-loop count check (drawCardChrome reads it every card).
+    Field selectionCount%
+
 
     // Keyboard-navigation state. selectedIndex is the per-category cursor
     // (which card the arrow keys highlight). Mouse hover doesn't move it
@@ -122,6 +146,7 @@ Type Browser
         self\lastCols = 1
         self\lastCount = 0
         self\pendingEnter = False
+        self\selectionCount = 0
 
         // Build the ordered category list. Iterated via `Each BrowserCategory`
         // in insertion order (Blitz3D's global type pool is FIFO) -- also the
@@ -220,6 +245,66 @@ Type Browser
     Method clearFilter()
         self\filterQuery = ""
         WriteLog(LoomLog, "Browser: filter cleared")
+    End Method
+
+
+    // -------------------------------------------------------------------------
+    // Selection-set accessors -- used by the outer Loom Esc handler to
+    // prioritize selection-clear above back-stack pop, and by the future
+    // bulk-edit composer view to discover what's selected.
+    // -------------------------------------------------------------------------
+    Method hasSelection%()
+        If self\selectionCount > 0 Then Return True
+        Return False
+    End Method
+
+
+    Method getSelectionCount%()
+        Return self\selectionCount
+    End Method
+
+
+    Method clearSelection()
+        Local e.SelectedEntity
+        For e = Each SelectedEntity
+            Delete e
+        Next
+        self\selectionCount = 0
+        WriteLog(LoomLog, "Browser: selection cleared")
+    End Method
+
+
+    Method isSelected%(kind$, refID%)
+        Local e.SelectedEntity
+        For e = Each SelectedEntity
+            If e\Kind = kind And e\RefID = refID Then Return True
+        Next
+        Return False
+    End Method
+
+
+    // -------------------------------------------------------------------------
+    // toggleInSelection -- add (kind, refID) if not present; remove if
+    // present. Called from drawCardChrome on Shift+Click.
+    // -------------------------------------------------------------------------
+    Method toggleInSelection(kind$, refID%)
+        // Try to remove existing entry first.
+        Local e.SelectedEntity
+        For e = Each SelectedEntity
+            If e\Kind = kind And e\RefID = refID
+                Delete e
+                self\selectionCount = self\selectionCount - 1
+                WriteLog(LoomLog, "Browser: deselected " + kind + "#" + Str(refID) + " (now " + Str(self\selectionCount) + ")")
+                Return
+            EndIf
+        Next
+
+        // Not present -- add.
+        Local newEntry.SelectedEntity = New SelectedEntity()
+        newEntry\Kind = kind
+        newEntry\RefID = refID
+        self\selectionCount = self\selectionCount + 1
+        WriteLog(LoomLog, "Browser: selected " + kind + "#" + Str(refID) + " (now " + Str(self\selectionCount) + ")")
     End Method
 
 
@@ -845,6 +930,7 @@ Type Browser
     Method drawCardChrome(kind$, refID%, x%, y%, mx%, my%, clicked%, cardIdx%)
         Local hovered% = (mx >= x And mx < x + BR_CARD_W And my >= y And my < y + BR_CARD_H)
         Local selected% = (cardIdx = self\selectedIndex)
+        Local inSelectionSet% = Browser::isSelected(self, kind, refID)
 
         // Drop shadow lifts each card off the body gradient so cards
         // read as physical tiles rather than printed-on labels.
@@ -852,11 +938,22 @@ Type Browser
 
         // Subtle stone-800 -> stone-850 gradient gives each card a
         // raised-tile feel instead of reading as a flat colored rectangle.
-        LoomGradientV(x, y, BR_CARD_W, BR_CARD_H, LOOM_STONE_800_R, LOOM_STONE_800_G, LOOM_STONE_800_B, LOOM_STONE_850_R, LOOM_STONE_850_G, LOOM_STONE_850_B)
+        // Selection set members get a slightly different fill so they
+        // read as "in the bulk-edit batch" at a glance.
+        If inSelectionSet = True
+            LoomGradientV(x, y, BR_CARD_W, BR_CARD_H, LOOM_BRASS_800_R, LOOM_BRASS_800_G, LOOM_BRASS_800_B, LOOM_STONE_800_R, LOOM_STONE_800_G, LOOM_STONE_800_B)
+        Else
+            LoomGradientV(x, y, BR_CARD_W, BR_CARD_H, LOOM_STONE_800_R, LOOM_STONE_800_G, LOOM_STONE_800_B, LOOM_STONE_850_R, LOOM_STONE_850_G, LOOM_STONE_850_B)
+        EndIf
 
+        // Border priority: hover (arcane) > in-selection (warning) >
+        // keyboard cursor (brass solid double) > base (brass-700).
         If hovered = True
             LoomBorder(x, y, BR_CARD_W, BR_CARD_H, LOOM_ARCANE_500_R, LOOM_ARCANE_500_G, LOOM_ARCANE_500_B)
             LoomBorder(x + 1, y + 1, BR_CARD_W - 2, BR_CARD_H - 2, LOOM_ARCANE_500_R, LOOM_ARCANE_500_G, LOOM_ARCANE_500_B)
+        Else If inSelectionSet = True
+            LoomBorder(x, y, BR_CARD_W, BR_CARD_H, LOOM_WARNING_R, LOOM_WARNING_G, LOOM_WARNING_B)
+            LoomBorder(x + 1, y + 1, BR_CARD_W - 2, BR_CARD_H - 2, LOOM_WARNING_R, LOOM_WARNING_G, LOOM_WARNING_B)
         Else If selected = True
             // Keyboard cursor -- brass double ring so it reads as
             // distinct from arcane hover.
@@ -872,14 +969,27 @@ Type Browser
         LoomHRule(x + 12, y + 7, BR_CARD_W - 24, LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
         LoomHRule(x + 12, y + 8, BR_CARD_W - 24, LOOM_BRASS_700_R, LOOM_BRASS_700_G, LOOM_BRASS_700_B)
 
+        // Click handling -- Shift+Click adds/removes from selection set;
+        // plain click clears selection + focuses (single-edit flow).
         If hovered And clicked
-            Threads::focus(self\threads, kind, refID)
-            self\cardClickLatch = True
-            WriteLog(LoomLog, "Browser: focused " + kind + "#" + Str(refID))
+            Local shiftDown% = (KeyDown(42) Or KeyDown(54))
+            If shiftDown = True
+                Browser::toggleInSelection(self, kind, refID)
+                self\cardClickLatch = True
+            Else
+                // Plain click -- clear any pending selection so the
+                // user gets the simple "focus this" semantics.
+                If self\selectionCount > 0 Then Browser::clearSelection(self)
+                Threads::focus(self\threads, kind, refID)
+                self\cardClickLatch = True
+                WriteLog(LoomLog, "Browser: focused " + kind + "#" + Str(refID))
+            EndIf
         EndIf
 
-        // Keyboard Enter -- only the selected card consumes it.
+        // Keyboard Enter -- only the selected card consumes it. Treated
+        // as a plain focus (no shift-modifier semantics for Enter).
         If selected = True And self\pendingEnter = True
+            If self\selectionCount > 0 Then Browser::clearSelection(self)
             Threads::focus(self\threads, kind, refID)
             self\cardClickLatch = True
             self\pendingEnter = False
@@ -1101,7 +1211,14 @@ Type Browser
         LoomGradientV(0, y, sw, BR_BOT_RIBBON, LOOM_STONE_850_R, LOOM_STONE_850_G, LOOM_STONE_850_B, LOOM_STONE_900_R, LOOM_STONE_900_G, LOOM_STONE_900_B)
         LoomHRule(0, y, sw, LOOM_BRASS_700_R, LOOM_BRASS_700_G, LOOM_BRASS_700_B)
 
-        LoomText(20, y + 10, "click a card to focus  |  follow threads in the composer  |  F1 for shortcuts  |  Esc to exit", LOOM_STONE_200_R, LOOM_STONE_200_G, LOOM_STONE_200_B)
+        Local hint$
+        If self\selectionCount > 0
+            hint = Str(self\selectionCount) + " selected  |  shift+click to add/remove  |  Esc to clear selection"
+            LoomText(20, y + 10, hint, LOOM_WARNING_R, LOOM_WARNING_G, LOOM_WARNING_B)
+        Else
+            hint = "click a card to focus  |  shift+click to bulk-select  |  F1 for shortcuts  |  Esc to exit"
+            LoomText(20, y + 10, hint, LOOM_STONE_200_R, LOOM_STONE_200_G, LOOM_STONE_200_B)
+        EndIf
     End Method
 
 
