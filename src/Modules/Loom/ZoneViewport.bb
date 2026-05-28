@@ -91,6 +91,10 @@ Global VPPanning   = False
 Global VPPanLastMX = 0
 Global VPPanLastMY = 0
 
+; RMB edge-detect so shift+RMB add-trigger fires once on the press
+; instead of repeatedly while the button is held.
+Global VPRMBPrevDown = False
+
 ; Per-zone counts cached at load time (saves recomputing in renderer
 ; just for the legend overlay).
 Global VPCountPortals  = 0
@@ -346,6 +350,60 @@ Function Loom_AddPortalAtClick(zoneHandle, localX, localY)
     If LoomComposer <> Null Then Composer::markDirtyForKind(LoomComposer, "zone")
     Toast_Show("Added portal " + Str(slot) + " at (" + Int(nx#) + ", " + Int(nz#) + ")", "success")
     WriteLog(LoomLog, "ZoneViewport: shift+click added portal " + Str(slot) + " at " + nx# + ", " + nz#)
+End Function
+
+
+; =============================================================================
+; Loom_AddTriggerAtClick -- shift+RMB on empty ground creates a new
+; trigger at the clicked XZ. Symmetric with Loom_AddPortalAtClick.
+; Trigger needs no portal-style target reference; just XYZ + size +
+; Script/Method.
+; =============================================================================
+Function Loom_AddTriggerAtClick(zoneHandle, localX, localY)
+    If VPInitOK = False Then Return
+    Local Ar.Area = Object.Area(zoneHandle)
+    If Ar = Null Then Return
+
+    ; Force ground pick (same trick as Loom_AddPortalAtClick).
+    Local m.ZoneViewportMarker
+    For m = Each ZoneViewportMarker
+        If m\Kind <> "" Then EntityPickMode m\EN, 0
+    Next
+    CameraPick VPCam, localX, localY
+    For m = Each ZoneViewportMarker
+        If m\Kind <> "" Then EntityPickMode m\EN, 1
+    Next
+
+    Local hit = PickedEntity()
+    If hit <> VPGround Then Return
+    Local nx# = PickedX#()
+    Local nz# = PickedZ#()
+
+    Local i
+    Local slot = -1
+    For i = 0 To 149
+        If Ar\TriggerScript$[i] = ""
+            slot = i
+            Exit
+        EndIf
+    Next
+    If slot < 0
+        Toast_Show("No empty trigger slots in this zone", "warning")
+        Return
+    EndIf
+
+    Ar\TriggerScript$[slot] = "New trigger"
+    Ar\TriggerMethod$[slot] = ""
+    Ar\TriggerX#[slot]      = nx#
+    Ar\TriggerY#[slot]      = 0.0
+    Ar\TriggerZ#[slot]      = nz#
+    Ar\TriggerSize#[slot]   = 5.0
+
+    Loom_LoadZoneMarkers(Ar)
+    VPDirty = True
+    If LoomComposer <> Null Then Composer::markDirtyForKind(LoomComposer, "zone")
+    Toast_Show("Added trigger " + Str(slot) + " at (" + Int(nx#) + ", " + Int(nz#) + ")", "success")
+    WriteLog(LoomLog, "ZoneViewport: shift+RMB added trigger " + Str(slot) + " at " + nx# + ", " + nz#)
 End Function
 
 
@@ -683,7 +741,11 @@ Function Loom_DrawZoneViewport(zoneHandle, x, y)
     ; RMB inside viewport hit-tests a marker on press; subsequent frames
     ; track the cursor on the ground plane and update the marker +
     ; underlying Area coord. Release commits.
-    If MouseDown(2) = True And inside = True
+    Local rmbDown = MouseDown(2)
+    Local rmbJustPressed = (rmbDown = True And VPRMBPrevDown = False)
+    VPRMBPrevDown = rmbDown
+
+    If rmbDown = True And inside = True
         If VPMarkerDragging = False
             ; Press: hit-test for a marker. Need to render the scene
             ; first so the camera + entity positions are current for
@@ -704,6 +766,10 @@ Function Loom_DrawZoneViewport(zoneHandle, x, y)
                         Exit
                     EndIf
                 Next
+            Else If rmbJustPressed = True And (KeyDown(42) = True Or KeyDown(54) = True)
+                ; Press edge + shift held + click on ground = add trigger.
+                ; Edge-detect so we don't add many triggers per held frame.
+                Loom_AddTriggerAtClick(zoneHandle, mx - x, my - y)
             EndIf
         Else
             ; Drag: re-pick against the ground, hide the dragged marker
@@ -887,7 +953,7 @@ Function Loom_DrawZoneViewport(zoneHandle, x, y)
     EndIf
 
     If inside = True
-        LoomText x + 8, y + VP_RT_SIZE - 18, "LMB=orbit  MMB=pan  RMB=move  wheel=zoom  shift+click=add portal", LOOM_STONE_300_R, LOOM_STONE_300_G, LOOM_STONE_300_B
+        LoomText x + 8, y + VP_RT_SIZE - 18, "LMB=orbit RMB=move wheel=zoom MMB=pan shift+L=add portal shift+R=add trigger", LOOM_STONE_300_R, LOOM_STONE_300_G, LOOM_STONE_300_B
     EndIf
 
     Return True
