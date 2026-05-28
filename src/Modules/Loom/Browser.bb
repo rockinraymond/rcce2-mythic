@@ -1082,6 +1082,12 @@ Type Browser
 
         LoomText(x + 180, y + 44, "Value", LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
         LoomText(x + 180, y + 60, Str(It\Value), LOOM_PARCHMENT_100_R, LOOM_PARCHMENT_100_G, LOOM_PARCHMENT_100_B)
+
+        // Bottom-right thumbnail -- 32x32 preview of the item's icon
+        // texture. Lazy-loaded via the same ImageCache module that
+        // serves the composer thumbnail. Missing/invalid IDs paint
+        // the cache's "?" placeholder so the layout stays stable.
+        Loom_DrawImageScaled(It\ThumbnailTexID, x + BR_CARD_W - 44, y + BR_CARD_H - 44, 32, 32)
     End Method
 
 
@@ -1106,6 +1112,9 @@ Type Browser
             LoomText(x + 180, y + 44, "Script", LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
             LoomText(x + 180, y + 60, Sp\Script$, LOOM_PARCHMENT_100_R, LOOM_PARCHMENT_100_G, LOOM_PARCHMENT_100_B)
         EndIf
+
+        // Bottom-right thumbnail -- 32x32 preview of the spell icon
+        Loom_DrawImageScaled(Sp\ThumbnailTexID, x + BR_CARD_W - 44, y + BR_CARD_H - 44, 32, 32)
     End Method
 
 
