@@ -355,6 +355,7 @@ Type Recents
         Local modalX% = (sw - RECENTS_MODAL_W) / 2
         Local modalY% = (sh - RECENTS_MODAL_H) / 3
 
+        LoomShadowCard(modalX, modalY, RECENTS_MODAL_W, RECENTS_MODAL_H)
         LoomFill(modalX, modalY, RECENTS_MODAL_W, RECENTS_MODAL_H, LOOM_STONE_850_R, LOOM_STONE_850_G, LOOM_STONE_850_B)
         LoomBorder(modalX, modalY, RECENTS_MODAL_W, RECENTS_MODAL_H, LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
         LoomBorder(modalX + 1, modalY + 1, RECENTS_MODAL_W - 2, RECENTS_MODAL_H - 2, LOOM_BRASS_700_R, LOOM_BRASS_700_G, LOOM_BRASS_700_B)

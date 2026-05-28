@@ -262,6 +262,7 @@ Type Palette
     // drawModalChrome -- the modal backdrop, border, and brass top-rule.
     // -------------------------------------------------------------------------
     Method drawModalChrome(modalX%, modalY%)
+        LoomShadowCard(modalX, modalY, PAL_MODAL_W, PAL_MODAL_H)
         LoomFill(modalX, modalY, PAL_MODAL_W, PAL_MODAL_H, LOOM_STONE_850_R, LOOM_STONE_850_G, LOOM_STONE_850_B)
         LoomBorder(modalX, modalY, PAL_MODAL_W, PAL_MODAL_H, LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
         LoomBorder(modalX + 1, modalY + 1, PAL_MODAL_W - 2, PAL_MODAL_H - 2, LOOM_BRASS_700_R, LOOM_BRASS_700_G, LOOM_BRASS_700_B)

@@ -777,6 +777,9 @@ Type Browser
         Local selected% = (cardIdx = self\selectedIndex)
         Local missing% = (FileType(t\ExePath) <> 1)
 
+        // Drop shadow for visual lift; matches entity-card chrome.
+        LoomShadowCard(x, y, BR_CARD_W, BR_CARD_H)
+
         // Background -- dimmed when the .exe is missing
         If missing = True
             LoomFill(x, y, BR_CARD_W, BR_CARD_H, LOOM_STONE_700_R, LOOM_STONE_700_G, LOOM_STONE_700_B)
@@ -842,6 +845,10 @@ Type Browser
     Method drawCardChrome(kind$, refID%, x%, y%, mx%, my%, clicked%, cardIdx%)
         Local hovered% = (mx >= x And mx < x + BR_CARD_W And my >= y And my < y + BR_CARD_H)
         Local selected% = (cardIdx = self\selectedIndex)
+
+        // Drop shadow lifts each card off the body gradient so cards
+        // read as physical tiles rather than printed-on labels.
+        LoomShadowCard(x, y, BR_CARD_W, BR_CARD_H)
 
         // Subtle stone-800 -> stone-850 gradient gives each card a
         // raised-tile feel instead of reading as a flat colored rectangle.
