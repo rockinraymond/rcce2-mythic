@@ -105,9 +105,11 @@ Include "Modules\Logging.bb"
 // its dirty-badge save dispatch) -> EntityFactory (free functions, last
 // since it calls Threads::focus + reads the *Saved globals).
 Include "Modules\Loom\Theme.bb"
-// NameUtil -- pure, dependency-free name-dedup helpers (used by
-// EntityFactory for zone-name uniqueness). Included early; no deps.
+// NameUtil + Clamp -- pure, dependency-free helpers (name-dedup for
+// EntityFactory; parse-and-clamp for the Composer numeric fields).
+// Included early; no deps.
 Include "Modules\Loom\NameUtil.bb"
+Include "Modules\Loom\Clamp.bb"
 Include "Modules\Loom\Threads.bb"
 // Settings BEFORE Composer so the LoomCfg_* / SettingsSaved globals
 // are declared by the time Strict Composer methods reference them.
