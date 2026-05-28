@@ -397,6 +397,8 @@ Type Composer
             Composer::renderFaction(self, x, scrolledBodyY, w, bodyH, mx, my, clicked, rightClicked)
         Else If kind = "animset"
             Composer::renderAnimSet(self, x, scrolledBodyY, w, bodyH, mx, my, clicked, rightClicked)
+        Else If kind = "settings"
+            Composer::renderSettings(self, x, scrolledBodyY, w, bodyH, mx, my, clicked)
         EndIf
 
         // Scrollbar indicator -- thin brass thumb on the right edge,
@@ -1059,6 +1061,34 @@ Type Composer
             If fieldId = "name" Then SetFactionName(refID, value) : Return
         EndIf
 
+        // ---- SETTINGS (project config singleton) ----------------------------
+        // Globals can't be written from inside a Strict Method (per the
+        // BlitzForge Dim-write trap), so every assignment goes through a
+        // setter defined in the non-Strict Settings.bb module.
+        If kind = "settings"
+            If fieldId = "game_name"      Then LoomSettings_SetGameName$(value)        : Return
+            If fieldId = "update_game"    Then LoomSettings_SetUpdateGame$(value)      : Return
+            If fieldId = "update_music"   Then LoomSettings_SetUpdateMusic$(value)     : Return
+            If fieldId = "server_host"    Then LoomSettings_SetServerHost$(value)      : Return
+            If fieldId = "update_host"    Then LoomSettings_SetUpdateHost$(value)      : Return
+            If fieldId = "server_port"    Then LoomSettings_SetServerPort(Composer::parseIntClamped(self, value, LoomCfg_ServerPort, 1, 65535))        : Return
+            If fieldId = "hide_nametags"  Then LoomSettings_SetHideNametags(value = "1")  : Return
+            If fieldId = "disable_collisions" Then LoomSettings_SetDisableCollisions(value = "1") : Return
+            If fieldId = "view_mode"      Then LoomSettings_SetViewMode(Composer::parseIntClamped(self, value, LoomCfg_ViewMode, 0, 10))               : Return
+            If fieldId = "require_memo"   Then LoomSettings_SetRequireMemorise(value = "1") : Return
+            If fieldId = "use_bubbles"    Then LoomSettings_SetUseBubbles(value = "1") : Return
+            If fieldId = "bubbles_r"      Then LoomSettings_SetBubblesR(Composer::parseIntClamped(self, value, LoomCfg_BubblesR, 0, 255))              : Return
+            If fieldId = "bubbles_g"      Then LoomSettings_SetBubblesG(Composer::parseIntClamped(self, value, LoomCfg_BubblesG, 0, 255))              : Return
+            If fieldId = "bubbles_b"      Then LoomSettings_SetBubblesB(Composer::parseIntClamped(self, value, LoomCfg_BubblesB, 0, 255))              : Return
+            If fieldId = "money1_name"    Then LoomSettings_SetMoney1$(value)          : Return
+            If fieldId = "money2_name"    Then LoomSettings_SetMoney2$(value)          : Return
+            If fieldId = "money2x"        Then LoomSettings_SetMoney2x(Composer::parseIntClamped(self, value, LoomCfg_Money2x, 0, 32767))              : Return
+            If fieldId = "money3_name"    Then LoomSettings_SetMoney3$(value)          : Return
+            If fieldId = "money3x"        Then LoomSettings_SetMoney3x(Composer::parseIntClamped(self, value, LoomCfg_Money3x, 0, 32767))              : Return
+            If fieldId = "money4_name"    Then LoomSettings_SetMoney4$(value)          : Return
+            If fieldId = "money4x"        Then LoomSettings_SetMoney4x(Composer::parseIntClamped(self, value, LoomCfg_Money4x, 0, 32767))              : Return
+        EndIf
+
         // ---- ANIMSET --------------------------------------------------------
         If kind = "animset"
             // AnimSet is iterated, not array-indexed; walk to the matching ID.
@@ -1153,12 +1183,13 @@ Type Composer
     // an in-memory edit.
     // -------------------------------------------------------------------------
     Method markDirtyForKind(kind$)
-        If kind = "spell"   Then SpellsSaved = False
-        If kind = "item"    Then ItemsSaved = False
-        If kind = "actor"   Then ActorsSaved = False
-        If kind = "faction" Then FactionsSaved = False
-        If kind = "zone"    Then ZoneSaved = False
-        If kind = "animset" Then AnimsSaved = False
+        If kind = "spell"    Then SpellsSaved = False
+        If kind = "item"     Then ItemsSaved = False
+        If kind = "actor"    Then ActorsSaved = False
+        If kind = "faction"  Then FactionsSaved = False
+        If kind = "zone"     Then ZoneSaved = False
+        If kind = "animset"  Then AnimsSaved = False
+        If kind = "settings" Then SettingsSaved = False
     End Method
 
 
@@ -1249,6 +1280,19 @@ Type Composer
             ZoneSaved = True
             WriteLog(LoomLog, "Composer: saved zone " + Ar\Name$)
             Toast_Show("Saved zone " + Ar\Name$, "success")
+            Return
+        EndIf
+
+        If kind = "settings"
+            Local okCfg% = Loom_SaveSettings()
+            If okCfg = False
+                WriteLog(LoomLog, "Composer: Loom_SaveSettings FAILED")
+                Toast_Show("Save Settings FAILED", "danger")
+                Return
+            EndIf
+            ; Loom_SaveSettings already flips SettingsSaved = True on success.
+            WriteLog(LoomLog, "Composer: saved project Settings")
+            Toast_Show("Saved project Settings", "success")
             Return
         EndIf
 
@@ -2838,6 +2882,50 @@ Type Composer
         If idx = 120 Then Return "Stand up"
         If idx = 119 Then Return "Strafe right"
         Return ""
+    End Method
+
+
+    // -------------------------------------------------------------------------
+    // renderSettings -- project-level configuration panel. Singleton, not an
+    // entity; refID is ignored. Backed by the LoomCfg_* globals in
+    // Modules/Loom/Settings.bb; saves go through Loom_SaveSettings (called
+    // from SaveAll dispatch when SettingsSaved = False).
+    // -------------------------------------------------------------------------
+    Method renderSettings(panelX%, bodyY%, panelW%, bodyH%, mx%, my%, clicked%)
+        Local y% = bodyY
+
+        y = Composer::sectionHeader(self, panelX, panelW, y, "Identity")
+        y = Composer::editableRow(self, panelX, panelW, y, "Game name",    "settings", 0, "game_name",    LoomCfg_GameName$,    mx, my, clicked)
+        y = Composer::editableRow(self, panelX, panelW, y, "Update URL",   "settings", 0, "update_game",  LoomCfg_UpdateGame$,  mx, my, clicked)
+        y = Composer::editableRow(self, panelX, panelW, y, "Music URL",    "settings", 0, "update_music", LoomCfg_UpdateMusic$, mx, my, clicked)
+
+        y = Composer::sectionHeader(self, panelX, panelW, y, "Hosts")
+        y = Composer::editableRow(self, panelX, panelW, y, "Server host",  "settings", 0, "server_host",  LoomCfg_ServerHost$,  mx, my, clicked)
+        y = Composer::editableRow(self, panelX, panelW, y, "Update host",  "settings", 0, "update_host",  LoomCfg_UpdateHost$,  mx, my, clicked)
+
+        y = Composer::sectionHeader(self, panelX, panelW, y, "Network / runtime")
+        y = Composer::editableIntRow(self, panelX, panelW, y, "Server port",    "settings", 0, "server_port",     LoomCfg_ServerPort,       mx, my, clicked)
+        y = Composer::toggleRow(self,      panelX, panelW, y, "Hide nametags",  "settings", 0, "hide_nametags",   LoomCfg_HideNametags,     mx, my, clicked)
+        y = Composer::toggleRow(self,      panelX, panelW, y, "No collisions",  "settings", 0, "disable_collisions", LoomCfg_DisableCollisions, mx, my, clicked)
+        y = Composer::editableIntRow(self, panelX, panelW, y, "View mode",      "settings", 0, "view_mode",       LoomCfg_ViewMode,         mx, my, clicked)
+        y = Composer::toggleRow(self,      panelX, panelW, y, "Require memo",   "settings", 0, "require_memo",    LoomCfg_RequireMemorise,  mx, my, clicked)
+
+        y = Composer::sectionHeader(self, panelX, panelW, y, "Speech bubbles")
+        y = Composer::toggleRow(self,      panelX, panelW, y, "Use bubbles",  "settings", 0, "use_bubbles", LoomCfg_UseBubbles, mx, my, clicked)
+        y = Composer::editableIntRow(self, panelX, panelW, y, "Bubble R",     "settings", 0, "bubbles_r",   LoomCfg_BubblesR,   mx, my, clicked)
+        y = Composer::editableIntRow(self, panelX, panelW, y, "Bubble G",     "settings", 0, "bubbles_g",   LoomCfg_BubblesG,   mx, my, clicked)
+        y = Composer::editableIntRow(self, panelX, panelW, y, "Bubble B",     "settings", 0, "bubbles_b",   LoomCfg_BubblesB,   mx, my, clicked)
+
+        y = Composer::sectionHeader(self, panelX, panelW, y, "Currency tiers")
+        y = Composer::editableRow(self,    panelX, panelW, y, "Tier 1 name",    "settings", 0, "money1_name", LoomCfg_Money1$, mx, my, clicked)
+        y = Composer::editableRow(self,    panelX, panelW, y, "Tier 2 name",    "settings", 0, "money2_name", LoomCfg_Money2$, mx, my, clicked)
+        y = Composer::editableIntRow(self, panelX, panelW, y, "Tier 2 = N x 1", "settings", 0, "money2x",     LoomCfg_Money2x, mx, my, clicked)
+        y = Composer::editableRow(self,    panelX, panelW, y, "Tier 3 name",    "settings", 0, "money3_name", LoomCfg_Money3$, mx, my, clicked)
+        y = Composer::editableIntRow(self, panelX, panelW, y, "Tier 3 = N x 2", "settings", 0, "money3x",     LoomCfg_Money3x, mx, my, clicked)
+        y = Composer::editableRow(self,    panelX, panelW, y, "Tier 4 name",    "settings", 0, "money4_name", LoomCfg_Money4$, mx, my, clicked)
+        y = Composer::editableIntRow(self, panelX, panelW, y, "Tier 4 = N x 3", "settings", 0, "money4x",     LoomCfg_Money4x, mx, my, clicked)
+
+        Composer::recordContentBottom(self, y)
     End Method
 
 

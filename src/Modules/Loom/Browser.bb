@@ -161,6 +161,11 @@ Type Browser
         // Editor, etc.). Not an entity kind, so the composer / new / save
         // affordances don't apply on this tab -- it's pure launch surface.
         Browser::addCategory(self, "tools",   "Tools")
+        // Settings tab: project-level configuration singleton (Misc.dat /
+        // Other.dat / Money.dat / Hosts.dat). Clicking the tab focuses
+        // the singleton composer view directly -- no card grid since
+        // there's only one "entity" here.
+        Browser::addCategory(self, "settings", "Settings")
 
         Return self
     End Method
@@ -653,6 +658,9 @@ Type Browser
         If cat = "tools"
             count = Browser::drawToolsGrid(self, sw, sh, mx, my, clicked, gridX, gridY, cols)
         EndIf
+        If cat = "settings"
+            count = Browser::drawSettingsCard(self, sw, sh, mx, my, clicked, gridX, gridY)
+        EndIf
 
         // Cache for next frame's pumpNavKeyboard.
         self\lastCount = count
@@ -825,6 +833,43 @@ Type Browser
     // hint -- and because there's no kind/refID to feed the standard
     // chrome's hit-test path.
     // -------------------------------------------------------------------------
+    // -------------------------------------------------------------------------
+    // drawSettingsCard -- the Settings tab body. Renders a single "Project
+    // Settings" card that, when clicked, focuses the singleton settings
+    // composer view via Threads::focus("settings", 0). Returns 1 (the
+    // card count) so the empty-state copy doesn't fire.
+    // -------------------------------------------------------------------------
+    Method drawSettingsCard%(sw%, sh%, mx%, my%, clicked%, gridX%, gridY%)
+        Local cx% = gridX
+        Local cy% = gridY
+        Local cw% = BR_CARD_W * 2 + BR_CARD_GAP   ; wider since it's a single card
+        Local ch% = BR_CARD_H
+        Local hovered% = (mx >= cx And mx < cx + cw And my >= cy And my < cy + ch)
+
+        LoomShadowCard(cx, cy, cw, ch)
+        If hovered = True
+            LoomFill(cx, cy, cw, ch, LOOM_STONE_700_R, LOOM_STONE_700_G, LOOM_STONE_700_B)
+        Else
+            LoomFill(cx, cy, cw, ch, LOOM_STONE_800_R, LOOM_STONE_800_G, LOOM_STONE_800_B)
+        EndIf
+        LoomBorder(cx, cy, cw, ch, LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
+        LoomFill(cx, cy, cw, 3, LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
+
+        LoomTheme_UseDisplay()
+        LoomText(cx + 16, cy + 16, "PROJECT SETTINGS", LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
+        LoomTheme_UseBody()
+        LoomText(cx + 16, cy + 44, "Game name | server port | currency tiers | runtime options", LOOM_STONE_200_R, LOOM_STONE_200_G, LOOM_STONE_200_B)
+        LoomText(cx + 16, cy + ch - 24, "Click to open >>", LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
+
+        If hovered = True And clicked = True
+            Threads::focus(self\threads, "settings", 0)
+            WriteLog(LoomLog, "Browser: opened Settings singleton")
+        EndIf
+
+        Return 1
+    End Method
+
+
     Method drawToolsGrid%(sw%, sh%, mx%, my%, clicked%, gridX%, gridY%, cols%)
         Local col% = 0
         Local row% = 0
