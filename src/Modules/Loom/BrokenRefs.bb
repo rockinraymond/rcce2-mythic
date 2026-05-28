@@ -134,7 +134,7 @@ Type BrokenRefs
         Next
 
         // Items -- empty name, weapon w/ 0 damage, asset checks (thumb +
-        // M/F mesh)
+        // M/F mesh), broken script binding
         Local It.Item
         For ai% = 0 To 65534
             If self\entryCount >= BROKENREFS_MAX_ENTRIES Then Exit
@@ -142,10 +142,12 @@ Type BrokenRefs
             If It <> Null
                 BrokenRefs::scanItemContent(self, It)
                 BrokenRefs::scanItemAssets(self, It)
+                BrokenRefs::scanItemScripts(self, It)
             EndIf
         Next
 
-        // Spells -- empty name, missing script + thumbnail asset check
+        // Spells -- empty name, missing script + thumbnail asset check +
+        // broken script binding
         Local Sp.Spell
         For asi% = 0 To 65534
             If self\entryCount >= BROKENREFS_MAX_ENTRIES Then Exit
@@ -153,15 +155,24 @@ Type BrokenRefs
             If Sp <> Null
                 BrokenRefs::scanSpellContent(self, Sp)
                 BrokenRefs::scanSpellAssets(self, Sp)
+                BrokenRefs::scanSpellScripts(self, Sp)
             EndIf
         Next
 
-        // Zones -- broken portal refs + orphan zone checks
+        // Zones -- broken portal refs + orphan zone checks + broken
+        // script bindings across all 5 script-string families.
         For Ar.Area = Each Area
             If self\entryCount >= BROKENREFS_MAX_ENTRIES Then Exit
             BrokenRefs::scanZone(self, Ar)
             BrokenRefs::scanZoneContent(self, Ar)
+            BrokenRefs::scanZoneScripts(self, Ar)
         Next
+
+        // Orphan-script scan -- scripts in catalog that no entity
+        // references. Capped at the global entry limit but typically
+        // far below. Helps designers prune dead .rsl files that
+        // accumulate across project iterations.
+        BrokenRefs::scanOrphanScripts(self)
 
         // Clamp scroll
         If self\scrollOffset >= self\entryCount Then self\scrollOffset = self\entryCount - 1
@@ -380,6 +391,132 @@ Type BrokenRefs
         // Back-compat shape: existing scanActor / scanZone callers use this
         // shorter signature and emit broken-ref category at error severity.
         BrokenRefs::emitFull(self, sourceKind, sourceRefID, sourceLabel, fieldDesc, badValue, diagnosis, "error", "broken-ref")
+    End Method
+
+
+    // -------------------------------------------------------------------------
+    // scanItemScripts -- emit broken-script issues when an item's Script
+    // field points at a .rsl that doesn't exist in the catalog. Empty
+    // Script field is fine (item just has no right-click handler).
+    // -------------------------------------------------------------------------
+    Method scanItemScripts(It.Item)
+        If It\Script$ = "" Then Return
+        If Scripts_GetByName(It\Script$) = Null
+            BrokenRefs::emitFull(self, "item", It\ID, It\Name$, "Script", It\Script$, "script file not found in Data\Server Data\Scripts\", "warning", "broken-script")
+        EndIf
+    End Method
+
+
+    // -------------------------------------------------------------------------
+    // scanSpellScripts -- same for spells. Empty Script is technically
+    // an empty-field issue (spell-config severity) which scanSpellContent
+    // already emits; here we only flag non-empty + non-resolving.
+    // -------------------------------------------------------------------------
+    Method scanSpellScripts(Sp.Spell)
+        If Sp\Script$ = "" Then Return
+        If Scripts_GetByName(Sp\Script$) = Null
+            BrokenRefs::emitFull(self, "spell", Sp\ID, Sp\Name$, "Script", Sp\Script$, "script file not found in Data\Server Data\Scripts\", "warning", "broken-script")
+        EndIf
+    End Method
+
+
+    // -------------------------------------------------------------------------
+    // scanZoneScripts -- walk every script-string field on the zone
+    // (Entry / Exit / 150 triggers / 1000 spawn x 3 families) and flag
+    // any that don't resolve. Capped at 25 emits per zone so a heavily-
+    // broken zone doesn't flood the modal -- the rest are still listed
+    // as "(+ N more in this zone)".
+    // -------------------------------------------------------------------------
+    Method scanZoneScripts(Ar.Area)
+        Local emits% = 0
+        Local maxPerZone% = 25
+
+        If Ar\EntryScript$ <> "" And Scripts_GetByName(Ar\EntryScript$) = Null
+            BrokenRefs::emitFull(self, "zone", Handle(Ar), Ar\Name$, "EntryScript", Ar\EntryScript$, "script file not found", "warning", "broken-script")
+            emits = emits + 1
+        EndIf
+        If Ar\ExitScript$ <> "" And Scripts_GetByName(Ar\ExitScript$) = Null
+            BrokenRefs::emitFull(self, "zone", Handle(Ar), Ar\Name$, "ExitScript", Ar\ExitScript$, "script file not found", "warning", "broken-script")
+            emits = emits + 1
+        EndIf
+
+        // Triggers (150)
+        Local ti% = 0
+        For ti = 0 To 149
+            If emits >= maxPerZone Then Exit
+            If Ar\TriggerScript$[ti] <> "" And Scripts_GetByName(Ar\TriggerScript$[ti]) = Null
+                BrokenRefs::emitFull(self, "zone", Handle(Ar), Ar\Name$, "TriggerScript[" + Str(ti) + "]", Ar\TriggerScript$[ti], "script file not found", "warning", "broken-script")
+                emits = emits + 1
+            EndIf
+        Next
+
+        // SpawnScript / SpawnActorScript / SpawnDeathScript (1000 x 3)
+        Local si% = 0
+        For si = 0 To 999
+            If emits >= maxPerZone Then Exit
+            If Ar\SpawnScript$[si] <> "" And Scripts_GetByName(Ar\SpawnScript$[si]) = Null
+                BrokenRefs::emitFull(self, "zone", Handle(Ar), Ar\Name$, "SpawnScript[" + Str(si) + "]", Ar\SpawnScript$[si], "script file not found", "warning", "broken-script")
+                emits = emits + 1
+            EndIf
+            If Ar\SpawnActorScript$[si] <> "" And Scripts_GetByName(Ar\SpawnActorScript$[si]) = Null
+                BrokenRefs::emitFull(self, "zone", Handle(Ar), Ar\Name$, "SpawnActorScript[" + Str(si) + "]", Ar\SpawnActorScript$[si], "script file not found", "warning", "broken-script")
+                emits = emits + 1
+            EndIf
+            If Ar\SpawnDeathScript$[si] <> "" And Scripts_GetByName(Ar\SpawnDeathScript$[si]) = Null
+                BrokenRefs::emitFull(self, "zone", Handle(Ar), Ar\Name$, "SpawnDeathScript[" + Str(si) + "]", Ar\SpawnDeathScript$[si], "script file not found", "warning", "broken-script")
+                emits = emits + 1
+            EndIf
+        Next
+    End Method
+
+
+    // -------------------------------------------------------------------------
+    // scanOrphanScripts -- emit one issue per ScriptFile that no entity
+    // references. Counts a script as referenced if ANY Item, Spell, or
+    // Area script-string field's normalized name matches it. Heavy walk
+    // (catalog * (items + spells + zones * 5_families * 1000_slots)) so
+    // we early-out the inner search per script.
+    // -------------------------------------------------------------------------
+    Method scanOrphanScripts()
+        For sf.ScriptFile = Each ScriptFile
+            If self\entryCount >= BROKENREFS_MAX_ENTRIES Then Return
+            If BrokenRefs::scriptIsReferenced(self, sf) = False
+                BrokenRefs::emitFull(self, "script", sf\Index, sf\Name$ + ".rsl", "(referenced by)", "0 entities", "orphan script -- no entity binds to it; consider deleting", "info", "orphan-script")
+            EndIf
+        Next
+    End Method
+
+
+    // -------------------------------------------------------------------------
+    // scriptIsReferenced -- True iff any Item/Spell/Area script-string
+    // field's normalized name matches the given ScriptFile. Returns on
+    // first hit to keep the walk cheap.
+    // -------------------------------------------------------------------------
+    Method scriptIsReferenced%(sf.ScriptFile)
+        Local key$ = Scripts_NormalizeName$(sf\Name$)
+
+        For It.Item = Each Item
+            If It\Script$ <> "" And Scripts_NormalizeName$(It\Script$) = key Then Return True
+        Next
+        For Sp.Spell = Each Spell
+            If Sp\Script$ <> "" And Scripts_NormalizeName$(Sp\Script$) = key Then Return True
+        Next
+        For Ar.Area = Each Area
+            If Ar\EntryScript$ <> "" And Scripts_NormalizeName$(Ar\EntryScript$) = key Then Return True
+            If Ar\ExitScript$  <> "" And Scripts_NormalizeName$(Ar\ExitScript$)  = key Then Return True
+            Local ti% = 0
+            For ti = 0 To 149
+                If Ar\TriggerScript$[ti] <> "" And Scripts_NormalizeName$(Ar\TriggerScript$[ti]) = key Then Return True
+            Next
+            Local si% = 0
+            For si = 0 To 999
+                If Ar\SpawnScript$[si] <> "" And Scripts_NormalizeName$(Ar\SpawnScript$[si]) = key Then Return True
+                If Ar\SpawnActorScript$[si] <> "" And Scripts_NormalizeName$(Ar\SpawnActorScript$[si]) = key Then Return True
+                If Ar\SpawnDeathScript$[si] <> "" And Scripts_NormalizeName$(Ar\SpawnDeathScript$[si]) = key Then Return True
+            Next
+        Next
+
+        Return False
     End Method
 
 
