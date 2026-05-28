@@ -182,6 +182,10 @@ Type Loom
         // clicks call Threads::jump.
         self\browser = New Browser(self\threads)
         self\composer = New Composer(self\threads)
+        // Module-level facade so non-Strict modules (e.g. ZoneViewport)
+        // can dispatch into the composer without holding a reference.
+        // Same recorder-facade pattern as LoomWorldCache (ADR 005).
+        LoomComposer = self\composer
         self\palette = New Palette(self\threads)
 
         // Cross-link Palette <-> Composer for ref-field picker mode. The

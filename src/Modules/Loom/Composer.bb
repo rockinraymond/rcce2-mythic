@@ -142,6 +142,17 @@ Type Composer
     Field bulkEditField$
     Field bulkEditBuffer$
 
+    // Per-zone-sub-entity Y anchors captured at render time so the
+    // viewport's click-pick can scroll the composer to the right
+    // section. Stored in unscrolled body coordinates (the y BEFORE
+    // self\scrollOffset is subtracted) so scrollToZoneSubEntity can
+    // just set scrollOffset = anchor - bodyTop. Refreshed every
+    // frame the zone is being rendered; stale slots are harmless
+    // because scrollToZoneSubEntity guards by source-data defined-ness.
+    Field zoneAnchorPortal[99]
+    Field zoneAnchorTrigger[149]
+    Field zoneAnchorSpawn[999]
+
     // Edit-buffer state. editKind = "" means no edit in progress.
     // (kind, refID, fieldId) together identify which field of which entity
     // the user is currently typing into. editBuffer is the in-progress value
@@ -1300,6 +1311,45 @@ Type Composer
         If kind = "zone"     Then ZoneSaved = False
         If kind = "animset"  Then AnimsSaved = False
         If kind = "settings" Then SettingsSaved = False
+    End Method
+
+
+    // -------------------------------------------------------------------------
+    // scrollToZoneSubEntity -- called from the ZoneViewport when a marker
+    // is clicked. Looks up the previously-captured Y anchor for the
+    // (kind, index) sub-entity and sets scrollOffset so that anchor
+    // becomes the top of the visible body region.
+    //
+    // Returns True if it scrolled, False if the anchor wasn't recorded
+    // yet (zone not currently focused, or the slot was empty last frame).
+    // The viewport's pick filters by source-data defined-ness before
+    // calling here, so a False return mostly means "you haven't rendered
+    // this zone yet this session".
+    // -------------------------------------------------------------------------
+    Method scrollToZoneSubEntity%(kind$, idx%)
+        // Resolve anchor via per-kind helper to dodge the Strict-mode
+        // "reassign Local from nested If" trap.
+        Local anchor% = Composer::zoneSubEntityAnchor(self, kind, idx)
+        If anchor < 0 Then Return False
+
+        // Set scrollOffset so anchor lands at body top. Subtract bodyTop
+        // since y values in the render are body-relative.
+        Local target% = anchor - self\bodyTop - 8
+        If target < 0 Then target = 0
+        // Clamp to content bottom so we don't scroll past the end
+        Local maxScroll% = self\lastContentBottom - self\bodyBottom
+        If maxScroll < 0 Then maxScroll = 0
+        If target > maxScroll Then target = maxScroll
+        self\scrollOffset = target
+        Return True
+    End Method
+
+
+    Method zoneSubEntityAnchor%(kind$, idx%)
+        If kind = "portal" And idx >= 0 And idx <= 99 Then Return self\zoneAnchorPortal[idx]
+        If kind = "trigger" And idx >= 0 And idx <= 149 Then Return self\zoneAnchorTrigger[idx]
+        If kind = "spawn" And idx >= 0 And idx <= 999 Then Return self\zoneAnchorSpawn[idx]
+        Return -1
     End Method
 
 
@@ -2851,6 +2901,9 @@ Type Composer
         Local p%
         For p = 0 To 99
             If Ar\PortalName$[p] <> ""
+                // Capture pre-scroll Y anchor so the zone-viewport pick
+                // can scroll the composer to this portal's section.
+                self\zoneAnchorPortal[p] = y + self\scrollOffset
                 // Sub-header + delete button
                 If Composer::canPaintRow(self, y, CMP_ROW_H) = True
                     LoomText(panelX + CMP_PAD, y + 4, "Portal " + Str(p), LOOM_ARCANE_500_R, LOOM_ARCANE_500_G, LOOM_ARCANE_500_B)
@@ -2903,6 +2956,7 @@ Type Composer
         Local t%
         For t = 0 To 149
             If Ar\TriggerScript$[t] <> ""
+                self\zoneAnchorTrigger[t] = y + self\scrollOffset
                 If Composer::canPaintRow(self, y, CMP_ROW_H) = True
                     LoomText(panelX + CMP_PAD, y + 4, "Trigger " + Str(t), LOOM_ARCANE_500_R, LOOM_ARCANE_500_G, LOOM_ARCANE_500_B)
                 EndIf
@@ -2939,6 +2993,7 @@ Type Composer
         Local s%
         For s = 0 To 999
             If Ar\SpawnActor[s] > 0
+                self\zoneAnchorSpawn[s] = y + self\scrollOffset
                 If Composer::canPaintRow(self, y, CMP_ROW_H) = True
                     LoomText(panelX + CMP_PAD, y + 4, "Spawn " + Str(s), LOOM_ARCANE_500_R, LOOM_ARCANE_500_G, LOOM_ARCANE_500_B)
                 EndIf
