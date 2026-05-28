@@ -61,6 +61,13 @@ Const CMP_DUP_BTN_H  = 22
 // Edit-buffer cursor blink rate (ms). MilliSecs() Mod CMP_CURSOR_PERIOD < half = visible.
 Const CMP_CURSOR_PERIOD = 1000
 
+// Scroll step (pixels per wheel tick). A standard wheel tick is one
+// detent; 22px = 1 standard row, so scrolling jumps a row at a time.
+Const CMP_SCROLL_STEP = 22
+
+// Scrollbar indicator track width on the right edge of the panel.
+Const CMP_SCROLLBAR_W = 4
+
 
 // =============================================================================
 // Composer -- right-side property panel.
@@ -72,6 +79,21 @@ Type Composer
     // any thread chip consumed a click, and renderAndUpdate returns it so the
     // caller can react (e.g. log it, refresh another surface).
     Field chipHit%
+
+    // Vertical scroll state for the body. Some kinds (Actor with all its
+    // toggles + ints, Item with weapon+armour sections) render more rows
+    // than fit in the panel height; without scroll the bottom fields
+    // are silently clipped. MouseZ() drives scrollOffset; lastContentBottom
+    // is the y where the previous frame's render ran out of rows, used
+    // to clamp scrollOffset so the user can't scroll past the end.
+    //
+    // bodyTop / bodyBottom are set at the top of renderAndUpdate and
+    // read by the row-painting helpers to skip rendering rows that
+    // would leak outside the body area (no Blitz3D 2D clip-rect).
+    Field scrollOffset%
+    Field lastContentBottom%
+    Field bodyTop%
+    Field bodyBottom%
 
     // Edit-buffer state. editKind = "" means no edit in progress.
     // (kind, refID, fieldId) together identify which field of which entity
@@ -117,6 +139,10 @@ Type Composer
         self\discardArmKind = ""
         self\discardArmAt = 0
         self\palette = Null
+        self\scrollOffset = 0
+        self\lastContentBottom = 0
+        self\bodyTop = 0
+        self\bodyBottom = 0
         Return self
     End Method
 
@@ -163,10 +189,30 @@ Type Composer
 
         // If focus changed while editing, cancel the pending edit (don't
         // mutate a stale target). Same kind+id keeps the edit active.
+        // Reset scroll on focus change so the new entity opens at the top.
         If self\editKind <> ""
             If self\editKind <> kind Or self\editRefID <> refID
                 Composer::cancelEdit(self)
+                self\scrollOffset = 0
             EndIf
+        EndIf
+
+        // Mouse wheel scroll. MouseZ() returns ticks since last poll;
+        // each tick is CMP_SCROLL_STEP pixels. Inverted: wheel-down is
+        // positive Z, which should scroll the content UP (offset
+        // increases, later rows come into view).
+        Local wheelTicks% = MouseZ()
+        If wheelTicks <> 0
+            self\scrollOffset = self\scrollOffset - wheelTicks * CMP_SCROLL_STEP
+            If self\scrollOffset < 0 Then self\scrollOffset = 0
+            // Clamp to last-frame's measured content height -- if the
+            // user just scrolled past the end, the clamp here pulls
+            // back to a sane offset on the NEXT frame. First-frame
+            // overshoot is invisible because no rows would render
+            // anyway.
+            Local maxScroll% = self\lastContentBottom - self\bodyBottom
+            If maxScroll < 0 Then maxScroll = 0
+            If self\scrollOffset > maxScroll Then self\scrollOffset = maxScroll
         EndIf
 
         // Drain keyboard into editBuffer if an edit is active. Consumes Esc
@@ -232,22 +278,37 @@ Type Composer
         LoomHRule(x + CMP_PAD, y + CMP_PAD + 38, w - CMP_PAD * 2, LOOM_BRASS_700_R, LOOM_BRASS_700_G, LOOM_BRASS_700_B)
 
         // Body -- per-kind render dispatch
+        // bodyY is the unscrolled top; rows render starting from
+        // bodyY - scrollOffset and the helpers (row / editableRow / ...)
+        // skip painting when their rowY falls outside [bodyTop, bodyBottom].
+        // self\bodyTop / bodyBottom give the visible bounds; the per-kind
+        // renderer's final y becomes self\lastContentBottom so next
+        // frame can clamp scrollOffset.
         Local bodyY% = y + CMP_PAD + 50
         Local bodyH% = h - (bodyY - y) - 24
+        self\bodyTop    = bodyY
+        self\bodyBottom = bodyY + bodyH
+        Local scrolledBodyY% = bodyY - self\scrollOffset
         self\chipHit = False
 
         If kind = "actor"
-            Composer::renderActor(self, x, bodyY, w, bodyH, mx, my, clicked, rightClicked)
+            Composer::renderActor(self, x, scrolledBodyY, w, bodyH, mx, my, clicked, rightClicked)
         Else If kind = "item"
-            Composer::renderItem(self, x, bodyY, w, bodyH, mx, my, clicked)
+            Composer::renderItem(self, x, scrolledBodyY, w, bodyH, mx, my, clicked)
         Else If kind = "spell"
-            Composer::renderSpell(self, x, bodyY, w, bodyH, mx, my, clicked)
+            Composer::renderSpell(self, x, scrolledBodyY, w, bodyH, mx, my, clicked)
         Else If kind = "zone"
-            Composer::renderZone(self, x, bodyY, w, bodyH, mx, my, clicked, rightClicked)
+            Composer::renderZone(self, x, scrolledBodyY, w, bodyH, mx, my, clicked, rightClicked)
         Else If kind = "faction"
-            Composer::renderFaction(self, x, bodyY, w, bodyH, mx, my, clicked, rightClicked)
+            Composer::renderFaction(self, x, scrolledBodyY, w, bodyH, mx, my, clicked, rightClicked)
         Else If kind = "animset"
-            Composer::renderAnimSet(self, x, bodyY, w, bodyH, mx, my, clicked, rightClicked)
+            Composer::renderAnimSet(self, x, scrolledBodyY, w, bodyH, mx, my, clicked, rightClicked)
+        EndIf
+
+        // Scrollbar indicator -- thin brass thumb on the right edge,
+        // visible only when content overflows.
+        If self\lastContentBottom > self\bodyBottom
+            Composer::drawScrollbar(self, x + w - CMP_SCROLLBAR_W - 2, self\bodyTop, bodyH)
         EndIf
 
         // Footer: back-stack hint (or edit-mode hint when editing). Two
@@ -271,10 +332,29 @@ Type Composer
     // Layout helpers -- private-by-convention; called from per-kind renderers.
     // -------------------------------------------------------------------------
 
+    // canPaintRow -- returns True when a row at (rowY, rowH) fits
+    // entirely within the visible body bounds (self\bodyTop ..
+    // self\bodyBottom). Used by every row helper to suppress painting
+    // when the scrolled row is off-screen -- Blitz3D has no 2D
+    // clip-rect, so without these gates the rows would leak into the
+    // title block above or the footer below the panel body.
+    //
+    // Helpers always return rowY + rowH (advancing the cursor) even
+    // when not painting, so subsequent rows position correctly.
+    Method canPaintRow%(rowY%, rowH%)
+        If self\bodyBottom = 0 Then Return True   ; defensive: before first frame
+        If rowY < self\bodyTop Then Return False
+        If rowY + rowH > self\bodyBottom Then Return False
+        Return True
+    End Method
+
+
     // label : value row. Returns the next Y.
     Method row%(panelX%, panelW%, rowY%, label$, value$)
-        LoomText(panelX + CMP_PAD,       rowY, label, LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
-        LoomText(panelX + CMP_PAD + 120, rowY, value, LOOM_PARCHMENT_100_R, LOOM_PARCHMENT_100_G, LOOM_PARCHMENT_100_B)
+        If Composer::canPaintRow(self, rowY, CMP_ROW_H) = True
+            LoomText(panelX + CMP_PAD,       rowY, label, LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
+            LoomText(panelX + CMP_PAD + 120, rowY, value, LOOM_PARCHMENT_100_R, LOOM_PARCHMENT_100_G, LOOM_PARCHMENT_100_B)
+        EndIf
         Return rowY + CMP_ROW_H
     End Method
 
@@ -305,33 +385,36 @@ Type Composer
         Local valW% = panelW - CMP_PAD * 2 - 120
         Local valH% = CMP_ROW_H
         Local hovered% = (mx >= valX And mx < valX + valW And my >= valY And my < valY + valH)
+        Local visible% = Composer::canPaintRow(self, rowY, CMP_ROW_H)
 
-        If hovered = True
-            LoomFill(valX, valY, valW, valH, LOOM_STONE_800_R, LOOM_STONE_800_G, LOOM_STONE_800_B)
-            LoomBorder(valX, valY, valW, valH, LOOM_BRASS_700_R, LOOM_BRASS_700_G, LOOM_BRASS_700_B)
+        If visible = True
+            If hovered = True
+                LoomFill(valX, valY, valW, valH, LOOM_STONE_800_R, LOOM_STONE_800_G, LOOM_STONE_800_B)
+                LoomBorder(valX, valY, valW, valH, LOOM_BRASS_700_R, LOOM_BRASS_700_G, LOOM_BRASS_700_B)
+            EndIf
+
+            LoomText(panelX + CMP_PAD, rowY, label, LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
+
+            // Mini toggle indicator on the right of the value cell -- a small
+            // brass pill that's filled when True, hollow when False. Affordance
+            // makes the click target read as a switch.
+            Local pillW% = 30
+            Local pillH% = 14
+            Local pillX% = valX + 4
+            Local pillY% = valY + (valH - pillH) / 2
+            If storedValue = True
+                LoomFill(pillX, pillY, pillW, pillH, LOOM_ARCANE_500_R, LOOM_ARCANE_500_G, LOOM_ARCANE_500_B)
+                LoomFill(pillX + pillW - 12, pillY + 2, 10, pillH - 4, LOOM_PARCHMENT_100_R, LOOM_PARCHMENT_100_G, LOOM_PARCHMENT_100_B)
+            Else
+                LoomBorder(pillX, pillY, pillW, pillH, LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
+                LoomFill(pillX + 2, pillY + 2, 10, pillH - 4, LOOM_STONE_300_R, LOOM_STONE_300_G, LOOM_STONE_300_B)
+            EndIf
+
+            // Label text
+            Local labelTxt$ = "No"
+            If storedValue = True Then labelTxt = "Yes"
+            LoomText(pillX + pillW + 8, rowY, labelTxt, LOOM_PARCHMENT_100_R, LOOM_PARCHMENT_100_G, LOOM_PARCHMENT_100_B)
         EndIf
-
-        LoomText(panelX + CMP_PAD, rowY, label, LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
-
-        // Mini toggle indicator on the right of the value cell -- a small
-        // brass pill that's filled when True, hollow when False. Affordance
-        // makes the click target read as a switch.
-        Local pillW% = 30
-        Local pillH% = 14
-        Local pillX% = valX + 4
-        Local pillY% = valY + (valH - pillH) / 2
-        If storedValue = True
-            LoomFill(pillX, pillY, pillW, pillH, LOOM_ARCANE_500_R, LOOM_ARCANE_500_G, LOOM_ARCANE_500_B)
-            LoomFill(pillX + pillW - 12, pillY + 2, 10, pillH - 4, LOOM_PARCHMENT_100_R, LOOM_PARCHMENT_100_G, LOOM_PARCHMENT_100_B)
-        Else
-            LoomBorder(pillX, pillY, pillW, pillH, LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
-            LoomFill(pillX + 2, pillY + 2, 10, pillH - 4, LOOM_STONE_300_R, LOOM_STONE_300_G, LOOM_STONE_300_B)
-        EndIf
-
-        // Label text
-        Local labelTxt$ = "No"
-        If storedValue = True Then labelTxt = "Yes"
-        LoomText(pillX + pillW + 8, rowY, labelTxt, LOOM_PARCHMENT_100_R, LOOM_PARCHMENT_100_G, LOOM_PARCHMENT_100_B)
 
         If hovered And clicked
             // Cancel any pending text-edit on a different field first.
@@ -365,42 +448,45 @@ Type Composer
 
         Local active% = (self\editKind = kind And self\editRefID = refID And self\editFieldId = fieldId)
         Local hovered% = (mx >= valX And mx < valX + valW And my >= valY And my < valY + valH)
+        Local visible% = Composer::canPaintRow(self, rowY, CMP_ROW_H)
 
-        // Background + border. Editing > hover > flat.
-        If active = True
-            LoomFill(valX, valY, valW, valH, LOOM_STONE_700_R, LOOM_STONE_700_G, LOOM_STONE_700_B)
-            LoomBorder(valX, valY, valW, valH, LOOM_ARCANE_500_R, LOOM_ARCANE_500_G, LOOM_ARCANE_500_B)
-        Else If hovered = True
-            LoomFill(valX, valY, valW, valH, LOOM_STONE_800_R, LOOM_STONE_800_G, LOOM_STONE_800_B)
-            LoomBorder(valX, valY, valW, valH, LOOM_BRASS_700_R, LOOM_BRASS_700_G, LOOM_BRASS_700_B)
-        EndIf
-
-        // Label
-        LoomText(panelX + CMP_PAD, rowY, label, LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
-
-        // Value (buffer when editing; stored value otherwise)
-        Local shown$
-        If active = True
-            shown = self\editBuffer
-        Else
-            shown = storedValue
-        EndIf
-        LoomText(valX + 4, rowY, shown, LOOM_PARCHMENT_100_R, LOOM_PARCHMENT_100_G, LOOM_PARCHMENT_100_B)
-
-        // Blinking cursor at end of buffer when editing
-        If active = True
-            If (MilliSecs() Mod CMP_CURSOR_PERIOD) < (CMP_CURSOR_PERIOD / 2)
-                Local cursorX% = valX + 4 + StringWidth(self\editBuffer)
-                LoomFill(cursorX, rowY, 2, 14, LOOM_PARCHMENT_100_R, LOOM_PARCHMENT_100_G, LOOM_PARCHMENT_100_B)
+        If visible = True
+            // Background + border. Editing > hover > flat.
+            If active = True
+                LoomFill(valX, valY, valW, valH, LOOM_STONE_700_R, LOOM_STONE_700_G, LOOM_STONE_700_B)
+                LoomBorder(valX, valY, valW, valH, LOOM_ARCANE_500_R, LOOM_ARCANE_500_G, LOOM_ARCANE_500_B)
+            Else If hovered = True
+                LoomFill(valX, valY, valW, valH, LOOM_STONE_800_R, LOOM_STONE_800_G, LOOM_STONE_800_B)
+                LoomBorder(valX, valY, valW, valH, LOOM_BRASS_700_R, LOOM_BRASS_700_G, LOOM_BRASS_700_B)
             EndIf
-        EndIf
 
-        // Hover affordance -- a small "edit" cue on the right edge of
-        // the cell so users discover the click-to-edit pattern without
-        // having to click first. Only shown when hovering AND not
-        // currently editing this field.
-        If hovered = True And active = False
-            LoomText(valX + valW - 26, rowY, "edit", LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
+            // Label
+            LoomText(panelX + CMP_PAD, rowY, label, LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
+
+            // Value (buffer when editing; stored value otherwise)
+            Local shown$
+            If active = True
+                shown = self\editBuffer
+            Else
+                shown = storedValue
+            EndIf
+            LoomText(valX + 4, rowY, shown, LOOM_PARCHMENT_100_R, LOOM_PARCHMENT_100_G, LOOM_PARCHMENT_100_B)
+
+            // Blinking cursor at end of buffer when editing
+            If active = True
+                If (MilliSecs() Mod CMP_CURSOR_PERIOD) < (CMP_CURSOR_PERIOD / 2)
+                    Local cursorX% = valX + 4 + StringWidth(self\editBuffer)
+                    LoomFill(cursorX, rowY, 2, 14, LOOM_PARCHMENT_100_R, LOOM_PARCHMENT_100_G, LOOM_PARCHMENT_100_B)
+                EndIf
+            EndIf
+
+            // Hover affordance -- a small "edit" cue on the right edge of
+            // the cell so users discover the click-to-edit pattern without
+            // having to click first. Only shown when hovering AND not
+            // currently editing this field.
+            If hovered = True And active = False
+                LoomText(valX + valW - 26, rowY, "edit", LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
+            EndIf
         EndIf
 
         // Click to begin / commit. Click on the value rect while NOT editing
@@ -1089,6 +1175,12 @@ Type Composer
     // or animset users), right-click is ignored -- there's no field on the
     // current focus to write the chosen entity into.
     Method chipRow%(panelX%, panelW%, rowY%, label$, kind$, refID%, mx%, my%, clicked%, rightClicked%, editFieldId$)
+        // Chip row needs the full CMP_CHIP_H height to be visible; skip
+        // painting + hit-test entirely when scrolled off-screen.
+        If Composer::canPaintRow(self, rowY, CMP_CHIP_H) = False
+            Return rowY + CMP_CHIP_H + 4
+        EndIf
+
         LoomText(panelX + CMP_PAD, rowY + 4, label, LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
 
         Local chipX% = panelX + CMP_PAD + 120
@@ -1108,12 +1200,14 @@ Type Composer
     // separator and the card-top accent so the visual rhythm is
     // consistent across surfaces.
     Method sectionHeader%(panelX%, panelW%, rowY%, title$)
-        LoomHRule(panelX + CMP_PAD,     rowY + 4, panelW - CMP_PAD * 2, LOOM_BRASS_700_R, LOOM_BRASS_700_G, LOOM_BRASS_700_B)
-        LoomHRule(panelX + CMP_PAD,     rowY + 5, panelW - CMP_PAD * 2, LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
-        LoomHRule(panelX + CMP_PAD,     rowY + 6, panelW - CMP_PAD * 2, LOOM_BRASS_700_R, LOOM_BRASS_700_G, LOOM_BRASS_700_B)
-        LoomTheme_UseDisplay()
-        LoomText(panelX + CMP_PAD,      rowY + 10, title, LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
-        LoomTheme_UseBody()
+        If Composer::canPaintRow(self, rowY, 28) = True
+            LoomHRule(panelX + CMP_PAD,     rowY + 4, panelW - CMP_PAD * 2, LOOM_BRASS_700_R, LOOM_BRASS_700_G, LOOM_BRASS_700_B)
+            LoomHRule(panelX + CMP_PAD,     rowY + 5, panelW - CMP_PAD * 2, LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
+            LoomHRule(panelX + CMP_PAD,     rowY + 6, panelW - CMP_PAD * 2, LOOM_BRASS_700_R, LOOM_BRASS_700_G, LOOM_BRASS_700_B)
+            LoomTheme_UseDisplay()
+            LoomText(panelX + CMP_PAD,      rowY + 10, title, LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
+            LoomTheme_UseBody()
+        EndIf
         Return rowY + 34
     End Method
 
@@ -1164,6 +1258,7 @@ Type Composer
         y = Composer::chipRow(self, panelX, panelW, y, "Faction",    "faction", A\DefaultFaction, mx, my, clicked, rightClicked, "default_faction")
         y = Composer::chipRow(self, panelX, panelW, y, "M anim set", "animset", A\MAnimationSet,  mx, my, clicked, rightClicked, "manim_set")
         y = Composer::chipRow(self, panelX, panelW, y, "F anim set", "animset", A\FAnimationSet,  mx, my, clicked, rightClicked, "fanim_set")
+        Composer::recordContentBottom(self, y)
     End Method
 
 
@@ -1207,6 +1302,7 @@ Type Composer
         y = Composer::sectionHeader(self, panelX, panelW, y, "Script")
         y = Composer::editableRow(self, panelX, panelW, y, "Bound",  "item", It\ID, "script",  It\Script$,  mx, my, clicked)
         y = Composer::editableRow(self, panelX, panelW, y, "Method", "item", It\ID, "smethod", It\SMethod$, mx, my, clicked)
+        Composer::recordContentBottom(self, y)
     End Method
 
 
@@ -1231,6 +1327,7 @@ Type Composer
         y = Composer::sectionHeader(self, panelX, panelW, y, "Script")
         y = Composer::editableRow(self, panelX, panelW, y, "Bound",  "spell", S\ID, "script",  S\Script$,  mx, my, clicked)
         y = Composer::editableRow(self, panelX, panelW, y, "Method", "spell", S\ID, "smethod", S\SMethod$, mx, my, clicked)
+        Composer::recordContentBottom(self, y)
     End Method
 
 
@@ -1281,7 +1378,7 @@ Type Composer
             y = Composer::sectionHeader(self, panelX, panelW, y, "Portal links")
             Local p% = 0
             For p = 0 To 99
-                If Ar\PortalName$[p] <> "" And y < bodyY + bodyH - CMP_CHIP_H - 24
+                If Ar\PortalName$[p] <> ""
                     Local targetHandle% = Composer::findZoneByName(self, Ar\PortalLinkArea$[p])
                     If targetHandle <> 0
                         // Portal-target chips: editable via right-click. fieldId
@@ -1292,15 +1389,18 @@ Type Composer
                         y = Composer::chipRow(self, panelX, panelW, y, Ar\PortalName$[p], "zone", targetHandle, mx, my, clicked, rightClicked, "portal_" + Str(p))
                     Else
                         // Unknown target -- render a brass label that names it in danger-red.
-                        LoomText(panelX + CMP_PAD, y + 4, Ar\PortalName$[p], LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
-                        Local tgt$ = Ar\PortalLinkArea$[p]
-                        If tgt = "" Then tgt = "(no target)"
-                        LoomText(panelX + CMP_PAD + 120, y + 4, tgt, LOOM_DANGER_R, LOOM_DANGER_G, LOOM_DANGER_B)
+                        If Composer::canPaintRow(self, y, CMP_ROW_H) = True
+                            LoomText(panelX + CMP_PAD, y + 4, Ar\PortalName$[p], LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
+                            Local tgt$ = Ar\PortalLinkArea$[p]
+                            If tgt = "" Then tgt = "(no target)"
+                            LoomText(panelX + CMP_PAD + 120, y + 4, tgt, LOOM_DANGER_R, LOOM_DANGER_G, LOOM_DANGER_B)
+                        EndIf
                         y = y + CMP_ROW_H
                     EndIf
                 EndIf
             Next
         EndIf
+        Composer::recordContentBottom(self, y)
     End Method
 
 
@@ -1312,13 +1412,15 @@ Type Composer
         y = Composer::editableRow(self, panelX, panelW, y, "Name",  "faction", idx, "name", FactionNames$(idx), mx, my, clicked)
         y = Composer::row(self, panelX, panelW, y, "Index", Str(idx))
 
-        // Members -- every actor whose DefaultFaction matches. Each renders
-        // as an actor chip. Capped to whatever fits in the panel body.
+        // Members -- every actor whose DefaultFaction matches. Each
+        // renders as an actor chip. The pre-scroll fit-cap dropped
+        // members past the panel bottom; with scroll the cap is gone
+        // (chipRow's own canPaintRow gate skips off-screen rows).
         y = Composer::sectionHeader(self, panelX, panelW, y, "Members")
 
         Local memberCount% = 0
         For Ac.Actor = Each Actor
-            If Ac\DefaultFaction = idx And y < bodyY + bodyH - CMP_CHIP_H - 24
+            If Ac\DefaultFaction = idx
                 // Members are a back-reference; no field on the focused
                 // faction to edit via this chip, so editFieldId = "".
                 y = Composer::chipRow(self, panelX, panelW, y, "", "actor", Ac\ID, mx, my, clicked, rightClicked, "")
@@ -1327,8 +1429,12 @@ Type Composer
         Next
 
         If memberCount = 0
-            LoomText(panelX + CMP_PAD, y + 4, "(no members)", LOOM_STONE_300_R, LOOM_STONE_300_G, LOOM_STONE_300_B)
+            If Composer::canPaintRow(self, y, CMP_ROW_H) = True
+                LoomText(panelX + CMP_PAD, y + 4, "(no members)", LOOM_STONE_300_R, LOOM_STONE_300_G, LOOM_STONE_300_B)
+            EndIf
+            y = y + CMP_ROW_H
         EndIf
+        Composer::recordContentBottom(self, y)
     End Method
 
 
@@ -1356,7 +1462,7 @@ Type Composer
         y = Composer::sectionHeader(self, panelX, panelW, y, "Used by")
         Local userCount% = 0
         For Ac.Actor = Each Actor
-            If (Ac\MAnimationSet = targetID Or Ac\FAnimationSet = targetID) And y < bodyY + bodyH - CMP_CHIP_H - 24
+            If Ac\MAnimationSet = targetID Or Ac\FAnimationSet = targetID
                 // Back-reference (actors using this anim set); no field
                 // on the focused animset to edit via this chip.
                 y = Composer::chipRow(self, panelX, panelW, y, "", "actor", Ac\ID, mx, my, clicked, rightClicked, "")
@@ -1365,8 +1471,12 @@ Type Composer
         Next
 
         If userCount = 0
-            LoomText(panelX + CMP_PAD, y + 4, "(no users)", LOOM_STONE_300_R, LOOM_STONE_300_G, LOOM_STONE_300_B)
+            If Composer::canPaintRow(self, y, CMP_ROW_H) = True
+                LoomText(panelX + CMP_PAD, y + 4, "(no users)", LOOM_STONE_300_R, LOOM_STONE_300_G, LOOM_STONE_300_B)
+            EndIf
+            y = y + CMP_ROW_H
         EndIf
+        Composer::recordContentBottom(self, y)
     End Method
 
 
@@ -1424,5 +1534,51 @@ Type Composer
             If Upper$(Ar\Name$) = Upper$(name) Then Return Handle(Ar)
         Next
         Return 0
+    End Method
+
+
+    // -------------------------------------------------------------------------
+    // drawScrollbar -- thin brass thumb on the right edge of the composer
+    // body, visible only when content overflows. Thumb position +
+    // height reflect scrollOffset / contentHeight.
+    //
+    // Track: stone-700 background spanning the full body height.
+    // Thumb:  brass-500 rect sized proportionally to bodyHeight /
+    //         contentHeight, positioned at scrollOffset / contentHeight.
+    // -------------------------------------------------------------------------
+    Method drawScrollbar(barX%, barTopY%, bodyH%)
+        Local contentH% = self\lastContentBottom - self\bodyTop
+        If contentH <= 0 Then Return
+
+        // Track
+        LoomFill(barX, barTopY, CMP_SCROLLBAR_W, bodyH, LOOM_STONE_700_R, LOOM_STONE_700_G, LOOM_STONE_700_B)
+
+        // Thumb height proportional to visible-fraction-of-content;
+        // minimum 16px so the thumb stays grabbable even with very
+        // tall content.
+        Local thumbH% = (bodyH * bodyH) / contentH
+        If thumbH < 16 Then thumbH = 16
+        If thumbH > bodyH Then thumbH = bodyH
+
+        // Thumb y: scrollOffset is in "content space", we translate to
+        // "track space" by multiplying by track-travel / content-travel.
+        Local travelTrack% = bodyH - thumbH
+        Local travelContent% = contentH - bodyH
+        Local thumbY% = barTopY
+        If travelContent > 0
+            thumbY = barTopY + (self\scrollOffset * travelTrack) / travelContent
+        EndIf
+
+        LoomFill(barX, thumbY, CMP_SCROLLBAR_W, thumbH, LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
+    End Method
+
+
+    // -------------------------------------------------------------------------
+    // recordContentBottom -- per-kind body renderers call this at the end
+    // with their final y cursor. We translate back from scrolled space to
+    // absolute panel-y so scrollOffset clamping can use it.
+    // -------------------------------------------------------------------------
+    Method recordContentBottom(finalY%)
+        self\lastContentBottom = finalY + self\scrollOffset
     End Method
 End Type
