@@ -465,6 +465,7 @@ Type Palette
         Local emitTexture% = (self\pickerMode = False Or self\pickerKind = "texture")
         Local emitMesh% = (self\pickerMode = False Or self\pickerKind = "mesh")
         Local emitSound% = (self\pickerMode = False Or self\pickerKind = "sound")
+        Local emitMusic% = (self\pickerMode = False Or self\pickerKind = "music")
 
         If emitActor = True
             For Ac.Actor = Each Actor
@@ -561,6 +562,15 @@ Type Palette
                 Local soundScore% = Palette::scoreOrBaseline(self, q, sd\Filename$, showAllBaseline)
                 If soundScore > 0
                     Palette::addResult(self, "sound", sd\Index, sd\Filename$ + " #" + Str(sd\ID), "sound", soundScore)
+                EndIf
+            Next
+        EndIf
+
+        If emitMusic = True
+            For mu.MusicEntry = Each MusicEntry
+                Local musicScore% = Palette::scoreOrBaseline(self, q, mu\Filename$, showAllBaseline)
+                If musicScore > 0
+                    Palette::addResult(self, "music", mu\Index, mu\Filename$ + " #" + Str(mu\ID), "music", musicScore)
                 EndIf
             Next
         EndIf
@@ -741,6 +751,7 @@ Type Palette
         If kind = "texture" Then Return "T"
         If kind = "mesh"    Then Return "m"
         If kind = "sound"   Then Return "s"
+        If kind = "music"   Then Return "M"
         Return "?"
     End Method
 End Type

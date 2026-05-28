@@ -126,6 +126,7 @@ Include "Modules\Loom\ScriptSearch.bb"
 Include "Modules\Loom\TextureCatalog.bb"
 Include "Modules\Loom\MeshCatalog.bb"
 Include "Modules\Loom\SoundCatalog.bb"
+Include "Modules\Loom\MusicCatalog.bb"
 Include "Modules\Loom\Recents.bb"
 Include "Modules\Loom\EntityFactory.bb"
 Include "Modules\Loom\SaveAll.bb"
@@ -453,6 +454,10 @@ WriteLog(LoomLog, "Mesh catalog: " + Str(MeshesTotalCount) + " meshes indexed")
 ; button for in-place audition -- not present in GUE at all.
 Sounds_Init()
 WriteLog(LoomLog, "Sound catalog: " + Str(SoundsTotalCount) + " sounds indexed")
+; Music catalog: final media family. No reverse refs (music isn't
+; statically referenced from data Loom edits); audition + browse only.
+Music_Init()
+WriteLog(LoomLog, "Music catalog: " + Str(MusicTotalCount) + " tracks indexed")
 
 
 // -----------------------------------------------------------------------------
