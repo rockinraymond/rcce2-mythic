@@ -101,9 +101,10 @@ Type Ribbon
 
         Ribbon::recomputeCache(self)
 
-        // Background -- a slightly different tint than the browser's brand
-        // strip so the two read as distinct bands.
-        LoomFill(0, 0, sw, RIBBON_H, LOOM_STONE_950_R, LOOM_STONE_950_G, LOOM_STONE_950_B)
+        // Background -- subtle stone-900 -> stone-950 gradient so the
+        // conscience strip doesn't read as a flat black bar above the
+        // brand strip.
+        LoomGradientV(0, 0, sw, RIBBON_H, LOOM_STONE_900_R, LOOM_STONE_900_G, LOOM_STONE_900_B, LOOM_STONE_950_R, LOOM_STONE_950_G, LOOM_STONE_950_B)
         LoomHRule(0, RIBBON_H - 1, sw, LOOM_BRASS_700_R, LOOM_BRASS_700_G, LOOM_BRASS_700_B)
 
         // Left side: "CONSCIENCE" label + dirty badges
@@ -151,7 +152,7 @@ Type Ribbon
         EndIf
 
         // Right side: total entity counts (compact)
-        Local totals$ = Str(self\cachedTotalActors) + "A · " + Str(self\cachedTotalItems) + "I · " + Str(self\cachedTotalSpells) + "S · " + Str(self\cachedTotalZones) + "Z · " + Str(self\cachedTotalFactions) + "F · " + Str(self\cachedTotalAnimSets) + "M"
+        Local totals$ = Str(self\cachedTotalActors) + "A | " + Str(self\cachedTotalItems) + "I | " + Str(self\cachedTotalSpells) + "S | " + Str(self\cachedTotalZones) + "Z | " + Str(self\cachedTotalFactions) + "F | " + Str(self\cachedTotalAnimSets) + "M"
         LoomText(sw - StringWidth(totals) - RIBBON_PAD, 6, totals, LOOM_STONE_300_R, LOOM_STONE_300_G, LOOM_STONE_300_B)
 
         Return consumed

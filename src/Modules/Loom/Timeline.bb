@@ -167,7 +167,7 @@ Type Timeline
         LoomFill(modalX, modalY, TIMELINE_MODAL_W, 3, LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
 
         // Header
-        LoomText(modalX + TIMELINE_PAD, modalY + 10, "SESSION TIMELINE  ·  " + Str(self\entryCount) + " entries", LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
+        LoomText(modalX + TIMELINE_PAD, modalY + 10, "SESSION TIMELINE  |  " + Str(self\entryCount) + " entries", LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
 
         // Entry list (newest first -- walk type pool backward via After
         // /  Before, which Blitz3D exposes through Last + Before).
@@ -176,7 +176,7 @@ Type Timeline
         // Footer hint
         Local hy% = modalY + TIMELINE_MODAL_H - TIMELINE_HINT_H - 4
         LoomHRule(modalX + TIMELINE_PAD, hy - 2, TIMELINE_MODAL_W - TIMELINE_PAD * 2, LOOM_BRASS_700_R, LOOM_BRASS_700_G, LOOM_BRASS_700_B)
-        LoomText(modalX + TIMELINE_PAD, hy + 4, "Click revert on a row to undo  ·  arrows scroll  ·  Esc to close", LOOM_STONE_300_R, LOOM_STONE_300_G, LOOM_STONE_300_B)
+        LoomText(modalX + TIMELINE_PAD, hy + 4, "Click revert on a row to undo  |  arrows scroll  |  Esc to close", LOOM_STONE_300_R, LOOM_STONE_300_G, LOOM_STONE_300_B)
 
         // Click-outside-modal closes
         If clicked = True

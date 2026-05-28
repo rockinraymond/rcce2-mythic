@@ -360,13 +360,13 @@ Type Recents
         LoomBorder(modalX + 1, modalY + 1, RECENTS_MODAL_W - 2, RECENTS_MODAL_H - 2, LOOM_BRASS_700_R, LOOM_BRASS_700_G, LOOM_BRASS_700_B)
         LoomFill(modalX, modalY, RECENTS_MODAL_W, 3, LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
 
-        LoomText(modalX + RECENTS_PAD, modalY + 10, "RECENTS  ·  " + Str(self\entryCount) + " entries", LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
+        LoomText(modalX + RECENTS_PAD, modalY + 10, "RECENTS  |  " + Str(self\entryCount) + " entries", LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
 
         Recents::drawEntries(self, modalX, modalY + RECENTS_HEADER_H, mx, my, clicked)
 
         Local hy% = modalY + RECENTS_MODAL_H - RECENTS_HINT_H - 4
         LoomHRule(modalX + RECENTS_PAD, hy - 2, RECENTS_MODAL_W - RECENTS_PAD * 2, LOOM_BRASS_700_R, LOOM_BRASS_700_G, LOOM_BRASS_700_B)
-        LoomText(modalX + RECENTS_PAD, hy + 4, "Click a row to jump  ·  arrows scroll  ·  Esc to close", LOOM_STONE_300_R, LOOM_STONE_300_G, LOOM_STONE_300_B)
+        LoomText(modalX + RECENTS_PAD, hy + 4, "Click a row to jump  |  arrows scroll  |  Esc to close", LOOM_STONE_300_R, LOOM_STONE_300_G, LOOM_STONE_300_B)
 
         If clicked = True
             If mx < modalX Or mx >= modalX + RECENTS_MODAL_W Or my < modalY Or my >= modalY + RECENTS_MODAL_H

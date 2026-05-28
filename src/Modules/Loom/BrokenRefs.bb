@@ -230,7 +230,7 @@ Type BrokenRefs
         LoomFill(modalX, modalY, BROKENREFS_MODAL_W, 3, LOOM_DANGER_R, LOOM_DANGER_G, LOOM_DANGER_B)
 
         // Header
-        Local headerTxt$ = "BROKEN REFERENCES  ·  " + Str(self\entryCount)
+        Local headerTxt$ = "BROKEN REFERENCES  |  " + Str(self\entryCount)
         If self\entryCount >= BROKENREFS_MAX_ENTRIES Then headerTxt = headerTxt + "+ (capped)"
         LoomText(modalX + BROKENREFS_PAD, modalY + 10, headerTxt, LOOM_DANGER_R, LOOM_DANGER_G, LOOM_DANGER_B)
 
@@ -239,7 +239,7 @@ Type BrokenRefs
         // Footer hint
         Local hy% = modalY + BROKENREFS_MODAL_H - BROKENREFS_HINT_H - 4
         LoomHRule(modalX + BROKENREFS_PAD, hy - 2, BROKENREFS_MODAL_W - BROKENREFS_PAD * 2, LOOM_BRASS_700_R, LOOM_BRASS_700_G, LOOM_BRASS_700_B)
-        LoomText(modalX + BROKENREFS_PAD, hy + 4, "Click a row to jump to the source  ·  arrows scroll  ·  Esc to close", LOOM_STONE_300_R, LOOM_STONE_300_G, LOOM_STONE_300_B)
+        LoomText(modalX + BROKENREFS_PAD, hy + 4, "Click a row to jump to the source  |  arrows scroll  |  Esc to close", LOOM_STONE_300_R, LOOM_STONE_300_G, LOOM_STONE_300_B)
 
         If clicked = True
             If mx < modalX Or mx >= modalX + BROKENREFS_MODAL_W Or my < modalY Or my >= modalY + BROKENREFS_MODAL_H

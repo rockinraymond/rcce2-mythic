@@ -109,10 +109,30 @@ Global LoomFont_Display = 0
 
 // =============================================================================
 // LoomTheme_Init -- one-time setup. Safe to call multiple times.
+//
+// Loads body + display fonts. Blitz3D's LoadFont takes a Windows font
+// name; Segoe UI is the Windows Vista+ default UI font and looks
+// noticeably more polished than the built-in bitmap default. If the
+// font isn't installed (older Windows or unusual locale), LoadFont
+// returns 0 and the rest of Loom paints with the default font as before
+// -- no visible failure mode.
 // =============================================================================
 Function LoomTheme_Init()
-    // Future: LoadFont "Data/Loom/Fonts/MedievalSharp.ttf", 48 etc.
-    // For the alpha, leave both as 0 -- Blitz uses the default system font.
+    LoomFont_Body    = LoadFont("Segoe UI", 14, False, False, False)
+    LoomFont_Display = LoadFont("Segoe UI", 18, True,  False, False)
+    If LoomFont_Body <> 0 Then SetFont LoomFont_Body
+End Function
+
+
+; Swap to the body font for subsequent Text() calls. Surfaces that want
+; bigger / bold text (LOOM brand mark, modal titles) call UseDisplay;
+; everything else stays on the body font set at boot.
+Function LoomTheme_UseBody()
+    If LoomFont_Body <> 0 Then SetFont LoomFont_Body
+End Function
+
+Function LoomTheme_UseDisplay()
+    If LoomFont_Display <> 0 Then SetFont LoomFont_Display
 End Function
 
 
