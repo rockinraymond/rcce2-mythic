@@ -425,6 +425,12 @@ Type Composer
         // visible only when content overflows.
         If self\lastContentBottom > self\bodyBottom
             Composer::drawScrollbar(self, x + w - CMP_SCROLLBAR_W - 2, self\bodyTop, bodyH)
+            // Back-to-top pill -- shown when scrolled past 100px so
+            // long composers (Actor 96+ cells, Zone 1000s) have an
+            // O(1) way back to the top without manual scrolling.
+            If self\scrollOffset > 100
+                Composer::drawBackToTop(self, x + w - 56, self\bodyBottom - 28, mx, my, clicked)
+            EndIf
         EndIf
 
         // Footer: back-stack hint (or edit-mode hint when editing). Two
@@ -3369,6 +3375,35 @@ Type Composer
             If Upper$(Ar\Name$) = Upper$(name) Then Return Handle(Ar)
         Next
         Return 0
+    End Method
+
+
+    // -------------------------------------------------------------------------
+    // drawBackToTop -- small brass pill in the lower-right of the composer
+    // body. Click resets scrollOffset to 0. Only painted when scrolled
+    // (caller-gated by scrollOffset > 100). Big composers (Actor with
+    // 96+ attribute cells, Zone with 1000s of sub-entities) otherwise
+    // need many wheel-scrolls to return to the top.
+    // -------------------------------------------------------------------------
+    Method drawBackToTop(btnX%, btnY%, mx%, my%, clicked%)
+        Local btnW% = 48
+        Local btnH% = 22
+        Local hovered% = (mx >= btnX And mx < btnX + btnW And my >= btnY And my < btnY + btnH)
+
+        LoomShadowCard(btnX, btnY, btnW, btnH)
+        If hovered = True
+            LoomFill(btnX, btnY, btnW, btnH, LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
+            LoomBorder(btnX, btnY, btnW, btnH, LOOM_PARCHMENT_100_R, LOOM_PARCHMENT_100_G, LOOM_PARCHMENT_100_B)
+            LoomText(btnX + 8, btnY + 4, "^ top", LOOM_PARCHMENT_100_R, LOOM_PARCHMENT_100_G, LOOM_PARCHMENT_100_B)
+        Else
+            LoomFill(btnX, btnY, btnW, btnH, LOOM_STONE_800_R, LOOM_STONE_800_G, LOOM_STONE_800_B)
+            LoomBorder(btnX, btnY, btnW, btnH, LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
+            LoomText(btnX + 8, btnY + 4, "^ top", LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
+        EndIf
+
+        If hovered = True And clicked = True
+            self\scrollOffset = 0
+        EndIf
     End Method
 
 
