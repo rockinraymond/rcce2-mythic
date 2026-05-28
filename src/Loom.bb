@@ -123,6 +123,7 @@ Include "Modules\Loom\Timeline.bb"
 Include "Modules\Loom\Tools.bb"
 Include "Modules\Loom\ScriptsCatalog.bb"
 Include "Modules\Loom\ScriptSearch.bb"
+Include "Modules\Loom\TextureCatalog.bb"
 Include "Modules\Loom\Recents.bb"
 Include "Modules\Loom\EntityFactory.bb"
 Include "Modules\Loom\SaveAll.bb"
@@ -438,6 +439,11 @@ Tools_Init()
 ; surfacing on a permission/disk failure.
 Scripts_Init()
 WriteLog(LoomLog, "Scripts catalog: " + Str(ScriptsTotalCount) + " .rsl files indexed")
+; Texture catalog: walks Textures.dat's full 65535-slot index, populates
+; one TextureEntry per defined slot. <50ms with LockTextures keeping
+; the file warm; powers the Textures browser tab.
+Textures_Init()
+WriteLog(LoomLog, "Texture catalog: " + Str(TexturesTotalCount) + " textures indexed")
 
 
 // -----------------------------------------------------------------------------

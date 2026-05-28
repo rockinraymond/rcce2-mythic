@@ -213,6 +213,13 @@ Type Threads
             Return sf\Name$ + ".rsl"
         EndIf
 
+        If kind = "texture"
+            // refID is the TextureEntry\Index from Textures_Init.
+            Local te.TextureEntry = Textures_GetByIndex(refID)
+            If te = Null Then Return ""
+            Return te\Filename$ + " #" + Str(te\ID)
+        EndIf
+
         Return ""
     End Method
 
@@ -306,6 +313,7 @@ Type Threads
         If kind = "faction" Then Return "F"
         If kind = "animset" Then Return "M"
         If kind = "script"  Then Return "x"      ; ".rsl" looks like an x-ish glyph
+        If kind = "texture" Then Return "T"
         Return "?"
     End Method
 End Type

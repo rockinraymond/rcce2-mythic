@@ -166,6 +166,11 @@ Type Browser
         // refs (which Zone/Item/Spell references this script). Closes
         // the "what scripts exist?" gap that GUE doesn't fill either.
         Browser::addCategory(self, "script",  "Scripts")
+        // Textures tab: every defined texture from Data\Game Data\Textures.dat
+        // as a 64x64 thumbnail card. Composer shows the texture preview +
+        // reverse refs (every Item/Spell/Actor field that points to it).
+        // Powered by TextureCatalog.bb (populated at boot).
+        Browser::addCategory(self, "texture", "Textures")
         // Settings tab: project-level configuration singleton (Misc.dat /
         // Other.dat / Money.dat / Hosts.dat). Clicking the tab focuses
         // the singleton composer view directly -- no card grid since
@@ -420,7 +425,7 @@ Type Browser
         Local nbW% = 96
         Local nbH% = 22
         Local nbHover% = False
-        If self\category <> "tools" And self\category <> "script"
+        If self\category <> "tools" And self\category <> "script" And self\category <> "texture"
             nbHover = (mx >= nbX And mx < nbX + nbW And my >= nbY And my < nbY + nbH)
 
             If nbHover = True
@@ -531,6 +536,7 @@ Type Browser
         If kind = "faction" Then Return "Faction"
         If kind = "animset" Then Return "Anim Set"
         If kind = "script"  Then Return "Script"
+        If kind = "texture" Then Return "Texture"
         Return kind
     End Method
 
@@ -682,6 +688,9 @@ Type Browser
         EndIf
         If cat = "script"
             count = Browser::drawScriptsGrid(self, sw, sh, mx, my, clicked, gridX, gridY, cols)
+        EndIf
+        If cat = "texture"
+            count = Browser::drawTexturesGrid(self, sw, sh, mx, my, clicked, gridX, gridY, cols)
         EndIf
         If cat = "settings"
             count = Browser::drawSettingsCard(self, sw, sh, mx, my, clicked, gridX, gridY)
@@ -1049,6 +1058,83 @@ Type Browser
 
         If selected = True And self\pendingEnter = True
             Threads::focus(self\threads, "script", sf\Index)
+            self\cardClickLatch = True
+            self\pendingEnter = False
+        EndIf
+    End Method
+
+
+    // -------------------------------------------------------------------------
+    // drawTexturesGrid -- one card per defined texture in the project.
+    // Each card carries a 64x64 thumbnail via the existing ImageCache
+    // (Loom_DrawThumbnailLarge), basename truncated to fit, and the
+    // engine-side ID for context.
+    // -------------------------------------------------------------------------
+    Method drawTexturesGrid%(sw%, sh%, mx%, my%, clicked%, gridX%, gridY%, cols%)
+        Local col% = 0
+        Local row% = 0
+        Local count% = 0
+        For te.TextureEntry = Each TextureEntry
+            If Browser::matchesFilter(self, te\Filename$) = True
+                Local cx% = gridX + col * (BR_CARD_W + BR_CARD_GAP)
+                Local cy% = gridY + row * (BR_CARD_H + BR_CARD_GAP)
+                If cy + BR_CARD_H < sh - BR_BOT_RIBBON
+                    Browser::drawTextureCard(self, te, cx, cy, mx, my, clicked, count)
+                EndIf
+                count = count + 1
+                col = col + 1
+                If col >= cols Then col = 0 : row = row + 1
+            EndIf
+        Next
+        Return count
+    End Method
+
+
+    // -------------------------------------------------------------------------
+    // drawTextureCard -- card chrome + 64x64 thumbnail + filename +
+    // ID label. Same hover/select pattern as script + entity cards;
+    // click focuses the composer to the texture preview.
+    // -------------------------------------------------------------------------
+    Method drawTextureCard(te.TextureEntry, x%, y%, mx%, my%, clicked%, cardIdx%)
+        Local hovered% = (mx >= x And mx < x + BR_CARD_W And my >= y And my < y + BR_CARD_H)
+        Local selected% = (cardIdx = self\selectedIndex)
+
+        LoomShadowCard(x, y, BR_CARD_W, BR_CARD_H)
+        LoomFill(x, y, BR_CARD_W, BR_CARD_H, LOOM_STONE_800_R, LOOM_STONE_800_G, LOOM_STONE_800_B)
+
+        If hovered = True
+            LoomBorder(x, y, BR_CARD_W, BR_CARD_H, LOOM_ARCANE_500_R, LOOM_ARCANE_500_G, LOOM_ARCANE_500_B)
+            LoomBorder(x + 1, y + 1, BR_CARD_W - 2, BR_CARD_H - 2, LOOM_ARCANE_500_R, LOOM_ARCANE_500_G, LOOM_ARCANE_500_B)
+        Else If selected = True
+            LoomBorder(x, y, BR_CARD_W, BR_CARD_H, LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
+            LoomBorder(x + 1, y + 1, BR_CARD_W - 2, BR_CARD_H - 2, LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
+        Else
+            LoomBorder(x, y, BR_CARD_W, BR_CARD_H, LOOM_BRASS_700_R, LOOM_BRASS_700_G, LOOM_BRASS_700_B)
+        EndIf
+
+        LoomHRule(x + 12, y + 8, BR_CARD_W - 24, LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
+
+        // Thumbnail anchored left under the accent rule. Item textures
+        // and other texture IDs share the ID space so Loom_DrawThumbnailLarge
+        // can render either source via the cached scaled image pool.
+        Loom_DrawThumbnailLarge(te\ID, x + 12, y + 18)
+
+        // Filename + ID column on the right of the thumbnail
+        Local labelX% = x + 12 + 64 + 8
+        Local nm$ = te\Filename$
+        If Len(nm) > 14 Then nm = Left$(nm, 13) + "~"
+        LoomText(labelX, y + 18, nm, LOOM_PARCHMENT_100_R, LOOM_PARCHMENT_100_G, LOOM_PARCHMENT_100_B)
+        LoomText(labelX, y + 36, "id " + Str(te\ID), LOOM_STONE_200_R, LOOM_STONE_200_G, LOOM_STONE_200_B)
+        If te\Flags <> 0
+            LoomText(labelX, y + 54, "flags " + Str(te\Flags), LOOM_STONE_300_R, LOOM_STONE_300_G, LOOM_STONE_300_B)
+        EndIf
+
+        If hovered And clicked
+            Threads::focus(self\threads, "texture", te\Index)
+            self\cardClickLatch = True
+        EndIf
+        If selected = True And self\pendingEnter = True
+            Threads::focus(self\threads, "texture", te\Index)
             self\cardClickLatch = True
             self\pendingEnter = False
         EndIf
