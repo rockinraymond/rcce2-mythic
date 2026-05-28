@@ -69,6 +69,16 @@ Global VPLastMY     = 0
 Global VPDragStartMX = 0
 Global VPDragStartMY = 0
 
+; Marker drag-to-edit state. Right-click on a marker to enter drag
+; mode; subsequent frames track the cursor on the ground plane and
+; reposition the marker + update the underlying Area coord field.
+; Release RMB to commit.
+Global VPMarkerDragging   = False
+Global VPMarkerDragEN     = 0            ; entity handle of the marker being dragged
+Global VPMarkerDragKind$  = ""
+Global VPMarkerDragIdx    = -1
+Global VPMarkerDragArH    = 0            ; Handle(Area) of the zone being edited
+
 ; Per-zone counts cached at load time (saves recomputing in renderer
 ; just for the legend overlay).
 Global VPCountPortals  = 0
@@ -119,10 +129,15 @@ Function Loom_InitZoneViewport()
 
     ; Ground plane -- a large flat cube acting as the zone floor.
     ; CreateCube returns a unit cube; scale to a wide flat slab.
+    ; Scale is huge so drag-to-edit works for big zones (cursor
+    ; can fall outside a "normal" zone's bbox during a fast drag).
+    ; EntityPickMode = 2 (poly pick) so CameraPick can land on the
+    ; ground plane during a drag and return its world position.
     VPGround = CreateCube()
-    ScaleEntity VPGround, 800.0, 0.5, 800.0
+    ScaleEntity VPGround, 5000.0, 0.5, 5000.0
     PositionEntity VPGround, 0, VP_SCENE_Y_OFFSET#, 0
     EntityColor VPGround, 24, 24, 32      ; near-black stone
+    EntityPickMode VPGround, 2            ; polygon pick (for ground drag-land)
 
     VPInitOK = True
     WriteLog(LoomLog, "ZoneViewport: initialized (RT=" + VP_RT_SIZE + "x" + VP_RT_SIZE + ")")
@@ -202,6 +217,39 @@ Function Loom_MakeAxisMarkers()
     Loom_MakeLine ox#, oy#, oz#, ox# + VP_AXIS_LENGTH#, oy#, oz#, 220, 60, 60
     Loom_MakeLine ox#, oy#, oz#, ox#, oy# + VP_AXIS_LENGTH#, oz#, 60, 220, 60
     Loom_MakeLine ox#, oy#, oz#, ox#, oy#, oz# + VP_AXIS_LENGTH#, 60, 120, 220
+End Function
+
+
+; =============================================================================
+; Loom_CommitMarkerCoord -- write the new X/Z (and keep current Y) back
+; to the underlying Area field for the dragged sub-entity. Called every
+; frame during drag for live preview. ZoneSaved gets flipped to False
+; via Composer::markDirtyForKind on release.
+; =============================================================================
+Function Loom_CommitMarkerCoord(zoneHandle, kind$, idx, newX#, newZ#)
+    Local Ar.Area = Object.Area(zoneHandle)
+    If Ar = Null Then Return
+    If kind$ = "portal"
+        If idx >= 0 And idx <= 99
+            Ar\PortalX#[idx] = newX#
+            Ar\PortalZ#[idx] = newZ#
+        EndIf
+    Else If kind$ = "trigger"
+        If idx >= 0 And idx <= 149
+            Ar\TriggerX#[idx] = newX#
+            Ar\TriggerZ#[idx] = newZ#
+        EndIf
+    Else If kind$ = "spawn"
+        If idx >= 0 And idx <= 999
+            ; Spawn position is the waypoint position, not a direct
+            ; spawn coord. Update the referenced waypoint instead.
+            Local wpIdx = Ar\SpawnWaypoint[idx]
+            If wpIdx >= 0 And wpIdx <= 1999
+                Ar\WaypointX#[wpIdx] = newX#
+                Ar\WaypointZ#[wpIdx] = newZ#
+            EndIf
+        EndIf
+    EndIf
 End Function
 
 
@@ -503,6 +551,63 @@ Function Loom_DrawZoneViewport(zoneHandle, x, y)
             EndIf
         EndIf
         VPDragging = False
+    EndIf
+
+    ; ---- Marker drag-to-edit (RMB) -----------------------------------------
+    ; RMB inside viewport hit-tests a marker on press; subsequent frames
+    ; track the cursor on the ground plane and update the marker +
+    ; underlying Area coord. Release commits.
+    If MouseDown(2) = True And inside = True
+        If VPMarkerDragging = False
+            ; Press: hit-test for a marker. Need to render the scene
+            ; first so the camera + entity positions are current for
+            ; CameraPick, but we already did that this frame at the
+            ; END of the previous renderAndUpdate call. The picks
+            ; should still be valid since nothing has moved.
+            CameraPick VPCam, mx - x, my - y
+            Local pickedEN = PickedEntity()
+            If pickedEN <> 0 And pickedEN <> VPGround
+                Local pm.ZoneViewportMarker
+                For pm = Each ZoneViewportMarker
+                    If pm\EN = pickedEN And (pm\Kind = "portal" Or pm\Kind = "trigger" Or pm\Kind = "spawn")
+                        VPMarkerDragging = True
+                        VPMarkerDragEN   = pickedEN
+                        VPMarkerDragKind$ = pm\Kind
+                        VPMarkerDragIdx  = pm\IndexN
+                        VPMarkerDragArH  = zoneHandle
+                        Exit
+                    EndIf
+                Next
+            EndIf
+        Else
+            ; Drag: re-pick against the ground, hide the dragged marker
+            ; first so the ray passes through it.
+            HideEntity VPMarkerDragEN
+            CameraPick VPCam, mx - x, my - y
+            ShowEntity VPMarkerDragEN
+            Local groundEN = PickedEntity()
+            If groundEN = VPGround
+                Local newX# = PickedX#()
+                Local newZ# = PickedZ#()
+                ; Update marker position
+                PositionEntity VPMarkerDragEN, newX#, EntityY#(VPMarkerDragEN), newZ#
+                ; Update the underlying Area field via the existing zone
+                ; setter dispatch (handles Strict-mode dim-write trap).
+                Loom_CommitMarkerCoord(VPMarkerDragArH, VPMarkerDragKind$, VPMarkerDragIdx, newX#, newZ#)
+            EndIf
+        EndIf
+    Else
+        If VPMarkerDragging = True
+            ; Commit on release. The per-frame updates already wrote
+            ; through to the Area; just fire a toast + mark dirty.
+            If LoomComposer <> Null Then Composer::markDirtyForKind(LoomComposer, "zone")
+            Toast_Show("Moved " + VPMarkerDragKind$ + " " + Str(VPMarkerDragIdx), "success")
+            WriteLog(LoomLog, "ZoneViewport: drag commit " + VPMarkerDragKind$ + " " + Str(VPMarkerDragIdx))
+            VPMarkerDragging = False
+            VPMarkerDragEN   = 0
+            VPMarkerDragKind$ = ""
+            VPMarkerDragIdx  = -1
+        EndIf
     EndIf
 
     If inside = True
