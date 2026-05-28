@@ -37,7 +37,12 @@
 ; Non-Strict (matches MeshPreview / Settings / Recents).
 
 
-Const VP_RT_SIZE          = 384
+; Sized to fit inside the 380px composer panel (CMP_W) with the
+; standard CMP_PAD breathing room. Previously 384 which leaked
+; left of the panel and produced the overlapping-text bug a user
+; reported (composer fields and viewport overlay both drew in the
+; same X column).
+Const VP_RT_SIZE          = 320
 Const VP_SCENE_Y_OFFSET#  = 20000.0      ; isolate from mesh preview at y=10000
 Const VP_DEFAULT_CAM_DIST# = 400.0
 Const VP_MARKER_SIZE#     = 4.0
@@ -93,6 +98,17 @@ Global VPCountSpawns   = 0
 Global VPCountTriggers = 0
 Global VPCountWaypoints = 0
 Global VPCountLines    = 0     ; total connection lines emitted
+
+; Render-on-change flag. Set True any time camera / markers / highlight
+; change; consumed by Loom_DrawZoneViewport which only does
+; RenderWorld + CopyRect when True. Cached pixels persist between
+; frames so a static viewport costs ~0.
+Global VPDirty         = True
+
+; Last-frame highlight so we only ScaleEntity on TRANSITIONS instead
+; of every frame's full marker walk. Empty/-1 = no previous highlight.
+Global VPPrevHighlightKind$ = ""
+Global VPPrevHighlightIdx   = -1
 
 ; Module-level Composer pointer set by Loom.bb after construction.
 ; Lets Loom_PickZoneMarker dispatch into Composer::scrollToZoneSubEntity
@@ -521,6 +537,7 @@ Function Loom_DrawZoneViewport(zoneHandle, x, y)
     If zoneHandle <> VPLoadedZoneH
         Loom_LoadZoneMarkers(Ar)
         VPLoadedZoneH = zoneHandle
+        VPDirty = True
         WriteLog(LoomLog, "ZoneViewport: loaded zone " + Ar\Name$)
     EndIf
 
@@ -539,10 +556,13 @@ Function Loom_DrawZoneViewport(zoneHandle, x, y)
         Else
             Local dx = mx - VPLastMX
             Local dy = my - VPLastMY
-            VPYaw# = VPYaw# + Float(dx) * 0.5
-            VPPitch# = VPPitch# + Float(dy) * 0.5
-            If VPPitch# > 89.0 Then VPPitch# = 89.0
-            If VPPitch# < -89.0 Then VPPitch# = -89.0
+            If dx <> 0 Or dy <> 0
+                VPYaw# = VPYaw# + Float(dx) * 0.5
+                VPPitch# = VPPitch# + Float(dy) * 0.5
+                If VPPitch# > 89.0 Then VPPitch# = 89.0
+                If VPPitch# < -89.0 Then VPPitch# = -89.0
+                VPDirty = True
+            EndIf
             VPLastMX = mx
             VPLastMY = my
         EndIf
@@ -601,6 +621,7 @@ Function Loom_DrawZoneViewport(zoneHandle, x, y)
                 ; Update the underlying Area field via the existing zone
                 ; setter dispatch (handles Strict-mode dim-write trap).
                 Loom_CommitMarkerCoord(VPMarkerDragArH, VPMarkerDragKind$, VPMarkerDragIdx, newX#, newZ#)
+                VPDirty = True
             EndIf
         EndIf
     Else
@@ -623,6 +644,7 @@ Function Loom_DrawZoneViewport(zoneHandle, x, y)
             VPDistance# = VPDistance# - Float(wheel) * (VPDistance# * 0.08)
             If VPDistance# < 20.0 Then VPDistance# = 20.0
             If VPDistance# > 5000.0 Then VPDistance# = 5000.0
+            VPDirty = True
         EndIf
     EndIf
 
@@ -661,35 +683,48 @@ Function Loom_DrawZoneViewport(zoneHandle, x, y)
 
     ; ---- Position camera by orbit math -------------------------------------
     Local yawRad# = VPYaw# * 3.14159 / 180.0
-    Local pitchRad# = VPPitch# * 3.14159 / 180.0
-    Local cx# = VPSceneCenterX# + Cos(VPPitch#) * Sin(VPYaw#) * VPDistance#
-    Local cy# = VP_SCENE_Y_OFFSET# + VPSceneCenterY# + Sin(VPPitch#) * VPDistance#
-    Local cz# = VPSceneCenterZ# - Cos(VPPitch#) * Cos(VPYaw#) * VPDistance#
-    PositionEntity VPCam, cx#, cy#, cz#
-    PointEntity VPCam, VPGround   ; PointEntity at ground center keeps camera level
+    ; ---- Highlight transition: only scale on change -----------------------
+    ; Per-frame iteration over every marker was expensive on big zones
+    ; (3000+ entities -> 3000+ ScaleEntity calls per frame). Now only
+    ; the OLD highlighted marker shrinks back and the NEW one grows;
+    ; if the highlight didn't change, no scaling work at all.
+    If LoomZoneHighlightKind$ <> VPPrevHighlightKind$ Or LoomZoneHighlightIdx <> VPPrevHighlightIdx
+        Local hm.ZoneViewportMarker
+        For hm = Each ZoneViewportMarker
+            If hm\Kind = VPPrevHighlightKind$ And hm\IndexN = VPPrevHighlightIdx And VPPrevHighlightKind$ <> ""
+                ScaleEntity hm\EN, hm\BaseScale, hm\BaseScale, hm\BaseScale
+            Else If hm\Kind = LoomZoneHighlightKind$ And hm\IndexN = LoomZoneHighlightIdx And LoomZoneHighlightKind$ <> ""
+                ScaleEntity hm\EN, hm\BaseScale * 1.6, hm\BaseScale * 1.6, hm\BaseScale * 1.6
+            EndIf
+        Next
+        VPPrevHighlightKind$ = LoomZoneHighlightKind$
+        VPPrevHighlightIdx   = LoomZoneHighlightIdx
+        VPDirty = True
+    EndIf
 
-    ; ---- Highlight pass: scale the focused marker 1.5x ---------------------
-    ; The composer publishes LoomZoneHighlightKind/Idx during render
-    ; (set when scrolling past a sub-section). We re-scale the matching
-    ; marker bigger so it pops in the viewport. Others stay at BaseScale.
-    Local hm.ZoneViewportMarker
-    For hm = Each ZoneViewportMarker
-        If hm\Kind = LoomZoneHighlightKind$ And hm\IndexN = LoomZoneHighlightIdx And LoomZoneHighlightKind$ <> ""
-            ScaleEntity hm\EN, hm\BaseScale * 1.6, hm\BaseScale * 1.6, hm\BaseScale * 1.6
-        Else If hm\BaseScale > 0.0
-            ; Restore base scale (might have been highlighted last frame).
-            ScaleEntity hm\EN, hm\BaseScale, hm\BaseScale, hm\BaseScale
-        EndIf
-    Next
+    ; ---- Re-render to texture only when something changed ------------------
+    ; Camera orbit/pan/zoom + marker drags + highlight transitions all
+    ; set VPDirty = True. Static frames skip RenderWorld + the camera
+    ; re-position math; the cached texture from the last render gets
+    ; CopyRect'd to the back buffer below.
+    If VPDirty = True
+        Local cx# = VPSceneCenterX# + Cos(VPPitch#) * Sin(VPYaw#) * VPDistance#
+        Local cy# = VP_SCENE_Y_OFFSET# + VPSceneCenterY# + Sin(VPPitch#) * VPDistance#
+        Local cz# = VPSceneCenterZ# - Cos(VPPitch#) * Cos(VPYaw#) * VPDistance#
+        PositionEntity VPCam, cx#, cy#, cz#
+        PointEntity VPCam, VPGround
 
-    ; ---- Render -------------------------------------------------------------
-    ShowEntity VPCam
-    SetBuffer TextureBuffer(VPRT)
-    RenderWorld
-    SetBuffer BackBuffer()
-    HideEntity VPCam
+        ShowEntity VPCam
+        SetBuffer TextureBuffer(VPRT)
+        RenderWorld
+        SetBuffer BackBuffer()
+        HideEntity VPCam
 
-    ; Blit to back buffer
+        VPDirty = False
+    EndIf
+
+    ; Blit cached texture to back buffer every frame (back buffer is
+    ; cleared at the top of renderFrame so we always need to repaint).
     CopyRect 0, 0, VP_RT_SIZE, VP_RT_SIZE, x, y, TextureBuffer(VPRT), BackBuffer()
     LoomBorder x, y, VP_RT_SIZE, VP_RT_SIZE, LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B
 

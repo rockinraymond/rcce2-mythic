@@ -2716,15 +2716,25 @@ Type Composer
 
         Local y% = bodyY
 
-        // 3D schematic viewport at the top of the composer body. Shows
-        // portal/spawn/trigger/waypoint markers in 3D space with mouse
-        // orbit + zoom. Anchored to the panel right; the editable
-        // field rows flow down the left side underneath.
-        Local zvX% = panelX + panelW - 384 - CMP_PAD
+        // 3D schematic viewport at the top of the composer body. Sized
+        // to fit inside the panel width (VP_RT_SIZE = 320 leaves
+        // CMP_PAD on each side of CMP_W = 380). Centered horizontally
+        // so the panel breathing room is symmetric.
+        //
+        // Field rows flow BELOW the viewport (y += viewport height +
+        // padding) -- earlier layout had them overlapping with the
+        // viewport's overlay text, producing the "jumbled" composer
+        // a user reported.
+        Local vpW = VP_RT_SIZE
+        Local zvX% = panelX + (panelW - vpW) / 2
         Local zvY% = y
-        If Composer::canPaintRow(self, y, 384) = True
+        If Composer::canPaintRow(self, y, vpW) = True
             Loom_DrawZoneViewport(h, zvX, zvY)
         EndIf
+        // Push past the viewport (with a small gap) regardless of
+        // whether it painted -- the field-flow layout below assumes
+        // a fixed offset so all zones see the same vertical rhythm.
+        y = y + vpW + 8
 
         y = Composer::editableRow(self,    panelX, panelW, y, "Name",     "zone", h, "name",     Ar\Name$,    mx, my, clicked)
         y = Composer::toggleRow(self,      panelX, panelW, y, "Outdoors", "zone", h, "outdoors", Ar\Outdoors, mx, my, clicked)
