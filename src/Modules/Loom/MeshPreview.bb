@@ -364,14 +364,21 @@ Function Loom_DrawMeshPreview(meshID, x, y, size)
         RotateEntity PreviewMesh, 0, PreviewSpinTime#, 0
     EndIf
 
-    ; ---- Render to texture --------------------------------------------------
+    ; ---- Render directly to the back buffer at the on-screen rect ----------
+    ; Render-to-texture (SetBuffer TextureBuffer + RenderWorld) does NOT
+    ; capture 3D in this BlitzForge build: RenderWorld lands on the BACK
+    ; BUFFER at the camera's viewport regardless of SetBuffer (confirmed from
+    ; a user screenshot -- the mesh painted at the top-left 0,0 box while the
+    ; CopyRect'd texture stayed black). So aim the camera's viewport AT the
+    ; on-screen box and render straight to the back buffer. CameraViewport
+    ; confines RenderWorld's clear + draw to the box, leaving the rest of the
+    ; 2D composer frame intact.
+    CameraViewport PreviewCam, x, y, size, size
     ShowEntity PreviewCam
-    SetBuffer TextureBuffer(PreviewRT)
     RenderWorld
-    SetBuffer BackBuffer()
     HideEntity PreviewCam
-
-    Loom_BlitPreviewTexture(PreviewRT, x, y, size)
+    ; Brass border on top (used to live in Loom_BlitPreviewTexture).
+    LoomBorder x, y, size, size, LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B
 
     ; Hover hint: tiny text in the bottom-left corner of the widget
     ; describing the controls. Only painted when the mouse is inside
