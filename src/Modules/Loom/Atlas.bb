@@ -97,6 +97,15 @@ Type Atlas
                           //   doesn't churn the layout file
     Field lmbPrevDown%    // edge detector for LMB press vs held
 
+    // Viewport pan/zoom state. zoom is a multiplier on the bbox-normalized
+    // coordinate (1.0 = fit-all). panX/Y is an additive offset in
+    // normalized space (0,0 = centered fit). Mouse wheel zooms about
+    // cursor; MMB-drag pans.
+    Field viewZoom#
+    Field viewPanX#, viewPanY#
+    Field panning%
+    Field panLastMX%, panLastMY%
+
 
     Method create.Atlas(threads.Threads)
         self\threads = threads
@@ -106,6 +115,10 @@ Type Atlas
         self\draggedNode = Null
         self\dragMoved = False
         self\lmbPrevDown = False
+        self\viewZoom# = 1.0
+        self\viewPanX# = 0.0
+        self\viewPanY# = 0.0
+        self\panning = False
         Return self
     End Method
 
@@ -146,11 +159,54 @@ Type Atlas
         EndIf
 
         // Title strip
-        LoomText(viewportX + 12, viewportY + 8, "ATLAS  |  " + Str(self\nodeCount) + " zones  |  " + Str(Atlas::countManual(self)) + " pinned", LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
+        // Format zoom to one decimal -- "1.5x" reads better than "1.5000000x".
+        Local zoomPct% = Int(self\viewZoom# * 100.0)
+        LoomText(viewportX + 12, viewportY + 8, "ATLAS  |  " + Str(self\nodeCount) + " zones  |  " + Str(Atlas::countManual(self)) + " pinned  |  zoom " + Str(zoomPct) + "%", LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
 
         Local mx% = MouseX()
         Local my% = MouseY()
         Local clicked% = Loom_MouseClicked()
+
+        // Viewport pan + zoom -- only when the cursor is in the atlas
+        // viewport rect (so wheel/MMB don't fire when the cursor's
+        // over the composer or browser nav).
+        Local inViewport% = (mx >= viewportX And mx < viewportX + viewportW And my >= viewportY + 28 And my < viewportY + viewportH)
+        If inViewport = True
+            // Mouse wheel zoom. MouseZ is frame-cached via Loom_MouseWheel.
+            Local wheel% = Loom_MouseWheel()
+            If wheel <> 0
+                // Each tick = 10% zoom. Clamp 0.25..4.0 so designers
+                // can't lose the graph or zoom to oblivion.
+                self\viewZoom# = self\viewZoom# * (1.0 + Float(wheel) * 0.1)
+                If self\viewZoom# < 0.25 Then self\viewZoom# = 0.25
+                If self\viewZoom# > 4.0  Then self\viewZoom# = 4.0
+            EndIf
+
+            // MMB pan -- edge-detect: MouseDown(3) press initiates,
+            // hold updates pan, release ends. Delta is in screen-px,
+            // converted to normalized space via viewportW/H.
+            Local mmbNow% = MouseDown(3)
+            If mmbNow = True And self\panning = False
+                self\panning = True
+                self\panLastMX = mx
+                self\panLastMY = my
+            EndIf
+            If mmbNow = True And self\panning = True
+                Local dx% = mx - self\panLastMX
+                Local dy% = my - self\panLastMY
+                If viewportW - ATLAS_VIEWPORT_PAD * 2 > 0
+                    self\viewPanX# = self\viewPanX# + Float(dx) / Float(viewportW - ATLAS_VIEWPORT_PAD * 2)
+                EndIf
+                If viewportH - ATLAS_VIEWPORT_PAD * 2 > 0
+                    self\viewPanY# = self\viewPanY# + Float(dy) / Float(viewportH - ATLAS_VIEWPORT_PAD * 2)
+                EndIf
+                self\panLastMX = mx
+                self\panLastMY = my
+            EndIf
+            If mmbNow = False And self\panning = True
+                self\panning = False
+            EndIf
+        EndIf
 
         // "Reset Positions" button in the title strip's right edge.
         // Clears every node's Manual flag + triggers a fresh force-
@@ -383,6 +439,10 @@ Type Atlas
     Method worldToScreenX%(vx%, vw%, wx#)
         Local span# = self\maxX# - self\minX#
         Local norm# = (wx# - self\minX#) / span#
+        // Apply user zoom + pan. Zoom is about the centre (norm 0.5)
+        // so the visible content scales without drifting. Pan adds
+        // a normalized offset.
+        norm# = (norm# - 0.5) * self\viewZoom# + 0.5 + self\viewPanX#
         Return vx + ATLAS_VIEWPORT_PAD + Int(norm# * Float(vw - ATLAS_VIEWPORT_PAD * 2))
     End Method
 
@@ -390,6 +450,7 @@ Type Atlas
     Method worldToScreenY%(vy%, vh%, wy#)
         Local span# = self\maxY# - self\minY#
         Local norm# = (wy# - self\minY#) / span#
+        norm# = (norm# - 0.5) * self\viewZoom# + 0.5 + self\viewPanY#
         Return vy + ATLAS_VIEWPORT_PAD + Int(norm# * Float(vh - ATLAS_VIEWPORT_PAD * 2))
     End Method
 
@@ -397,13 +458,17 @@ Type Atlas
     // -------------------------------------------------------------------------
     // screenToWorldX / screenToWorldY -- inverse of worldToScreen*. Drag
     // converts screen-space mouse positions back to world-space so the
-    // node tracks the cursor regardless of viewport size.
+    // node tracks the cursor regardless of viewport size, zoom, or pan.
     // -------------------------------------------------------------------------
     Method screenToWorldX#(vx%, vw%, sx%)
         Local span# = self\maxX# - self\minX#
         Local inner% = vw - ATLAS_VIEWPORT_PAD * 2
         If inner <= 0 Then Return self\minX#
         Local norm# = Float(sx - vx - ATLAS_VIEWPORT_PAD) / Float(inner)
+        // Inverse of worldToScreen's zoom + pan: subtract pan, undo
+        // the centre-scaling.
+        norm# = norm# - self\viewPanX#
+        norm# = (norm# - 0.5) / self\viewZoom# + 0.5
         Return self\minX# + norm# * span#
     End Method
 
@@ -413,6 +478,8 @@ Type Atlas
         Local inner% = vh - ATLAS_VIEWPORT_PAD * 2
         If inner <= 0 Then Return self\minY#
         Local norm# = Float(sy - vy - ATLAS_VIEWPORT_PAD) / Float(inner)
+        norm# = norm# - self\viewPanY#
+        norm# = (norm# - 0.5) / self\viewZoom# + 0.5
         Return self\minY# + norm# * span#
     End Method
 
@@ -686,6 +753,12 @@ Type Atlas
         For n = Each AtlasNode
             n\Manual = False
         Next
+        // Also reset zoom + pan so the freshly-laid-out graph fills
+        // the viewport again. Designers who clicked "reset positions"
+        // implicitly want the full canonical view back.
+        self\viewZoom# = 1.0
+        self\viewPanX# = 0.0
+        self\viewPanY# = 0.0
         // Delete persisted layout so applySavedLayout (called from
         // rebuildLayout) doesn't re-impose the old positions on top
         // of the fresh force-directed pass.
