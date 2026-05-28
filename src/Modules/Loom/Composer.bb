@@ -177,6 +177,18 @@ Type Composer
     Field discardArmKind$
     Field discardArmAt%
 
+    // Tab-navigation per-frame field list. Each editable row helper
+    // appends its (kind, refID, fieldId) here via recordField at paint
+    // time. pumpKeyboard reads the list (from the PRIOR frame's paint)
+    // to advance the active edit on Tab / Shift+Tab. 512 is enough for
+    // even the densest entity composer (Actor with all 96 attribute
+    // cells + appearance arrays comes in at ~250).
+    Field rowFieldKinds$[512]
+    Field rowFieldRefIDs%[512]
+    Field rowFieldIds$[512]
+    Field rowFieldValues$[512]   // cached storedValue for Tab-seed
+    Field rowFieldCount%
+
     // Palette reference -- set by setPalette from Loom.bb at construction.
     // Used by chipRow to dispatch picker-mode opens on right-click of a
     // thread chip.
@@ -287,6 +299,12 @@ Type Composer
                 self\scrollOffset = 0
             EndIf
         EndIf
+
+        // Reset the per-frame editable-field list before render. Each
+        // editableRow/editableIntRow/etc. helper appends via recordField
+        // as it paints. pumpKeyboard reads this list (prior frame) to
+        // advance the active edit on Tab.
+        self\rowFieldCount = 0
 
         // Mouse wheel scroll. MouseZ() returns ticks since last poll;
         // each tick is CMP_SCROLL_STEP pixels. Inverted: wheel-down is
@@ -735,6 +753,10 @@ Type Composer
     // (cellX, cellW) rather than the row's full value column.
     // -------------------------------------------------------------------------
     Method miniEditCell(cellX%, cellY%, cellW%, cellH%, textRowY%, kind$, refID%, fieldId$, storedValue$, mx%, my%, clicked%, visible%)
+        // Record for Tab navigation -- doubleIntRow calls this for both
+        // cells, so a Tab on the Value cell advances to Max and another
+        // Tab to the next row's Value etc.
+        Composer::recordField(self, kind, refID, fieldId, storedValue)
         Local active% = (self\editKind = kind And self\editRefID = refID And self\editFieldId = fieldId)
         Local hovered% = (mx >= cellX And mx < cellX + cellW And my >= cellY And my < cellY + cellH)
 
@@ -834,6 +856,10 @@ Type Composer
     // Returns the next Y.
     // -------------------------------------------------------------------------
     Method editableRow%(panelX%, panelW%, rowY%, label$, kind$, refID%, fieldId$, storedValue$, mx%, my%, clicked%)
+        // Record for Tab navigation. Done unconditionally (even off-
+        // screen rows), so Shift+Tab to a scrolled-up row still finds
+        // it. The row's visibility only affects mouse hit-testing.
+        Composer::recordField(self, kind, refID, fieldId, storedValue)
         Local valX% = panelX + CMP_PAD + 120
         Local valY% = rowY - 3
         Local valW% = panelW - CMP_PAD * 2 - 120
@@ -1064,6 +1090,17 @@ Type Composer
             Return
         EndIf
 
+        // Tab -- commit current edit + advance to next editable field
+        // in the prior frame's render order. Shift+Tab goes backwards.
+        // KeyHit(15) = Tab, KeyDown(42) = LShift, KeyDown(54) = RShift.
+        If KeyHit(15)
+            Local shift% = (KeyDown(42) Or KeyDown(54))
+            Local stepDir% = 1
+            If shift = True Then stepDir = -1
+            Composer::advanceEditField(self, stepDir)
+            Return
+        EndIf
+
         // Esc -- cancel (consumed here so Loom's outer Esc doesn't fire)
         If KeyHit(1)
             Composer::cancelEdit(self)
@@ -1079,6 +1116,69 @@ Type Composer
             EndIf
             k = GetKey()
         Wend
+    End Method
+
+
+    // -------------------------------------------------------------------------
+    // recordField -- per-frame field-list append. Called by every
+    // editable-row helper during render. Used by Tab navigation in
+    // pumpKeyboard to find the next/prev field after the current edit.
+    // Cap silently at 512 -- the dropped fields just can't be tabbed to
+    // (only matters for very dense composers; users will still hit a
+    // visible row by mouse or scrolling).
+    // -------------------------------------------------------------------------
+    Method recordField(kind$, refID%, fieldId$, storedValue$)
+        If self\rowFieldCount >= 512 Then Return
+        self\rowFieldKinds$[self\rowFieldCount] = kind
+        self\rowFieldRefIDs[self\rowFieldCount] = refID
+        self\rowFieldIds$[self\rowFieldCount] = fieldId
+        self\rowFieldValues$[self\rowFieldCount] = storedValue
+        self\rowFieldCount = self\rowFieldCount + 1
+    End Method
+
+
+    // -------------------------------------------------------------------------
+    // advanceEditField -- on Tab / Shift+Tab, commit the current edit
+    // and beginEdit on the next/prev recorded field. Wraps end-to-start
+    // and start-to-end so the user can cycle continuously.
+    //
+    // Uses the prior frame's recordField list (still in the rowField*
+    // arrays since renderAndUpdate resets at start of frame and
+    // pumpKeyboard runs from inside renderAndUpdate after the previous
+    // frame's paint already populated them; effectively a one-frame
+    // lag with no visible artifact).
+    // -------------------------------------------------------------------------
+    Method advanceEditField(stepDir%)
+        If self\rowFieldCount = 0 Then Return
+        If self\editKind = "" Then Return    // not editing -- nothing to advance from
+
+        // Find current edit in the list.
+        Local curIdx% = -1
+        Local i% = 0
+        For i = 0 To self\rowFieldCount - 1
+            If self\rowFieldKinds$[i] = self\editKind And self\rowFieldRefIDs[i] = self\editRefID And self\rowFieldIds$[i] = self\editFieldId
+                curIdx = i
+                Exit
+            EndIf
+        Next
+        If curIdx < 0 Then Return     // current edit isn't in the list (off-screen?)
+
+        // Wrap-around index step.
+        Local nextIdx% = curIdx + stepDir
+        If nextIdx < 0 Then nextIdx = self\rowFieldCount - 1
+        If nextIdx >= self\rowFieldCount Then nextIdx = 0
+
+        // Commit current, then begin edit on the new target. We need
+        // to read the new target's stored value -- the recordField
+        // list only has identity, not value. Use a per-kind readField
+        // helper would be ideal but we don't have one. Workaround:
+        // commit current edit which writes the buffer back, then
+        // call beginEdit with "" as the seed -- the user will see an
+        // empty buffer they can type into, OR cancel (Esc) without
+        // mutating. Acceptable for first cut; iter 76 can add proper
+        // readField to seed the buffer with the current value.
+        Composer::commitEdit(self)
+        Composer::beginEdit(self, self\rowFieldKinds$[nextIdx], self\rowFieldRefIDs[nextIdx], self\rowFieldIds$[nextIdx], self\rowFieldValues$[nextIdx])
     End Method
 
 

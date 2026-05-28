@@ -111,6 +111,7 @@ Type Help
         rowY = Help::section(self, modalX, rowY, "Composer (focused entity)")
         rowY = Help::row(self, modalX, rowY, "Click field",        "Begin editing (text / number)")
         rowY = Help::row(self, modalX, rowY, "Enter",              "Commit edit")
+        rowY = Help::row(self, modalX, rowY, "Tab / Shift+Tab",    "Commit + advance to next/prev editable field")
         rowY = Help::row(self, modalX, rowY, "Esc (during edit)",  "Cancel edit")
         rowY = Help::row(self, modalX, rowY, "Click toggle pill",  "Flip a bool field")
         rowY = Help::row(self, modalX, rowY, "Left-click chip",    "Jump to referenced entity")
