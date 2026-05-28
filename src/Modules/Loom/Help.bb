@@ -95,6 +95,7 @@ Type Help
         rowY = Help::row(self, modalX, rowY, "Ctrl+H",       "Session timeline (edit history + revert)")
         rowY = Help::row(self, modalX, rowY, "Ctrl+R",       "Recents (jump to recently-focused entity)")
         rowY = Help::row(self, modalX, rowY, "Ctrl+S",       "Save All (every dirty kind)")
+        rowY = Help::row(self, modalX, rowY, "Ctrl+F",       "Find in scripts (grep across .rsl)")
         rowY = Help::row(self, modalX, rowY, "F1",           "This help screen")
         rowY = Help::row(self, modalX, rowY, "Esc",          "Pop / close / exit (priority chain)")
         rowY = rowY + 6
