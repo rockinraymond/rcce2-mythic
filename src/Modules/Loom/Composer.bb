@@ -2573,6 +2573,17 @@ Type Composer
             Loom_DrawThumbnailLarge(It\ThumbnailTexID, thumbX, thumbY)
         EndIf
         y = y + 50   ; padding so the next row clears the 64px-tall preview
+
+        // 3D mesh preview of the male item mesh (sword model, etc.).
+        // Same widget shape as the actor composer; sits anchored to the
+        // right of the int rows. Skipped if MMeshID is 0 (placeholder
+        // paints in that case via Loom_DrawMeshPreview's own check).
+        Local itemPreviewX% = panelX + panelW - LOOM_PREVIEW_SIZE - CMP_PAD
+        Local itemPreviewY% = y
+        If Composer::canPaintRow(self, y, LOOM_PREVIEW_SIZE) = True
+            Loom_DrawMeshPreview(It\MMeshID, itemPreviewX, itemPreviewY, LOOM_PREVIEW_SIZE)
+        EndIf
+
         y = Composer::editableIntRow(self, panelX, panelW, y, "Male mesh",      "item", It\ID, "m_mesh",     It\MMeshID,        mx, my, clicked)
         y = Composer::editableIntRow(self, panelX, panelW, y, "Female mesh",    "item", It\ID, "f_mesh",     It\FMeshID,        mx, my, clicked)
         y = Composer::editableIntRow(self, panelX, panelW, y, "Image (img-typ)","item", It\ID, "image_id",   It\ImageID,        mx, my, clicked)

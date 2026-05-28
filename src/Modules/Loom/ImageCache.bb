@@ -58,6 +58,11 @@ Global FrameImageLoadCount = 0
 ; =============================================================================
 Global LoomFrameMouseClicked      = False
 Global LoomFrameMouseRightClicked = False
+; MouseZ() is also read-and-clear (cumulative wheel delta since last
+; call). Same per-frame cache shape as the click state -- without
+; caching, two renderers calling MouseZ in the same frame would
+; double-consume the wheel tick.
+Global LoomFrameMouseWheel        = 0
 
 
 ; =============================================================================
@@ -72,6 +77,7 @@ Function Loom_BeginFrame()
     ; rendering pipelines aren't equipped to handle counts.
     LoomFrameMouseClicked      = (MouseHit(1) > 0)
     LoomFrameMouseRightClicked = (MouseHit(2) > 0)
+    LoomFrameMouseWheel        = MouseZ()
 End Function
 
 
@@ -83,6 +89,10 @@ End Function
 
 Function Loom_MouseRightClicked%()
     Return LoomFrameMouseRightClicked
+End Function
+
+Function Loom_MouseWheel%()
+    Return LoomFrameMouseWheel
 End Function
 
 
