@@ -1265,6 +1265,28 @@ Function SetFactionRelation(FromIdx, ToIdx, Rating)
 	FactionDefaultRatings(FromIdx, ToIdx) = Rating
 End Function
 
+; Non-Strict setters for the AttributeNames$ / AttributeIsSkill /
+; AttributeHidden arrays + AttributeAssignment global. Used by Loom's
+; Settings catalog editor. Same dim-write-from-Strict trap rationale.
+Function SetAttributeName(Index, Name$)
+	If Index < 0 Or Index > 39 Then Return
+	AttributeNames$(Index) = Name$
+End Function
+
+Function SetAttributeIsSkill(Index, IsSkill)
+	If Index < 0 Or Index > 39 Then Return
+	AttributeIsSkill(Index) = IsSkill
+End Function
+
+Function SetAttributeHidden(Index, Hidden)
+	If Index < 0 Or Index > 39 Then Return
+	AttributeHidden(Index) = Hidden
+End Function
+
+Function SetAttributeAssignment(Val)
+	AttributeAssignment = Val
+End Function
+
 ; Duplicate an Actor template -- allocate a new ID via CreateActor, copy
 ; every field including the Attributes side-instance (deep-copied so the
 ; clone has its own backing storage). Returns the new ID, or -1 if

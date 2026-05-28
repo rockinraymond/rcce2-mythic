@@ -495,6 +495,31 @@ Function LoadDamageTypes(Filename$)
 
 End Function
 
+; Saves DamageTypes$ to a .dat file via SafeWriteOpen/Commit (atomic).
+; Mirrors LoadDamageTypes' on-disk format: 20 bounded strings.
+; Added for Loom's catalog editor (Settings tab); GUE has no editor for
+; this file so it was previously hand-edited as binary.
+Function SaveDamageTypes(Filename$)
+
+	Local Temp$ = SafeWriteOpen$(Filename$)
+	F = WriteFile(Temp$)
+	If F = 0 Then Return False
+
+		For i = 0 To 19
+			WriteString(F, DamageTypes$(i))
+		Next
+
+	Return SafeWriteCommit%(Temp$, Filename$, F)
+
+End Function
+
+; Non-Strict setter for DamageTypes$ -- Strict callers in Loom can't write
+; to the Dim'd array directly. Same shape as SetFactionName / SetFactionRelation.
+Function SetDamageTypeName(Index, Name$)
+	If Index < 0 Or Index > 19 Then Return
+	DamageTypes$(Index) = Name$
+End Function
+
 ; Looks up a damage type number from the name
 Function FindDamageType(Name$)
 

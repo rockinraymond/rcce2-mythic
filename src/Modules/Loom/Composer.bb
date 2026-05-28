@@ -1096,6 +1096,35 @@ Type Composer
             If fieldId = "money3x"        Then LoomSettings_SetMoney3x(Composer::parseIntClamped(self, value, LoomCfg_Money3x, 0, 32767))              : Return
             If fieldId = "money4_name"    Then LoomSettings_SetMoney4$(value)          : Return
             If fieldId = "money4x"        Then LoomSettings_SetMoney4x(Composer::parseIntClamped(self, value, LoomCfg_Money4x, 0, 32767))              : Return
+
+            // Damage types catalog: fieldId = "damage_<i>" (i in 0..19)
+            If Left$(fieldId, 7) = "damage_"
+                Local dIdx% = Int(Mid$(fieldId, 8))
+                SetDamageTypeName(dIdx, value)
+                Return
+            EndIf
+
+            // Attribute catalog: fieldId = "attr_assignment" |
+            // "attr_name_<i>" | "attr_skill_<i>" | "attr_hidden_<i>" (i in 0..39)
+            If fieldId = "attr_assignment"
+                SetAttributeAssignment(Composer::parseIntClamped(self, value, AttributeAssignment, 0, 10))
+                Return
+            EndIf
+            If Left$(fieldId, 10) = "attr_name_"
+                Local anIdx% = Int(Mid$(fieldId, 11))
+                SetAttributeName(anIdx, value)
+                Return
+            EndIf
+            If Left$(fieldId, 11) = "attr_skill_"
+                Local askIdx% = Int(Mid$(fieldId, 12))
+                SetAttributeIsSkill(askIdx, (value = "1"))
+                Return
+            EndIf
+            If Left$(fieldId, 12) = "attr_hidden_"
+                Local ahIdx% = Int(Mid$(fieldId, 13))
+                SetAttributeHidden(ahIdx, (value = "1"))
+                Return
+            EndIf
         EndIf
 
         // ---- ANIMSET --------------------------------------------------------
@@ -2959,6 +2988,34 @@ Type Composer
         y = Composer::editableIntRow(self, panelX, panelW, y, "Tier 3 = N x 2", "settings", 0, "money3x",     LoomCfg_Money3x, mx, my, clicked)
         y = Composer::editableRow(self,    panelX, panelW, y, "Tier 4 name",    "settings", 0, "money4_name", LoomCfg_Money4$, mx, my, clicked)
         y = Composer::editableIntRow(self, panelX, panelW, y, "Tier 4 = N x 3", "settings", 0, "money4x",     LoomCfg_Money4x, mx, my, clicked)
+
+        // Damage Types catalog (Damage.dat) -- 20 named slots used by
+        // combat damage type lookups. Empty slot N = no damage type N.
+        y = Composer::sectionHeader(self, panelX, panelW, y, "Damage types")
+        Local di%
+        For di = 0 To 19
+            y = Composer::editableRow(self, panelX, panelW, y, "Type " + Str(di), "settings", 0, "damage_" + Str(di), DamageTypes$(di), mx, my, clicked)
+        Next
+
+        // Attribute Names catalog (Attributes.dat) -- 40 named slots used
+        // by per-actor/per-item Attributes\Value[i] indexing. Each slot
+        // has Name + IsSkill (skill vs stat) + Hidden (visible to player).
+        y = Composer::sectionHeader(self, panelX, panelW, y, "Attribute assignment")
+        y = Composer::editableIntRow(self, panelX, panelW, y, "Assignment mode", "settings", 0, "attr_assignment", AttributeAssignment, mx, my, clicked)
+
+        y = Composer::sectionHeader(self, panelX, panelW, y, "Attributes catalog")
+        Local ai%
+        For ai = 0 To 39
+            // Sub-header per slot index
+            If Composer::canPaintRow(self, y, CMP_ROW_H) = True
+                LoomText(panelX + CMP_PAD, y + 4, "Slot " + Str(ai), LOOM_ARCANE_500_R, LOOM_ARCANE_500_G, LOOM_ARCANE_500_B)
+            EndIf
+            y = y + CMP_ROW_H
+            y = Composer::editableRow(self, panelX, panelW, y, "Name",   "settings", 0, "attr_name_" + Str(ai),   AttributeNames$(ai),    mx, my, clicked)
+            y = Composer::toggleRow(self,   panelX, panelW, y, "Skill",  "settings", 0, "attr_skill_" + Str(ai),  AttributeIsSkill(ai),   mx, my, clicked)
+            y = Composer::toggleRow(self,   panelX, panelW, y, "Hidden", "settings", 0, "attr_hidden_" + Str(ai), AttributeHidden(ai),    mx, my, clicked)
+            y = y + 4
+        Next
 
         Composer::recordContentBottom(self, y)
     End Method

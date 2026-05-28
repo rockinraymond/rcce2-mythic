@@ -207,7 +207,17 @@ Function Loom_SaveSettings()
     Result = SafeWriteCommit%(TempPath$, FinalPath$, F)
     If Result = False Then Return False
 
+    ; --- Damage.dat (DamageTypes$ catalog) ----------------------------------
+    ; Uses the new SaveDamageTypes helper added to Items.bb.
+    Result = SaveDamageTypes("Data\Server Data\Damage.dat")
+    If Result = False Then Return False
+
+    ; --- Attributes.dat (AttributeNames$ + flags + AttributeAssignment) -----
+    ; Reuses the existing SaveAttributes function in Actors.bb.
+    Result = SaveAttributes("Data\Server Data\Attributes.dat")
+    If Result = False Then Return False
+
     SettingsSaved = True
-    WriteLog(LoomLog, "Settings: saved project config")
+    WriteLog(LoomLog, "Settings: saved project config (Misc+Hosts+Other+Money+Damage+Attributes)")
     Return True
 End Function
