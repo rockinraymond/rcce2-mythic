@@ -122,6 +122,7 @@ Include "Modules\Loom\Atlas.bb"
 Include "Modules\Loom\Timeline.bb"
 Include "Modules\Loom\Tools.bb"
 Include "Modules\Loom\ScriptsCatalog.bb"
+Include "Modules\Loom\ScriptSearch.bb"
 Include "Modules\Loom\Recents.bb"
 Include "Modules\Loom\EntityFactory.bb"
 Include "Modules\Loom\SaveAll.bb"
@@ -158,6 +159,7 @@ Type Loom
     Field worldCache.WorldCache
     Field exitPrompt.ExitPrompt
     Field help.Help
+    Field scriptSearch.ScriptSearch
     Field toasts.Toasts
 
 
@@ -247,6 +249,12 @@ Type Loom
         // interaction. No dependencies; just a paint surface.
         self\help = New Help()
 
+        // Script search (Ctrl+F) -- modal that grep-searches every .rsl
+        // in the Scripts catalog for a substring. Lets a designer find
+        // every script that calls a BVM, references a faction by name,
+        // mentions an item, etc. without leaving Loom.
+        self\scriptSearch = New ScriptSearch(self\threads)
+
         // Toasts -- transient bottom-right notifications. Surfaces fire
         // via Toast_Show facade; the singleton renders auto-fades after
         // TOAST_TTL_MS. Same recorder-facade pattern as Timeline /
@@ -286,7 +294,7 @@ Type Loom
         // no-ops if already open). Detect BEFORE any other input handler
         // so openModal's FlushKeys swallows the K/H keystroke before it
         // can land in a query buffer.
-        If Palette::isOpen(self\palette) = False And Timeline::isOpen(self\timeline) = False And BrokenRefs::isOpen(self\brokenRefs) = False And Recents::isOpen(self\recents) = False And ExitPrompt::isOpen(self\exitPrompt) = False And Help::isOpen(self\help) = False
+        If Palette::isOpen(self\palette) = False And Timeline::isOpen(self\timeline) = False And BrokenRefs::isOpen(self\brokenRefs) = False And Recents::isOpen(self\recents) = False And ExitPrompt::isOpen(self\exitPrompt) = False And Help::isOpen(self\help) = False And ScriptSearch::isOpen(self\scriptSearch) = False
             If (KeyDown(29) Or KeyDown(157)) And KeyHit(37)
                 Palette::openModal(self\palette)
             Else If (KeyDown(29) Or KeyDown(157)) And KeyHit(35)
@@ -299,6 +307,10 @@ Type Loom
                 // to write everything; the per-kind Save buttons are
                 // for when you only want to save one tab's state.
                 SaveAll_Persist(self\composer)
+            Else If (KeyDown(29) Or KeyDown(157)) And KeyHit(33)
+                // Ctrl+F -- find in scripts. Grep across every .rsl in
+                // the catalog. Closes the "where is BVM_X called?" gap.
+                ScriptSearch::openModal(self\scriptSearch)
             Else If KeyHit(59)
                 // F1 -- cheat sheet. No Ctrl required since F-keys are
                 // unambiguous discovery affordances.
@@ -316,6 +328,7 @@ Type Loom
         If Recents::isOpen(self\recents) = True Then browserInput = False
         If ExitPrompt::isOpen(self\exitPrompt) = True Then browserInput = False
         If Help::isOpen(self\help) = True Then browserInput = False
+        If ScriptSearch::isOpen(self\scriptSearch) = True Then browserInput = False
         If Composer::isEditing(self\composer) = True Then browserInput = False
 
         // Pass composer width so the browser's card grid shrinks to
@@ -342,7 +355,8 @@ Type Loom
         Local paletteAte%    = Palette::renderAndUpdate(self\palette, self\windowWidth, self\windowHeight)
         Local exitPromptAte% = ExitPrompt::renderAndUpdate(self\exitPrompt, self\windowWidth, self\windowHeight)
         Local helpAte%       = Help::renderAndUpdate(self\help, self\windowWidth, self\windowHeight)
-        Local modalAte%      = (timelineAte Or brokenRefsAte Or recentsAte Or paletteAte Or exitPromptAte Or helpAte)
+        Local scriptSearchAte% = ScriptSearch::renderAndUpdate(self\scriptSearch, self\windowWidth, self\windowHeight)
+        Local modalAte%      = (timelineAte Or brokenRefsAte Or recentsAte Or paletteAte Or exitPromptAte Or helpAte Or scriptSearchAte)
 
         // Toasts paint on top of everything (above modals) so success/
         // failure feedback is visible even while a modal is up. They
