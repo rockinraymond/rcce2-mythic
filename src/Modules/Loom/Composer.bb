@@ -2386,6 +2386,19 @@ Type Composer
         // via the existing ImageCache. Mesh fields render as plain int
         // rows since mesh preview requires a 3D viewport (ADR 004).
         y = Composer::sectionHeader(self, panelX, panelW, y, "Body meshes")
+
+        // 3D mesh preview widget -- LOOM_PREVIEW_SIZE square, anchored to
+        // the panel's right side. Renders A\MeshIDs[0] (male base) with
+        // an auto-spinning camera. The editable int rows for the 8 mesh
+        // slots flow down the LEFT side of the panel underneath; the
+        // preview overlaps with them visually but the int inputs are
+        // shorter so the preview sits cleanly to the right.
+        Local previewX% = panelX + panelW - LOOM_PREVIEW_SIZE - CMP_PAD
+        Local previewY% = y
+        If Composer::canPaintRow(self, y, LOOM_PREVIEW_SIZE) = True
+            Loom_DrawMeshPreview(A\MeshIDs[0], previewX, previewY, LOOM_PREVIEW_SIZE)
+        EndIf
+
         y = Composer::editableIntRow(self, panelX, panelW, y, "Male base",     "actor", A\ID, "mesh_0", A\MeshIDs[0], mx, my, clicked)
         y = Composer::editableIntRow(self, panelX, panelW, y, "Female base",   "actor", A\ID, "mesh_1", A\MeshIDs[1], mx, my, clicked)
         Local mi%
