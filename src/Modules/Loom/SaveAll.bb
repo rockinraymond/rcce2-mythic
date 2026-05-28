@@ -158,7 +158,9 @@ Type ExitPrompt
         LoomBorder(modalX + 1, modalY + 1, EXITPROMPT_MODAL_W - 2, EXITPROMPT_MODAL_H - 2, LOOM_BRASS_700_R, LOOM_BRASS_700_G, LOOM_BRASS_700_B)
         LoomFill(modalX, modalY, EXITPROMPT_MODAL_W, 3, LOOM_WARNING_R, LOOM_WARNING_G, LOOM_WARNING_B)
 
-        LoomText(modalX + EXITPROMPT_PAD, modalY + 16, "UNSAVED CHANGES", LOOM_WARNING_R, LOOM_WARNING_G, LOOM_WARNING_B)
+        LoomTheme_UseDisplay()
+        LoomText(modalX + EXITPROMPT_PAD, modalY + 12, "UNSAVED CHANGES", LOOM_WARNING_R, LOOM_WARNING_G, LOOM_WARNING_B)
+        LoomTheme_UseBody()
         LoomText(modalX + EXITPROMPT_PAD, modalY + 40, "Loom has unsaved edits. What should it do?", LOOM_PARCHMENT_100_R, LOOM_PARCHMENT_100_G, LOOM_PARCHMENT_100_B)
 
         // Three buttons across the bottom: Save All / Discard / Cancel

@@ -268,7 +268,9 @@ Type Palette
 
         // Top brass strip + LOOM tag
         LoomFill(modalX, modalY, PAL_MODAL_W, 3, LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
-        LoomText(modalX + PAL_PAD, modalY + 8, "FIND  ANYTHING", LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
+        LoomTheme_UseDisplay()
+        LoomText(modalX + PAL_PAD, modalY + 6, "FIND  ANYTHING", LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
+        LoomTheme_UseBody()
     End Method
 
 

@@ -229,10 +229,12 @@ Type BrokenRefs
         LoomBorder(modalX + 1, modalY + 1, BROKENREFS_MODAL_W - 2, BROKENREFS_MODAL_H - 2, LOOM_BRASS_700_R, LOOM_BRASS_700_G, LOOM_BRASS_700_B)
         LoomFill(modalX, modalY, BROKENREFS_MODAL_W, 3, LOOM_DANGER_R, LOOM_DANGER_G, LOOM_DANGER_B)
 
-        // Header
+        // Header in display font
         Local headerTxt$ = "BROKEN REFERENCES  |  " + Str(self\entryCount)
         If self\entryCount >= BROKENREFS_MAX_ENTRIES Then headerTxt = headerTxt + "+ (capped)"
-        LoomText(modalX + BROKENREFS_PAD, modalY + 10, headerTxt, LOOM_DANGER_R, LOOM_DANGER_G, LOOM_DANGER_B)
+        LoomTheme_UseDisplay()
+        LoomText(modalX + BROKENREFS_PAD, modalY + 6, headerTxt, LOOM_DANGER_R, LOOM_DANGER_G, LOOM_DANGER_B)
+        LoomTheme_UseBody()
 
         BrokenRefs::drawEntries(self, modalX, modalY + BROKENREFS_HEADER_H, mx, my, clicked)
 

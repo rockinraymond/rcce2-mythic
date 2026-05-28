@@ -451,10 +451,14 @@ Type Browser
         LoomHRule(0, BR_TOP_RIBBON,     sw, LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
         LoomHRule(0, BR_TOP_RIBBON + 1, sw, LOOM_BRASS_700_R, LOOM_BRASS_700_G, LOOM_BRASS_700_B)
 
-        LoomText(20, stripY + 18, "LOOM",    LOOM_PARCHMENT_100_R, LOOM_PARCHMENT_100_G, LOOM_PARCHMENT_100_B)
-        LoomText(20, stripY + 32, "Browser", LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
-
-        LoomTextCentered(sw / 2, stripY + 22, project$, LOOM_PARCHMENT_100_R, LOOM_PARCHMENT_100_G, LOOM_PARCHMENT_100_B)
+        // Brand mark in display font for visual weight; project name in
+        // display font too since it's the user's anchor. Sub-label
+        // ("Browser") stays in the body font as supporting text.
+        LoomTheme_UseDisplay()
+        LoomText(20, stripY + 14, "LOOM", LOOM_PARCHMENT_100_R, LOOM_PARCHMENT_100_G, LOOM_PARCHMENT_100_B)
+        LoomTextCentered(sw / 2, stripY + 18, project$, LOOM_PARCHMENT_100_R, LOOM_PARCHMENT_100_G, LOOM_PARCHMENT_100_B)
+        LoomTheme_UseBody()
+        LoomText(20, stripY + 36, "Browser", LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
     End Method
 
 
@@ -979,7 +983,7 @@ Type Browser
         LoomGradientV(0, y, sw, BR_BOT_RIBBON, LOOM_STONE_850_R, LOOM_STONE_850_G, LOOM_STONE_850_B, LOOM_STONE_900_R, LOOM_STONE_900_G, LOOM_STONE_900_B)
         LoomHRule(0, y, sw, LOOM_BRASS_700_R, LOOM_BRASS_700_G, LOOM_BRASS_700_B)
 
-        LoomText(20, y + 10, "click a card to focus  |  follow threads in the composer  |  Esc to exit", LOOM_STONE_200_R, LOOM_STONE_200_G, LOOM_STONE_200_B)
+        LoomText(20, y + 10, "click a card to focus  |  follow threads in the composer  |  F1 for shortcuts  |  Esc to exit", LOOM_STONE_200_R, LOOM_STONE_200_G, LOOM_STONE_200_B)
     End Method
 
 

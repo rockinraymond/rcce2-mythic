@@ -166,8 +166,10 @@ Type Timeline
         LoomBorder(modalX + 1, modalY + 1, TIMELINE_MODAL_W - 2, TIMELINE_MODAL_H - 2, LOOM_BRASS_700_R, LOOM_BRASS_700_G, LOOM_BRASS_700_B)
         LoomFill(modalX, modalY, TIMELINE_MODAL_W, 3, LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
 
-        // Header
-        LoomText(modalX + TIMELINE_PAD, modalY + 10, "SESSION TIMELINE  |  " + Str(self\entryCount) + " entries", LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
+        // Header in display font
+        LoomTheme_UseDisplay()
+        LoomText(modalX + TIMELINE_PAD, modalY + 6, "SESSION TIMELINE  |  " + Str(self\entryCount) + " entries", LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
+        LoomTheme_UseBody()
 
         // Entry list (newest first -- walk type pool backward via After
         // /  Before, which Blitz3D exposes through Last + Before).
