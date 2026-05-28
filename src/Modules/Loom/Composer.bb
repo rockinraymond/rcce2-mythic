@@ -816,6 +816,38 @@ Type Composer
             If fieldId = "class"          Then I\ExclusiveClass$ = value : Return
             If fieldId = "stackable"      Then I\Stackable   = (value = "1") : Return
             If fieldId = "breakable"      Then I\TakesDamage = (value = "1") : Return
+            If fieldId = "weapon_dmg_type" Then I\WeaponDamageType = Composer::parseIntClamped(self, value, I\WeaponDamageType, 0, 19) : Return
+            If fieldId = "weapon_type"    Then I\WeaponType   = Composer::parseIntClamped(self, value, I\WeaponType, 0, 255) : Return
+            If fieldId = "ranged_proj"    Then I\RangedProjectile = Composer::parseIntClamped(self, value, I\RangedProjectile, 0, 65535) : Return
+            If fieldId = "ranged_anim"    Then I\RangedAnimation$ = value : Return
+            If fieldId = "eat_length"     Then I\EatEffectsLength = Composer::parseIntClamped(self, value, I\EatEffectsLength, 0, 3600000) : Return
+            If fieldId = "thumb_tex"      Then I\ThumbnailTexID = Composer::parseIntClamped(self, value, I\ThumbnailTexID, 0, 65535) : Return
+            If fieldId = "m_mesh"         Then I\MMeshID      = Composer::parseIntClamped(self, value, I\MMeshID, 0, 65535) : Return
+            If fieldId = "f_mesh"         Then I\FMeshID      = Composer::parseIntClamped(self, value, I\FMeshID, 0, 65535) : Return
+            If fieldId = "image_id"       Then I\ImageID      = Composer::parseIntClamped(self, value, I\ImageID, 0, 65535) : Return
+            If fieldId = "misc_data"      Then I\MiscData$    = value : Return
+            // Gubbins -- 5 equip-slot activation flags, fieldId "gubbin_<i>"
+            If Left$(fieldId, 7) = "gubbin_"
+                Local giI% = Int(Mid$(fieldId, 8))
+                If giI >= 0 And giI <= 4 Then I\Gubbins[giI] = (value = "1")
+                Return
+            EndIf
+            // Attributes table -- same pattern as Actor; Items have
+            // Attributes for equipped-bonus / consumable-effect encoding.
+            If Left$(fieldId, 16) = "attribute_value_"
+                Local aiIV% = Int(Mid$(fieldId, 17))
+                If aiIV >= 0 And aiIV <= 39 And I\Attributes <> Null
+                    I\Attributes\Value[aiIV] = Composer::parseIntClamped(self, value, I\Attributes\Value[aiIV], -2000000000, 2000000000)
+                EndIf
+                Return
+            EndIf
+            If Left$(fieldId, 14) = "attribute_max_"
+                Local aiIM% = Int(Mid$(fieldId, 15))
+                If aiIM >= 0 And aiIM <= 39 And I\Attributes <> Null
+                    I\Attributes\Maximum[aiIM] = Composer::parseIntClamped(self, value, I\Attributes\Maximum[aiIM], -2000000000, 2000000000)
+                EndIf
+                Return
+            EndIf
         EndIf
 
         // ---- ACTOR ----------------------------------------------------------
@@ -1978,7 +2010,7 @@ Type Composer
         // project's defined attributes. Both columns are editable via
         // fieldId pattern "attribute_value_<i>" / "attribute_max_<i>".
         y = Composer::sectionHeader(self, panelX, panelW, y, "Attributes (Value | Max)")
-        y = Composer::renderAttributesTable(self, panelX, panelW, y, A, mx, my, clicked)
+        y = Composer::renderAttributesTable(self, panelX, panelW, y, "actor", A\ID, A\Attributes, mx, my, clicked)
 
         // Resistances -- 19 damage-type resistances (defined in
         // DamageTypes$()). Each is a single int. Skip rows with empty
@@ -2000,14 +2032,14 @@ Type Composer
     // attribute index ("attribute_value_<i>" / "attribute_max_<i>") so
     // the dispatch table can branch on the prefix.
     // -------------------------------------------------------------------------
-    Method renderAttributesTable%(panelX%, panelW%, y%, A.Actor, mx%, my%, clicked%)
-        If A\Attributes = Null Then Return y
+    Method renderAttributesTable%(panelX%, panelW%, y%, kind$, refID%, attrs.Attributes, mx%, my%, clicked%)
+        If attrs = Null Then Return y
         Local i%
         For i = 0 To 39
             If AttributeNames$(i) <> ""
                 Local fidV$ = "attribute_value_" + Str(i)
                 Local fidM$ = "attribute_max_"   + Str(i)
-                y = Composer::doubleIntRow(self, panelX, panelW, y, AttributeNames$(i), "actor", A\ID, fidV, A\Attributes\Value[i], fidM, A\Attributes\Maximum[i], mx, my, clicked)
+                y = Composer::doubleIntRow(self, panelX, panelW, y, AttributeNames$(i), kind, refID, fidV, attrs\Value[i], fidM, attrs\Maximum[i], mx, my, clicked)
             EndIf
         Next
         Return y
@@ -2050,8 +2082,11 @@ Type Composer
         If It\ItemType = 1
             y = Composer::sectionHeader(self, panelX, panelW, y, "Weapon")
             y = Composer::editableIntRow(self, panelX, panelW, y, "Damage",      "item", It\ID, "weapon_damage", It\WeaponDamage, mx, my, clicked)
-            y = Composer::row(self, panelX, panelW, y, "Weapon type", Str(It\WeaponType))
+            y = Composer::editableIntRow(self, panelX, panelW, y, "Damage type", "item", It\ID, "weapon_dmg_type", It\WeaponDamageType, mx, my, clicked)
+            y = Composer::editableIntRow(self, panelX, panelW, y, "Weapon type", "item", It\ID, "weapon_type",   It\WeaponType,   mx, my, clicked)
             y = Composer::editableFloatRow(self, panelX, panelW, y, "Range",     "item", It\ID, "range",         It\Range#,       mx, my, clicked)
+            y = Composer::editableIntRow(self, panelX, panelW, y, "Ranged proj.","item", It\ID, "ranged_proj",   It\RangedProjectile, mx, my, clicked)
+            y = Composer::editableRow(self,    panelX, panelW, y, "Ranged anim", "item", It\ID, "ranged_anim",   It\RangedAnimation$, mx, my, clicked)
         EndIf
 
         // Armour-specific
@@ -2059,6 +2094,29 @@ Type Composer
             y = Composer::sectionHeader(self, panelX, panelW, y, "Armour")
             y = Composer::editableIntRow(self, panelX, panelW, y, "Armour level", "item", It\ID, "armour_level", It\ArmourLevel, mx, my, clicked)
         EndIf
+
+        // Potion / food -- ItemType 6/7 are potions/ingredients; show eat
+        // effects regardless of type (some projects extend item types).
+        y = Composer::sectionHeader(self, panelX, panelW, y, "Consumable")
+        y = Composer::editableIntRow(self, panelX, panelW, y, "Eat duration (ms)", "item", It\ID, "eat_length", It\EatEffectsLength, mx, my, clicked)
+
+        // Visuals -- texture / mesh / gubbin IDs. Loom doesn't preview
+        // these yet, but exposing the IDs lets designers see / edit them.
+        y = Composer::sectionHeader(self, panelX, panelW, y, "Visuals")
+        y = Composer::editableIntRow(self, panelX, panelW, y, "Thumbnail tex",  "item", It\ID, "thumb_tex",  It\ThumbnailTexID, mx, my, clicked)
+        y = Composer::editableIntRow(self, panelX, panelW, y, "Male mesh",      "item", It\ID, "m_mesh",     It\MMeshID,        mx, my, clicked)
+        y = Composer::editableIntRow(self, panelX, panelW, y, "Female mesh",    "item", It\ID, "f_mesh",     It\FMeshID,        mx, my, clicked)
+        y = Composer::editableIntRow(self, panelX, panelW, y, "Image (img-typ)","item", It\ID, "image_id",   It\ImageID,        mx, my, clicked)
+        // Gubbins -- 5 equip-slot activation flags (booleans 0/1)
+        Local gi%
+        For gi = 0 To 4
+            Local gFid$ = "gubbin_" + Str(gi)
+            y = Composer::toggleRow(self, panelX, panelW, y, "Gubbin " + Str(gi), "item", It\ID, gFid, It\Gubbins[gi], mx, my, clicked)
+        Next
+
+        // Misc data -- free-form string slot the engine doesn't interpret
+        y = Composer::sectionHeader(self, panelX, panelW, y, "Misc")
+        y = Composer::editableRow(self, panelX, panelW, y, "Misc data", "item", It\ID, "misc_data", It\MiscData$, mx, my, clicked)
 
         // Restrictions -- always editable (typing into an empty field is how
         // a restriction is added in the first place).
@@ -2070,6 +2128,13 @@ Type Composer
         y = Composer::sectionHeader(self, panelX, panelW, y, "Script")
         y = Composer::editableRow(self, panelX, panelW, y, "Bound",  "item", It\ID, "script",  It\Script$,  mx, my, clicked)
         y = Composer::editableRow(self, panelX, panelW, y, "Method", "item", It\ID, "smethod", It\SMethod$, mx, my, clicked)
+
+        // Attributes -- same 40-row Value | Max grid as Actor. For items,
+        // these typically encode equipped-bonuses (a sword that adds +5 STR,
+        // armor that adds +20 HP, a potion that adds +10 mana, etc).
+        y = Composer::sectionHeader(self, panelX, panelW, y, "Attributes (Value | Max)")
+        y = Composer::renderAttributesTable(self, panelX, panelW, y, "item", It\ID, It\Attributes, mx, my, clicked)
+
         Composer::recordContentBottom(self, y)
     End Method
 
