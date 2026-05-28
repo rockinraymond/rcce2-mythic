@@ -177,6 +177,11 @@ Type Loom
         Composer::setPalette(self\composer, self\palette)
         Palette::setComposer(self\palette, self\composer)
 
+        // Composer reads Browser::hasSelection / Each SelectedEntity to
+        // render the bulk-edit panel when the user has cards selected
+        // but nothing focused. Set after both exist.
+        Composer::setBrowser(self\composer, self\browser)
+
         // BrokenRefs modal -- shown when user clicks the ribbon's
         // broken-ref count chip. Holds a Threads ref for click-to-jump.
         self\brokenRefs = New BrokenRefs(self\threads)

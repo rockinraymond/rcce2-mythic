@@ -72,6 +72,19 @@ Const CMP_SCROLL_STEP = 22
 Const CMP_SCROLLBAR_W = 4
 
 
+// -----------------------------------------------------------------------------
+// BulkDeleteTarget -- per-iteration snapshot of (kind, refID) for the
+// bulk-delete loop. Snapshotting decouples the delete iteration from
+// concurrent mutation of the SelectedEntity pool (EntityFactory_Delete
+// invokes Toast_Show, WorldCache_Invalidate, etc. which could conceivably
+// touch other globals). Allocated + freed within commitBulkDelete.
+// -----------------------------------------------------------------------------
+Type BulkDeleteTarget
+    Field Kind$
+    Field RefID%
+End Type
+
+
 // =============================================================================
 // Composer -- right-side property panel.
 // =============================================================================
@@ -104,6 +117,16 @@ Type Composer
     // active. Toggle via the chevron button at the top-left of the
     // composer panel.
     Field collapsed%
+
+    // Browser reference -- set by Loom.bb via setBrowser. Composer reads
+    // Browser::hasSelection / iterates Each SelectedEntity when rendering
+    // the bulk-edit panel.
+    Field browser.Browser
+
+    // Bulk-delete arm timestamp. Same arm/confirm shape as single-entity
+    // delete; clicking once arms (button turns red), clicking again
+    // within CMP_DELETE_ARM_MS commits to delete every selected entity.
+    Field bulkDeleteArmAt%
 
     // Edit-buffer state. editKind = "" means no edit in progress.
     // (kind, refID, fieldId) together identify which field of which entity
@@ -154,7 +177,19 @@ Type Composer
         self\bodyTop = 0
         self\bodyBottom = 0
         self\collapsed = False
+        self\browser = Null
+        self\bulkDeleteArmAt = 0
         Return self
+    End Method
+
+
+    // -------------------------------------------------------------------------
+    // setBrowser -- injection point so the composer can read the
+    // bulk-select set when rendering its bulk-edit panel. Called once
+    // by Loom.bb at construction.
+    // -------------------------------------------------------------------------
+    Method setBrowser(browser.Browser)
+        self\browser = browser
     End Method
 
 
@@ -168,12 +203,17 @@ Type Composer
 
 
     // -------------------------------------------------------------------------
-    // width -- 0 when nothing's focused (lets the Browser fill the screen
-    // without leaving an empty right gutter), CMP_COLLAPSED_W when the
-    // user collapsed the panel, else CMP_W.
+    // width -- 0 when nothing's showing (no focus AND no bulk selection),
+    // CMP_COLLAPSED_W when the user collapsed the panel, else CMP_W.
+    //
+    // Browser bulk-selection causes the panel to render the bulk-edit
+    // view instead of nothing, so width%() must report CMP_W in that
+    // case too so the Browser shrinks its grid accordingly.
     // -------------------------------------------------------------------------
     Method width%()
-        If self\threads\focusKind = "" Then Return 0
+        Local hasBulk% = False
+        If self\browser <> Null Then hasBulk = Browser::hasSelection(self\browser)
+        If self\threads\focusKind = "" And hasBulk = False Then Return 0
         If self\collapsed = True Then Return CMP_COLLAPSED_W
         Return CMP_W
     End Method
@@ -195,6 +235,16 @@ Type Composer
     // is focused. Returns True if any chip was clicked this frame.
     // -------------------------------------------------------------------------
     Method renderAndUpdate%(sw%, sh%)
+        // Bulk-edit mode: no single entity focused, but browser has a
+        // selection set. Render the bulk-edit panel and return.
+        // Priority: focused entity > bulk selection > nothing.
+        Local hasBulk% = False
+        If self\browser <> Null Then hasBulk = Browser::hasSelection(self\browser)
+        If self\threads\focusKind = "" And hasBulk = True
+            Composer::renderBulkEdit(self, sw, sh)
+            Return False
+        EndIf
+
         If self\threads\focusKind = "" Then Return False
 
         Local kind$ = self\threads\focusKind
@@ -983,6 +1033,220 @@ Type Composer
         If kind = "faction" Then Return "F"
         If kind = "animset" Then Return "M"
         Return "?"
+    End Method
+
+
+    // -------------------------------------------------------------------------
+    // renderBulkEdit -- the panel shown when Browser has a non-empty
+    // selection set and no single entity is focused.
+    //
+    // Shows the selected entities as a scrollable list + a "Bulk Delete"
+    // button with arm/confirm. Per-field broadcast edits are the
+    // follow-up iteration; this lands the visible bulk-mode panel
+    // shape + the most-asked-for bulk action (delete-many).
+    //
+    // Mouse wheel + scrollbar reuse the same machinery as the focused
+    // composer body via self\scrollOffset / bodyTop / bodyBottom /
+    // canPaintRow / recordContentBottom.
+    // -------------------------------------------------------------------------
+    Method renderBulkEdit(sw%, sh%)
+        // Mouse wheel scroll -- same shape as focused-entity composer.
+        Local wheelTicks% = MouseZ()
+        If wheelTicks <> 0
+            self\scrollOffset = self\scrollOffset - wheelTicks * CMP_SCROLL_STEP
+            If self\scrollOffset < 0 Then self\scrollOffset = 0
+            Local maxScroll% = self\lastContentBottom - self\bodyBottom
+            If maxScroll < 0 Then maxScroll = 0
+            If self\scrollOffset > maxScroll Then self\scrollOffset = maxScroll
+        EndIf
+
+        Local mx% = MouseX()
+        Local my% = MouseY()
+        Local clicked% = MouseHit(1)
+
+        Local x% = sw - CMP_W
+        Local y% = CMP_TOP
+        Local w% = CMP_W
+        Local h% = sh - CMP_TOP - CMP_BOT_PAD
+
+        // Panel chrome -- same gradient + brass left rule as focused
+        // composer for visual continuity; users feel they're in the
+        // "same panel" with a different mode.
+        LoomGradientV(x, y, w, h, LOOM_STONE_850_R, LOOM_STONE_850_G, LOOM_STONE_850_B, LOOM_STONE_900_R, LOOM_STONE_900_G, LOOM_STONE_900_B)
+        LoomBorder(x, y, w, h, LOOM_WARNING_R, LOOM_WARNING_G, LOOM_WARNING_B)
+        LoomFill(x, y, 3, h, LOOM_WARNING_R, LOOM_WARNING_G, LOOM_WARNING_B)
+
+        // Title block -- display font, warning color to mirror the
+        // selection's warning-orange visual language.
+        LoomTheme_UseDisplay()
+        LoomText(x + CMP_PAD, y + CMP_PAD, "BULK EDIT", LOOM_WARNING_R, LOOM_WARNING_G, LOOM_WARNING_B)
+        LoomTheme_UseBody()
+        Local count% = Browser::getSelectionCount(self\browser)
+        LoomText(x + CMP_PAD, y + CMP_PAD + 22, Str(count) + " selected  |  kinds: " + Composer::bulkSelectionKindSummary(self), LOOM_PARCHMENT_100_R, LOOM_PARCHMENT_100_G, LOOM_PARCHMENT_100_B)
+
+        // Bulk Delete button (top-right). Same arm/confirm shape as
+        // single-entity delete.
+        Composer::drawBulkDeleteButton(self, x + w - CMP_DISCARD_BTN_W - CMP_PAD, y + CMP_PAD - 2, mx, my, clicked)
+
+        LoomHRule(x + CMP_PAD, y + CMP_PAD + 44, w - CMP_PAD * 2, LOOM_BRASS_700_R, LOOM_BRASS_700_G, LOOM_BRASS_700_B)
+
+        // Body -- list of selected entities, scrollable
+        Local bodyY% = y + CMP_PAD + 56
+        Local bodyH% = h - (bodyY - y) - 24
+        self\bodyTop = bodyY
+        self\bodyBottom = bodyY + bodyH
+        Local rowY% = bodyY - self\scrollOffset
+
+        rowY = Composer::sectionHeader(self, x, w, rowY, "Selected entities")
+
+        Local e.SelectedEntity
+        For e = Each SelectedEntity
+            Local label$ = Threads::lookupName(self\threads, e\Kind, e\RefID)
+            If label = "" Then label = "(stale " + e\Kind + "#" + Str(e\RefID) + ")"
+            rowY = Composer::row(self, x, w, rowY, e\Kind, label)
+        Next
+
+        Composer::recordContentBottom(self, rowY)
+
+        // Scrollbar
+        If self\lastContentBottom > self\bodyBottom
+            Composer::drawScrollbar(self, x + w - CMP_SCROLLBAR_W - 2, self\bodyTop, bodyH)
+        EndIf
+
+        // Footer
+        LoomText(x + CMP_PAD, y + h - 22, "Esc clears selection", LOOM_STONE_300_R, LOOM_STONE_300_G, LOOM_STONE_300_B)
+    End Method
+
+
+    // -------------------------------------------------------------------------
+    // bulkSelectionKindSummary -- builds the "actor, item" comma-joined
+    // distinct-kinds string for the bulk header. Uses a per-kind flag
+    // walk so the output order is stable.
+    // -------------------------------------------------------------------------
+    Method bulkSelectionKindSummary$()
+        Local hasActor% = False
+        Local hasItem% = False
+        Local hasSpell% = False
+        Local hasZone% = False
+        Local hasFaction% = False
+        Local hasAnimSet% = False
+        Local e.SelectedEntity
+        For e = Each SelectedEntity
+            If e\Kind = "actor"   Then hasActor   = True
+            If e\Kind = "item"    Then hasItem    = True
+            If e\Kind = "spell"   Then hasSpell   = True
+            If e\Kind = "zone"    Then hasZone    = True
+            If e\Kind = "faction" Then hasFaction = True
+            If e\Kind = "animset" Then hasAnimSet = True
+        Next
+
+        Local out$ = ""
+        If hasActor   = True Then out = Composer::appendKind(self, out, "actor")
+        If hasItem    = True Then out = Composer::appendKind(self, out, "item")
+        If hasSpell   = True Then out = Composer::appendKind(self, out, "spell")
+        If hasZone    = True Then out = Composer::appendKind(self, out, "zone")
+        If hasFaction = True Then out = Composer::appendKind(self, out, "faction")
+        If hasAnimSet = True Then out = Composer::appendKind(self, out, "animset")
+        Return out
+    End Method
+
+
+    Method appendKind$(acc$, k$)
+        If acc = "" Then Return k
+        Return acc + ", " + k
+    End Method
+
+
+    // -------------------------------------------------------------------------
+    // drawBulkDeleteButton -- arm/confirm shape like the single-entity
+    // delete. Confirmed click iterates Each SelectedEntity and
+    // dispatches EntityFactory_Delete for each; clears selection.
+    // -------------------------------------------------------------------------
+    Method drawBulkDeleteButton(btnX%, btnY%, mx%, my%, clicked%)
+        Local hovered% = (mx >= btnX And mx < btnX + CMP_DISCARD_BTN_W And my >= btnY And my < btnY + CMP_DISCARD_BTN_H)
+
+        // Arm window timeout
+        If self\bulkDeleteArmAt > 0 And (MilliSecs() - self\bulkDeleteArmAt) > CMP_DELETE_ARM_MS
+            self\bulkDeleteArmAt = 0
+        EndIf
+
+        Local armed% = (self\bulkDeleteArmAt > 0)
+
+        If armed = True
+            LoomFill(btnX, btnY, CMP_DISCARD_BTN_W, CMP_DISCARD_BTN_H, LOOM_DANGER_R, LOOM_DANGER_G, LOOM_DANGER_B)
+            LoomBorder(btnX, btnY, CMP_DISCARD_BTN_W, CMP_DISCARD_BTN_H, LOOM_PARCHMENT_100_R, LOOM_PARCHMENT_100_G, LOOM_PARCHMENT_100_B)
+            LoomText(btnX + 6, btnY + 4, "Confirm?", LOOM_PARCHMENT_100_R, LOOM_PARCHMENT_100_G, LOOM_PARCHMENT_100_B)
+        Else If hovered = True
+            LoomFill(btnX, btnY, CMP_DISCARD_BTN_W, CMP_DISCARD_BTN_H, LOOM_DANGER_R, LOOM_DANGER_G, LOOM_DANGER_B)
+            LoomBorder(btnX, btnY, CMP_DISCARD_BTN_W, CMP_DISCARD_BTN_H, LOOM_PARCHMENT_100_R, LOOM_PARCHMENT_100_G, LOOM_PARCHMENT_100_B)
+            LoomText(btnX + 10, btnY + 4, "Delete", LOOM_PARCHMENT_100_R, LOOM_PARCHMENT_100_G, LOOM_PARCHMENT_100_B)
+        Else
+            LoomFill(btnX, btnY, CMP_DISCARD_BTN_W, CMP_DISCARD_BTN_H, LOOM_STONE_800_R, LOOM_STONE_800_G, LOOM_STONE_800_B)
+            LoomBorder(btnX, btnY, CMP_DISCARD_BTN_W, CMP_DISCARD_BTN_H, LOOM_DANGER_R, LOOM_DANGER_G, LOOM_DANGER_B)
+            LoomText(btnX + 10, btnY + 4, "Delete", LOOM_DANGER_R, LOOM_DANGER_G, LOOM_DANGER_B)
+        EndIf
+
+        If hovered And clicked
+            If armed = True
+                Composer::commitBulkDelete(self)
+                self\bulkDeleteArmAt = 0
+            Else
+                self\bulkDeleteArmAt = MilliSecs()
+                WriteLog(LoomLog, "Composer: bulk delete armed")
+            EndIf
+        EndIf
+    End Method
+
+
+    // -------------------------------------------------------------------------
+    // commitBulkDelete -- iterate Each SelectedEntity, dispatch
+    // EntityFactory_Delete for each. Then clear the selection.
+    //
+    // Iteration is tricky because EntityFactory_Delete mutates the
+    // SelectedEntity-adjacent state (via WorldCache_Invalidate, Timeline
+    // recording, etc.). We snapshot kind+refID pairs upfront so the
+    // delete loop doesn't trip over its own collection.
+    //
+    // NB: we don't delete the SelectedEntity instances directly --
+    // Browser::clearSelection does that at the end.
+    // -------------------------------------------------------------------------
+    Method commitBulkDelete()
+        If self\browser = Null Then Return
+        Local count% = Browser::getSelectionCount(self\browser)
+        If count <= 0 Then Return
+
+        // Snapshot phase: walk the pool once and collect (kind, refID)
+        // into a parallel Type so the delete loop has a stable target
+        // list independent of any side effects.
+        Local e.SelectedEntity
+        Local n.BulkDeleteTarget
+        For e = Each SelectedEntity
+            n = New BulkDeleteTarget()
+            n\Kind = e\Kind
+            n\RefID = e\RefID
+        Next
+
+        // Delete phase: iterate the snapshot. Bulk delete summary
+        // toast at the end (per-entity toasts would spam).
+        Local deleted% = 0
+        Local t.BulkDeleteTarget
+        For t = Each BulkDeleteTarget
+            If EntityFactory_Delete(t\Kind, t\RefID, self\threads) = True
+                deleted = deleted + 1
+            EndIf
+        Next
+
+        // Drop the snapshot
+        For t = Each BulkDeleteTarget
+            Delete t
+        Next
+
+        // Clear selection -- the entities are gone, so the visual
+        // highlight on now-deleted cards would be misleading.
+        Browser::clearSelection(self\browser)
+
+        Toast_Show("Bulk delete: " + Str(deleted) + " of " + Str(count) + " entities removed", "danger")
+        WriteLog(LoomLog, "Composer: bulk-deleted " + Str(deleted) + " entities")
     End Method
 
 
