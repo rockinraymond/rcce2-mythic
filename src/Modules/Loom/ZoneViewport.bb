@@ -66,6 +66,8 @@ Global VPSceneCenterZ# = 0.0
 Global VPDragging   = False
 Global VPLastMX     = 0
 Global VPLastMY     = 0
+Global VPDragStartMX = 0
+Global VPDragStartMY = 0
 
 ; Per-zone counts cached at load time (saves recomputing in renderer
 ; just for the legend overlay).
@@ -94,6 +96,10 @@ Function Loom_InitZoneViewport()
     PointEntity VPCam, 0
     CameraClsColor VPCam, 16, 16, 22
     CameraRange    VPCam, 1.0, 10000.0
+    ; Constrain the camera's viewport to the render-target size so
+    ; CameraPick(cam, x, y) treats (x, y) as 0..VP_RT_SIZE coords
+    ; (which lets us pass mouse coords RELATIVE to the widget rect).
+    CameraViewport VPCam, 0, 0, VP_RT_SIZE, VP_RT_SIZE
     HideEntity     VPCam
 
     VPLight = CreateLight(1)
@@ -121,6 +127,8 @@ End Function
 ; =============================================================================
 Type ZoneViewportMarker
     Field EN
+    Field Kind$        ; "portal" / "spawn" / "trigger" / "waypoint" / "" for axis/line decorations
+    Field IndexN%      ; sub-entity slot index inside the zone (0..N-1 per kind)
 End Type
 
 Function Loom_FreeZoneMarkers()
@@ -186,6 +194,42 @@ End Function
 
 
 ; =============================================================================
+; Loom_PickZoneMarker -- cast a ray from the camera through the requested
+; local widget coords (0..VP_RT_SIZE), find which marker (if any) was
+; hit. On hit, fire a toast naming the sub-entity. Iter 45 will turn
+; this into a composer scroll-to-section dispatch.
+;
+; Note: line cubes (Loom_MakeLine emits these for axes + waypoint
+; connections) have EntityPickMode = 0 (the default) so they don't
+; intercept the pick ray. Only the marker cubes (portal/spawn/trigger/
+; waypoint) are pickable.
+; =============================================================================
+Function Loom_PickZoneMarker(localX, localY)
+    If VPInitOK = False Then Return
+
+    ; CameraPick uses the camera's viewport (set at init to
+    ; 0..VP_RT_SIZE), so we pass local widget coords directly.
+    CameraPick VPCam, localX, localY
+    Local picked = PickedEntity()
+    If picked = 0 Then Return
+
+    ; Find which marker has this entity. Linear walk is fine since
+    ; total markers stay bounded (typically <50 per zone, capped at
+    ; thousands worst-case).
+    Local m.ZoneViewportMarker
+    For m = Each ZoneViewportMarker
+        If m\EN = picked
+            If m\Kind <> ""
+                Toast_Show("Picked " + m\Kind + " " + Str(m\IndexN), "info")
+                WriteLog(LoomLog, "ZoneViewport: picked " + m\Kind + " " + Str(m\IndexN))
+            EndIf
+            Return
+        EndIf
+    Next
+End Function
+
+
+; =============================================================================
 ; Loom_LoadZoneMarkers -- walk the Area's portal/spawn/trigger/waypoint
 ; arrays, instantiate a colored cube for each defined entry. Also computes
 ; the scene bbox so the camera can auto-fit.
@@ -216,8 +260,11 @@ Function Loom_LoadZoneMarkers(Ar.Area)
             ScaleEntity pEn, VP_MARKER_SIZE#, VP_MARKER_SIZE#, VP_MARKER_SIZE#
             PositionEntity pEn, Ar\PortalX#[i], VP_SCENE_Y_OFFSET# + Ar\PortalY#[i] + VP_MARKER_SIZE#, Ar\PortalZ#[i]
             EntityColor pEn, LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B
+            EntityPickMode pEn, 1     ; box-pick eligible
             Local pm.ZoneViewportMarker = New ZoneViewportMarker
             pm\EN = pEn
+            pm\Kind = "portal"
+            pm\IndexN = i
             VPCountPortals = VPCountPortals + 1
             If Ar\PortalX#[i] < minX# Then minX# = Ar\PortalX#[i]
             If Ar\PortalX#[i] > maxX# Then maxX# = Ar\PortalX#[i]
@@ -236,8 +283,11 @@ Function Loom_LoadZoneMarkers(Ar.Area)
                 ScaleEntity sEn, VP_MARKER_SIZE#, VP_MARKER_SIZE#, VP_MARKER_SIZE#
                 PositionEntity sEn, Ar\WaypointX#[waypointIdx], VP_SCENE_Y_OFFSET# + Ar\WaypointY#[waypointIdx] + VP_MARKER_SIZE#, Ar\WaypointZ#[waypointIdx]
                 EntityColor sEn, LOOM_ARCANE_500_R, LOOM_ARCANE_500_G, LOOM_ARCANE_500_B
+                EntityPickMode sEn, 1
                 Local sm.ZoneViewportMarker = New ZoneViewportMarker
                 sm\EN = sEn
+                sm\Kind = "spawn"
+                sm\IndexN = i
                 VPCountSpawns = VPCountSpawns + 1
                 If Ar\WaypointX#[waypointIdx] < minX# Then minX# = Ar\WaypointX#[waypointIdx]
                 If Ar\WaypointX#[waypointIdx] > maxX# Then maxX# = Ar\WaypointX#[waypointIdx]
@@ -255,8 +305,11 @@ Function Loom_LoadZoneMarkers(Ar.Area)
             ScaleEntity tEn, VP_MARKER_SIZE#, VP_MARKER_SIZE#, VP_MARKER_SIZE#
             PositionEntity tEn, Ar\TriggerX#[i], VP_SCENE_Y_OFFSET# + Ar\TriggerY#[i] + VP_MARKER_SIZE#, Ar\TriggerZ#[i]
             EntityColor tEn, LOOM_WARNING_R, LOOM_WARNING_G, LOOM_WARNING_B
+            EntityPickMode tEn, 1
             Local tm.ZoneViewportMarker = New ZoneViewportMarker
             tm\EN = tEn
+            tm\Kind = "trigger"
+            tm\IndexN = i
             VPCountTriggers = VPCountTriggers + 1
             If Ar\TriggerX#[i] < minX# Then minX# = Ar\TriggerX#[i]
             If Ar\TriggerX#[i] > maxX# Then maxX# = Ar\TriggerX#[i]
@@ -273,8 +326,11 @@ Function Loom_LoadZoneMarkers(Ar.Area)
             ScaleEntity wEn, VP_WAYPOINT_SIZE#, VP_WAYPOINT_SIZE#, VP_WAYPOINT_SIZE#
             PositionEntity wEn, Ar\WaypointX#[i], VP_SCENE_Y_OFFSET# + Ar\WaypointY#[i] + VP_WAYPOINT_SIZE#, Ar\WaypointZ#[i]
             EntityColor wEn, 140, 140, 150
+            EntityPickMode wEn, 1
             Local wm.ZoneViewportMarker = New ZoneViewportMarker
             wm\EN = wEn
+            wm\Kind = "waypoint"
+            wm\IndexN = i
             VPCountWaypoints = VPCountWaypoints + 1
             If Ar\WaypointX#[i] < minX# Then minX# = Ar\WaypointX#[i]
             If Ar\WaypointX#[i] > maxX# Then maxX# = Ar\WaypointX#[i]
@@ -366,6 +422,8 @@ Function Loom_DrawZoneViewport(zoneHandle, x, y)
             VPDragging = True
             VPLastMX = mx
             VPLastMY = my
+            VPDragStartMX = mx     ; remember initial press for click-vs-drag distinguish
+            VPDragStartMY = my
         Else
             Local dx = mx - VPLastMX
             Local dy = my - VPLastMY
@@ -377,6 +435,16 @@ Function Loom_DrawZoneViewport(zoneHandle, x, y)
             VPLastMY = my
         EndIf
     Else
+        ; On LMB release: if the press-to-release total movement was
+        ; small (no real drag), treat as a click and try to pick a
+        ; marker. Loom_MouseClicked() is False here (it fires on PRESS
+        ; not release), so check VPDragging transitioning to False.
+        If VPDragging = True
+            Local moveDist = Abs(mx - VPDragStartMX) + Abs(my - VPDragStartMY)
+            If moveDist < 4 And inside = True
+                Loom_PickZoneMarker(mx - x, my - y)
+            EndIf
+        EndIf
         VPDragging = False
     EndIf
 
