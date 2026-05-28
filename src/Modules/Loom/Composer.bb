@@ -408,9 +408,9 @@ Type Composer
         If kind = "actor"
             Composer::renderActor(self, x, scrolledBodyY, w, bodyH, mx, my, clicked, rightClicked)
         Else If kind = "item"
-            Composer::renderItem(self, x, scrolledBodyY, w, bodyH, mx, my, clicked)
+            Composer::renderItem(self, x, scrolledBodyY, w, bodyH, mx, my, clicked, rightClicked)
         Else If kind = "spell"
-            Composer::renderSpell(self, x, scrolledBodyY, w, bodyH, mx, my, clicked)
+            Composer::renderSpell(self, x, scrolledBodyY, w, bodyH, mx, my, clicked, rightClicked)
         Else If kind = "zone"
             Composer::renderZone(self, x, scrolledBodyY, w, bodyH, mx, my, clicked, rightClicked)
         Else If kind = "faction"
@@ -713,12 +713,23 @@ Type Composer
     //
     // Empty value: pure editableRow behavior (just type a name to bind).
     // -------------------------------------------------------------------------
-    Method scriptStringRow%(panelX%, panelW%, rowY%, label$, kind$, refID%, fieldId$, storedValue$, mx%, my%, clicked%)
+    Method scriptStringRow%(panelX%, panelW%, rowY%, label$, kind$, refID%, fieldId$, storedValue$, mx%, my%, clicked%, rightClicked%)
         // First paint the editable text field at the normal width.
         // We don't shrink it -- the jump pill paints OVER the right edge
         // since the editable buffer rarely fills its width and the visual
         // "edit" hover hint anchors there too (the pill replaces it).
         Local nextY% = Composer::editableRow(self, panelX, panelW, rowY, label, kind, refID, fieldId, storedValue, mx, my, clicked)
+
+        // Right-click anywhere in the value cell opens the palette as a
+        // script picker. Works on EMPTY rows too -- that's how a designer
+        // binds a fresh script without remembering the name. Hit-test
+        // matches editableRow's value rect (panelX + CMP_PAD + 120 onwards).
+        Local valX% = panelX + CMP_PAD + 120
+        Local valW% = panelW - CMP_PAD * 2 - 120
+        Local valHovered% = (mx >= valX And mx < valX + valW And my >= rowY - 3 And my < rowY - 3 + CMP_ROW_H)
+        If valHovered = True And rightClicked = True And self\palette <> Null
+            Palette::openAsPicker(self\palette, "script", kind, refID, fieldId)
+        EndIf
 
         // Skip the pill entirely if the field is empty -- nothing to
         // navigate TO. Also skip when the row scrolled off-screen.
@@ -2704,7 +2715,7 @@ Type Composer
     End Method
 
 
-    Method renderItem(panelX%, bodyY%, panelW%, bodyH%, mx%, my%, clicked%)
+    Method renderItem(panelX%, bodyY%, panelW%, bodyH%, mx%, my%, clicked%, rightClicked%)
         Local refID% = self\threads\focusID
         If refID < 0 Or refID > 65534 Then Return
         Local It.Item = ItemList(refID)
@@ -2787,7 +2798,7 @@ Type Composer
 
         // Script -- always editable
         y = Composer::sectionHeader(self, panelX, panelW, y, "Script")
-        y = Composer::scriptStringRow(self, panelX, panelW, y, "Bound",  "item", It\ID, "script",  It\Script$,  mx, my, clicked)
+        y = Composer::scriptStringRow(self, panelX, panelW, y, "Bound",  "item", It\ID, "script",  It\Script$,  mx, my, clicked, rightClicked)
         y = Composer::editableRow(self, panelX, panelW, y, "Method", "item", It\ID, "smethod", It\SMethod$, mx, my, clicked)
 
         // Attributes -- same 40-row Value | Max grid as Actor. For items,
@@ -2800,7 +2811,7 @@ Type Composer
     End Method
 
 
-    Method renderSpell(panelX%, bodyY%, panelW%, bodyH%, mx%, my%, clicked%)
+    Method renderSpell(panelX%, bodyY%, panelW%, bodyH%, mx%, my%, clicked%, rightClicked%)
         Local refID% = self\threads\focusID
         If refID < 0 Or refID > 65534 Then Return
         Local S.Spell = SpellsList(refID)
@@ -2827,7 +2838,7 @@ Type Composer
         y = Composer::editableRow(self, panelX, panelW, y, "Class", "spell", S\ID, "class", S\ExclusiveClass$, mx, my, clicked)
 
         y = Composer::sectionHeader(self, panelX, panelW, y, "Script")
-        y = Composer::scriptStringRow(self, panelX, panelW, y, "Bound",  "spell", S\ID, "script",  S\Script$,  mx, my, clicked)
+        y = Composer::scriptStringRow(self, panelX, panelW, y, "Bound",  "spell", S\ID, "script",  S\Script$,  mx, my, clicked, rightClicked)
         y = Composer::editableRow(self, panelX, panelW, y, "Method", "spell", S\ID, "smethod", S\SMethod$, mx, my, clicked)
         Composer::recordContentBottom(self, y)
     End Method
@@ -2907,8 +2918,8 @@ Type Composer
 
         // Scripts -- always editable
         y = Composer::sectionHeader(self, panelX, panelW, y, "Scripts")
-        y = Composer::scriptStringRow(self, panelX, panelW, y, "Entry", "zone", h, "entry_script", Ar\EntryScript$, mx, my, clicked)
-        y = Composer::scriptStringRow(self, panelX, panelW, y, "Exit",  "zone", h, "exit_script",  Ar\ExitScript$,  mx, my, clicked)
+        y = Composer::scriptStringRow(self, panelX, panelW, y, "Entry", "zone", h, "entry_script", Ar\EntryScript$, mx, my, clicked, rightClicked)
+        y = Composer::scriptStringRow(self, panelX, panelW, y, "Exit",  "zone", h, "exit_script",  Ar\ExitScript$,  mx, my, clicked, rightClicked)
 
         // Portals / Triggers / Spawns -- always render the section header
         // (with "+ New" button) even when empty, so designers can add
@@ -2940,7 +2951,7 @@ Type Composer
                 Toast_Show("No empty trigger slots", "warning")
             EndIf
         EndIf
-        y = Composer::renderZoneTriggers(self, panelX, panelW, y, Ar, h, mx, my, clicked)
+        y = Composer::renderZoneTriggers(self, panelX, panelW, y, Ar, h, mx, my, clicked, rightClicked)
 
         sectY = y
         y = Composer::sectionHeader(self, panelX, panelW, y, "Spawns")
@@ -3143,7 +3154,7 @@ Type Composer
     // renderZoneTriggers -- per-trigger sub-section with X/Y/Z/Size + Script/
     // Method. Empty TriggerScript$ slots are skipped.
     // -------------------------------------------------------------------------
-    Method renderZoneTriggers%(panelX%, panelW%, y%, Ar.Area, h%, mx%, my%, clicked%)
+    Method renderZoneTriggers%(panelX%, panelW%, y%, Ar.Area, h%, mx%, my%, clicked%, rightClicked%)
         Local t%
         For t = 0 To 149
             If Ar\TriggerScript$[t] <> ""
@@ -3167,7 +3178,7 @@ Type Composer
                 y = Composer::editableFloatRow(self, panelX, panelW, y, "Y",    "zone", h, "trigger_y_"    + Str(t), Ar\TriggerY#[t],    mx, my, clicked)
                 y = Composer::editableFloatRow(self, panelX, panelW, y, "Z",    "zone", h, "trigger_z_"    + Str(t), Ar\TriggerZ#[t],    mx, my, clicked)
                 y = Composer::editableFloatRow(self, panelX, panelW, y, "Size", "zone", h, "trigger_size_" + Str(t), Ar\TriggerSize#[t], mx, my, clicked)
-                y = Composer::scriptStringRow(self,  panelX, panelW, y, "Script", "zone", h, "trigger_script_" + Str(t), Ar\TriggerScript$[t], mx, my, clicked)
+                y = Composer::scriptStringRow(self,  panelX, panelW, y, "Script", "zone", h, "trigger_script_" + Str(t), Ar\TriggerScript$[t], mx, my, clicked, rightClicked)
                 y = Composer::editableRow(self,      panelX, panelW, y, "Method", "zone", h, "trigger_method_" + Str(t), Ar\TriggerMethod$[t], mx, my, clicked)
 
                 y = y + 4
@@ -3210,9 +3221,9 @@ Type Composer
                 y = Composer::editableFloatRow(self, panelX, panelW, y, "Range",      "zone", h, "spawn_range_"    + Str(s), Ar\SpawnRange#[s],   mx, my, clicked)
                 y = Composer::editableIntRow(self,   panelX, panelW, y, "Frequency",  "zone", h, "spawn_freq_"     + Str(s), Ar\SpawnFrequency[s], mx, my, clicked)
                 y = Composer::editableIntRow(self,   panelX, panelW, y, "Max",        "zone", h, "spawn_max_"      + Str(s), Ar\SpawnMax[s],       mx, my, clicked)
-                y = Composer::scriptStringRow(self,  panelX, panelW, y, "Script",     "zone", h, "spawn_script_"   + Str(s), Ar\SpawnScript$[s],   mx, my, clicked)
-                y = Composer::scriptStringRow(self,  panelX, panelW, y, "Actor scr",  "zone", h, "spawn_ascript_"  + Str(s), Ar\SpawnActorScript$[s], mx, my, clicked)
-                y = Composer::scriptStringRow(self,  panelX, panelW, y, "Death scr",  "zone", h, "spawn_dscript_"  + Str(s), Ar\SpawnDeathScript$[s], mx, my, clicked)
+                y = Composer::scriptStringRow(self,  panelX, panelW, y, "Script",     "zone", h, "spawn_script_"   + Str(s), Ar\SpawnScript$[s],   mx, my, clicked, rightClicked)
+                y = Composer::scriptStringRow(self,  panelX, panelW, y, "Actor scr",  "zone", h, "spawn_ascript_"  + Str(s), Ar\SpawnActorScript$[s], mx, my, clicked, rightClicked)
+                y = Composer::scriptStringRow(self,  panelX, panelW, y, "Death scr",  "zone", h, "spawn_dscript_"  + Str(s), Ar\SpawnDeathScript$[s], mx, my, clicked, rightClicked)
 
                 y = y + 4
             EndIf
