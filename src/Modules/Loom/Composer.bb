@@ -511,6 +511,111 @@ Type Composer
 
 
     // -------------------------------------------------------------------------
+    // enumIntRow -- editableIntRow plus a small annotation "(enumName)"
+    // painted in stone-tone after the value. Designers see the enum-
+    // resolved meaning without leaving the int input.
+    //
+    // enumKind selects the lookup family:
+    //   "itemtype" / "slottype" / "weapontype" / "damagetype" /
+    //   "aggressiveness" / "environment" / "genders" / "trademode"
+    //
+    // Empty enumName means the value is out-of-range; render "?".
+    // Skipped while the field is being edited (the cursor would
+    // visually conflict with the annotation).
+    // -------------------------------------------------------------------------
+    Method enumIntRow%(panelX%, panelW%, rowY%, label$, kind$, refID%, fieldId$, storedValue%, enumKind$, mx%, my%, clicked%)
+        Local nextY% = Composer::editableIntRow(self, panelX, panelW, rowY, label, kind, refID, fieldId, storedValue, mx, my, clicked)
+
+        If Composer::canPaintRow(self, rowY, CMP_ROW_H) = False Then Return nextY
+        Local active% = (self\editKind = kind And self\editRefID = refID And self\editFieldId = fieldId)
+        If active = True Then Return nextY
+
+        Local name$ = Composer::enumName(self, enumKind, storedValue)
+        If name = "" Then name = "?"
+
+        // Paint annotation past the int value text. The value cell
+        // starts at panelX + CMP_PAD + 120 + 4. 48px in is enough room
+        // for typical ints (0..1000) but short enough to stay readable.
+        Local annoX% = panelX + CMP_PAD + 120 + 4 + 48
+        LoomText(annoX, rowY, "(" + name + ")", LOOM_STONE_300_R, LOOM_STONE_300_G, LOOM_STONE_300_B)
+
+        Return nextY
+    End Method
+
+
+    // -------------------------------------------------------------------------
+    // enumName -- value-to-name lookup keyed by enumKind. Returns ""
+    // for unresolved (out-of-range / undefined slot) values.
+    // -------------------------------------------------------------------------
+    Method enumName$(enumKind$, v%)
+        If enumKind = "itemtype"
+            If v = 1 Then Return "Weapon"
+            If v = 2 Then Return "Armour"
+            If v = 3 Then Return "Ring"
+            If v = 4 Then Return "Potion"
+            If v = 5 Then Return "Ingredient"
+            If v = 6 Then Return "Image"
+            If v = 7 Then Return "Other"
+            Return ""
+        EndIf
+        If enumKind = "slottype"
+            If v = 1  Then Return "Weapon"
+            If v = 2  Then Return "Shield"
+            If v = 3  Then Return "Hat"
+            If v = 4  Then Return "Chest"
+            If v = 5  Then Return "Hand"
+            If v = 6  Then Return "Belt"
+            If v = 7  Then Return "Legs"
+            If v = 8  Then Return "Feet"
+            If v = 9  Then Return "Ring"
+            If v = 10 Then Return "Amulet"
+            If v = 11 Then Return "Backpack"
+            Return ""
+        EndIf
+        If enumKind = "weapontype"
+            If v = 1 Then Return "OneHand"
+            If v = 2 Then Return "TwoHand"
+            If v = 3 Then Return "Ranged"
+            Return ""
+        EndIf
+        If enumKind = "damagetype"
+            If v < 0 Or v > 19 Then Return ""
+            Local nm$ = DamageTypes$(v)
+            If nm = "" Then Return ""
+            Return nm
+        EndIf
+        If enumKind = "aggressiveness"
+            If v = 0 Then Return "passive"
+            If v = 1 Then Return "provoked"
+            If v = 2 Then Return "on-sight"
+            If v = 3 Then Return "no combat"
+            Return ""
+        EndIf
+        If enumKind = "environment"
+            If v = 0 Then Return "amphibious"
+            If v = 1 Then Return "swim"
+            If v = 2 Then Return "fly"
+            If v = 3 Then Return "walk"
+            Return ""
+        EndIf
+        If enumKind = "genders"
+            If v = 0 Then Return "both"
+            If v = 1 Then Return "male only"
+            If v = 2 Then Return "female only"
+            If v = 3 Then Return "none"
+            Return ""
+        EndIf
+        If enumKind = "trademode"
+            If v = 0 Then Return "no trade"
+            If v = 1 Then Return "free"
+            If v = 2 Then Return "charged"
+            Return ""
+        EndIf
+        Return ""
+    End Method
+
+
+    // -------------------------------------------------------------------------
     // assetIntRow -- editableIntRow variant for entity fields that hold
     // a texture / mesh / sound ID. Renders the existing editable int
     // field PLUS, when the value resolves in the corresponding catalog,
@@ -2569,18 +2674,18 @@ Type Composer
         y = Composer::row(self, panelX, panelW, y, "ID",            Str(A\ID))
         y = Composer::editableRow(self, panelX, panelW, y,    "Race",          "actor", A\ID, "race",          A\Race$,        mx, my, clicked)
         y = Composer::editableRow(self, panelX, panelW, y,    "Class",         "actor", A\ID, "class",         A\Class$,       mx, my, clicked)
-        y = Composer::editableIntRow(self, panelX, panelW, y, "Aggressiveness", "actor", A\ID, "aggressiveness", A\Aggressiveness, mx, my, clicked)
+        y = Composer::enumIntRow(self, panelX, panelW, y, "Aggressiveness", "actor", A\ID, "aggressiveness", A\Aggressiveness, "aggressiveness", mx, my, clicked)
         y = Composer::editableIntRow(self, panelX, panelW, y, "Agg range",     "actor", A\ID, "agg_range",     A\AggressiveRange, mx, my, clicked)
-        y = Composer::editableIntRow(self, panelX, panelW, y, "Genders",       "actor", A\ID, "genders",       A\Genders,      mx, my, clicked)
+        y = Composer::enumIntRow(self, panelX, panelW, y, "Genders",       "actor", A\ID, "genders",       A\Genders,      "genders", mx, my, clicked)
         y = Composer::toggleRow(self,    panelX, panelW, y, "Playable",      "actor", A\ID, "playable",      A\Playable,     mx, my, clicked)
         y = Composer::toggleRow(self,    panelX, panelW, y, "Rideable",      "actor", A\ID, "rideable",      A\Rideable,     mx, my, clicked)
         y = Composer::editableIntRow(self, panelX, panelW, y, "XP multiplier", "actor", A\ID, "xpmult",        A\XPMultiplier, mx, my, clicked)
         y = Composer::editableFloatRow(self, panelX, panelW, y, "Scale",       "actor", A\ID, "scale",         A\Scale#,       mx, my, clicked)
         y = Composer::editableFloatRow(self, panelX, panelW, y, "Radius",      "actor", A\ID, "radius",        A\Radius#,      mx, my, clicked)
-        y = Composer::editableIntRow(self, panelX, panelW, y, "Environment",  "actor", A\ID, "environment",   A\Environment,  mx, my, clicked)
+        y = Composer::enumIntRow(self, panelX, panelW, y, "Environment",  "actor", A\ID, "environment",   A\Environment,  "environment", mx, my, clicked)
         y = Composer::editableIntRow(self, panelX, panelW, y, "Inv slots",    "actor", A\ID, "inv_slots",     A\InventorySlots, mx, my, clicked)
-        y = Composer::editableIntRow(self, panelX, panelW, y, "Default DT",   "actor", A\ID, "default_dmg",   A\DefaultDamageType, mx, my, clicked)
-        y = Composer::editableIntRow(self, panelX, panelW, y, "Trade mode",   "actor", A\ID, "trade_mode",    A\TradeMode,    mx, my, clicked)
+        y = Composer::enumIntRow(self, panelX, panelW, y, "Default DT",   "actor", A\ID, "default_dmg",   A\DefaultDamageType, "damagetype", mx, my, clicked)
+        y = Composer::enumIntRow(self, panelX, panelW, y, "Trade mode",   "actor", A\ID, "trade_mode",    A\TradeMode,    "trademode", mx, my, clicked)
         y = Composer::toggleRow(self,    panelX, panelW, y, "Poly collide",  "actor", A\ID, "poly_collision", A\PolyCollision, mx, my, clicked)
 
         // Description -- a long string; show as editable text field. Word
@@ -2840,7 +2945,7 @@ Type Composer
         y = Composer::row(self, panelX, panelW, y, "ID",        Str(It\ID))
         y = Composer::editableRow(self, panelX, panelW, y, "Name", "item", It\ID, "name", It\Name$, mx, my, clicked)
         y = Composer::row(self, panelX, panelW, y, "Type",      Composer::itemTypeLabel(self, It\ItemType))
-        y = Composer::row(self, panelX, panelW, y, "Slot",      Str(It\SlotType))
+        y = Composer::row(self, panelX, panelW, y, "Slot",      Str(It\SlotType) + " (" + Composer::enumName(self, "slottype", It\SlotType) + ")")
         y = Composer::editableIntRow(self, panelX, panelW, y, "Value", "item", It\ID, "value", It\Value, mx, my, clicked)
         y = Composer::editableIntRow(self, panelX, panelW, y, "Mass",  "item", It\ID, "mass",  It\Mass,  mx, my, clicked)
         y = Composer::toggleRow(self, panelX, panelW, y, "Stackable", "item", It\ID, "stackable", It\Stackable,   mx, my, clicked)
@@ -2850,8 +2955,8 @@ Type Composer
         If It\ItemType = 1
             y = Composer::sectionHeader(self, panelX, panelW, y, "Weapon")
             y = Composer::editableIntRow(self, panelX, panelW, y, "Damage",      "item", It\ID, "weapon_damage", It\WeaponDamage, mx, my, clicked)
-            y = Composer::editableIntRow(self, panelX, panelW, y, "Damage type", "item", It\ID, "weapon_dmg_type", It\WeaponDamageType, mx, my, clicked)
-            y = Composer::editableIntRow(self, panelX, panelW, y, "Weapon type", "item", It\ID, "weapon_type",   It\WeaponType,   mx, my, clicked)
+            y = Composer::enumIntRow(self, panelX, panelW, y, "Damage type", "item", It\ID, "weapon_dmg_type", It\WeaponDamageType, "damagetype", mx, my, clicked)
+            y = Composer::enumIntRow(self, panelX, panelW, y, "Weapon type", "item", It\ID, "weapon_type",   It\WeaponType,   "weapontype", mx, my, clicked)
             y = Composer::editableFloatRow(self, panelX, panelW, y, "Range",     "item", It\ID, "range",         It\Range#,       mx, my, clicked)
             y = Composer::editableIntRow(self, panelX, panelW, y, "Ranged proj.","item", It\ID, "ranged_proj",   It\RangedProjectile, mx, my, clicked)
             y = Composer::editableRow(self,    panelX, panelW, y, "Ranged anim", "item", It\ID, "ranged_anim",   It\RangedAnimation$, mx, my, clicked)
