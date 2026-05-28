@@ -379,7 +379,7 @@ Type Palette
     Method drawHint(modalX%, modalY%)
         Local hy% = modalY + PAL_MODAL_H - PAL_HINT_H - 4
         LoomHRule(modalX + PAL_PAD, hy - 2, PAL_MODAL_W - PAL_PAD * 2, LOOM_BRASS_700_R, LOOM_BRASS_700_G, LOOM_BRASS_700_B)
-        LoomText(modalX + PAL_PAD, hy + 4, "Enter to jump  ·  arrow keys to move  ·  Esc to close", LOOM_STONE_300_R, LOOM_STONE_300_G, LOOM_STONE_300_B)
+        LoomText(modalX + PAL_PAD, hy + 4, "Enter to jump  |  arrow keys to move  |  Esc to close", LOOM_STONE_300_R, LOOM_STONE_300_G, LOOM_STONE_300_B)
     End Method
 
 

@@ -301,7 +301,7 @@ Type Browser
         Local y% = BR_TOP_RIBBON + BR_TAB_BAR_H
         Local h% = BR_FILTER_BAR_H
 
-        LoomFill(0, y, sw, h, LOOM_STONE_850_R, LOOM_STONE_850_G, LOOM_STONE_850_B)
+        LoomGradientV(0, y, sw, h, LOOM_STONE_850_R, LOOM_STONE_850_G, LOOM_STONE_850_B, LOOM_STONE_900_R, LOOM_STONE_900_G, LOOM_STONE_900_B)
         LoomHRule(0, y + h, sw, LOOM_BRASS_700_R, LOOM_BRASS_700_G, LOOM_BRASS_700_B)
 
         // "+ New" button on the left -- creates a fresh entity of the
@@ -375,7 +375,7 @@ Type Browser
         EndIf
 
         // Hint between the button cluster and the input
-        LoomText(hintX, y + 8, "TYPE TO FILTER  ·  CTRL+K SEARCH ALL", LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
+        LoomText(hintX, y + 8, "TYPE TO FILTER  |  CTRL+K SEARCH ALL", LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
 
         // Input on the right -- 280px wide
         Local iw% = 280
@@ -444,7 +444,9 @@ Type Browser
     // -------------------------------------------------------------------------
     Method drawTopRibbon(sw%, project$)
         Local stripY% = LOOM_TOP_RIBBON_H
-        LoomFill(0, stripY, sw, BR_BRAND_STRIP_H, LOOM_STONE_850_R, LOOM_STONE_850_G, LOOM_STONE_850_B)
+        // Subtle stone-800 -> stone-850 gradient gives the brand strip
+        // a sculpted look instead of the previous flat stone-850 panel.
+        LoomGradientV(0, stripY, sw, BR_BRAND_STRIP_H, LOOM_STONE_800_R, LOOM_STONE_800_G, LOOM_STONE_800_B, LOOM_STONE_850_R, LOOM_STONE_850_G, LOOM_STONE_850_B)
         LoomHRule(0, BR_TOP_RIBBON - 1, sw, LOOM_BRASS_700_R, LOOM_BRASS_700_G, LOOM_BRASS_700_B)
         LoomHRule(0, BR_TOP_RIBBON,     sw, LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
         LoomHRule(0, BR_TOP_RIBBON + 1, sw, LOOM_BRASS_700_R, LOOM_BRASS_700_G, LOOM_BRASS_700_B)
@@ -462,7 +464,7 @@ Type Browser
     Method drawTabBar(sw%, mx%, my%, clicked%)
         Local y% = BR_TOP_RIBBON
         Local h% = BR_TAB_BAR_H
-        LoomFill(0, y, sw, h, LOOM_STONE_800_R, LOOM_STONE_800_G, LOOM_STONE_800_B)
+        LoomGradientV(0, y, sw, h, LOOM_STONE_700_R, LOOM_STONE_700_G, LOOM_STONE_700_B, LOOM_STONE_800_R, LOOM_STONE_800_G, LOOM_STONE_800_B)
         LoomHRule(0, y + h, sw, LOOM_BRASS_700_R, LOOM_BRASS_700_G, LOOM_BRASS_700_B)
 
         Local x% = 20
@@ -565,7 +567,7 @@ Type Browser
         If count = 0
             Local emptyMsg$
             If self\filterQuery <> ""
-                emptyMsg = "No " + cat + "s match " + Chr(34) + self\filterQuery + Chr(34) + "  ·  Esc to clear filter"
+                emptyMsg = "No " + cat + "s match " + Chr(34) + self\filterQuery + Chr(34) + "  |  Esc to clear filter"
             Else
                 emptyMsg = "No " + cat + "s in this project yet."
             EndIf
@@ -825,7 +827,9 @@ Type Browser
         Local hovered% = (mx >= x And mx < x + BR_CARD_W And my >= y And my < y + BR_CARD_H)
         Local selected% = (cardIdx = self\selectedIndex)
 
-        LoomFill(x, y, BR_CARD_W, BR_CARD_H, LOOM_STONE_800_R, LOOM_STONE_800_G, LOOM_STONE_800_B)
+        // Subtle stone-800 -> stone-850 gradient gives each card a
+        // raised-tile feel instead of reading as a flat colored rectangle.
+        LoomGradientV(x, y, BR_CARD_W, BR_CARD_H, LOOM_STONE_800_R, LOOM_STONE_800_G, LOOM_STONE_800_B, LOOM_STONE_850_R, LOOM_STONE_850_G, LOOM_STONE_850_B)
 
         If hovered = True
             LoomBorder(x, y, BR_CARD_W, BR_CARD_H, LOOM_ARCANE_500_R, LOOM_ARCANE_500_G, LOOM_ARCANE_500_B)
@@ -839,8 +843,11 @@ Type Browser
             LoomBorder(x, y, BR_CARD_W, BR_CARD_H, LOOM_BRASS_700_R, LOOM_BRASS_700_G, LOOM_BRASS_700_B)
         EndIf
 
-        // Top brass accent
-        LoomHRule(x + 12, y + 8, BR_CARD_W - 24, LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
+        // Top brass accent -- a thicker brass band so the cards read as
+        // ornament-trimmed rather than thinly-outlined.
+        LoomHRule(x + 12, y + 6, BR_CARD_W - 24, LOOM_BRASS_700_R, LOOM_BRASS_700_G, LOOM_BRASS_700_B)
+        LoomHRule(x + 12, y + 7, BR_CARD_W - 24, LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
+        LoomHRule(x + 12, y + 8, BR_CARD_W - 24, LOOM_BRASS_700_R, LOOM_BRASS_700_G, LOOM_BRASS_700_B)
 
         If hovered And clicked
             Threads::focus(self\threads, kind, refID)
@@ -967,10 +974,12 @@ Type Browser
     // -------------------------------------------------------------------------
     Method drawFooter(sw%, sh%)
         Local y% = sh - BR_BOT_RIBBON
-        LoomFill(0, y, sw, BR_BOT_RIBBON, LOOM_STONE_850_R, LOOM_STONE_850_G, LOOM_STONE_850_B)
+        // Mirror of the brand strip's gradient direction so the chrome
+        // bands at top + bottom read as a matched pair framing the body.
+        LoomGradientV(0, y, sw, BR_BOT_RIBBON, LOOM_STONE_850_R, LOOM_STONE_850_G, LOOM_STONE_850_B, LOOM_STONE_900_R, LOOM_STONE_900_G, LOOM_STONE_900_B)
         LoomHRule(0, y, sw, LOOM_BRASS_700_R, LOOM_BRASS_700_G, LOOM_BRASS_700_B)
 
-        LoomText(20, y + 10, "click a card to focus  ·  follow threads in the composer  ·  Esc to exit", LOOM_STONE_200_R, LOOM_STONE_200_G, LOOM_STONE_200_B)
+        LoomText(20, y + 10, "click a card to focus  |  follow threads in the composer  |  Esc to exit", LOOM_STONE_200_R, LOOM_STONE_200_G, LOOM_STONE_200_B)
     End Method
 
 

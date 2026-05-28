@@ -122,7 +122,7 @@ Type Atlas
         EndIf
 
         // Title strip
-        LoomText(viewportX + 12, viewportY + 8, "ATLAS  ·  " + Str(self\nodeCount) + " zones  ·  portal links derived from data", LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
+        LoomText(viewportX + 12, viewportY + 8, "ATLAS  |  " + Str(self\nodeCount) + " zones  |  portal links derived from data", LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
 
         Local mx% = MouseX()
         Local my% = MouseY()

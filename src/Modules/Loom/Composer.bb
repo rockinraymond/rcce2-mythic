@@ -184,7 +184,9 @@ Type Composer
         Local h% = sh - CMP_TOP - CMP_BOT_PAD
 
         // Panel chrome -- brass left rule signals the primary surface.
-        LoomFill(x, y, w, h, LOOM_STONE_850_R, LOOM_STONE_850_G, LOOM_STONE_850_B)
+        // Subtle stone-850 -> stone-900 gradient gives the panel depth
+        // rather than reading as a flat slab pasted onto the browser.
+        LoomGradientV(x, y, w, h, LOOM_STONE_850_R, LOOM_STONE_850_G, LOOM_STONE_850_B, LOOM_STONE_900_R, LOOM_STONE_900_G, LOOM_STONE_900_B)
         LoomBorder(x, y, w, h, LOOM_BRASS_700_R, LOOM_BRASS_700_G, LOOM_BRASS_700_B)
         LoomFill(x, y, 3, h, LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
 
@@ -244,10 +246,10 @@ Type Composer
         Local stackSize% = ListSize(self\threads\backStack)
         Local footMsg$ = "Esc returns to browser"
         If self\editKind = "" And stackSize > 0
-            footMsg = "Esc walks back  ·  " + Str(stackSize) + " in trail"
+            footMsg = "Esc walks back  |  " + Str(stackSize) + " in trail"
         EndIf
         If self\editKind <> ""
-            footMsg = "Enter to commit  ·  Esc to cancel edit"
+            footMsg = "Enter to commit  |  Esc to cancel edit"
         EndIf
         LoomText(x + CMP_PAD, y + h - 22, footMsg, LOOM_STONE_300_R, LOOM_STONE_300_G, LOOM_STONE_300_B)
 
