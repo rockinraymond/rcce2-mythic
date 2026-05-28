@@ -126,6 +126,10 @@ Include "Modules\Loom\EntityFactory.bb"
 Include "Modules\Loom\SaveAll.bb"
 Include "Modules\Loom\Help.bb"
 Include "Modules\Loom\Toasts.bb"
+// 3D mesh preview -- after ImageCache (shares Loom_BeginFrame infra)
+// and after every other module that might need it. Pulls in Media.bb's
+// GetMesh + Blitz3D 3D primitives.
+Include "Modules\Loom\MeshPreview.bb"
 
 
 // =============================================================================
@@ -453,6 +457,12 @@ WriteLog(LoomLog, "Loaded " + Str(TotalZones) + " zones")
 // half-set-up projects.
 Loom_LoadSettings()
 
+// 3D mesh preview infrastructure -- creates a hidden camera + light +
+// render-to-texture. Used by the actor composer to show a spinning
+// preview of the actor's base mesh. Initialized once at boot; freed
+// at shutdown via Loom_ShutdownMeshPreview.
+Loom_InitMeshPreview()
+
 WriteLog(LoomLog, "** Data load complete **")
 
 
@@ -469,6 +479,8 @@ WriteLog(LoomLog, "** Loom shutdown **")
 // Persist the per-project recents list to Data/Loom/recents.txt so the
 // next session can show "where was I" without rebuilding from scratch.
 If app\recents <> Null Then Recents::persist(app\recents)
+// Free 3D preview GPU resources before exit.
+Loom_ShutdownMeshPreview()
 CloseAllLogs()
 End
 
