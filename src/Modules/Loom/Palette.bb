@@ -48,10 +48,9 @@ Const PAL_MAX_RESULTS   = 12
 Const PAL_HINT_H        = 24
 Const PAL_CURSOR_PERIOD = 1000
 
-// Scoring constants (higher = better)
-Const PAL_SCORE_PREFIX = 1000
-Const PAL_SCORE_SUBSTR = 100
-Const PAL_SCORE_EXACT  = 5000
+// Scoring constants + the scoreName ranking logic now live in
+// SearchScore.bb (pure + unit-tested via SearchScoreTest.bb);
+// Palette::scoreName delegates to Loom_ScoreName.
 
 
 // -----------------------------------------------------------------------------
@@ -596,21 +595,12 @@ Type Palette
 
 
     // -------------------------------------------------------------------------
-    // scoreName -- substring score with prefix + exact bonuses. q must be
-    // already lower-cased and trimmed by the caller; this function lowers
-    // name. Returns 0 for no match.
+    // scoreName -- thin delegate to the pure, unit-tested Loom_ScoreName in
+    // SearchScore.bb. q must be already lower-cased and trimmed by the
+    // caller. Kept as a method so the scoreOrBaseline call site is unchanged.
     // -------------------------------------------------------------------------
     Method scoreName%(q$, name$)
-        If name = "" Then Return 0
-        Local lname$ = Lower$(name)
-
-        If lname = q Then Return PAL_SCORE_EXACT
-        If Left$(lname, Len(q)) = q Then Return PAL_SCORE_PREFIX + (200 - Len(name))
-
-        // Substring -- Instr returns 1-based index, 0 = not found
-        Local pos% = Instr(lname, q)
-        If pos > 0 Then Return PAL_SCORE_SUBSTR + (100 - pos)
-        Return 0
+        Return Loom_ScoreName(q, name)
     End Method
 
 

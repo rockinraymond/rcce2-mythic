@@ -110,6 +110,8 @@ Include "Modules\Loom\Theme.bb"
 // Included early; no deps.
 Include "Modules\Loom\NameUtil.bb"
 Include "Modules\Loom\Clamp.bb"
+// SearchScore -- pure command-palette name ranking; Palette delegates to it.
+Include "Modules\Loom\SearchScore.bb"
 Include "Modules\Loom\Threads.bb"
 // Settings BEFORE Composer so the LoomCfg_* / SettingsSaved globals
 // are declared by the time Strict Composer methods reference them.
