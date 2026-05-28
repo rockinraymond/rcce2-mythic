@@ -127,8 +127,14 @@ Type Ribbon
         // Clickable when > 0 + BrokenRefs is wired: opens the finder modal
         // so the user can jump to each broken source and fix it.
         If self\cachedBrokenRefs > 0
+            // Label says "broken ref(s) + issues" because the modal also
+            // surfaces warning/info issues (playability, weapon-config,
+            // orphan zones) that aren't counted by WorldCache. The cache
+            // only tracks the higher-severity broken-ref count for the
+            // ribbon's at-a-glance signal.
             Local brokenLabel$ = Str(self\cachedBrokenRefs) + " broken ref"
             If self\cachedBrokenRefs > 1 Then brokenLabel = brokenLabel + "s"
+            brokenLabel = brokenLabel + " + issues"
             Local brkW% = StringWidth(brokenLabel) + 24
             Local brkX% = sw / 2 - brkW / 2
             Local brkY% = 4
@@ -148,7 +154,21 @@ Type Ribbon
                 consumed = True
             EndIf
         Else
-            LoomTextCentered(sw / 2, 6, "no broken references", LOOM_STONE_300_R, LOOM_STONE_300_G, LOOM_STONE_300_B)
+            // No broken refs but warning/info issues may still be in the
+            // modal. Clickable so the user can open the modal regardless.
+            Local emptyLabel$ = "no broken refs  |  click for all issues"
+            Local emptyW% = StringWidth(emptyLabel) + 24
+            Local emptyX% = sw / 2 - emptyW / 2
+            Local emptyHover% = (mx >= emptyX And mx < emptyX + emptyW And my >= 4 And my < 4 + RIBBON_BADGE_H)
+            If emptyHover = True
+                LoomTextCentered(sw / 2, 6, emptyLabel, LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
+            Else
+                LoomTextCentered(sw / 2, 6, emptyLabel, LOOM_STONE_300_R, LOOM_STONE_300_G, LOOM_STONE_300_B)
+            EndIf
+            If emptyHover And clicked And self\brokenRefs <> Null
+                BrokenRefs::openModal(self\brokenRefs)
+                consumed = True
+            EndIf
         EndIf
 
         // Right side: total entity counts (compact)
