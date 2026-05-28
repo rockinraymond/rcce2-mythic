@@ -1092,13 +1092,27 @@ Function Loom_DrawZoneViewport(zoneHandle, x, y)
     ; if the highlight didn't change, no scaling work at all.
     If LoomZoneHighlightKind$ <> VPPrevHighlightKind$ Or LoomZoneHighlightIdx <> VPPrevHighlightIdx
         Local hm.ZoneViewportMarker
+        Local newCenterX# = VPSceneCenterX#
+        Local newCenterZ# = VPSceneCenterZ#
+        Local centerChanged = False
         For hm = Each ZoneViewportMarker
             If hm\Kind = VPPrevHighlightKind$ And hm\IndexN = VPPrevHighlightIdx And VPPrevHighlightKind$ <> ""
                 ScaleEntity hm\EN, hm\BaseScale, hm\BaseScale, hm\BaseScale
             Else If hm\Kind = LoomZoneHighlightKind$ And hm\IndexN = LoomZoneHighlightIdx And LoomZoneHighlightKind$ <> ""
                 ScaleEntity hm\EN, hm\BaseScale * 1.6, hm\BaseScale * 1.6, hm\BaseScale * 1.6
+                ; Camera-follow: pan the orbit center to the new marker
+                ; so it lands inside the visible frustum even when it
+                ; was previously off-screen. Don't touch zoom/yaw/pitch
+                ; -- user keeps their viewing angle.
+                newCenterX# = EntityX#(hm\EN)
+                newCenterZ# = EntityZ#(hm\EN)
+                centerChanged = True
             EndIf
         Next
+        If centerChanged = True
+            VPSceneCenterX# = newCenterX#
+            VPSceneCenterZ# = newCenterZ#
+        EndIf
         VPPrevHighlightKind$ = LoomZoneHighlightKind$
         VPPrevHighlightIdx   = LoomZoneHighlightIdx
         VPDirty = True
