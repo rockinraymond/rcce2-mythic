@@ -38,6 +38,13 @@ Type Help
     // the next frame (same pattern as the composer body).
     Field scroll%
     Field lastContentH%
+    // Visible body band [bodyTop, bodyBottom], set each render. The row /
+    // section helpers gate their own drawing to this band (composer-style
+    // canPaintRow), so we scroll by pixel offset WITHOUT a 2D Viewport clip.
+    // (TrueType text under a clipped Viewport overflowed the engine's
+    // text path -- the composer avoids it the same way.)
+    Field bodyTop%
+    Field bodyBottom%
 
 
     Method create.Help()
@@ -103,6 +110,9 @@ Type Help
         Local bodyTop%    = modalY + HELP_HEADER_H + 8
         Local bodyBottom% = modalY + HELP_MODAL_H - HELP_HINT_H - 10
         Local bodyH%      = bodyBottom - bodyTop
+        // Publish the band so the row/section helpers can gate their draws.
+        self\bodyTop    = bodyTop
+        self\bodyBottom = bodyBottom
 
         // Mouse wheel + arrow keys scroll the body. Loom_MouseWheel is the
         // per-frame delta; each tick moves HELP_ROW_H * 3 px. Clamp against
@@ -119,14 +129,10 @@ Type Help
         If self\scroll < 0 Then self\scroll = 0
         If self\scroll > maxScroll Then self\scroll = maxScroll
 
-        // Clip subsequent 2D drawing to the body band so overflow rows don't
-        // paint over the footer / outside the modal. Reset to full screen
-        // after the table (footer + scrollbar draw unclipped).
-        Viewport modalX + 2, bodyTop, HELP_MODAL_W - 4, bodyH
-
         // Body -- rendered as a two-column table via per-row helpers so
         // the row layout stays consistent. Rows start at bodyTop offset by
-        // the scroll; the clip hides anything above/below the band.
+        // the scroll; each helper gates its draw to [bodyTop, bodyBottom]
+        // (no 2D Viewport clip -- see the field comment above).
         Local rowY% = bodyTop - self\scroll
 
         rowY = Help::section(self, modalX, rowY, "Global")
@@ -176,7 +182,6 @@ Type Help
         // unscrolled coords) so next frame can clamp scroll, then drop the
         // clip so the footer + scrollbar draw normally.
         self\lastContentH = (rowY + self\scroll) - bodyTop
-        Viewport 0, 0, GraphicsWidth(), GraphicsHeight()
 
         // Scrollbar thumb on the right edge of the body when content overflows.
         If self\lastContentH > bodyH
@@ -208,8 +213,14 @@ Type Help
     // section -- brass-underlined section header. Returns next y.
     // -------------------------------------------------------------------------
     Method section%(modalX%, y%, title$)
-        LoomText(modalX + HELP_PAD, y, title, LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
-        LoomHRule(modalX + HELP_PAD, y + 18, HELP_MODAL_W - HELP_PAD * 2, LOOM_BRASS_700_R, LOOM_BRASS_700_G, LOOM_BRASS_700_B)
+        // Gate to the visible band -- only paint when the whole header
+        // (text + underline) fits inside [bodyTop, bodyBottom]. Out-of-view
+        // headers are skipped but still advance y so layout/scroll stay
+        // consistent. This replaces the 2D Viewport clip.
+        If y >= self\bodyTop And y + 24 <= self\bodyBottom
+            LoomText(modalX + HELP_PAD, y, title, LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
+            LoomHRule(modalX + HELP_PAD, y + 18, HELP_MODAL_W - HELP_PAD * 2, LOOM_BRASS_700_R, LOOM_BRASS_700_G, LOOM_BRASS_700_B)
+        EndIf
         Return y + 24
     End Method
 
@@ -218,8 +229,12 @@ Type Help
     // row -- two-column "key : description" row. Returns next y.
     // -------------------------------------------------------------------------
     Method row%(modalX%, y%, keyLabel$, desc$)
-        LoomText(modalX + HELP_PAD,                  y, keyLabel, LOOM_PARCHMENT_100_R, LOOM_PARCHMENT_100_G, LOOM_PARCHMENT_100_B)
-        LoomText(modalX + HELP_PAD + HELP_KEY_COL_W, y, desc,     LOOM_STONE_200_R, LOOM_STONE_200_G, LOOM_STONE_200_B)
+        // Same band gate as section() -- skip drawing rows scrolled out of
+        // the visible body, but always advance y.
+        If y >= self\bodyTop And y + HELP_ROW_H <= self\bodyBottom
+            LoomText(modalX + HELP_PAD,                  y, keyLabel, LOOM_PARCHMENT_100_R, LOOM_PARCHMENT_100_G, LOOM_PARCHMENT_100_B)
+            LoomText(modalX + HELP_PAD + HELP_KEY_COL_W, y, desc,     LOOM_STONE_200_R, LOOM_STONE_200_G, LOOM_STONE_200_B)
+        EndIf
         Return y + HELP_ROW_H
     End Method
 End Type
