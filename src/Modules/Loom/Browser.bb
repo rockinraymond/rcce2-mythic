@@ -757,6 +757,18 @@ Type Browser
 
         Local count% = 0
 
+        // Clip card drawing to the grid band (below the filter bar, above the
+        // footer). cardVisible() only decides WHETHER to draw a card, not clip
+        // it -- so a partially-scrolled card at the top/bottom edge was drawn
+        // in full and bled over the tab/filter chrome (top) or the footer
+        // (bottom). The 2D Viewport pixel-clips them to the band. Reset to the
+        // full buffer after the dispatch so later surfaces aren't clipped.
+        Local clipTop% = BR_FILTER_BAR_Y + BR_FILTER_BAR_H + 2
+        Local clipBot% = sh - BR_BOT_RIBBON
+        If clipBot > clipTop
+            Viewport 0, clipTop, sw, clipBot - clipTop
+        EndIf
+
         If cat = "actor"
             count = Browser::drawActorGrid(self, sw, sh, mx, my, clicked, gridX, gridY, cols)
         EndIf
@@ -799,6 +811,10 @@ Type Browser
         If cat = "settings"
             count = Browser::drawSettingsCard(self, sw, sh, mx, my, clicked, gridX, gridY)
         EndIf
+
+        // Done drawing cards -- restore the full-buffer 2D viewport so the
+        // empty-state text, composer, ribbon, and modals aren't clipped.
+        Viewport 0, 0, GraphicsWidth(), GraphicsHeight()
 
         // Cache for next frame's pumpNavKeyboard.
         self\lastCount = count
