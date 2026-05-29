@@ -8,6 +8,7 @@ ChangeDir RootDir$
 
 ; Includes --------------------------------------------------------------------------------------------------------------------------
 
+Include "Modules\Path.bb"
 Include "Modules\RCEnet.bb"
 Include "Modules\Media.bb"
 Include "Modules\MediaImport.bb"
@@ -9699,15 +9700,9 @@ Function RepositionWaypointLinks(WP, Parent = True)
 
 End Function
 
-; Gets the stripped filename from a path
-Function GetFilename$(Path$)
-
-	For i = Len(Path$) To 1 Step -1
-		If Mid$(Path$, i, 1) = "\" Or Mid$(Path$, i, 1) = "/" Then Return Mid$(Path$, i + 1)
-	Next
-	Return Path$
-
-End Function
+; GetFilename$ moved to Modules\Path.bb (ADR-004 Phase A) so Loom + the
+; shared zone loader can use it without depending on GUE.bb. Included near
+; the top of this file; callers below resolve to it unchanged.
 
 ; Displays the saving dialog
 Function SaveDialog()
