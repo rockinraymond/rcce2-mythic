@@ -2936,22 +2936,52 @@ Type Composer
         Local cx% = rx + rw / 2
         Local cy% = ry + rh / 2
 
-        Local nodeW% = 150
         Local nodeH% = 24
-        Local radius# = Float(rh) / 2.0 - 50.0
-        Local maxR# = Float(rw) / 2.0 - 90.0
+        Local radius# = Float(rh) / 2.0 - 60.0
+        Local maxR# = Float(rw) / 2.0 - 150.0
         If radius# > maxR# Then radius# = maxR#
-        If radius# < 80.0 Then radius# = 80.0
+        If radius# < 90.0 Then radius# = 90.0
 
-        // Threads + nodes (centre node paints last, on top).
-        Local i%
-        For i = 0 To self\twCount - 1
-            Local ang# = Float(i) * 360.0 / Float(self\twCount) - 90.0
-            Local nxC% = cx + Int(Cos(ang#) * radius#)
-            Local nyC% = cy + Int(Sin(ang#) * radius#)
-            LoomLine(cx, cy, nxC, nyC, LOOM_BRASS_700_R, LOOM_BRASS_700_G, LOOM_BRASS_700_B)
-            Threads::renderChip(self\threads, nxC - nodeW / 2, nyC - nodeH / 2, nodeW, nodeH, self\twKind[i], self\twRefID[i], mx, my, clicked, rightClicked)
-        Next
+        // Layout: collectThreads emits in type order, so twKind is already
+        // grouped (faction, animset, mesh, texture, sound). Give each type its
+        // own contiguous arc with a gap + heading between groups, so same-type
+        // refs cluster and the type is obvious. Chip widths size to their
+        // label. Centre node + notes paint after (on top).
+        Local n% = self\twCount
+        If n > 0
+            Local groupCount% = 1
+            Local gi%
+            For gi = 1 To n - 1
+                If self\twKind[gi] <> self\twKind[gi - 1] Then groupCount = groupCount + 1
+            Next
+            Local gapDeg# = 16.0
+            Local usable# = 360.0 - gapDeg# * Float(groupCount)
+            If usable# < 60.0 Then usable# = 60.0
+            Local perNode# = usable# / Float(n)
+
+            Local curAng# = -90.0
+            Local grpStartAng# = -90.0
+            Local i%
+            For i = 0 To n - 1
+                // Boundary: close the previous group with a heading, then gap.
+                If i > 0 And self\twKind[i] <> self\twKind[i - 1]
+                    Composer::drawTypeLabel(self, cx, cy, (grpStartAng# + curAng# - perNode#) / 2.0, radius# + 50.0, self\twKind[i - 1])
+                    curAng# = curAng# + gapDeg#
+                    grpStartAng# = curAng#
+                EndIf
+                // Chip sized to its label (matches renderChip's text layout).
+                Local nm$ = Threads::lookupName(self\threads, self\twKind[i], self\twRefID[i])
+                If nm = "" Then nm = "(broken " + self\twKind[i] + " #" + Str(self\twRefID[i]) + ")"
+                Local nodeW% = StringWidth(nm) + 64
+                Local nxC% = cx + Int(Cos(curAng#) * radius#)
+                Local nyC% = cy + Int(Sin(curAng#) * radius#)
+                LoomLine(cx, cy, nxC, nyC, LOOM_BRASS_700_R, LOOM_BRASS_700_G, LOOM_BRASS_700_B)
+                Threads::renderChip(self\threads, nxC - nodeW / 2, nyC - nodeH / 2, nodeW, nodeH, self\twKind[i], self\twRefID[i], mx, my, clicked, rightClicked)
+                curAng# = curAng# + perNode#
+            Next
+            // Heading for the final group.
+            Composer::drawTypeLabel(self, cx, cy, (grpStartAng# + curAng# - perNode#) / 2.0, radius# + 50.0, self\twKind[n - 1])
+        EndIf
 
         // Centre node -- the focused entity (highlighted, non-clickable).
         Local cName$ = Threads::lookupName(self\threads, kind, refID)
@@ -2972,6 +3002,25 @@ Type Composer
         If self\twOverflow > 0
             LoomTextCentered(cx, ry + rh - 20, "+ " + Str(self\twOverflow) + " more -- see the composer roster", LOOM_STONE_300_R, LOOM_STONE_300_G, LOOM_STONE_300_B)
         EndIf
+    End Method
+
+
+    // Draw a type heading for a thread group at the given angle/radius from
+    // the centre (brass, centered) -- e.g. "MESHES" above the mesh cluster.
+    Method drawTypeLabel(cx%, cy%, ang#, r#, kind$)
+        Local lx% = cx + Int(Cos(ang#) * r#)
+        Local ly% = cy + Int(Sin(ang#) * r#)
+        LoomTextCentered(lx, ly - 6, Composer::typeLabel(self, kind), LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
+    End Method
+
+    Method typeLabel$(kind$)
+        If kind = "faction" Then Return "FACTION"
+        If kind = "animset" Then Return "ANIM SETS"
+        If kind = "mesh"    Then Return "MESHES"
+        If kind = "texture" Then Return "TEXTURES"
+        If kind = "sound"   Then Return "SOUNDS"
+        If kind = "actor"   Then Return "ACTORS"
+        Return Upper$(kind)
     End Method
 
 
