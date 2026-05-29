@@ -2990,16 +2990,24 @@ Type Composer
             If refID >= 0 And refID <= 65535
                 Local A.Actor = ActorList(refID)
                 If A <> Null
-                    If A\DefaultFaction > 0 Then Composer::twAdd(self, "faction", A\DefaultFaction)
+                    // Faction slot 0 is a VALID faction (e.g. "Traders"), so
+                    // gate on "resolves to a real faction" not ">0".
+                    If A\DefaultFaction >= 0 And A\DefaultFaction <= 99
+                        If FactionNames$(A\DefaultFaction) <> "" Then Composer::twAdd(self, "faction", A\DefaultFaction)
+                    EndIf
                     If A\MAnimationSet <> 0 Then Composer::twAdd(self, "animset", A\MAnimationSet)
                     If A\FAnimationSet <> 0 Then Composer::twAdd(self, "animset", A\FAnimationSet)
                 EndIf
             EndIf
         Else If kind = "faction"
-            Local ai%
-            For ai = 0 To 65535
-                Local Ac.Actor = ActorList(ai)
-                If Ac <> Null And Ac\DefaultFaction = refID
+            // Iterate ONLY real actors via Each Actor (like renderFaction).
+            // The old 0..65535 ActorList walk read Ac\DefaultFaction on every
+            // Null slot -- BlitzForge's And is non-short-circuit, so for
+            // refID=0 those Null reads "matched" ~65k slots and hammered the
+            // null-object path (the stack overflow). Each Actor visits only
+            // live actors and never dereferences Null.
+            For Ac.Actor = Each Actor
+                If Ac\DefaultFaction = refID
                     If self\twCount < TW_MAX
                         Composer::twAdd(self, "actor", Ac\ID)
                     Else
@@ -3008,12 +3016,10 @@ Type Composer
                 EndIf
             Next
         Else If kind = "animset"
-            Local aj%
-            For aj = 0 To 65535
-                Local Ac2.Actor = ActorList(aj)
-                If Ac2 <> Null And (Ac2\MAnimationSet = refID Or Ac2\FAnimationSet = refID)
+            For Aw.Actor = Each Actor
+                If Aw\MAnimationSet = refID Or Aw\FAnimationSet = refID
                     If self\twCount < TW_MAX
-                        Composer::twAdd(self, "actor", Ac2\ID)
+                        Composer::twAdd(self, "actor", Aw\ID)
                     Else
                         self\twOverflow = self\twOverflow + 1
                     EndIf
