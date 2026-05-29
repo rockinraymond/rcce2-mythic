@@ -849,6 +849,25 @@ Type BrokenRefs
         cats[11] = "orphan-texture"
         cats[12] = "orphan-mesh"
 
+        // Compact display labels -- the verbose category keys wrapped the
+        // chip strip to 3-4 rows (too tall). Short labels keep the strip to
+        // ~2 full-width rows; the header text still spells out the active
+        // filter's full key so nothing is lost. Index-aligned with cats[].
+        Local shorts$[13]
+        shorts[0]  = "refs"
+        shorts[1]  = "scripts"
+        shorts[2]  = "miss-tex"
+        shorts[3]  = "miss-mesh"
+        shorts[4]  = "miss-snd"
+        shorts[5]  = "empty"
+        shorts[6]  = "play"
+        shorts[7]  = "weapon"
+        shorts[8]  = "spell"
+        shorts[9]  = "orph-zone"
+        shorts[10] = "orph-scr"
+        shorts[11] = "orph-tex"
+        shorts[12] = "orph-mesh"
+
         Local cx% = chipsX
         Local cy% = chipsY
         Local ch% = 18
@@ -878,7 +897,7 @@ Type BrokenRefs
         For ci = 0 To 12
             Local catName$ = cats[ci]
             Local count% = BrokenRefs::countCategory(self, catName)
-            Local label$ = catName + " " + Str(count)
+            Local label$ = shorts[ci] + " " + Str(count)
             Local chipW% = StringWidth(label) + 12
             // Wrap to a second row if we'd overflow the modal width
             If cx + chipW > BROKENREFS_MODAL_W - BROKENREFS_PAD

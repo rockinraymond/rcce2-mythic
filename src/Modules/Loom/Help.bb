@@ -31,10 +31,19 @@ Const HELP_KEY_COL_W = 200
 // =============================================================================
 Type Help
     Field open%
+    // Body scroll offset in pixels. The keybinding table is taller than the
+    // modal body, so the rows scroll under a clipped viewport while the
+    // chrome (header / footer / border) stays fixed. Measured-then-clamped:
+    // lastContentH is filled in during render and used to clamp scroll on
+    // the next frame (same pattern as the composer body).
+    Field scroll%
+    Field lastContentH%
 
 
     Method create.Help()
         self\open = False
+        self\scroll = 0
+        self\lastContentH = 0
         Return self
     End Method
 
@@ -46,6 +55,7 @@ Type Help
 
     Method openModal()
         self\open = True
+        self\scroll = 0
         FlushKeys
         Loom_ConsumeClick()
         WriteLog(LoomLog, "Help: open")
@@ -86,9 +96,38 @@ Type Help
         LoomText(modalX + HELP_PAD, modalY + 6, "LOOM  |  KEYBINDINGS", LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
         LoomTheme_UseBody()
 
+        // Scrollable body region. The keybinding table overflows the modal,
+        // so the rows paint under a clipped viewport that scrolls; the header
+        // above and the footer hint below stay pinned. bodyTop/bodyBottom
+        // bound the visible band.
+        Local bodyTop%    = modalY + HELP_HEADER_H + 8
+        Local bodyBottom% = modalY + HELP_MODAL_H - HELP_HINT_H - 10
+        Local bodyH%      = bodyBottom - bodyTop
+
+        // Mouse wheel + arrow keys scroll the body. Loom_MouseWheel is the
+        // per-frame delta; each tick moves HELP_ROW_H * 3 px. Clamp against
+        // last frame's measured content height.
+        Local maxScroll% = self\lastContentH - bodyH
+        If maxScroll < 0 Then maxScroll = 0
+        Local wheelTicks% = Loom_MouseWheel()
+        If wheelTicks <> 0
+            self\scroll = self\scroll - wheelTicks * HELP_ROW_H * 3
+            Loom_ConsumeWheel()
+        EndIf
+        If KeyDown(208) Then self\scroll = self\scroll + 8   // Down arrow
+        If KeyDown(200) Then self\scroll = self\scroll - 8   // Up arrow
+        If self\scroll < 0 Then self\scroll = 0
+        If self\scroll > maxScroll Then self\scroll = maxScroll
+
+        // Clip subsequent 2D drawing to the body band so overflow rows don't
+        // paint over the footer / outside the modal. Reset to full screen
+        // after the table (footer + scrollbar draw unclipped).
+        Viewport modalX + 2, bodyTop, HELP_MODAL_W - 4, bodyH
+
         // Body -- rendered as a two-column table via per-row helpers so
-        // the row layout stays consistent.
-        Local rowY% = modalY + HELP_HEADER_H + 12
+        // the row layout stays consistent. Rows start at bodyTop offset by
+        // the scroll; the clip hides anything above/below the band.
+        Local rowY% = bodyTop - self\scroll
 
         rowY = Help::section(self, modalX, rowY, "Global")
         rowY = Help::row(self, modalX, rowY, "Ctrl+K",       "Command palette (find anywhere)")
@@ -133,10 +172,26 @@ Type Help
         rowY = Help::row(self, modalX, rowY, "Click dirty badge",        "Save that kind")
         rowY = Help::row(self, modalX, rowY, "Click broken-ref count",   "Open the broken-ref finder")
 
+        // Done painting the table -- record the full content height (in
+        // unscrolled coords) so next frame can clamp scroll, then drop the
+        // clip so the footer + scrollbar draw normally.
+        self\lastContentH = (rowY + self\scroll) - bodyTop
+        Viewport 0, 0, GraphicsWidth(), GraphicsHeight()
+
+        // Scrollbar thumb on the right edge of the body when content overflows.
+        If self\lastContentH > bodyH
+            Local trackX% = modalX + HELP_MODAL_W - 6
+            LoomFill(trackX, bodyTop, 3, bodyH, LOOM_STONE_700_R, LOOM_STONE_700_G, LOOM_STONE_700_B)
+            Local thumbH% = (bodyH * bodyH) / self\lastContentH
+            If thumbH < 20 Then thumbH = 20
+            Local thumbY% = bodyTop + (self\scroll * (bodyH - thumbH)) / maxScroll
+            LoomFill(trackX, thumbY, 3, thumbH, LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
+        EndIf
+
         // Footer hint
         Local hy% = modalY + HELP_MODAL_H - HELP_HINT_H - 4
         LoomHRule(modalX + HELP_PAD, hy - 2, HELP_MODAL_W - HELP_PAD * 2, LOOM_BRASS_700_R, LOOM_BRASS_700_G, LOOM_BRASS_700_B)
-        LoomText(modalX + HELP_PAD, hy + 4, "Esc or F1 to close", LOOM_STONE_300_R, LOOM_STONE_300_G, LOOM_STONE_300_B)
+        LoomText(modalX + HELP_PAD, hy + 4, "Esc or F1 to close  |  wheel / arrows to scroll", LOOM_STONE_300_R, LOOM_STONE_300_G, LOOM_STONE_300_B)
 
         // Click-outside-modal closes
         If clicked = True
