@@ -2975,11 +2975,45 @@ Type Composer
     End Method
 
 
+    // True if (kind, refID) is already a thread node -- so an asset
+    // referenced from several slots (e.g. one mesh used by 3 gubbins) shows
+    // as a single node, not duplicates.
+    Method twHas%(kind$, refID%)
+        Local i%
+        For i = 0 To self\twCount - 1
+            If self\twKind[i] = kind And self\twRefID[i] = refID Then Return True
+        Next
+        Return False
+    End Method
+
+    // Add a thread node. Dedups, caps at TW_MAX (surplus -> twOverflow note).
     Method twAdd(kind$, refID%)
-        If self\twCount >= TW_MAX Then Return
+        If Composer::twHas(self, kind, refID) Then Return
+        If self\twCount >= TW_MAX
+            self\twOverflow = self\twOverflow + 1
+            Return
+        EndIf
         self\twKind[self\twCount] = kind
         self\twRefID[self\twCount] = refID
         self\twCount = self\twCount + 1
+    End Method
+
+    // Add an asset-catalog reference as a thread node. The entity stores an
+    // asset ID; the catalog node needs the catalog INDEX, so resolve ID ->
+    // entry -> Index. Unset (0) and "none" (65535) sentinels are skipped, as
+    // are IDs not present in the catalog.
+    Method twAddAsset(catKind$, assetID%)
+        If assetID <= 0 Or assetID >= 65535 Then Return
+        If catKind = "mesh"
+            Local m.MeshEntry = Meshes_GetByID(assetID)
+            If m <> Null Then Composer::twAdd(self, "mesh", m\Index)
+        Else If catKind = "texture"
+            Local t.TextureEntry = Textures_GetByID(assetID)
+            If t <> Null Then Composer::twAdd(self, "texture", t\Index)
+        Else If catKind = "sound"
+            Local sd.SoundEntry = Sounds_GetByID(assetID)
+            If sd <> Null Then Composer::twAdd(self, "sound", sd\Index)
+        EndIf
     End Method
 
 
@@ -2997,38 +3031,64 @@ Type Composer
                     EndIf
                     If A\MAnimationSet <> 0 Then Composer::twAdd(self, "animset", A\MAnimationSet)
                     If A\FAnimationSet <> 0 Then Composer::twAdd(self, "animset", A\FAnimationSet)
+                    // Meshes: base bodies + 6 gubbins, beards, hair.
+                    Local mi%
+                    For mi = 0 To 7
+                        Composer::twAddAsset(self, "mesh", A\MeshIDs[mi])
+                    Next
+                    Local bi%
+                    For bi = 0 To 4
+                        Composer::twAddAsset(self, "mesh", A\BeardIDs[bi])
+                        Composer::twAddAsset(self, "mesh", A\MaleHairIDs[bi])
+                        Composer::twAddAsset(self, "mesh", A\FemaleHairIDs[bi])
+                    Next
+                    // Textures: face / body / blood.
+                    Local ti%
+                    For ti = 0 To 4
+                        Composer::twAddAsset(self, "texture", A\MaleFaceIDs[ti])
+                        Composer::twAddAsset(self, "texture", A\FemaleFaceIDs[ti])
+                        Composer::twAddAsset(self, "texture", A\MaleBodyIDs[ti])
+                        Composer::twAddAsset(self, "texture", A\FemaleBodyIDs[ti])
+                    Next
+                    Composer::twAddAsset(self, "texture", A\BloodTexID)
+                    // Speech sounds.
+                    Local si%
+                    For si = 0 To 15
+                        Composer::twAddAsset(self, "sound", A\MSpeechIDs[si])
+                        Composer::twAddAsset(self, "sound", A\FSpeechIDs[si])
+                    Next
                 EndIf
             EndIf
-        Else If kind = "faction"
-            // Iterate ONLY real actors via Each Actor (like renderFaction).
-            // The old 0..65535 ActorList walk read Ac\DefaultFaction on every
-            // Null slot -- BlitzForge's And is non-short-circuit, so for
-            // refID=0 those Null reads "matched" ~65k slots and hammered the
-            // null-object path (the stack overflow). Each Actor visits only
-            // live actors and never dereferences Null.
-            For Ac.Actor = Each Actor
-                If Ac\DefaultFaction = refID
-                    If self\twCount < TW_MAX
-                        Composer::twAdd(self, "actor", Ac\ID)
-                    Else
-                        self\twOverflow = self\twOverflow + 1
-                    EndIf
+        Else If kind = "item"
+            If refID >= 0 And refID <= 65534
+                Local It.Item = ItemList(refID)
+                If It <> Null
+                    Composer::twAddAsset(self, "texture", It\ThumbnailTexID)
+                    Composer::twAddAsset(self, "texture", It\ImageID)
+                    Composer::twAddAsset(self, "mesh", It\MMeshID)
+                    Composer::twAddAsset(self, "mesh", It\FMeshID)
                 EndIf
+            EndIf
+        Else If kind = "spell"
+            If refID >= 0 And refID <= 65534
+                Local Sp.Spell = SpellsList(refID)
+                If Sp <> Null Then Composer::twAddAsset(self, "texture", Sp\ThumbnailTexID)
+            EndIf
+        Else If kind = "faction"
+            // Iterate ONLY real actors via Each Actor (like renderFaction) --
+            // never the 0..65535 ActorList walk, whose Null reads via
+            // BlitzForge's non-short-circuit And caused the faction-0 crash.
+            For Ac.Actor = Each Actor
+                If Ac\DefaultFaction = refID Then Composer::twAdd(self, "actor", Ac\ID)
             Next
         Else If kind = "animset"
             For Aw.Actor = Each Actor
-                If Aw\MAnimationSet = refID Or Aw\FAnimationSet = refID
-                    If self\twCount < TW_MAX
-                        Composer::twAdd(self, "actor", Aw\ID)
-                    Else
-                        self\twOverflow = self\twOverflow + 1
-                    EndIf
-                EndIf
+                If Aw\MAnimationSet = refID Or Aw\FAnimationSet = refID Then Composer::twAdd(self, "actor", Aw\ID)
             Next
         EndIf
-        // item / spell / settings / catalog kinds: no jumpable entity threads
-        // in v1 (their refs are asset-catalog rows / script strings, shown in
-        // the composer). Centre node renders alone with the "none" note.
+        // mesh / texture / sound / settings: no outgoing threads (they're leaf
+        // assets / config). The composer roster + "Used by" sections cover
+        // their back-references.
     End Method
 
 
