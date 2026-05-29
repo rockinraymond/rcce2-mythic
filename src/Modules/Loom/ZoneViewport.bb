@@ -51,6 +51,10 @@ Const VP_AXIS_LENGTH#     = 30.0          ; XYZ axis indicator length
 Const VP_AXIS_THICKNESS#  = 0.3           ; thin cube acting as a line
 Const VP_LINE_THICKNESS#  = 0.25          ; waypoint connection line thickness
 Const VP_MAX_LINES        = 500           ; cap connection line entities
+Const VP_MAX_SPAWN_MESHES = 200           ; cap loaded actor meshes per zone
+                                          ; (beyond this, spawns fall back to
+                                          ; marker cubes -- bounds load cost
+                                          ; on pathological 1000-spawn zones)
 
 
 ; ---- Module state -----------------------------------------------------------
@@ -656,6 +660,29 @@ End Function
 ; arrays, instantiate a colored cube for each defined entry. Also computes
 ; the scene bbox so the camera can auto-fit.
 ; =============================================================================
+; =============================================================================
+; Loom_LoadSpawnActorMesh -- load the spawned actor's base mesh as an OWNED
+; entity (GetMesh Duplicate=True) scaled by the actor's Scale, for placing
+; at a spawn point so the designer sees the actual creature. Returns 0 if
+; the actor or its mesh doesn't resolve -- the caller falls back to a marker
+; cube. The mesh origin is at the feet for character meshes, so the caller
+; positions it directly on the ground (no half-size lift like the cube).
+; =============================================================================
+Function Loom_LoadSpawnActorMesh(actorID)
+    If actorID < 0 Or actorID > 65535 Then Return 0
+    Local A.Actor = ActorList(actorID)
+    If A = Null Then Return 0
+    Local meshID = A\MeshIDs[0]      ; base (male) body mesh
+    If meshID <= 0 Then Return 0
+    Local ent = GetMesh(meshID, True)
+    If ent = 0 Then Return 0
+    Local sc# = A\Scale#
+    If sc# <= 0.0 Then sc# = 1.0
+    ScaleEntity ent, sc#, sc#, sc#
+    Return ent
+End Function
+
+
 Function Loom_LoadZoneMarkers(Ar.Area)
     Loom_FreeZoneMarkers()
     VPCountPortals  = 0
@@ -697,21 +724,39 @@ Function Loom_LoadZoneMarkers(Ar.Area)
         EndIf
     Next
 
-    ; Spawns -- arcane cubes
+    ; Spawns -- render the spawned actor's actual mesh at the spawn point so
+    ; the designer sees the creatures populating the zone. Falls back to an
+    ; arcane cube when the actor / base mesh doesn't resolve, or once the
+    ; per-zone mesh cap is hit (bounds load cost on huge zones).
+    Local spawnMeshCount = 0
     For i = 0 To 999
         If Ar\SpawnActor[i] > 0
             Local waypointIdx = Ar\SpawnWaypoint[i]
             If waypointIdx >= 0 And waypointIdx <= 1999
-                Local sEn = CreateCube()
-                ScaleEntity sEn, VP_MARKER_SIZE#, VP_MARKER_SIZE#, VP_MARKER_SIZE#
-                PositionEntity sEn, Ar\WaypointX#[waypointIdx], VP_SCENE_Y_OFFSET# + Ar\WaypointY#[waypointIdx] + VP_MARKER_SIZE#, Ar\WaypointZ#[waypointIdx]
-                EntityColor sEn, LOOM_ARCANE_500_R, LOOM_ARCANE_500_G, LOOM_ARCANE_500_B
+                Local sEn = 0
+                Local spawnScale# = VP_MARKER_SIZE#
+                If spawnMeshCount < VP_MAX_SPAWN_MESHES
+                    sEn = Loom_LoadSpawnActorMesh(Ar\SpawnActor[i])
+                EndIf
+                If sEn <> 0
+                    ; Actor mesh: origin at the feet -> sit it on the ground.
+                    spawnMeshCount = spawnMeshCount + 1
+                    PositionEntity sEn, Ar\WaypointX#[waypointIdx], VP_SCENE_Y_OFFSET# + Ar\WaypointY#[waypointIdx], Ar\WaypointZ#[waypointIdx]
+                    Local A2.Actor = ActorList(Ar\SpawnActor[i])
+                    If A2 <> Null And A2\Scale# > 0.0 Then spawnScale# = A2\Scale#
+                Else
+                    ; Fallback marker cube (centered -> lift by half-size).
+                    sEn = CreateCube()
+                    ScaleEntity sEn, VP_MARKER_SIZE#, VP_MARKER_SIZE#, VP_MARKER_SIZE#
+                    PositionEntity sEn, Ar\WaypointX#[waypointIdx], VP_SCENE_Y_OFFSET# + Ar\WaypointY#[waypointIdx] + VP_MARKER_SIZE#, Ar\WaypointZ#[waypointIdx]
+                    EntityColor sEn, LOOM_ARCANE_500_R, LOOM_ARCANE_500_G, LOOM_ARCANE_500_B
+                EndIf
                 EntityPickMode sEn, 1
                 Local sm.ZoneViewportMarker = New ZoneViewportMarker
                 sm\EN = sEn
                 sm\Kind = "spawn"
                 sm\IndexN = i
-                sm\BaseScale = VP_MARKER_SIZE#
+                sm\BaseScale = spawnScale#
                 VPCountSpawns = VPCountSpawns + 1
                 If Ar\WaypointX#[waypointIdx] < minX# Then minX# = Ar\WaypointX#[waypointIdx]
                 If Ar\WaypointX#[waypointIdx] > maxX# Then maxX# = Ar\WaypointX#[waypointIdx]
