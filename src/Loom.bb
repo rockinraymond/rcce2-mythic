@@ -341,6 +341,11 @@ Type Loom
         If Help::isOpen(self\help) = True Then browserInput = False
         If ScriptSearch::isOpen(self\scriptSearch) = True Then browserInput = False
         If Composer::isEditing(self\composer) = True Then browserInput = False
+        // A focused zone shows the full-screen 3D viewport over the card
+        // grid; the grid (and its type-to-filter) is hidden, and the
+        // viewport owns WASD/QE for fly movement -- so silence the browser
+        // keyboard to keep fly keys out of the (invisible) card filter.
+        If self\threads\focusKind = "zone" Then browserInput = False
 
         // Pass composer width so the browser's card grid shrinks to
         // avoid right-column cards being half-hidden behind the panel.
