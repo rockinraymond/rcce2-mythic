@@ -1155,6 +1155,51 @@ Function Loom_DrawZoneViewport(zoneHandle, x, y, w, h)
         VPPanning = False
     EndIf
 
+    ; ---- RMB-hold fly: WASD move + Q/E down/up ------------------------------
+    ; While RMB is held over the viewport (and not dragging a marker), WASD
+    ; flies through the scene and Q/E drop/raise. Movement translates the
+    ; orbit pivot (VPSceneCenter) along the camera's facing/right vectors, so
+    ; you keep your view angle while moving; LMB still orbits, wheel zooms.
+    ; (Loom.bb silences the browser keyboard while a zone is focused, so
+    ; these keys don't dribble into the card filter.) Scancodes: W17 A30 S31
+    ; D32 Q16 E18.
+    If rmbDown = True And inside = True And VPMarkerDragging = False
+        Local flyStep# = VPDistance# * 0.03
+        If flyStep# < 2.0 Then flyStep# = 2.0
+        Local ffX# = Sin(VPYaw#)
+        Local ffZ# = -Cos(VPYaw#)
+        Local frX# = Cos(VPYaw#)
+        Local frZ# = Sin(VPYaw#)
+        If KeyDown(17) = True
+            VPSceneCenterX# = VPSceneCenterX# + ffX# * flyStep#
+            VPSceneCenterZ# = VPSceneCenterZ# + ffZ# * flyStep#
+            VPDirty = True
+        EndIf
+        If KeyDown(31) = True
+            VPSceneCenterX# = VPSceneCenterX# - ffX# * flyStep#
+            VPSceneCenterZ# = VPSceneCenterZ# - ffZ# * flyStep#
+            VPDirty = True
+        EndIf
+        If KeyDown(30) = True
+            VPSceneCenterX# = VPSceneCenterX# - frX# * flyStep#
+            VPSceneCenterZ# = VPSceneCenterZ# - frZ# * flyStep#
+            VPDirty = True
+        EndIf
+        If KeyDown(32) = True
+            VPSceneCenterX# = VPSceneCenterX# + frX# * flyStep#
+            VPSceneCenterZ# = VPSceneCenterZ# + frZ# * flyStep#
+            VPDirty = True
+        EndIf
+        If KeyDown(18) = True
+            VPSceneCenterY# = VPSceneCenterY# + flyStep#
+            VPDirty = True
+        EndIf
+        If KeyDown(16) = True
+            VPSceneCenterY# = VPSceneCenterY# - flyStep#
+            VPDirty = True
+        EndIf
+    EndIf
+
     ; ---- Position camera by orbit math -------------------------------------
     Local yawRad# = VPYaw# * 3.14159 / 180.0
     ; ---- Highlight transition: only scale on change -----------------------
@@ -1326,7 +1371,7 @@ Function Loom_DrawZoneViewport(zoneHandle, x, y, w, h)
     EndIf
 
     If inside = True
-        LoomText x + 8, y + h - 18, "LMB drag: orbit  |  MMB drag: pan  |  wheel: zoom  |  RMB drag a marker: move (+Shift = up/down)  |  Shift+LMB: add portal  |  Ctrl+LMB: delete", LOOM_STONE_300_R, LOOM_STONE_300_G, LOOM_STONE_300_B
+        LoomText x + 8, y + h - 18, "LMB: orbit  |  MMB: pan  |  wheel: zoom  |  hold RMB + WASD fly / QE up-down  |  RMB drag a marker: move  |  Shift+LMB: add portal  |  Ctrl+LMB: delete", LOOM_STONE_300_R, LOOM_STONE_300_G, LOOM_STONE_300_B
     EndIf
 
     Return True
