@@ -1642,7 +1642,7 @@ Function UpdateNetwork()
 											AI\Inventory\Amounts[SlotI] = 0
 										EndIf
 										AI\Inventory\Items[SlotI] = D\Item
-										AI\Inventory\Amounts[SlotI] = AI\Inventory\Amounts[SlotI] + D\Amount
+										AI\Inventory\Amounts[SlotI] = ClampStackAmount(AI\Inventory\Amounts[SlotI] + D\Amount)  ; cap to 16-bit save/wire ceiling
 										If SlotI < SlotI_Backpack Then SendEquippedUpdate(AI)
 
 										; Tell this player he got it
@@ -1727,7 +1727,7 @@ Function UpdateNetwork()
 												AI\Inventory\Amounts[SlotI] = 0
 											EndIf
 											AI\Inventory\Items[SlotI] = II
-											AI\Inventory\Amounts[SlotI] = AI\Inventory\Amounts[SlotI] + II\Assignment
+											AI\Inventory\Amounts[SlotI] = ClampStackAmount(AI\Inventory\Amounts[SlotI] + II\Assignment)  ; cap to 16-bit save/wire ceiling
 											II\Assignment = 0
 											If SlotI < SlotI_Backpack Then SendEquippedUpdate(AI)
 										EndIf

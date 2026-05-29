@@ -2854,7 +2854,12 @@ Function BVM_GIVEITEM(Param1%, Param2$, Param3%=1)
 											Actor\Inventory\Amounts[i] = 0
 										EndIf
 										Actor\Inventory\Items[i] = II
-										Actor\Inventory\Amounts[i] = Actor\Inventory\Amounts[i] + ThisAmount
+										; Clamp to the 16-bit save/wire ceiling (see ClampStackAmount
+										; in Inventories.bb) so a BVM GiveItem can't push the slot past
+										; what the save format represents (which would lose the whole
+										; stack on save->load). Excess above the cap is dropped here;
+										; non-lossy residual is a deferred follow-up.
+										Actor\Inventory\Amounts[i] = ClampStackAmount(Actor\Inventory\Amounts[i] + ThisAmount)
 
 										; Visual stuff
 										If i = SlotI_Weapon Or i = SlotI_Shield Or i = SlotI_Hat Or i = SlotI_Chest
