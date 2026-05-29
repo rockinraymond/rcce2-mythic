@@ -26,6 +26,10 @@ Strict
 
 
 Const CMP_W              = 380
+// Max thread-web nodes rendered radially around the focused entity. Extra
+// references past this are summed into a "+N more" note (a faction with 200
+// members can't render as 200 radial chips). 12 fits the left area legibly.
+Const TW_MAX             = 12
 Const CMP_COLLAPSED_W    = 28      ; width when self\collapsed = True
 Const CMP_COLLAPSE_BTN_W = 18      ; chevron-button size (square)
 Const CMP_COLLAPSE_BTN_H = 22
@@ -194,6 +198,20 @@ Type Composer
     // thread chip.
     Field palette.Palette
 
+    // Thread-web state. When a NON-zone entity is focused, the left content
+    // area (left of the panel) shows the design's signature "every reference
+    // is a thread" view: the focused entity at centre, its references fanning
+    // out as labelled, clickable nodes joined by dashed threads. The (kind,
+    // refID) of each outgoing thread is collected once per focus change (the
+    // collection walks ActorList for faction/animset back-refs, so it's not
+    // free) and cached; twLast* drive the recompute.
+    Field twKind$[31]
+    Field twRefID%[31]
+    Field twCount%
+    Field twOverflow%
+    Field twLastKind$
+    Field twLastRefID%
+
 
     Method create.Composer(threads.Threads)
         self\threads = threads
@@ -215,6 +233,10 @@ Type Composer
         self\bodyBottom = 0
         self\collapsed = False
         self\browser = Null
+        self\twCount = 0
+        self\twOverflow = 0
+        self\twLastKind = "?"
+        self\twLastRefID = -1
         self\bulkDeleteArmAt = 0
         self\bulkEditField = ""
         self\bulkEditBuffer = ""
@@ -455,6 +477,11 @@ Type Composer
         // editable while flying.
         If kind = "zone"
             Composer::drawZoneFullscreen(self, refID, sw, sh)
+        Else
+            // Non-zone: the left content area shows the thread web -- the
+            // focused entity with its references fanning out as clickable
+            // thread nodes (the design's signature surface).
+            Composer::drawThreadWeb(self, kind, refID, sw, sh, mx, my, clicked, rightClicked)
         EndIf
 
         If kind = "actor"
@@ -2878,6 +2905,124 @@ Type Composer
         If zvW < 120 Or zvH < 120 Then Return
         Local Ar.Area = Object.Area(refID)
         If Ar <> Null Then Loom_DrawZoneViewport(refID, zvX, zvY, zvW, zvH)
+    End Method
+
+
+    // -------------------------------------------------------------------------
+    // Thread web -- the design's signature surface. For a focused NON-zone
+    // entity, draw it at the centre of the left content area with its
+    // outgoing references fanning out as dashed threads to labelled,
+    // clickable nodes. Each node reuses Threads::renderChip, so a left-click
+    // jumps focus to it. Refs are collected once per focus change and cached
+    // (the faction/animset back-ref collectors walk ActorList).
+    // -------------------------------------------------------------------------
+    Method drawThreadWeb(kind$, refID%, sw%, sh%, mx%, my%, clicked%, rightClicked%)
+        Local rx% = 0
+        Local ry% = BR_TOP_RIBBON + BR_TAB_BAR_H + BR_FILTER_BAR_H
+        Local rw% = sw - CMP_W
+        Local rh% = sh - ry - BR_BOT_RIBBON
+        If rw < 160 Or rh < 160 Then Return
+
+        // Backdrop so the web reads as its own surface.
+        LoomGradientV(rx, ry, rw, rh, LOOM_STONE_900_R, LOOM_STONE_900_G, LOOM_STONE_900_B, LOOM_STONE_950_R, LOOM_STONE_950_G, LOOM_STONE_950_B)
+
+        // (Re)collect the focused entity's threads on focus change only.
+        If kind <> self\twLastKind Or refID <> self\twLastRefID
+            Composer::collectThreads(self, kind, refID)
+            self\twLastKind = kind
+            self\twLastRefID = refID
+        EndIf
+
+        Local cx% = rx + rw / 2
+        Local cy% = ry + rh / 2
+
+        Local nodeW% = 150
+        Local nodeH% = 24
+        Local radius# = Float(rh) / 2.0 - 50.0
+        Local maxR# = Float(rw) / 2.0 - 90.0
+        If radius# > maxR# Then radius# = maxR#
+        If radius# < 80.0 Then radius# = 80.0
+
+        // Threads + nodes (centre node paints last, on top).
+        Local i%
+        For i = 0 To self\twCount - 1
+            Local ang# = Float(i) * 360.0 / Float(self\twCount) - 90.0
+            Local nxC% = cx + Int(Cos(ang#) * radius#)
+            Local nyC% = cy + Int(Sin(ang#) * radius#)
+            LoomLine(cx, cy, nxC, nyC, LOOM_BRASS_700_R, LOOM_BRASS_700_G, LOOM_BRASS_700_B)
+            Threads::renderChip(self\threads, nxC - nodeW / 2, nyC - nodeH / 2, nodeW, nodeH, self\twKind[i], self\twRefID[i], mx, my, clicked, rightClicked)
+        Next
+
+        // Centre node -- the focused entity (highlighted, non-clickable).
+        Local cName$ = Threads::lookupName(self\threads, kind, refID)
+        If cName = "" Then cName = "(this)"
+        Local cw% = 180
+        Local ch% = 30
+        Local cnx% = cx - cw / 2
+        Local cny% = cy - ch / 2
+        LoomFill(cnx, cny, cw, ch, LOOM_ARCANE_900_R, LOOM_ARCANE_900_G, LOOM_ARCANE_900_B)
+        LoomBorder(cnx, cny, cw, ch, LOOM_ARCANE_500_R, LOOM_ARCANE_500_G, LOOM_ARCANE_500_B)
+        LoomBorder(cnx + 1, cny + 1, cw - 2, ch - 2, LOOM_ARCANE_500_R, LOOM_ARCANE_500_G, LOOM_ARCANE_500_B)
+        LoomText(cnx + 12, cny + 8, Threads::kindGlyph(self\threads, kind) + "  " + cName, LOOM_PARCHMENT_100_R, LOOM_PARCHMENT_100_G, LOOM_PARCHMENT_100_B)
+
+        // Notes.
+        If self\twCount = 0
+            LoomTextCentered(cx, cy + 46, "no outgoing references", LOOM_STONE_300_R, LOOM_STONE_300_G, LOOM_STONE_300_B)
+        EndIf
+        If self\twOverflow > 0
+            LoomTextCentered(cx, ry + rh - 20, "+ " + Str(self\twOverflow) + " more -- see the composer roster", LOOM_STONE_300_R, LOOM_STONE_300_G, LOOM_STONE_300_B)
+        EndIf
+    End Method
+
+
+    Method twAdd(kind$, refID%)
+        If self\twCount >= TW_MAX Then Return
+        self\twKind[self\twCount] = kind
+        self\twRefID[self\twCount] = refID
+        self\twCount = self\twCount + 1
+    End Method
+
+
+    Method collectThreads(kind$, refID%)
+        self\twCount = 0
+        self\twOverflow = 0
+        If kind = "actor"
+            If refID >= 0 And refID <= 65535
+                Local A.Actor = ActorList(refID)
+                If A <> Null
+                    If A\DefaultFaction > 0 Then Composer::twAdd(self, "faction", A\DefaultFaction)
+                    If A\MAnimationSet <> 0 Then Composer::twAdd(self, "animset", A\MAnimationSet)
+                    If A\FAnimationSet <> 0 Then Composer::twAdd(self, "animset", A\FAnimationSet)
+                EndIf
+            EndIf
+        Else If kind = "faction"
+            Local ai%
+            For ai = 0 To 65535
+                Local Ac.Actor = ActorList(ai)
+                If Ac <> Null And Ac\DefaultFaction = refID
+                    If self\twCount < TW_MAX
+                        Composer::twAdd(self, "actor", Ac\ID)
+                    Else
+                        self\twOverflow = self\twOverflow + 1
+                    EndIf
+                EndIf
+            Next
+        Else If kind = "animset"
+            Local aj%
+            For aj = 0 To 65535
+                Local Ac2.Actor = ActorList(aj)
+                If Ac2 <> Null And (Ac2\MAnimationSet = refID Or Ac2\FAnimationSet = refID)
+                    If self\twCount < TW_MAX
+                        Composer::twAdd(self, "actor", Ac2\ID)
+                    Else
+                        self\twOverflow = self\twOverflow + 1
+                    EndIf
+                EndIf
+            Next
+        EndIf
+        // item / spell / settings / catalog kinds: no jumpable entity threads
+        // in v1 (their refs are asset-catalog rows / script strings, shown in
+        // the composer). Centre node renders alone with the "none" note.
     End Method
 
 
