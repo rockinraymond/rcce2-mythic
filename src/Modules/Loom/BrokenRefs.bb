@@ -32,7 +32,7 @@ Strict
 
 
 Const BROKENREFS_MAX_ENTRIES = 250
-Const BROKENREFS_MODAL_W     = 720
+Const BROKENREFS_MODAL_W     = 900
 Const BROKENREFS_MODAL_H     = 480
 Const BROKENREFS_PAD         = 16
 Const BROKENREFS_ROW_H       = 24
@@ -834,6 +834,12 @@ Type BrokenRefs
     // bar layout stays stable across sessions.
     // -------------------------------------------------------------------------
     Method drawCategoryChips%(chipsX%, chipsY%, mx%, my%, clicked%)
+        // Unified chip list: index 0 = "all", 1..13 = the categories. Full
+        // category names (matches the design); each chip is a pill with a
+        // count badge. Rows are JUSTIFIED to the full strip width -- the
+        // leftover horizontal space is distributed as equal inter-chip gaps
+        // so every row except the last spans edge-to-edge (the reported
+        // "filters don't fill the top row" fix).
         Local cats$[13]
         cats[0]  = "broken-ref"
         cats[1]  = "broken-script"
@@ -849,82 +855,133 @@ Type BrokenRefs
         cats[11] = "orphan-texture"
         cats[12] = "orphan-mesh"
 
-        // Compact display labels -- the verbose category keys wrapped the
-        // chip strip to 3-4 rows (too tall). Short labels keep the strip to
-        // ~2 full-width rows; the header text still spells out the active
-        // filter's full key so nothing is lost. Index-aligned with cats[].
-        Local shorts$[13]
-        shorts[0]  = "refs"
-        shorts[1]  = "scripts"
-        shorts[2]  = "miss-tex"
-        shorts[3]  = "miss-mesh"
-        shorts[4]  = "miss-snd"
-        shorts[5]  = "empty"
-        shorts[6]  = "play"
-        shorts[7]  = "weapon"
-        shorts[8]  = "spell"
-        shorts[9]  = "orph-zone"
-        shorts[10] = "orph-scr"
-        shorts[11] = "orph-tex"
-        shorts[12] = "orph-mesh"
+        Local lbl$[13]
+        Local cat$[13]
+        Local cnt%[13]
+        Local cw%[13]
+        Local crow%[13]
+        Local i%
 
-        Local cx% = chipsX
-        Local cy% = chipsY
-        Local ch% = 18
+        lbl[0] = "all"
+        cat[0] = ""
+        cnt[0] = self\entryCount
+        For i = 1 To 13
+            cat[i] = cats[i - 1]
+            lbl[i] = cats[i - 1]
+            cnt[i] = BrokenRefs::countCategory(self, cats[i - 1])
+        Next
 
-        // "All" chip first
-        Local allW% = 30
-        Local allHover% = (mx >= cx And mx < cx + allW And my >= cy And my < cy + ch)
-        If self\categoryFilter = ""
-            LoomFill(cx, cy, allW, ch, LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
-            LoomText(cx + 6, cy + 2, "all", LOOM_PARCHMENT_100_R, LOOM_PARCHMENT_100_G, LOOM_PARCHMENT_100_B)
-        Else If allHover = True
-            LoomFill(cx, cy, allW, ch, LOOM_ARCANE_700_R, LOOM_ARCANE_700_G, LOOM_ARCANE_700_B)
-            LoomText(cx + 6, cy + 2, "all", LOOM_PARCHMENT_100_R, LOOM_PARCHMENT_100_G, LOOM_PARCHMENT_100_B)
-        Else
-            LoomFill(cx, cy, allW, ch, LOOM_STONE_700_R, LOOM_STONE_700_G, LOOM_STONE_700_B)
-            LoomText(cx + 6, cy + 2, "all", LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
-        EndIf
-        LoomBorder(cx, cy, allW, ch, LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
-        If allHover = True And clicked = True And self\categoryFilter <> ""
-            self\categoryFilter = ""
-            self\scrollOffset = 0
-        EndIf
-        cx = cx + allW + 4
+        Local ch% = 22
+        Local padX% = 12
+        Local badgeGap% = 6
+        // Natural width of each chip: padding + label + gap + count badge + padding.
+        For i = 0 To 13
+            cw[i] = padX + StringWidth(lbl[i]) + badgeGap + (StringWidth(Str(cnt[i])) + 12) + padX
+        Next
 
-        // Per-category chips
-        Local ci% = 0
-        For ci = 0 To 12
-            Local catName$ = cats[ci]
-            Local count% = BrokenRefs::countCategory(self, catName)
-            Local label$ = shorts[ci] + " " + Str(count)
-            Local chipW% = StringWidth(label) + 12
-            // Wrap to a second row if we'd overflow the modal width
-            If cx + chipW > BROKENREFS_MODAL_W - BROKENREFS_PAD
-                cx = chipsX
-                cy = cy + ch + 2
-            EndIf
+        Local baseGap% = 8
+        Local availW%    = BROKENREFS_MODAL_W - BROKENREFS_PAD * 2
+        Local availRight% = chipsX + availW
 
-            Local hov% = (mx >= cx And mx < cx + chipW And my >= cy And my < cy + ch)
-            Local active% = (self\categoryFilter = catName)
-            If active = True
-                LoomFill(cx, cy, chipW, ch, LOOM_DANGER_R, LOOM_DANGER_G, LOOM_DANGER_B)
-                LoomText(cx + 6, cy + 2, label, LOOM_PARCHMENT_100_R, LOOM_PARCHMENT_100_G, LOOM_PARCHMENT_100_B)
-            Else If hov = True
-                LoomFill(cx, cy, chipW, ch, LOOM_ARCANE_700_R, LOOM_ARCANE_700_G, LOOM_ARCANE_700_B)
-                LoomText(cx + 6, cy + 2, label, LOOM_PARCHMENT_100_R, LOOM_PARCHMENT_100_G, LOOM_PARCHMENT_100_B)
-            Else
-                If count = 0
-                    LoomFill(cx, cy, chipW, ch, LOOM_STONE_800_R, LOOM_STONE_800_G, LOOM_STONE_800_B)
-                    LoomText(cx + 6, cy + 2, label, LOOM_STONE_300_R, LOOM_STONE_300_G, LOOM_STONE_300_B)
-                Else
-                    LoomFill(cx, cy, chipW, ch, LOOM_STONE_700_R, LOOM_STONE_700_G, LOOM_STONE_700_B)
-                    LoomText(cx + 6, cy + 2, label, LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
+        // Greedy wrap into rows (record each chip's row index).
+        Local penX% = chipsX
+        Local rowN% = 0
+        For i = 0 To 13
+            If i > 0
+                If penX + cw[i] > availRight
+                    rowN = rowN + 1
+                    penX = chipsX
                 EndIf
             EndIf
-            LoomBorder(cx, cy, chipW, ch, LOOM_BRASS_700_R, LOOM_BRASS_700_G, LOOM_BRASS_700_B)
-            If hov = True And clicked = True And count > 0
-                // Toggle: clicking an active chip clears; otherwise sets
+            crow[i] = rowN
+            penX = penX + cw[i] + baseGap
+        Next
+        Local lastRow% = rowN
+
+        // Draw row by row. Method-scope accumulators (reassigned inside the
+        // loops) per the Strict nested-block-reassignment rule.
+        Local r2%
+        Local n%
+        Local sumW%
+        Local gap%
+        Local dx%
+        Local dy%
+        Local k%
+        For r2 = 0 To lastRow
+            n = 0
+            sumW = 0
+            For k = 0 To 13
+                If crow[k] = r2
+                    n = n + 1
+                    sumW = sumW + cw[k]
+                EndIf
+            Next
+            // Justify every row except the last to fill availW.
+            gap = baseGap
+            If r2 < lastRow
+                If n > 1
+                    gap = (availW - sumW) / (n - 1)
+                    If gap < baseGap Then gap = baseGap
+                EndIf
+            EndIf
+            dx = chipsX
+            dy = chipsY + r2 * (ch + 5)
+            For k = 0 To 13
+                If crow[k] = r2
+                    BrokenRefs::drawOneChip(self, lbl[k], cat[k], cnt[k], dx, dy, cw[k], ch, mx, my, clicked)
+                    dx = dx + cw[k] + gap
+                EndIf
+            Next
+        Next
+
+        // Bottom Y of the chip strip. The caller starts the entries list
+        // below this so the (possibly multi-row) chips never overlap it.
+        Return chipsY + (lastRow + 1) * (ch + 5)
+    End Method
+
+
+    // drawOneChip -- one filter pill: rounded-look fill + border, the
+    // category label, and a count badge. Handles hover/active styling and
+    // click (toggle filter; the "all" chip -- catName="" -- clears it).
+    Method drawOneChip(label$, catName$, count%, x%, y%, w%, h%, mx%, my%, clicked%)
+        Local hov%    = (mx >= x And mx < x + w And my >= y And my < y + h)
+        Local active% = (self\categoryFilter = catName)
+
+        // Pill background + label drawn together per branch (avoids the
+        // Strict nested-block Local-reassignment trap on a shared colour var):
+        // active = brass, hover = arcane, idle = stone (dimmer + greyed label
+        // when the category is empty so zero-count chips recede).
+        If active = True
+            LoomFill(x, y, w, h, LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
+            LoomText(x + 12, y + 4, label, LOOM_PARCHMENT_100_R, LOOM_PARCHMENT_100_G, LOOM_PARCHMENT_100_B)
+        Else If hov = True
+            LoomFill(x, y, w, h, LOOM_ARCANE_700_R, LOOM_ARCANE_700_G, LOOM_ARCANE_700_B)
+            LoomText(x + 12, y + 4, label, LOOM_PARCHMENT_100_R, LOOM_PARCHMENT_100_G, LOOM_PARCHMENT_100_B)
+        Else If count = 0 And catName <> ""
+            LoomFill(x, y, w, h, LOOM_STONE_800_R, LOOM_STONE_800_G, LOOM_STONE_800_B)
+            LoomText(x + 12, y + 4, label, LOOM_STONE_300_R, LOOM_STONE_300_G, LOOM_STONE_300_B)
+        Else
+            LoomFill(x, y, w, h, LOOM_STONE_700_R, LOOM_STONE_700_G, LOOM_STONE_700_B)
+            LoomText(x + 12, y + 4, label, LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
+        EndIf
+        LoomBorder(x, y, w, h, LOOM_BRASS_700_R, LOOM_BRASS_700_G, LOOM_BRASS_700_B)
+
+        // Count badge -- darker inset rect with the number, right after the
+        // label. Reads as a pill-on-pill like the design's count chips.
+        Local bw% = StringWidth(Str(count)) + 12
+        Local bx% = x + 12 + StringWidth(label) + 6
+        Local by% = y + 3
+        Local bh% = h - 6
+        LoomFill(bx, by, bw, bh, LOOM_STONE_950_R, LOOM_STONE_950_G, LOOM_STONE_950_B)
+        LoomText(bx + bw / 2, by + 1, Str(count), LOOM_PARCHMENT_200_R, LOOM_PARCHMENT_200_G, LOOM_PARCHMENT_200_B, 1)
+
+        // Click: "all" clears the filter; a category toggles (only if it has
+        // entries -- empty categories aren't actionable).
+        If hov = True And clicked = True
+            If catName = ""
+                self\categoryFilter = ""
+                self\scrollOffset = 0
+            Else If count > 0
                 If active = True
                     self\categoryFilter = ""
                 Else
@@ -932,13 +989,7 @@ Type BrokenRefs
                 EndIf
                 self\scrollOffset = 0
             EndIf
-            cx = cx + chipW + 4
-        Next
-
-        // Bottom Y of the chip strip (last row baseline + height). The
-        // caller starts the entries list below this so wrapped chip rows
-        // never overlap the list -- the original overlap bug.
-        Return cy + ch
+        EndIf
     End Method
 
 
