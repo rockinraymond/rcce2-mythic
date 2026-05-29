@@ -948,6 +948,16 @@ Function UpdateActorInstances(Broadcast)
 							EndIf
 						EndIf
 					EndIf
+				; Orphaned pet: its leader was freed without resetting AIMode.
+				; FreeActorInstance's orphan loop and BVM_SETLEADER reset it at
+				; the source; this is the tick-side backstop so a missed future
+				; orphaning path can't deref a Null AI\Leader in the pet branches
+				; below (the AI_Chase branch already follows this Null discipline).
+				; Operands are plain reads/compares -- no deref through Leader --
+				; so the non-short-circuit And/Or is safe here.
+				ElseIf (AI\AIMode = AI_Pet Or AI\AIMode = AI_PetChase) And AI\Leader = Null
+					AI\AIMode = AI_Wait
+					AI\AITarget = Null
 				; Pet AI
 				ElseIf AI\AIMode = AI_Pet
 					; Move towards leader's position
@@ -1390,7 +1400,10 @@ Function CommandPet(AI.ActorInstance, Command$, Params$)
 			AI\AITarget = Null
 		; Pet to attack leader's target
 		Case "ATTACK"
-			If AI\Actor\Aggressiveness < 3
+			; Guard AI\Leader before the deref below -- an orphaned pet (leader
+			; freed) must not crash here. Both operands are plain reads/compares
+			; (no deref through Leader), so the non-short-circuit And is safe.
+			If AI\Actor\Aggressiveness < 3 And AI\Leader <> Null
 				If AI\Leader\AITarget <> Null
 					AI\AITarget = AI\Leader\AITarget
 					AI\AIMode = AI_PetChase
