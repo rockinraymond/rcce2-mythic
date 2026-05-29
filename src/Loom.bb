@@ -79,6 +79,7 @@ Global EnvironmentSaved = True
 //
 // Order matters for Type declarations -- mirror GUE.bb's order.
 // -----------------------------------------------------------------------------
+Include "Modules\Path.bb"
 Include "Modules\RCEnet.bb"
 Include "Modules\Media.bb"
 Include "Modules\MediaImport.bb"
