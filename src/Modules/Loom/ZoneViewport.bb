@@ -61,7 +61,10 @@ Const VP_MAX_SPAWN_MESHES = 200           ; cap loaded actor meshes per zone
 Global VPCam        = 0
 Global VPLight      = 0
 Global VPRT         = 0
-Global VPGround     = 0           ; ground plane entity
+Global VPGround     = 0           ; ground plane entity (at origin, for pick-land)
+Global VPPivot      = 0           ; hidden orbit/look pivot, moved to the
+                                  ; scene centre each frame so the camera
+                                  ; orbits AND looks at the same point
 Global VPInitOK     = False
 Global VPLoadedZoneH = 0          ; Handle(Area) of currently-loaded zone
 
@@ -185,6 +188,15 @@ Function Loom_InitZoneViewport()
     PositionEntity VPGround, 0, VP_SCENE_Y_OFFSET#, 0
     EntityColor VPGround, 24, 24, 32      ; near-black stone
     EntityPickMode VPGround, 2            ; polygon pick (for ground drag-land)
+
+    ; Orbit/look pivot -- a hidden point the camera both orbits around and
+    ; points at. Repositioned to the scene centre every frame (see the camera
+    ; block) so orbit is pure rotation and zoom is pure dolly. Previously the
+    ; camera orbited the scene centre but PointEntity'd VPGround at the origin,
+    ; so the content drifted in/out (orbit looked like zoom; zoom like rotate).
+    VPPivot = CreatePivot()
+    PositionEntity VPPivot, 0, VP_SCENE_Y_OFFSET#, 0
+    HideEntity VPPivot
 
     VPInitOK = True
     WriteLog(LoomLog, "ZoneViewport: initialized (RT=" + VP_RT_SIZE + "x" + VP_RT_SIZE + ")")
@@ -1187,7 +1199,12 @@ Function Loom_DrawZoneViewport(zoneHandle, x, y, w, h)
     Local cy# = VP_SCENE_Y_OFFSET# + VPSceneCenterY# + Sin(VPPitch#) * VPDistance#
     Local cz# = VPSceneCenterZ# - Cos(VPPitch#) * Cos(VPYaw#) * VPDistance#
     PositionEntity VPCam, cx#, cy#, cz#
-    PointEntity VPCam, VPGround
+    ; Look at the orbit pivot (the scene centre), NOT VPGround at the origin.
+    ; The camera position above is computed at distance VPDistance from this
+    ; same point, so pointing here makes orbit pure-rotation and zoom
+    ; pure-dolly with the content staying centred.
+    PositionEntity VPPivot, VPSceneCenterX#, VP_SCENE_Y_OFFSET# + VPSceneCenterY#, VPSceneCenterZ#
+    PointEntity VPCam, VPPivot
 
     ShowEntity VPCam
     RenderWorld
@@ -1309,7 +1326,7 @@ Function Loom_DrawZoneViewport(zoneHandle, x, y, w, h)
     EndIf
 
     If inside = True
-        LoomText x + 8, y + h - 18, "LMB=orbit RMB=move(shift+Y) wheel=zoom shift+click=add ctrl+click=del", LOOM_STONE_300_R, LOOM_STONE_300_G, LOOM_STONE_300_B
+        LoomText x + 8, y + h - 18, "LMB drag: orbit  |  MMB drag: pan  |  wheel: zoom  |  RMB drag a marker: move (+Shift = up/down)  |  Shift+LMB: add portal  |  Ctrl+LMB: delete", LOOM_STONE_300_R, LOOM_STONE_300_G, LOOM_STONE_300_B
     EndIf
 
     Return True
@@ -1322,6 +1339,7 @@ End Function
 Function Loom_ShutdownZoneViewport()
     Loom_FreeZoneMarkers()
     If VPGround <> 0 Then FreeEntity VPGround : VPGround = 0
+    If VPPivot <> 0 Then FreeEntity VPPivot : VPPivot = 0
     If VPCam <> 0 Then FreeEntity VPCam : VPCam = 0
     If VPLight <> 0 Then FreeEntity VPLight : VPLight = 0
     If VPRT <> 0 Then FreeTexture VPRT : VPRT = 0
