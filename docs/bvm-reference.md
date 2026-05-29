@@ -20,6 +20,7 @@ clicker, or only from a script the server itself spawned (or from a DM / GM):
 | `None` | Callable from any script. Pure-read or otherwise safe. |
 | `SelfOrPrivileged` | Callable if the target actor is the script's spawning actor (`SI\AI`) OR the script was spawned privileged. **WRONG choice** for any function that must block clicker exploits in Examine / Trade / RightClick / ItemScript spawns (where `SI\AI = Handle(clicker)`) — use `Privileged` instead. |
 | `Privileged` | Callable only from privileged scripts (server-spawned or DM-initiated). Mutates global state, opens host resources, or invokes terminal failures. |
+| `Dead` | **Not callable — does nothing.** The opcode survives in the dispatch table for opcode-number stability, but the implementation is permanently disabled (commented out in `ScriptingCommands.bb`, marked `DEAD-API`) and the dispatch case is a silent no-op. A script that calls it compiles and runs without error but has no effect; do not write new scripts against it. |
 
 See `CLAUDE.md`'s "Privilege gating in BVM commands" section for the full threat model.
 
@@ -307,7 +308,7 @@ none = void/Bool. Parameter sigils inside the argument list use the same.
 | `REPUTATION` | `REPUTATION(PARAM1%)` : Int | None |
 | `RESISTANCE` | `RESISTANCE(PARAM1%, PARAM2$)` : Int | None |
 | `SAVESTATE` | `SAVESTATE()` | Privileged |
-| `SCENERYOWNER` | `SCENERYOWNER(PARAM1$, PARAM2%, PARAM3%=0)` : Int | None |
+| `SCENERYOWNER` | `SCENERYOWNER(PARAM1$, PARAM2%, PARAM3%=0)` : Int | Dead |
 | `SCREENFLASH` | `SCREENFLASH(PARAM1%, PARAM2%, PARAM3%, PARAM4%, PARAM5%, PARAM6%, PARAM7%=0)` | None |
 | `SCRIPTLOG` | `SCRIPTLOG(PARAM1$="")` | None |
 | `SEASON` | `SEASON()` : String | None |
@@ -317,7 +318,7 @@ none = void/Bool. Parameter sigils inside the argument list use the same.
 | `SETLEADER` | `SETLEADER(PARAM1%, PARAM2%)` | Privileged |
 | `SETMAXATTRIBUTE` | `SETMAXATTRIBUTE(PARAM1%, PARAM2$, PARAM3%)` | Privileged |
 | `SETNAME` | `SETNAME(PARAM1%, PARAM2$)` | Privileged |
-| `SETOWNER` | `SETOWNER(PARAM1%, PARAM2$, PARAM3%, PARAM4% = 0)` | None |
+| `SETOWNER` | `SETOWNER(PARAM1%, PARAM2$, PARAM3%, PARAM4% = 0)` | Dead |
 | `SETREPUTATION` | `SETREPUTATION(PARAM1%, PARAM2%)` | Privileged |
 | `SETRESISTANCE` | `SETRESISTANCE(PARAM1%, PARAM2$, PARAM3%)` | Privileged |
 | `SETSUPERGLOBAL` | `SETSUPERGLOBAL(PARAM1%, PARAM2$)` | None |
