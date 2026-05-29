@@ -67,6 +67,15 @@ Type BrokenRefs
     Field entryCount%
     Field scrollOffset%
     Field categoryFilter$    // "" = all; otherwise the Category to show
+    // Deferred row-jump. A row click can't close the modal inline: closeModal
+    // clears the BrokenRef pool via `For r = Each BrokenRef : Delete r`, and
+    // the click fires from drawOneEntry WHILE drawEntries is iterating that
+    // same pool -- deleting it mid-iteration corrupts the iterator and crashes
+    // ("Stack overflow!"). So the click only records the target here; the
+    // close + focus happen after the draw loop returns.
+    Field pendingJump%
+    Field pendingJumpKind$
+    Field pendingJumpRefID%
 
 
     Method create.BrokenRefs(threads.Threads)
@@ -88,6 +97,7 @@ Type BrokenRefs
         self\open = True
         self\scrollOffset = 0
         self\categoryFilter = ""
+        self\pendingJump = False
         BrokenRefs::rebuild(self)
         FlushKeys
         // Eat the opening click so the modal's "click outside closes"
@@ -773,6 +783,19 @@ Type BrokenRefs
         LoomHRule(modalX + BROKENREFS_PAD, hy - 2, BROKENREFS_MODAL_W - BROKENREFS_PAD * 2, LOOM_BRASS_700_R, LOOM_BRASS_700_G, LOOM_BRASS_700_B)
         LoomText(modalX + BROKENREFS_PAD, hy + 4, "Click a row to jump to the source  |  wheel / arrows scroll  |  Esc to close", LOOM_STONE_300_R, LOOM_STONE_300_G, LOOM_STONE_300_B)
 
+        // Deferred row-jump (set by drawOneEntry). Safe to closeModal now --
+        // drawEntries' `For r = Each BrokenRef` loop has finished, so clearing
+        // the pool here can't corrupt an in-flight iterator. Focus AFTER close.
+        If self\pendingJump = True
+            Local jk$ = self\pendingJumpKind
+            Local jid% = self\pendingJumpRefID
+            self\pendingJump = False
+            BrokenRefs::closeModal(self)
+            Threads::focus(self\threads, jk, jid)
+            WriteLog(LoomLog, "BrokenRefs: jumped to " + jk + "#" + Str(jid))
+            Return True
+        EndIf
+
         If clicked = True
             If mx < modalX Or mx >= modalX + BROKENREFS_MODAL_W Or my < modalY Or my >= modalY + BROKENREFS_MODAL_H
                 BrokenRefs::closeModal(self)
@@ -1041,9 +1064,12 @@ Type BrokenRefs
         LoomText(rx + rw - StringWidth(r\Diagnosis) - 12, ry + 4, r\Diagnosis, LOOM_STONE_300_R, LOOM_STONE_300_G, LOOM_STONE_300_B)
 
         If hovered And clicked
-            BrokenRefs::closeModal(self)
-            Threads::focus(self\threads, r\SourceKind, r\SourceRefID)
-            WriteLog(LoomLog, "BrokenRefs: jumped to " + r\SourceKind + "#" + Str(r\SourceRefID) + " for " + r\FieldDesc)
+            // Defer -- do NOT closeModal here (it Deletes the BrokenRef pool
+            // we're mid-iterating in drawEntries). Record the target; the
+            // outer renderAndUpdate closes + focuses after the loop.
+            self\pendingJump = True
+            self\pendingJumpKind = r\SourceKind
+            self\pendingJumpRefID = r\SourceRefID
         EndIf
     End Method
 
