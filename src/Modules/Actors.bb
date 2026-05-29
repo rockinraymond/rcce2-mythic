@@ -764,6 +764,14 @@ Function FreeActorInstance(A.ActorInstance)
 		ChildNext = Child\NextSlave
 		Child\Leader = Null
 		Child\NextSlave = Null
+		; A surviving child was a pet of A (AI_Pet / AI_PetChase); its
+		; leader is now gone. Reset to idle so the server AI tick's pet
+		; branches don't deref the now-Null Leader -- a crash in debug
+		; builds, or (per the non-short-circuit / skipped-__bbNullObjEx
+		; behaviour) a silent walk to world origin in release. Mirrors
+		; the AI_Wait reset BVM_SETLEADER performs at its SlaveUnlink site.
+		Child\AIMode = AI_Wait
+		Child\AITarget = Null
 		Child = ChildNext
 	Wend
 	A\FirstSlave = Null
