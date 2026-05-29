@@ -184,12 +184,22 @@ Type Help
         self\lastContentH = (rowY + self\scroll) - bodyTop
 
         // Scrollbar thumb on the right edge of the body when content overflows.
+        // Derive the scroll denominator from THIS frame's freshly-measured
+        // lastContentH -- NOT the frame-top `maxScroll`, which is computed
+        // from the PREVIOUS frame's lastContentH (0 on the first open). On
+        // that first frame the guard below is true (content overflows) but
+        // frame-top maxScroll is still 0, so dividing by it was an integer
+        // divide-by-zero -> BlitzForge "Stack overflow!" the instant F1 opened.
+        // `denom` is > 0 whenever this branch runs (lastContentH > bodyH).
         If self\lastContentH > bodyH
+            Local denom% = self\lastContentH - bodyH
             Local trackX% = modalX + HELP_MODAL_W - 6
             LoomFill(trackX, bodyTop, 3, bodyH, LOOM_STONE_700_R, LOOM_STONE_700_G, LOOM_STONE_700_B)
             Local thumbH% = (bodyH * bodyH) / self\lastContentH
             If thumbH < 20 Then thumbH = 20
-            Local thumbY% = bodyTop + (self\scroll * (bodyH - thumbH)) / maxScroll
+            Local thumbScroll% = self\scroll
+            If thumbScroll > denom Then thumbScroll = denom
+            Local thumbY% = bodyTop + (thumbScroll * (bodyH - thumbH)) / denom
             LoomFill(trackX, thumbY, 3, thumbH, LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
         EndIf
 
