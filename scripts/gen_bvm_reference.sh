@@ -159,10 +159,18 @@ declarations=$(awk -v gates="$gate_index" '
         else if (name ~ /^RAND/ || name ~ /^INT$/ || name ~ /^FLOAT$/ || name ~ /^SQR/ || name ~ /^SIN/ || name ~ /^COS/ || name ~ /^TAN/ || name ~ /^ABS/ || name ~ /^STR/ || name ~ /^CHR/ || name ~ /^ASC/ || name ~ /^LEN/ || name ~ /^LEFT/ || name ~ /^RIGHT/ || name ~ /^MID/ || name ~ /^UPPER/ || name ~ /^LOWER/ || name ~ /^TRIM/ || name ~ /^INSTR/) category = "String & Math"
 
         # Resolve gate (case-insensitive lookup; gate index is upper).
+        # A name present in the opcode table but absent from the live
+        # `Function BVM_*` index is DEAD API: the opcode survives in
+        # RC_Standard_Invoker.bb for opcode-number stability, but the
+        # implementation in ScriptingCommands.bb is commented out and the
+        # dispatch case is a silent no-op (grep "DEAD-API" there). Classify
+        # it as "Dead" rather than silently laundering it into "None" --
+        # an ungated-callable row is an active footgun for scripters, who
+        # would write the call, hit no error, and silently get nothing.
         g = gate[toupper(impl)]
         if (g == "") {
-            g = "None"
-            print "WARN: no BVM impl found for " impl > "/dev/stderr"
+            g = "Dead"
+            print "WARN: no live BVM impl for " impl " -- marking Dead (no-op) in reference" > "/dev/stderr"
         }
 
         print category "|" name "|" impl "|" sigil "|" args "|" g
@@ -194,6 +202,7 @@ clicker, or only from a script the server itself spawned (or from a DM / GM):
 | `None` | Callable from any script. Pure-read or otherwise safe. |
 | `SelfOrPrivileged` | Callable if the target actor is the script's spawning actor (`SI\AI`) OR the script was spawned privileged. **WRONG choice** for any function that must block clicker exploits in Examine / Trade / RightClick / ItemScript spawns (where `SI\AI = Handle(clicker)`) — use `Privileged` instead. |
 | `Privileged` | Callable only from privileged scripts (server-spawned or DM-initiated). Mutates global state, opens host resources, or invokes terminal failures. |
+| `Dead` | **Not callable — does nothing.** The opcode survives in the dispatch table for opcode-number stability, but the implementation is permanently disabled (commented out in `ScriptingCommands.bb`, marked `DEAD-API`) and the dispatch case is a silent no-op. A script that calls it compiles and runs without error but has no effect; do not write new scripts against it. |
 
 See `CLAUDE.md`'s "Privilege gating in BVM commands" section for the full threat model.
 
