@@ -276,6 +276,18 @@ Type Browser
 
         // Card grid -- shrink the effective width by composerWidth so
         // cards never end up half-hidden behind the composer panel.
+        //
+        // When a ZONE is focused, the composer renders a full-screen 3D
+        // viewport over the entire left content area -- the card grid is
+        // completely hidden behind it. Skip the grid entirely in that case
+        // so it doesn't steal the wheel (zoom) / clicks meant for the
+        // viewport: the grid runs BEFORE the composer in the frame, and its
+        // wheel handler was consuming the tick before the viewport could
+        // read it (cursor-over-viewport zoom did nothing as a result).
+        self\cardClickLatch = False
+        If self\threads <> Null And self\threads\focusKind = "zone"
+            Return False
+        EndIf
         Browser::drawCardGrid(self, sw - composerWidth, sh, mx, my, clicked)
         Return self\cardClickLatch
     End Method
