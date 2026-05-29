@@ -288,7 +288,7 @@ Type Browser
         If self\threads <> Null And self\threads\focusKind <> ""
             Return False
         EndIf
-        Browser::drawCardGrid(self, sw - composerWidth, sh, mx, my, clicked)
+        Browser::drawCardGrid(self, sw - composerWidth, sh, mx, my, clicked, inputEnabled)
         Return self\cardClickLatch
     End Method
 
@@ -686,7 +686,7 @@ Type Browser
     // pathology, and is cleaner OO design anyway. Returns True via
     // self\cardClickLatch (which the per-kind methods set as a side effect).
     // -------------------------------------------------------------------------
-    Method drawCardGrid%(sw%, sh%, mx%, my%, clicked%)
+    Method drawCardGrid%(sw%, sh%, mx%, my%, clicked%, inputEnabled%)
         Local gridX% = BR_SECTION_PAD
         Local gridY% = BR_TOP_RIBBON + BR_TAB_BAR_H + BR_FILTER_BAR_H + BR_SECTION_PAD
         Local gridW% = sw - (BR_SECTION_PAD * 2)
@@ -725,8 +725,14 @@ Type Browser
         Local rowPitch% = BR_CARD_H + BR_CARD_GAP
         Local gridViewTop% = BR_FILTER_BAR_Y + BR_FILTER_BAR_H + 2
         Local gridViewBottom% = sh - BR_BOT_RIBBON
+        // Gate wheel consumption on inputEnabled: when a modal (Help, Issues,
+        // palette, etc.) is open, Loom sets browserInput=False, and the modal
+        // -- which renders AFTER the browser in the frame -- needs the wheel
+        // tick for its own scroll. Without this gate the card grid (sitting
+        // behind the modal overlay) ate the tick first and the modal's wheel
+        // appeared dead. (Reported: Help modal wheel not scrolling.)
         Local wheel% = Loom_MouseWheel()
-        If wheel <> 0 And atlasActive = False And mx < sw And my >= gridViewTop And my < gridViewBottom
+        If wheel <> 0 And inputEnabled = True And atlasActive = False And mx < sw And my >= gridViewTop And my < gridViewBottom
             self\cardScroll = self\cardScroll - wheel * rowPitch
             If self\cardScroll < 0 Then self\cardScroll = 0
             Local contentH% = self\lastGridRows * rowPitch
