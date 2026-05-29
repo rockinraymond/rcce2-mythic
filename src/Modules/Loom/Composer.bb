@@ -2964,10 +2964,16 @@ Type Composer
             Local i%
             For i = 0 To n - 1
                 // Boundary: close the previous group with a heading, then gap.
-                If i > 0 And self\twKind[i] <> self\twKind[i - 1]
-                    Composer::drawTypeLabel(self, cx, cy, (grpStartAng# + curAng# - perNode#) / 2.0, radius# + 50.0, self\twKind[i - 1])
-                    curAng# = curAng# + gapDeg#
-                    grpStartAng# = curAng#
+                // NESTED If (not `i > 0 And ...`): BlitzForge's And is
+                // non-short-circuit, so the single-line form read twKind[i-1]
+                // = twKind[-1] when i=0 -- a negative array index that
+                // corrupted memory / stack-overflowed on actor select.
+                If i > 0
+                    If self\twKind[i] <> self\twKind[i - 1]
+                        Composer::drawTypeLabel(self, cx, cy, (grpStartAng# + curAng# - perNode#) / 2.0, radius# + 50.0, self\twKind[i - 1])
+                        curAng# = curAng# + gapDeg#
+                        grpStartAng# = curAng#
+                    EndIf
                 EndIf
                 // Chip sized to its label (matches renderChip's text layout).
                 Local nm$ = Threads::lookupName(self\threads, self\twKind[i], self\twRefID[i])
