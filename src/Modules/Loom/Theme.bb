@@ -191,6 +191,13 @@ Function LoomHRule(x, y, w, r, g, b)
     Line x, y, x + w - 1, y
 End Function
 
+// Arbitrary straight line between two points (LoomHRule is horizontal-only).
+// Used by the thread-web overlay to draw threads between entity nodes.
+Function LoomLine(x1, y1, x2, y2, r, g, b)
+    Color r, g, b
+    Line x1, y1, x2, y2
+End Function
+
 // align: 0 = left, 1 = center, 2 = right (relative to x).
 Function LoomText(x, y, txt$, r, g, b, align = 0)
     Color r, g, b
