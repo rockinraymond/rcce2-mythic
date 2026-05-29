@@ -119,6 +119,13 @@ Type Composer
     Field lastContentBottom%
     Field bodyTop%
     Field bodyBottom%
+    // Last (kind, refID) the body was laid out for. When focus changes we
+    // reset scrollOffset to 0 so a new entity always opens at the top --
+    // otherwise the previous entity's scroll position "sticks" onto the new
+    // one (and can sit past its shorter content). Tracks ALL focus changes,
+    // not just edit-active ones (the edit-only reset missed plain navigation).
+    Field scrollFocusKind$
+    Field scrollFocusRefID%
 
     // Collapse state -- when True, the composer renders only as a thin
     // brass sliver on the right edge with a chevron to expand. Lets the
@@ -312,13 +319,22 @@ Type Composer
         Local kind$ = self\threads\focusKind
         Local refID% = self\threads\focusID
 
+        // Reset scroll to the top on ANY focus change (new entity / new kind),
+        // regardless of edit state. Without this the prior entity's
+        // scrollOffset sticks onto the newly-focused one -- and since it's only
+        // clamped to the new entity's measured height a frame LATER, it can
+        // briefly sit further down than the new (often shorter) entity allows.
+        If self\scrollFocusKind <> kind Or self\scrollFocusRefID <> refID
+            self\scrollOffset = 0
+            self\scrollFocusKind = kind
+            self\scrollFocusRefID = refID
+        EndIf
+
         // If focus changed while editing, cancel the pending edit (don't
         // mutate a stale target). Same kind+id keeps the edit active.
-        // Reset scroll on focus change so the new entity opens at the top.
         If self\editKind <> ""
             If self\editKind <> kind Or self\editRefID <> refID
                 Composer::cancelEdit(self)
-                self\scrollOffset = 0
             EndIf
         EndIf
 
