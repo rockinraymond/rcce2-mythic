@@ -364,6 +364,37 @@ Function GetTarget$(EN)
 End Function
 
 ; Updates the standard components and handles player input
+; --- Spell cooldown helpers ------------------------------------------
+; SpellCharge[] is keyed by spell ID (0..999) -- see the field comment in
+; Actors.bb and the authoritative server (ServerNet.bb P_SpellUpdate "F"
+; gates on AI\SpellCharge[SpellID]; GameServer.bb decrements 0..999 by
+; spell ID). The client action bar and spellbook previously keyed
+; SpellCharge by a KnownSpells index (action bar non-memorise / spellbook)
+; or a memorise slot (action bar memorise), so the client's predictive
+; cooldown lived in a different slot than the server's authority and than
+; the other client surface -- casting from one surface left the other
+; reading "ready" (spurious LS_AbilityNotRecharged, or a click the server
+; silently drops). Centralise the spell-ID-keyed, bound-checked access so
+; every client cast site matches the server.
+;
+; A spell ID outside 0..999 is not castable server-side (the server wraps
+; its cast path in the same 0..999 guard), so treat it as "ready" here --
+; the cast packet is still sent and the authoritative server is the final
+; arbiter. The bound check lives in a nested If inside the helper because
+; BlitzForge `And` is non-short-circuit: `If id <= 999 And arr[id] ...`
+; would still evaluate arr[id] for an out-of-range id.
+Function SpellChargeReady(M.ActorInstance, SpellID)
+	If SpellID < 0 Or SpellID > 999 Then Return True
+	If M\SpellCharge[SpellID] <= 0 Then Return True
+	Return False
+End Function
+
+Function SetSpellCharge(M.ActorInstance, SpellID, Charge)
+	If SpellID < 0 Or SpellID > 999 Then Return
+	M\SpellCharge[SpellID] = Charge
+End Function
+; ---------------------------------------------------------------------
+
 Function UpdateInterface()
 
 	; Gooey system
@@ -1089,14 +1120,14 @@ Function UpdateInterface()
 					RechargeTime = SpClick\RechargeTime
 					Pa$ = RCE_StrFromInt$(SpId, 2)
 					; Recharged
-					If Me\SpellCharge[Num] <= 0
+					If SpellChargeReady(Me, SpId)
 						If PlayerTarget > 0
 							AI.ActorInstance = Object.ActorInstance(PlayerTarget)
-							Pa$ = Pa$ + RCE_StrFromInt$(AI\RuntimeID, 2)
+							If AI <> Null Then Pa$ = Pa$ + RCE_StrFromInt$(AI\RuntimeID, 2)
 						EndIf
 						RCE_Send(Connection, PeerToHost, P_SpellUpdate, "F" + Pa$, True)
-						Me\SpellCharge[Num] = RechargeTime
-						
+						SetSpellCharge(Me, SpId, RechargeTime)
+
 						;[654]
 						RechargeTime = RechargeTime - 1000
 						;Output ("RechargeTime = "+RechargeTime/1000)
@@ -1215,7 +1246,7 @@ Function UpdateInterface()
 				RechargeTime = SpKey\RechargeTime
 				Pa$ = RCE_StrFromInt$(SpId2, 2)
 				; Recharged
-				If Me\SpellCharge[Num] <= 0
+				If SpellChargeReady(Me, SpId2)
 					If PlayerTarget > 0
 						AI.ActorInstance = Object.ActorInstance(PlayerTarget)
 						; Stale target handle: send the cast untargeted
@@ -1225,8 +1256,8 @@ Function UpdateInterface()
 						If AI <> Null Then Pa$ = Pa$ + RCE_StrFromInt$(AI\RuntimeID, 2)
 					EndIf
 					RCE_Send(Connection, PeerToHost, P_SpellUpdate, "F" + Pa$, True)
-					Me\SpellCharge[Num] = RechargeTime
-					
+					SetSpellCharge(Me, SpId2, RechargeTime)
+
 				;[654] fixing cooldown reset bug in action bar
 						RechargeTime = RechargeTime - 1000
 					;	Output ("RechargeTime = "+RechargeTime/1000)
@@ -1303,17 +1334,15 @@ Function UpdateInterface()
 	; Update compass direction
 	UpdateCompass()
 
-	; Recharge spells
+	; Recharge spells -- cooldowns are keyed by spell ID (0..999), matching
+	; the server's GameServer.bb decrement. The old code split on
+	; RequireMemorise and walked the wrong index spaces (0..9 memorise slots
+	; / 0..999 KnownSpells indices), desyncing from SpellCharge's spell-ID
+	; contract; a single uniform 0..999 pass is correct for both modes.
 	If MilliSecs() - LastSpellRecharge > 100
-		If RequireMemorise
-			For i = 0 To 9
-				If Me\SpellCharge[i] > 0 Then Me\SpellCharge[i] = Me\SpellCharge[i] - 100
-			Next
-		Else
-			For i = 0 To 999
-				If Me\SpellCharge[i] > 0 Then Me\SpellCharge[i] = Me\SpellCharge[i] - 100
-			Next
-		EndIf
+		For i = 0 To 999
+			If Me\SpellCharge[i] > 0 Then Me\SpellCharge[i] = Me\SpellCharge[i] - 100
+		Next
 		LastSpellRecharge = MilliSecs()
 	EndIf
 
@@ -1495,7 +1524,7 @@ Function UpdateInterface()
 					; us an OOB Num (corrupt sort table or 0-known-spells).
 					If Num < 0 Or Num > 999
 						; nothing to cast
-					ElseIf Me\SpellCharge[Num] <= 0
+					ElseIf SpellChargeReady(Me, Me\KnownSpells[Num])
 						; Spell may have been deleted between sessions while
 						; still in KnownSpells; SpellsList(...) returns Null
 						; and the bare \RechargeTime deref crashes. Resolve
@@ -1512,7 +1541,7 @@ Function UpdateInterface()
 							If AI <> Null Then Pa$ = Pa$ + RCE_StrFromInt$(AI\RuntimeID, 2)
 						EndIf
 						RCE_Send(Connection, PeerToHost, P_SpellUpdate, "F" + Pa$, True)
-						Me\SpellCharge[Num] = SpBk\RechargeTime
+						SetSpellCharge(Me, SIDBk, SpBk\RechargeTime)
 						EndIf  ; SpBk <> Null
 					; Not recharged
 					Else
