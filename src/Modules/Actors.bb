@@ -415,9 +415,20 @@ Function ReadActorInstance.ActorInstance(Stream)
 	A\Name$      = ReadBoundedString$(Stream, 256)
 	A\Tag$       = ReadBoundedString$(Stream, 256)
 	A\TeamID     = ReadInt(Stream)
-	A\X# = ReadFloat#(Stream)
-	A\Y# = ReadFloat#(Stream)
-	A\Z# = ReadFloat#(Stream)
+	; Sanitise loaded position floats the same way the wire / BVM entry
+	; points do (ClampWorldCoord in BVM_MOVEACTOR, ServerNet P_InventoryUpdate
+	; "D", etc. -- see RCEnet.bb and the "Float sanitisation" doctrine in
+	; CLAUDE.md). A corrupted or tampered Accounts.dat row could carry a NaN
+	; / Inf / absurd X/Y/Z; loaded raw, that value flows straight into the
+	; broadcast actor state P_StandardUpdate replicates to every client and
+	; poisons spatial code (collision, LOD culling, EntityDistance#) for the
+	; whole zone on every server boot. Every other field in this loader is
+	; already bounded (strings, appearance indices, slave count, HomeFaction)
+	; -- the position floats were the one gap. Clamp-to-0 (world origin) is a
+	; recoverable degraded state; NaN is not.
+	A\X# = ClampWorldCoord#(ReadFloat#(Stream))
+	A\Y# = ClampWorldCoord#(ReadFloat#(Stream))
+	A\Z# = ClampWorldCoord#(ReadFloat#(Stream))
 	A\Gender     = ReadByte(Stream)
 	A\XP         = ReadInt(Stream)
 	A\XPBarLevel = ReadByte(Stream)
