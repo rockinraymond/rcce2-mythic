@@ -7,12 +7,13 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::rc::Rc;
 
-use rcce_data::{texture, ActorCatalog, B3dModel, Image, MeshCatalog};
+use rcce_data::{texture, ActorCatalog, B3dModel, Image, MeshCatalog, TextureCatalog};
 
 pub struct AssetStore {
     data_root: PathBuf,
     actors: ActorCatalog,
     meshes: MeshCatalog,
+    textures: TextureCatalog,
     cache: HashMap<u16, Option<Rc<B3dModel>>>,
 }
 
@@ -29,12 +30,32 @@ impl AssetStore {
         let meshes = MeshCatalog::parse(&mesh_bytes)
             .map_err(|e| format!("Meshes.dat: {e}"))?
             .value;
+        // Texture catalog (for real actor skins). Non-fatal if absent.
+        let textures = std::fs::read(data_root.join("Game Data/Textures.dat"))
+            .ok()
+            .and_then(|b| TextureCatalog::parse(&b).ok())
+            .map(|p| p.value)
+            .unwrap_or_default();
         Ok(Self {
             data_root,
             actors,
             meshes,
+            textures,
             cache: HashMap::new(),
         })
+    }
+
+    /// Resolve a texture-catalog id to an on-disk path under `data/Textures/`.
+    fn skin_path(&self, id: u16) -> Option<PathBuf> {
+        if id == 65535 {
+            return None;
+        }
+        let entry = self.textures.get(id)?;
+        let p = self
+            .data_root
+            .join("Textures")
+            .join(entry.filename.replace('\\', "/"));
+        p.exists().then_some(p)
     }
 
     /// The base body model for an actor template + gender (0 male / 1 female).
@@ -64,7 +85,23 @@ impl AssetStore {
         let Some(mesh_id) = self.actors.mesh_for(template_id, gender) else {
             return Vec::new();
         };
-        // Build search roots from the mesh's path before borrowing the cache.
+
+        // Real skins from the actor's body/face texture selection (default 0).
+        // These replace the b3d's embedded UV-guide textures.
+        const SEL: usize = 0;
+        let (face_skin, body_skin) = match self.actors.templates.get(&template_id) {
+            Some(t) => {
+                let (faces, bodies) = if gender == 1 {
+                    (t.female_face_ids, t.female_body_ids)
+                } else {
+                    (t.male_face_ids, t.male_body_ids)
+                };
+                (self.skin_path(faces[SEL]), self.skin_path(bodies[SEL]))
+            }
+            None => (None, None),
+        };
+
+        // Fallback search roots for the b3d's own textures.
         let mut roots = Vec::new();
         if let Some(entry) = self.meshes.get(mesh_id) {
             let rel = entry.filename.replace('\\', "/");
@@ -82,10 +119,26 @@ impl AssetStore {
             .meshes
             .iter()
             .map(|m| {
-                m.texture
-                    .as_ref()
-                    .and_then(|name| texture::find_texture(&roots, name))
-                    .and_then(|p| texture::load(&p))
+                // Surface type from the b3d texture name: head/face vs body.
+                let is_face = m
+                    .texture
+                    .as_deref()
+                    .map(texture::basename)
+                    .map(|b| {
+                        let l = b.to_ascii_lowercase();
+                        l.contains("head") || l.contains("face")
+                    })
+                    .unwrap_or(false);
+                let skin = if is_face { &face_skin } else { &body_skin };
+                // Prefer the real actor skin; fall back to the b3d's texture.
+                skin.as_ref()
+                    .and_then(|p| texture::load(p))
+                    .or_else(|| {
+                        m.texture
+                            .as_ref()
+                            .and_then(|name| texture::find_texture(&roots, name))
+                            .and_then(|p| texture::load(&p))
+                    })
             })
             .collect()
     }

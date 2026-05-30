@@ -117,3 +117,67 @@ pub struct ParsedCatalog<T> {
     pub value: T,
     pub skipped: Vec<(u16, &'static str)>,
 }
+
+/// One texture record from `Textures.dat` (`Media.bb:904`): `Flags:i16` then a
+/// length-prefixed `Filename` (relative to `Data/Textures/`). Same 65535-slot
+/// i32 index as `Meshes.dat`.
+#[derive(Debug, Clone, PartialEq)]
+pub struct TextureEntry {
+    pub id: u16,
+    pub flags: i16,
+    /// Path relative to `Data/Textures/`, as stored (Windows separators).
+    pub filename: String,
+}
+
+/// A parsed `Textures.dat`: only populated slots, ascending by id.
+#[derive(Debug, Clone, Default)]
+pub struct TextureCatalog {
+    pub entries: Vec<TextureEntry>,
+}
+
+impl TextureCatalog {
+    pub fn parse(data: &[u8]) -> Result<ParsedCatalog<TextureCatalog>, ReadError> {
+        if data.len() < INDEX_BYTES {
+            return Err(ReadError::UnexpectedEof {
+                offset: 0,
+                needed: INDEX_BYTES,
+                available: data.len(),
+            });
+        }
+        let mut entries = Vec::new();
+        let mut skipped = Vec::new();
+        for id in 0..CATALOG_SLOTS {
+            let i = id * 4;
+            let offset = i32::from_le_bytes([data[i], data[i + 1], data[i + 2], data[i + 3]]);
+            if offset <= 0 {
+                if offset < 0 {
+                    skipped.push((id as u16, "negative offset"));
+                }
+                continue;
+            }
+            let mut r = BlitzReader::new(data);
+            let parsed = (|| {
+                r.seek(offset as usize)?;
+                let flags = r.read_short()?;
+                let filename = r.read_string(260)?;
+                Ok::<_, ReadError>(TextureEntry {
+                    id: id as u16,
+                    flags,
+                    filename,
+                })
+            })();
+            match parsed {
+                Ok(e) => entries.push(e),
+                Err(_) => skipped.push((id as u16, "record decode failed")),
+            }
+        }
+        Ok(ParsedCatalog {
+            value: TextureCatalog { entries },
+            skipped,
+        })
+    }
+
+    pub fn get(&self, id: u16) -> Option<&TextureEntry> {
+        self.entries.iter().find(|e| e.id == id)
+    }
+}

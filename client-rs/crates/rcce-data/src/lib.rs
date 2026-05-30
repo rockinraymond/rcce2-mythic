@@ -15,7 +15,7 @@ pub mod texture;
 pub use actors::{ActorCatalog, ActorTemplate};
 pub use b3d::{B3dMesh, B3dModel};
 pub use texture::Image;
-pub use catalog::{MeshCatalog, MeshEntry, ParsedCatalog, CATALOG_SLOTS};
+pub use catalog::{MeshCatalog, MeshEntry, ParsedCatalog, TextureCatalog, TextureEntry, CATALOG_SLOTS};
 pub use reader::{BlitzReader, ReadError};
 
 #[cfg(test)]
@@ -207,5 +207,43 @@ mod tests {
             resolved
         );
         assert!(resolved > 0, "no actor resolved to a loadable mesh");
+    }
+
+    /// Does the Human actor's selected body/face texture resolve through
+    /// Textures.dat to a real, loadable skin image? (Decides whether the actor
+    /// texture system can replace the b3d UV-guide textures.)
+    #[test]
+    fn actor_skin_resolves_via_texture_catalog() {
+        let root = repo_root();
+        let (Ok(ab), Ok(tb)) = (
+            std::fs::read(root.join("data/Server Data/Actors.dat")),
+            std::fs::read(root.join("data/Game Data/Textures.dat")),
+        ) else {
+            eprintln!("skipping: missing Actors.dat / Textures.dat");
+            return;
+        };
+        let actors = ActorCatalog::parse(&ab).expect("actors");
+        let texcat = TextureCatalog::parse(&tb).expect("textures").value;
+        eprintln!("Textures.dat: {} entries", texcat.entries.len());
+        for t in actors.templates.values() {
+            let body0 = t.male_body_ids[0];
+            let face0 = t.male_face_ids[0];
+            let resolve = |id: u16| -> String {
+                if id == 65535 {
+                    return "(none)".into();
+                }
+                match texcat.get(id) {
+                    Some(e) => {
+                        let p = root.join("data/Textures").join(e.filename.replace('\\', "/"));
+                        format!("{} [{}]", e.filename, if p.exists() { "exists" } else { "MISSING" })
+                    }
+                    None => format!("id {id} not in catalog"),
+                }
+            };
+            eprintln!(
+                "actor '{}': body[0]={} -> {}, face[0]={} -> {}",
+                t.race, body0, resolve(body0), face0, resolve(face0)
+            );
+        }
     }
 }
