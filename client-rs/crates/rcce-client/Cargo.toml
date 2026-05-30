@@ -15,6 +15,14 @@ enet-sys = { path = "../enet-sys" }
 rcce-render = { path = "../rcce-render" }
 rcce-data = { path = "../rcce-data" }
 
+# Real-time window (client_window bin). winit 0.30 pairs with wgpu 22
+# (both on raw-window-handle 0.6).
+winit = "0.30"
+wgpu = "22"
+pollster = "0.3"
+bytemuck = { version = "1", features = ["derive"] }
+glam = "0.29"
+
 [lib]
 name = "rcce_client"
 path = "src/lib.rs"
@@ -26,3 +34,7 @@ path = "src/main.rs"
 [[bin]]
 name = "move-test"
 path = "src/bin/move_test.rs"
+
+[[bin]]
+name = "client-window"
+path = "src/bin/client_window.rs"
