@@ -328,6 +328,18 @@ Function ServerLoadArea.Area(Name$)
 		For i = 0 To 999
 			A\SpawnActor[i]        = ReadShort(F)
 			A\SpawnWaypoint[i]     = ReadShort(F)
+			; WaypointX/Y/Z are Field[1999]. SpawnWaypoint is read signed
+			; (-32768..32767) and later copied verbatim into AI\CurrentWaypoint
+			; at spawn (Server.bb:565 / :775), bypassing SetArea's own range
+			; clamp, then used to index WaypointX#[AI\CurrentWaypoint] on the AI
+			; patrol tick (GameServer.bb:864/869/930 -- unguarded, unlike the
+			; NextWaypoint siblings at :880-892). A corrupt or hand-edited area
+			; file with an out-of-range slot would Field-OOB and crash the shared
+			; server (every connected player disconnected). Clamp at the load
+			; boundary -- same pattern as the DamageType clamp below and the
+			; SpawnActor range guard in PreLoadSpawns (Server.bb:758). Slot 0 is a
+			; valid origin fallback, matching SetArea's own out-of-range behaviour.
+			If A\SpawnWaypoint[i] < 0 Or A\SpawnWaypoint[i] > 1999 Then A\SpawnWaypoint[i] = 0
 			A\SpawnSize#[i]        = ReadFloat#(F)
 			A\SpawnScript$[i]      = ReadBoundedString$(F, 1024)
 			A\SpawnActorScript$[i] = ReadBoundedString$(F, 1024)
