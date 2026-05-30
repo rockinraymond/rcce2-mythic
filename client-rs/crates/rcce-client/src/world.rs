@@ -2,7 +2,7 @@
 //!
 //! Packet payload layouts decoded from the reference client's parse code
 //! (`ClientNet.bb`) and the server serializer (`Actors.bb::ActorInstanceToString`).
-//! All multi-byte fields are **big-endian** (handled by `MsgReader`).
+//! All multi-byte fields are **little-endian** (handled by `MsgReader`).
 
 use std::collections::HashMap;
 
@@ -36,6 +36,14 @@ pub struct Actor {
     pub walk_back: bool,
     pub mount_id: u16,
     pub alive: bool,
+    /// Appearance from P_NewActor: gender (0 male / 1 female) and the 0..4
+    /// face/body/hair/beard selection indices into the actor template's id
+    /// arrays. Drive which skin + hair/beard mesh this actor draws.
+    pub gender: u8,
+    pub face_tex: u8,
+    pub body_tex: u8,
+    pub hair: u8,
+    pub beard: u8,
     /// Attribute index → (value, maximum), as delivered by P_StatUpdate.
     /// Sparse — only attributes the server has sent. Health/Energy/etc. indices
     /// come from Fixed Attributes.dat (the caller maps them).
@@ -60,6 +68,15 @@ pub struct World {
     pub me_y: f32,
     pub me_z: f32,
     pub me_yaw: f32,
+    /// Local player's appearance (from our own P_NewActor).
+    pub me_gender: u8,
+    pub me_face_tex: u8,
+    pub me_body_tex: u8,
+    /// Template gender mode (`Actors.dat` `Genders`) keyed by template id.
+    /// Populated by the host before applying packets so `on_new_actor` knows
+    /// whether the wire carries a gender byte (only when mode == 0). Empty map
+    /// ⇒ assume 0 (byte present), the players-and-most-NPCs default.
+    pub template_genders: HashMap<u16, u8>,
     pub zone: Zone,
     /// Other actors keyed by runtime id (excludes the local player).
     pub actors: HashMap<u16, Actor>,
@@ -118,9 +135,11 @@ impl World {
         };
     }
 
-    /// `P_NewActor` = `ActorInstanceToString` (Actors.bb:1076): ServerArea u32 ·
+    /// `P_NewActor` = `ActorInstanceToString` (Actors.bb:1057): ServerArea u32 ·
     /// RuntimeID u16 · Level u16 · XP u32 · TemplateID u16 · X,Y,Z,Yaw f32 ·
-    /// isPlayer u8 · nameLen u8 · name · (more, ignored).
+    /// isPlayer u8 · nameLen u8 · name · tagLen u8 · tag · **gender u8 (only if
+    /// the template's Genders mode == 0)** · Reputation i16 · FaceTex u16 ·
+    /// Hair u16 · BodyTex u16 · Beard u16 · (stats/equipment/factions, ignored).
     fn on_new_actor(&mut self, d: &[u8]) {
         let mut r = MsgReader::new(d);
         let _server_area = r.u32();
@@ -134,11 +153,33 @@ impl World {
         let yaw = r.f32().unwrap_or(0.0);
         let is_player = r.u8().unwrap_or(0) != 0;
         let name = r.str8().unwrap_or_default();
+        let tag = r.str8().unwrap_or_default();
+
+        // Gender byte is present only when the template is player-selectable
+        // (mode 0). For mode 1 it's male (0); mode 2 it's female (1).
+        let mode = self.template_genders.get(&template_id).copied().unwrap_or(0);
+        let gender = if mode == 0 {
+            (r.u8().unwrap_or(0)).min(1)
+        } else if mode == 2 {
+            1
+        } else {
+            0
+        };
+        let _reputation = r.u16(); // skip 2 bytes (value unused here)
+        let clamp4 = |v: Option<u16>| v.unwrap_or(0).min(4) as u8;
+        let face_tex = clamp4(r.u16());
+        let hair = clamp4(r.u16());
+        let body_tex = clamp4(r.u16());
+        let beard = clamp4(r.u16());
+
         if runtime_id == self.my_runtime_id {
             self.me_x = x;
             self.me_y = y;
             self.me_z = z;
             self.me_yaw = yaw;
+            self.me_gender = gender;
+            self.me_face_tex = face_tex;
+            self.me_body_tex = body_tex;
             return; // don't list ourselves among "other actors"
         }
         self.actors.insert(
@@ -147,6 +188,7 @@ impl World {
                 runtime_id,
                 template_id,
                 name,
+                tag,
                 is_player,
                 x,
                 y,
@@ -155,6 +197,11 @@ impl World {
                 dest_x: x,
                 dest_z: z,
                 alive: true,
+                gender,
+                face_tex,
+                body_tex,
+                hair,
+                beard,
                 ..Default::default()
             },
         );
@@ -411,6 +458,49 @@ mod tests {
         // ActorDead marks the NPC dead.
         w.apply(&msg(pk::ACTOR_DEAD, pkt(|p| { p.u16(50); })));
         assert!(!w.actors[&50].alive);
+    }
+
+    #[test]
+    fn new_actor_appearance_both_gender_modes() {
+        let mut w = World::default();
+        // Template 3 = male-only (mode 1, NO gender byte); template 9 =
+        // player-selectable (mode 0, gender byte present).
+        w.template_genders.insert(3, 1);
+        w.template_genders.insert(9, 0);
+
+        // Mode-1 NPC: after name+tag, Reputation, then Face/Hair/Body/Beard.
+        w.apply(&msg(
+            pk::NEW_ACTOR,
+            pkt(|p| {
+                p.u32(0).u16(50).u16(1).u32(0).u16(3);
+                p.f32(0.0).f32(0.0).f32(0.0).f32(0.0);
+                p.u8(1).str8("Knight"); // isPlayer name
+                p.str8("[Boss]"); // tag (no gender byte for mode 1)
+                p.u16(0); // reputation
+                p.u16(2).u16(1).u16(3).u16(4); // face hair body beard
+            }),
+        ));
+        let a = &w.actors[&50];
+        assert_eq!(a.tag, "[Boss]");
+        assert_eq!(a.gender, 0); // mode 1 -> male
+        assert_eq!((a.face_tex, a.hair, a.body_tex, a.beard), (2, 1, 3, 4));
+
+        // Mode-0 player: gender byte = 1 (female) sits between tag and reputation.
+        w.apply(&msg(
+            pk::NEW_ACTOR,
+            pkt(|p| {
+                p.u32(0).u16(51).u16(1).u32(0).u16(9);
+                p.f32(0.0).f32(0.0).f32(0.0).f32(0.0);
+                p.u8(1).str8("Heroine");
+                p.str8(""); // empty tag
+                p.u8(1); // gender byte (female)
+                p.u16(0); // reputation
+                p.u16(4).u16(0).u16(1).u16(0); // face hair body beard
+            }),
+        ));
+        let b = &w.actors[&51];
+        assert_eq!(b.gender, 1);
+        assert_eq!((b.face_tex, b.body_tex), (4, 1));
     }
 
     #[test]

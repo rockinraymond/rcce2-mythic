@@ -39,8 +39,21 @@ fn main() {
     };
     println!("[client] ✓ in world, RuntimeID={}", outcome.runtime_id);
 
+    // Load assets up front so the packet decoder knows each template's gender
+    // mode (decides whether P_NewActor carries a gender byte) before any actor
+    // packet is applied. Kept for the render pass too.
+    let data_root = std::env::var("RCCE_DATA")
+        .unwrap_or_else(|_| r"C:\Users\dyanr\Desktop\rcce2\data".to_string());
+    let mut store_opt = rcce_client::assets::AssetStore::load(&data_root)
+        .map_err(|e| eprintln!("[client] assets: {e}"))
+        .ok();
+
     let mut world = World {
         my_runtime_id: outcome.runtime_id,
+        template_genders: store_opt
+            .as_ref()
+            .map(|s| s.template_genders())
+            .unwrap_or_default(),
         ..Default::default()
     };
     for m in &outcome.world_packets {
@@ -98,14 +111,9 @@ fn main() {
     t.disconnect(outcome.peer);
 
     // ---- Render the live world as a real 3D scene (actors as their models) --
-    let data_root = std::env::var("RCCE_DATA")
-        .unwrap_or_else(|_| r"C:\Users\dyanr\Desktop\rcce2\data".to_string());
-    let mut store = match rcce_client::assets::AssetStore::load(&data_root) {
-        Ok(s) => s,
-        Err(e) => {
-            eprintln!("[client] assets: {e}");
-            return;
-        }
+    let Some(mut store) = store_opt.take() else {
+        eprintln!("[client] assets unavailable; skipping scene render");
+        return;
     };
 
     // Shared model + texture pools; placements reference them by index. Models
@@ -119,21 +127,26 @@ fn main() {
     let ground_y = 0.0f32;
 
     // --- Actors (the local player + every tracked actor) ---------------------
+    #[allow(clippy::too_many_arguments)]
     let mut add_actor = |store: &mut rcce_client::assets::AssetStore,
                          models: &mut Vec<std::rc::Rc<rcce_data::B3dModel>>,
                          textures: &mut Vec<Vec<Option<rcce_data::Image>>>,
                          dedup: &mut std::collections::HashMap<String, usize>,
                          placements: &mut Vec<(usize, [f32; 3], [f32; 3], [f32; 3], [f32; 3])>,
                          tmpl: u16,
+                         gender: u8,
+                         face: u8,
+                         body: u8,
                          pos: [f32; 3],
                          yaw: f32,
                          color: [f32; 3]| {
-        let key = format!("actor:{tmpl}");
+        // Model varies by gender; textures also by face/body selection.
+        let key = format!("actor:{tmpl}:{gender}:{face}:{body}");
         let idx = match dedup.get(&key) {
             Some(&i) => i,
             None => {
-                let Some(m) = store.actor_model(tmpl, 0) else { return };
-                let tex = store.actor_textures(tmpl, 0);
+                let Some(m) = store.actor_model(tmpl, gender) else { return };
+                let tex = store.actor_textures(tmpl, gender, face, body);
                 let i = models.len();
                 models.push(m);
                 textures.push(tex);
@@ -141,18 +154,18 @@ fn main() {
                 i
             }
         };
-        let scale = store.actor_render_scale(tmpl, 0).unwrap_or(0.05);
+        let scale = store.actor_render_scale(tmpl, gender).unwrap_or(0.05);
         // Seat the model's feet on the ground.
         let (min, _max) = models[idx].bounds();
         let pos = [pos[0], ground_y - min[1] * scale, pos[2]];
         placements.push((idx, pos, [0.0, yaw.to_radians(), 0.0], color, [scale, scale, scale]));
     };
 
-    add_actor(&mut store, &mut models, &mut textures, &mut dedup, &mut placements, 0, [world.me_x, world.me_y, world.me_z], world.me_yaw, [0.85, 0.95, 0.85]);
+    add_actor(&mut store, &mut models, &mut textures, &mut dedup, &mut placements, 0, world.me_gender, world.me_face_tex, world.me_body_tex, [world.me_x, world.me_y, world.me_z], world.me_yaw, [0.85, 0.95, 0.85]);
     let actor_player_idx = placements.first().map(|p| p.0);
     for a in world.actors.values() {
         let color = if a.is_player { [0.85, 0.9, 1.0] } else { [1.0, 1.0, 1.0] };
-        add_actor(&mut store, &mut models, &mut textures, &mut dedup, &mut placements, a.template_id, [a.x, a.y, a.z], a.yaw, color);
+        add_actor(&mut store, &mut models, &mut textures, &mut dedup, &mut placements, a.template_id, a.gender, a.face_tex, a.body_tex, [a.x, a.y, a.z], a.yaw, color);
     }
     let actor_count = placements.len();
 

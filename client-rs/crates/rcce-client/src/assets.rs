@@ -45,6 +45,17 @@ impl AssetStore {
         })
     }
 
+    /// Template gender-mode (`Actors.dat` `Genders`) for every actor template,
+    /// keyed by id. The packet decoder needs this to know whether a P_NewActor
+    /// carries a gender byte (only when mode == 0).
+    pub fn template_genders(&self) -> HashMap<u16, u8> {
+        self.actors
+            .templates
+            .iter()
+            .map(|(&id, t)| (id, t.genders))
+            .collect()
+    }
+
     /// Resolve a texture-catalog id to an on-disk path under `data/Textures/`.
     fn skin_path(&self, id: u16) -> Option<PathBuf> {
         if id == 65535 {
@@ -81,14 +92,21 @@ impl AssetStore {
     /// `actor_model(...).meshes`). Each mesh's B3D texture filename is resolved
     /// by basename against the mesh's own directory and the project texture
     /// trees, then decoded (BMP/PNG/JPG). `None` where unresolved/undecodable.
-    pub fn actor_textures(&mut self, template_id: u16, gender: u8) -> Vec<Option<Image>> {
+    pub fn actor_textures(
+        &mut self,
+        template_id: u16,
+        gender: u8,
+        face_sel: u8,
+        body_sel: u8,
+    ) -> Vec<Option<Image>> {
         let Some(mesh_id) = self.actors.mesh_for(template_id, gender) else {
             return Vec::new();
         };
 
-        // Real skins from the actor's body/face texture selection (default 0).
-        // These replace the b3d's embedded UV-guide textures.
-        const SEL: usize = 0;
+        // Real skins from this actor's chosen body/face texture selection
+        // (0..4). These replace the b3d's embedded UV-guide textures.
+        let fi = (face_sel as usize).min(4);
+        let bi = (body_sel as usize).min(4);
         let (face_skin, body_skin) = match self.actors.templates.get(&template_id) {
             Some(t) => {
                 let (faces, bodies) = if gender == 1 {
@@ -96,7 +114,7 @@ impl AssetStore {
                 } else {
                     (t.male_face_ids, t.male_body_ids)
                 };
-                (self.skin_path(faces[SEL]), self.skin_path(bodies[SEL]))
+                (self.skin_path(faces[fi]), self.skin_path(bodies[bi]))
             }
             None => (None, None),
         };

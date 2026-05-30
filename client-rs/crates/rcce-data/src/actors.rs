@@ -25,6 +25,9 @@ pub struct ActorTemplate {
     pub female_face_ids: [u16; 5],
     pub male_body_ids: [u16; 5],
     pub female_body_ids: [u16; 5],
+    /// Template gender mode: 0 = player-selectable (the P_NewActor wire then
+    /// carries a gender byte), 1 = male-only, 2 = female-only.
+    pub genders: u8,
 }
 
 #[derive(Debug, Default, Clone)]
@@ -113,7 +116,7 @@ fn parse_record(r: &mut BlitzReader) -> Result<ActorTemplate, ReadError> {
     for _ in 0..20 {
         r.read_short()?;
     }
-    let _genders = r.read_byte()?;
+    let genders = r.read_byte()? as u8;
     let _playable = r.read_byte()?;
     let _rideable = r.read_byte()?;
     let _aggressiveness = r.read_byte()?;
@@ -136,5 +139,6 @@ fn parse_record(r: &mut BlitzReader) -> Result<ActorTemplate, ReadError> {
         female_face_ids,
         male_body_ids,
         female_body_ids,
+        genders,
     })
 }
