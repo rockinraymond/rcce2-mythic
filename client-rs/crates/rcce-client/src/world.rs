@@ -298,18 +298,38 @@ impl World {
             return;
         }
         let val = val as i16;
-        let table = if rid == self.my_runtime_id {
-            &mut self.me_attributes
+        // Health is attribute 0 (Server.bb reads HealthStat from
+        // Fixed Attributes.dat → 0); mirror it onto the actor's health field so
+        // the HP bars reflect live combat damage.
+        const HEALTH_STAT: u8 = 0;
+        if rid == self.my_runtime_id {
+            let e = self.me_attributes.entry(attr).or_default();
+            match kind {
+                b'A' => e.0 = val,
+                b'M' => e.1 = val,
+                _ => {}
+            }
+            if attr == HEALTH_STAT {
+                match kind {
+                    b'A' => self.me_health = val,
+                    b'M' => self.me_health_max = val,
+                    _ => {}
+                }
+            }
         } else if let Some(a) = self.actors.get_mut(&rid) {
-            &mut a.attributes
-        } else {
-            return;
-        };
-        let entry = table.entry(attr).or_default();
-        match kind {
-            b'A' => entry.0 = val, // current value
-            b'M' => entry.1 = val, // maximum
-            _ => {}
+            let e = a.attributes.entry(attr).or_default();
+            match kind {
+                b'A' => e.0 = val,
+                b'M' => e.1 = val,
+                _ => {}
+            }
+            if attr == HEALTH_STAT {
+                match kind {
+                    b'A' => a.health = val,
+                    b'M' => a.health_max = val,
+                    _ => {}
+                }
+            }
         }
     }
 
@@ -467,6 +487,13 @@ mod tests {
         // StatUpdate for self goes to me_attributes.
         w.apply(&msg(pk::STAT_UPDATE, pkt(|p| { p.u8(b'A').u16(7).u8(5).u16(42); })));
         assert_eq!(w.me_attributes[&5], (42, 0));
+
+        // Health is attr 0 → mirrored onto actor.health / me_health for the bars.
+        w.apply(&msg(pk::STAT_UPDATE, pkt(|p| { p.u8(b'M').u16(50).u8(0).u16(120); })));
+        w.apply(&msg(pk::STAT_UPDATE, pkt(|p| { p.u8(b'A').u16(50).u8(0).u16(75); })));
+        assert_eq!((w.actors[&50].health, w.actors[&50].health_max), (75, 120));
+        w.apply(&msg(pk::STAT_UPDATE, pkt(|p| { p.u8(b'A').u16(7).u8(0).u16(33); })));
+        assert_eq!(w.me_health, 33);
 
         // ActorDead marks the NPC dead.
         w.apply(&msg(pk::ACTOR_DEAD, pkt(|p| { p.u16(50); })));

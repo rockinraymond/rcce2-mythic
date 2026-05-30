@@ -47,3 +47,7 @@ path = "src/bin/overlay_test.rs"
 [[bin]]
 name = "chat-test"
 path = "src/bin/chat_test.rs"
+
+[[bin]]
+name = "combat-test"
+path = "src/bin/combat_test.rs"

@@ -132,6 +132,8 @@ struct App {
     /// `Some` while the chat line is open (the typed buffer); movement keys are
     /// suppressed. Enter sends + closes, Esc cancels.
     chat_input: Option<String>,
+    /// Runtime id of the last-attacked actor (for the target highlight).
+    target: Option<u16>,
 }
 
 impl App {
@@ -163,6 +165,7 @@ impl App {
             last_move: now,
             was_moving: false,
             chat_input: None,
+            target: None,
         }
     }
 }
@@ -446,6 +449,32 @@ impl ApplicationHandler for App {
                             self.chat_input = Some(String::new());
                             self.keys_wasd = [false; 4]; // stop moving while typing
                         }
+                        // Attack the nearest living actor.
+                        KeyCode::KeyF | KeyCode::Space if pressed => {
+                            if let Some(net) = self.net.as_mut() {
+                                let (mx, mz) = (net.world.me_x, net.world.me_z);
+                                let target = net
+                                    .world
+                                    .actors
+                                    .values()
+                                    .filter(|a| a.alive)
+                                    .min_by(|a, b| {
+                                        let da = (a.x - mx).powi(2) + (a.z - mz).powi(2);
+                                        let db = (b.x - mx).powi(2) + (b.z - mz).powi(2);
+                                        da.total_cmp(&db)
+                                    })
+                                    .map(|a| a.runtime_id);
+                                if let Some(rid) = target {
+                                    self.target = Some(rid);
+                                    net.transport.send(
+                                        net.peer,
+                                        rcce_net::packet_id::ATTACK_ACTOR,
+                                        &rid.to_le_bytes(),
+                                        true,
+                                    );
+                                }
+                            }
+                        }
                         KeyCode::KeyW | KeyCode::ArrowUp => self.keys_wasd[0] = pressed,
                         KeyCode::KeyA => self.keys_wasd[1] = pressed,
                         KeyCode::KeyS | KeyCode::ArrowDown => self.keys_wasd[2] = pressed,
@@ -596,6 +625,7 @@ impl App {
         );
 
         // 2D overlay: nameplates + health bars over actors, and a player HUD.
+        let target_rid = self.target;
         if let Some(overlay) = self.overlay.as_mut() {
             let (sw, sh) = (gfx.config.width as f32, gfx.config.height as f32);
             let white = [1.0, 1.0, 1.0, 1.0];
@@ -610,15 +640,24 @@ impl App {
                         } else {
                             1.0
                         };
-                        let col = if a.is_player {
+                        let is_target = target_rid == Some(a.runtime_id);
+                        let col = if is_target {
+                            [1.0, 0.85, 0.2, 1.0]
+                        } else if a.is_player {
                             [0.4, 0.7, 1.0, 1.0]
                         } else {
                             [0.9, 0.3, 0.3, 1.0]
                         };
                         overlay.bar(px - 24.0, py - 14.0, 48.0, 5.0, frac, col);
+                        if is_target {
+                            // Target brackets around the bar.
+                            overlay.rect(px - 28.0, py - 15.0, 2.0, 7.0, col);
+                            overlay.rect(px + 26.0, py - 15.0, 2.0, 7.0, col);
+                        }
                         if !a.name.is_empty() {
                             let tw = rcce_render::font::text_width(&a.name, 1.0);
-                            overlay.text_shadow(px - tw * 0.5, py - 26.0, 1.0, &a.name, white);
+                            let nc = if is_target { col } else { white };
+                            overlay.text_shadow(px - tw * 0.5, py - 26.0, 1.0, &a.name, nc);
                         }
                     }
                 }
