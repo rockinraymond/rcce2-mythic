@@ -1107,7 +1107,14 @@ End Function
 
 Function savework(SF$="")
 FN$=sf$
-sfile=WriteFile (fn$)
+; Atomic save: write to a .tmp and only promote it on success, so a crash or
+; a failed/partial write can't truncate the user's existing .act map. Matches
+; the .tmp-protected mesh-pad path already in this file (~:1561) and the
+; CLAUDE.md atomic-write convention. SafeWriteCommit closes the handle and
+; performs the atomic promote (and refuses to clobber the original if the
+; temp is missing/empty).
+Local TmpPath$ = SafeWriteOpen$(fn$)
+sfile=WriteFile (TmpPath$)
 ;find out how many dropmodels there are
 dmc=0
 
@@ -1137,7 +1144,7 @@ WriteByte sfile,dm\cg
 WriteByte sfile,dm\cb
 Next
 
-CloseFile sfile
+SafeWriteCommit%(TmpPath$, fn$, sfile)
 
 ChangeDir thispath$
 

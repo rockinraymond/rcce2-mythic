@@ -2666,7 +2666,14 @@ savemultimesh (cube,"Data\RCCAVES\"+thisfold$,"Data\RCCAVES\",7)
 lightf$=Left$(thisfold$,Len(thisfold$)-3)
 lightf$=lightf$+"LGT"
 ChangeDir thispath$
-sfl=WriteFile("Data\RCCAVES\"+lightf$)
+; Atomic save of the .LGT light file: write to .tmp, promote on success, so a
+; crash/partial write can't truncate the user's existing light data.
+; (CLAUDE.md atomic writes; matches the .tmp-protected path at ~:2932 here.)
+; No ChangeDir occurs between here and the commit, so the relative temp/final
+; paths resolve consistently from thispath$.
+Local CaveLightPath$ = "Data\RCCAVES\"+lightf$
+Local TmpPath$ = SafeWriteOpen$(CaveLightPath$)
+sfl=WriteFile(TmpPath$)
 
  
  
@@ -2695,7 +2702,7 @@ For dm.dropmodel=Each DropModel
 
 Next
 
-CloseFile sfl
+SafeWriteCommit%(TmpPath$, CaveLightPath$, sfl)
 
 ChangeDir thispath$
 fui_notify("Cave Saved.")
