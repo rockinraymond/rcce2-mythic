@@ -108,62 +108,81 @@ fn main() {
         }
     };
 
-    // Resolve a model per actor (cached). The local player is the character we
-    // created — actor template 0 (Human).
+    // Shared model + texture pools; placements reference them by index. Models
+    // are deduped by a string key so 250 identical trees share one upload.
     let mut models: Vec<std::rc::Rc<rcce_data::B3dModel>> = Vec::new();
     let mut textures: Vec<Vec<Option<rcce_data::Image>>> = Vec::new();
-    // (model idx, world pos, yaw degrees, color, render scale)
-    let mut placements: Vec<(usize, [f32; 3], f32, [f32; 3], f32)> = Vec::new();
+    let mut dedup: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
+    // (model idx, world pos, rot[pitch,yaw,roll] radians, color, scale[3])
+    let mut placements: Vec<(usize, [f32; 3], [f32; 3], [f32; 3], [f32; 3])> = Vec::new();
 
-    let add_actor = |store: &mut rcce_client::assets::AssetStore,
-                     models: &mut Vec<std::rc::Rc<rcce_data::B3dModel>>,
-                     textures: &mut Vec<Vec<Option<rcce_data::Image>>>,
-                         placements: &mut Vec<(usize, [f32; 3], f32, [f32; 3], f32)>,
+    let ground_y = 0.0f32;
+
+    // --- Actors (the local player + every tracked actor) ---------------------
+    let mut add_actor = |store: &mut rcce_client::assets::AssetStore,
+                         models: &mut Vec<std::rc::Rc<rcce_data::B3dModel>>,
+                         textures: &mut Vec<Vec<Option<rcce_data::Image>>>,
+                         dedup: &mut std::collections::HashMap<String, usize>,
+                         placements: &mut Vec<(usize, [f32; 3], [f32; 3], [f32; 3], [f32; 3])>,
                          tmpl: u16,
                          pos: [f32; 3],
                          yaw: f32,
                          color: [f32; 3]| {
-        if let Some(m) = store.actor_model(tmpl, 0) {
-            let scale = store.actor_render_scale(tmpl, 0).unwrap_or(0.05);
-            let tex = store.actor_textures(tmpl, 0);
-            let idx = models.len();
-            models.push(m);
-            textures.push(tex);
-            placements.push((idx, pos, yaw, color, scale));
-        }
+        let key = format!("actor:{tmpl}");
+        let idx = match dedup.get(&key) {
+            Some(&i) => i,
+            None => {
+                let Some(m) = store.actor_model(tmpl, 0) else { return };
+                let tex = store.actor_textures(tmpl, 0);
+                let i = models.len();
+                models.push(m);
+                textures.push(tex);
+                dedup.insert(key, i);
+                i
+            }
+        };
+        let scale = store.actor_render_scale(tmpl, 0).unwrap_or(0.05);
+        // Seat the model's feet on the ground.
+        let (min, _max) = models[idx].bounds();
+        let pos = [pos[0], ground_y - min[1] * scale, pos[2]];
+        placements.push((idx, pos, [0.0, yaw.to_radians(), 0.0], color, [scale, scale, scale]));
     };
 
-    add_actor(&mut store, &mut models, &mut textures, &mut placements, 0, [world.me_x, world.me_y, world.me_z], world.me_yaw, [0.85, 0.95, 0.85]);
+    add_actor(&mut store, &mut models, &mut textures, &mut dedup, &mut placements, 0, [world.me_x, world.me_y, world.me_z], world.me_yaw, [0.85, 0.95, 0.85]);
+    let actor_player_idx = placements.first().map(|p| p.0);
     for a in world.actors.values() {
         let color = if a.is_player { [0.85, 0.9, 1.0] } else { [1.0, 1.0, 1.0] };
-        add_actor(&mut store, &mut models, &mut textures, &mut placements, a.template_id, [a.x, a.y, a.z], a.yaw, color);
+        add_actor(&mut store, &mut models, &mut textures, &mut dedup, &mut placements, a.template_id, [a.x, a.y, a.z], a.yaw, color);
     }
+    let actor_count = placements.len();
+
+    // --- Scenery (props/terrain meshes that fill the zone) -------------------
+    let scenery_count = load_zone_scenery(
+        &data_root, &world.zone.name, &mut store, &mut models, &mut textures, &mut dedup, &mut placements,
+    );
+    println!("[client] scene: {actor_count} actor(s), {scenery_count} scenery object(s)");
 
     if placements.is_empty() {
-        eprintln!("[client] no actor models resolved; skipping scene render");
+        eprintln!("[client] nothing resolved to render; skipping scene render");
         return;
     }
 
-    // Build instances at the engine's real scale, feet seated on the ground.
-    let ground_y = 0.0f32;
     let instances: Vec<rcce_render::SceneInstance> = placements
         .iter()
-        .map(|&(idx, pos, yaw, color, scale)| {
-            let model: &rcce_data::B3dModel = &models[idx];
-            let (min, _max) = model.bounds();
-            rcce_render::SceneInstance {
-                model,
-                textures: &textures[idx],
-                translation: [pos[0], ground_y - min[1] * scale, pos[2]],
-                yaw: yaw.to_radians(),
-                scale,
-                color,
-            }
+        .map(|&(idx, pos, rot, color, scale)| rcce_render::SceneInstance {
+            model: &models[idx],
+            textures: &textures[idx],
+            translation: pos,
+            rot,
+            scale,
+            color,
         })
         .collect();
 
     // Third-person camera framing the local player (placement 0).
-    let (p_idx, p_pos, _, _, p_scale) = placements[0];
+    let p_pos = placements[0].1;
+    let p_idx = actor_player_idx.unwrap_or(placements[0].0);
+    let p_scale = placements[0].4[1];
     let (pmin, pmax) = models[p_idx].bounds();
     let player_h = ((pmax[1] - pmin[1]) * p_scale).max(0.5);
     let d = player_h * 3.2;
@@ -173,9 +192,61 @@ fn main() {
     let out = "rcce_world3d.png";
     match rcce_render::render_scene_png(&instances, eye, target, ground_y, 1200, 900, out) {
         Ok(adapter) => println!(
-            "[client] rendered 3D world ({} actors) via {adapter} -> {out}",
+            "[client] rendered 3D world ({} instances) via {adapter} -> {out}",
             instances.len()
         ),
         Err(e) => eprintln!("[client] scene render failed: {e}"),
     }
+}
+
+/// Load `Data/Areas/<zone>.dat`, resolve each scenery placement to a model +
+/// textures (deduped by mesh id), and append world-space placements. Returns
+/// the number of objects added. Missing/unparsable area files are non-fatal.
+#[allow(clippy::too_many_arguments)]
+fn load_zone_scenery(
+    data_root: &str,
+    zone_name: &str,
+    store: &mut rcce_client::assets::AssetStore,
+    models: &mut Vec<std::rc::Rc<rcce_data::B3dModel>>,
+    textures: &mut Vec<Vec<Option<rcce_data::Image>>>,
+    dedup: &mut std::collections::HashMap<String, usize>,
+    placements: &mut Vec<(usize, [f32; 3], [f32; 3], [f32; 3], [f32; 3])>,
+) -> usize {
+    if zone_name.is_empty() {
+        return 0;
+    }
+    let path = std::path::Path::new(data_root)
+        .join("Areas")
+        .join(format!("{zone_name}.dat"));
+    let Ok(bytes) = std::fs::read(&path) else {
+        eprintln!("[client] no area file at {}", path.display());
+        return 0;
+    };
+    let scenery = match rcce_data::AreaScenery::parse(&bytes) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("[client] area parse failed: {e}");
+            return 0;
+        }
+    };
+    let mut added = 0;
+    for s in &scenery.sceneries {
+        let key = format!("scenery:{}:{}", s.mesh_id, s.texture_id);
+        let idx = match dedup.get(&key) {
+            Some(&i) => i,
+            None => {
+                let Some(m) = store.mesh_model(s.mesh_id) else { continue };
+                let tex = store.scenery_textures(s.mesh_id, s.texture_id);
+                let i = models.len();
+                models.push(m);
+                textures.push(tex);
+                dedup.insert(key, i);
+                i
+            }
+        };
+        let rot = [s.rot[0].to_radians(), s.rot[1].to_radians(), s.rot[2].to_radians()];
+        placements.push((idx, s.pos, rot, [1.0, 1.0, 1.0], s.scale));
+        added += 1;
+    }
+    added
 }

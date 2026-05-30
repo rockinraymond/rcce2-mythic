@@ -17,8 +17,11 @@ pub struct SceneInstance<'a> {
     pub model: &'a B3dModel,
     pub textures: &'a [Option<Image>],
     pub translation: [f32; 3],
-    pub yaw: f32,
-    pub scale: f32,
+    /// Pitch, yaw, roll in radians (X, Y, Z). Actors use `[0, yaw, 0]`;
+    /// scenery carries all three from the area file.
+    pub rot: [f32; 3],
+    /// Per-axis world scale. Actors pass `[s, s, s]`; scenery is non-uniform.
+    pub scale: [f32; 3],
     /// Fallback/tint colour (multiplied with the texture; shows through where a
     /// mesh has no texture).
     pub color: [f32; 3],
@@ -313,8 +316,12 @@ pub fn render_scene_png(
 
     // One drawable per (instance, mesh), baked to world space.
     for inst in instances {
-        let rot = Mat4::from_rotation_y(inst.yaw);
+        // Blitz `RotateEntity pitch,yaw,roll` → rotate about Y, then X, then Z.
+        let rot = Mat4::from_rotation_y(inst.rot[1])
+            * Mat4::from_rotation_x(inst.rot[0])
+            * Mat4::from_rotation_z(inst.rot[2]);
         let nrot = Mat3::from_mat4(rot);
+        let scale = Vec3::from(inst.scale);
         let trans = Vec3::from(inst.translation);
         for (mi, mesh) in inst.model.meshes.iter().enumerate() {
             if mesh.positions.is_empty() || mesh.indices.is_empty() {
@@ -327,7 +334,7 @@ pub fn render_scene_png(
                 .iter()
                 .enumerate()
                 .map(|(i, p)| {
-                    let world = trans + nrot * (Vec3::from(*p) * inst.scale);
+                    let world = trans + nrot * (Vec3::from(*p) * scale);
                     Vertex {
                         pos: world.into(),
                         normal: (nrot * normals[i]).into(),

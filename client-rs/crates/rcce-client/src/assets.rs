@@ -143,6 +143,46 @@ impl AssetStore {
             .collect()
     }
 
+    /// Textures for a plain scenery mesh, one per sub-mesh (aligned to
+    /// `mesh_model(mesh_id).meshes`). Resolves each sub-mesh's own B3D texture
+    /// name against the mesh directory and the project texture trees. If
+    /// `retexture_id` is a real texture-catalog id (not 65535), it overrides
+    /// every sub-mesh (the engine's scenery `TextureID` retexture).
+    pub fn scenery_textures(&mut self, mesh_id: u16, retexture_id: u16) -> Vec<Option<Image>> {
+        // Optional whole-mesh retexture from the area file's TextureID.
+        let retex = self
+            .skin_path(retexture_id)
+            .and_then(|p| texture::load(&p));
+
+        // Search roots: the mesh's own directory, then the texture trees.
+        let mut roots = Vec::new();
+        if let Some(entry) = self.meshes.get(mesh_id) {
+            let rel = entry.filename.replace('\\', "/");
+            if let Some(dir) = self.data_root.join("Meshes").join(&rel).parent() {
+                roots.push(dir.to_path_buf());
+            }
+        }
+        roots.push(self.data_root.join("Textures"));
+        roots.push(self.data_root.join("Meshes"));
+
+        let Some(model) = self.mesh_model(mesh_id) else {
+            return Vec::new();
+        };
+        model
+            .meshes
+            .iter()
+            .map(|m| {
+                if let Some(img) = &retex {
+                    return Some(img.clone());
+                }
+                m.texture
+                    .as_ref()
+                    .and_then(|name| texture::find_texture(&roots, name))
+                    .and_then(|p| texture::load(&p))
+            })
+            .collect()
+    }
+
     /// A model by mesh-catalog id, cached (including negative cache for misses).
     pub fn mesh_model(&mut self, mesh_id: u16) -> Option<Rc<B3dModel>> {
         if let Some(cached) = self.cache.get(&mesh_id) {

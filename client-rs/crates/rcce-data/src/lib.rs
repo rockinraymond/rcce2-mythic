@@ -213,7 +213,7 @@ mod tests {
 
     /// Parse real client area files and sanity-check the scenery list: a sane
     /// count, and mesh ids that resolve through the mesh catalog to loadable
-    /// `.b3d` files (confirms the 61-byte header offset is correct).
+    /// `.b3d` files (confirms the 41-byte header offset is correct).
     #[test]
     fn parse_real_area_scenery() {
         let root = repo_root();
