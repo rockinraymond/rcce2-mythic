@@ -83,7 +83,16 @@ Function GiveXP(A.ActorInstance, XP, IgnoreParty = 0)
 						If Party\Player[i]\ServerArea = A\ServerArea Then GiveXP(Party\Player[i], PartyXP, True)
 					EndIf
 				Next
-				XP = PartyXP + (XP Mod Party\Members)
+				; The recipient (A) keeps its share plus the division remainder.
+				; The remainder MUST use the SAME divisor as the split above --
+				; the in-area `Members`, not the total-party `Party\Members`.
+				; Each of the (Members-1) other in-area members received
+				; PartyXP = XP / Members, so for the distributed total to equal
+				; XP exactly, A must keep PartyXP + (XP Mod Members). Using
+				; Party\Members here fabricated or dropped XP whenever the party
+				; spanned zones (Members <> Party\Members): e.g. XP=10, Members=2,
+				; Party\Members=3 gave 5 + (10 Mod 3)=6, total 11 from a 10 award.
+				XP = PartyXP + (XP Mod Members)
 			EndIf
 		EndIf
 	EndIf
