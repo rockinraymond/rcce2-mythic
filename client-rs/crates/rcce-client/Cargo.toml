@@ -43,3 +43,7 @@ path = "src/bin/client_window.rs"
 [[bin]]
 name = "overlay-test"
 path = "src/bin/overlay_test.rs"
+
+[[bin]]
+name = "chat-test"
+path = "src/bin/chat_test.rs"

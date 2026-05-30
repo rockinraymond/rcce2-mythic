@@ -129,6 +129,9 @@ struct App {
     cam_yaw: f32,
     last_move: Instant,
     was_moving: bool,
+    /// `Some` while the chat line is open (the typed buffer); movement keys are
+    /// suppressed. Enter sends + closes, Esc cancels.
+    chat_input: Option<String>,
 }
 
 impl App {
@@ -159,6 +162,7 @@ impl App {
             cam_yaw: 0.0,
             last_move: now,
             was_moving: false,
+            chat_input: None,
         }
     }
 }
@@ -397,8 +401,51 @@ impl ApplicationHandler for App {
             }
             WindowEvent::KeyboardInput { event, .. } => {
                 let pressed = event.state == ElementState::Pressed;
+                // Chat typing mode: capture text, Enter sends, Esc cancels.
+                if self.chat_input.is_some() {
+                    if pressed {
+                        match event.physical_key {
+                            PhysicalKey::Code(KeyCode::Enter | KeyCode::NumpadEnter) => {
+                                let msg = self.chat_input.take().unwrap_or_default();
+                                if !msg.is_empty() {
+                                    if let Some(net) = self.net.as_mut() {
+                                        net.transport.send(
+                                            net.peer,
+                                            rcce_net::packet_id::CHAT_MESSAGE,
+                                            msg.as_bytes(),
+                                            true,
+                                        );
+                                    }
+                                }
+                            }
+                            PhysicalKey::Code(KeyCode::Escape) => self.chat_input = None,
+                            PhysicalKey::Code(KeyCode::Backspace) => {
+                                if let Some(b) = self.chat_input.as_mut() {
+                                    b.pop();
+                                }
+                            }
+                            _ => {
+                                if let (Some(t), Some(b)) =
+                                    (event.text.as_ref(), self.chat_input.as_mut())
+                                {
+                                    for c in t.chars() {
+                                        if !c.is_control() && b.chars().count() < 100 {
+                                            b.push(c);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    return;
+                }
                 if let PhysicalKey::Code(code) = event.physical_key {
                     match code {
+                        // Open the chat line.
+                        KeyCode::Enter | KeyCode::KeyT if pressed => {
+                            self.chat_input = Some(String::new());
+                            self.keys_wasd = [false; 4]; // stop moving while typing
+                        }
                         KeyCode::KeyW | KeyCode::ArrowUp => self.keys_wasd[0] = pressed,
                         KeyCode::KeyA => self.keys_wasd[1] = pressed,
                         KeyCode::KeyS | KeyCode::ArrowDown => self.keys_wasd[2] = pressed,
@@ -592,13 +639,18 @@ impl App {
                 overlay.text(sw - 84.0, 10.0, 1.0, &format!("{fps:.0} fps"), [0.8, 1.0, 0.8, 1.0]);
 
                 // Chat log: the last few lines, just above the HUD.
-                let lines = w.chat.len();
+                let chat_base = if self.chat_input.is_some() { 84.0 } else { 70.0 };
                 for (i, line) in w.chat.iter().rev().take(5).enumerate() {
-                    let y = sh - 70.0 - i as f32 * 12.0;
+                    let y = sh - chat_base - i as f32 * 12.0;
                     let s: String = line.chars().take(60).collect();
                     overlay.text_shadow(14.0, y, 1.0, &s, [0.9, 0.9, 0.7, 1.0]);
                 }
-                let _ = lines;
+            }
+            // Chat input line (with a blinking-ish caret).
+            if let Some(buf) = self.chat_input.as_ref() {
+                overlay.rect(10.0, sh - 80.0, sw - 20.0, 16.0, [0.0, 0.0, 0.0, 0.55]);
+                let caret = if (elapsed * 2.0) as i64 % 2 == 0 { "_" } else { " " };
+                overlay.text_shadow(14.0, sh - 78.0, 1.0, &format!("> {buf}{caret}"), [1.0, 1.0, 1.0, 1.0]);
             }
             overlay.render(&gfx.device, &gfx.queue, &tview, sw, sh);
         }
