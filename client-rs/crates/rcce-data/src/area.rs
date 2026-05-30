@@ -32,6 +32,9 @@ pub struct SceneryPlacement {
 #[derive(Debug, Clone)]
 pub struct AreaEnv {
     pub sky_tex_id: u16,
+    /// `LoadingMusicID` — indexes `Music.dat` for the zone's looping track
+    /// (65535 = none).
+    pub music_id: u16,
     /// Fog colour (0..1). Also the natural sky/clear colour.
     pub fog_color: [f32; 3],
     pub fog_near: f32,
@@ -57,6 +60,7 @@ impl Default for AreaEnv {
     fn default() -> Self {
         AreaEnv {
             sky_tex_id: 65535,
+            music_id: 65535,
             fog_color: [0.45, 0.62, 0.82],
             fog_near: 1000.0,
             fog_far: 8000.0,
@@ -82,7 +86,8 @@ impl AreaScenery {
         // Header (41 bytes): 6×i16 tex/music ids · FogRGB(u8×3) · FogNear,Far
         // (f32×2) · MapTexID(i16) · Outdoors(u8) · AmbientRGB(u8×3) · light(f32×3).
         let env = (|| -> Result<AreaEnv, ReadError> {
-            r.seek(4)?; // skip LoadingTexID, LoadingMusicID
+            r.seek(2)?; // skip LoadingTexID (i16@0)
+            let music_id = r.read_short_u()?; // LoadingMusicID (i16@2)
             let sky_tex_id = r.read_short_u()?;
             r.seek(12)?; // to FogRGB
             let fog_color = [
@@ -105,6 +110,7 @@ impl AreaScenery {
             let light_dir = light_dir_from_pitch_yaw(light_pitch, light_yaw);
             Ok(AreaEnv {
                 sky_tex_id,
+                music_id,
                 fog_color,
                 fog_near,
                 fog_far,

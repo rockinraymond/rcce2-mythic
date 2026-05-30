@@ -8,7 +8,8 @@ use std::path::PathBuf;
 use std::rc::Rc;
 
 use rcce_data::{
-    texture, ActorCatalog, AnimClip, AnimSetCatalog, B3dModel, Image, MeshCatalog, TextureCatalog,
+    texture, ActorCatalog, AnimClip, AnimSetCatalog, B3dModel, Image, MeshCatalog, MusicCatalog,
+    TextureCatalog,
 };
 
 pub struct AssetStore {
@@ -17,6 +18,7 @@ pub struct AssetStore {
     meshes: MeshCatalog,
     textures: TextureCatalog,
     anims: AnimSetCatalog,
+    music: MusicCatalog,
     cache: HashMap<u16, Option<Rc<B3dModel>>>,
     /// Memoised decoded actor skins, keyed by appearance, so per-frame actor
     /// rebuilds don't re-read + re-decode the skin files from disk.
@@ -94,15 +96,41 @@ impl AssetStore {
             .ok()
             .and_then(|b| AnimSetCatalog::parse(&b).ok())
             .unwrap_or_default();
+        // Music index (zone track id → filename). Non-fatal if absent.
+        let music = std::fs::read(data_root.join("Game Data/Music.dat"))
+            .ok()
+            .and_then(|b| MusicCatalog::parse(&b).ok())
+            .map(|p| p.value)
+            .unwrap_or_default();
         Ok(Self {
             data_root,
             actors,
             meshes,
             textures,
             anims,
+            music,
             cache: HashMap::new(),
             actor_tex_cache: HashMap::new(),
         })
+    }
+
+    /// Resolve a `LoadingMusicID` to an on-disk `.ogg` path under `Data/Music/`,
+    /// or `None` if the id is empty/unknown or the file is missing. Backslashes
+    /// in the stored filename are normalised to the platform separator.
+    pub fn music_path(&self, id: u16) -> Option<std::path::PathBuf> {
+        let entry = self.music.get(id)?;
+        let rel = entry.filename.replace('\\', "/");
+        let path = self.data_root.join("Music").join(rel);
+        path.exists().then_some(path)
+    }
+
+    /// First `Music.dat` entry that resolves to a file on disk, as `(id, path)`.
+    /// Used to exercise the music pipeline when no zone sets `LoadingMusicID`.
+    pub fn any_music(&self) -> Option<(u16, std::path::PathBuf)> {
+        self.music
+            .entries
+            .iter()
+            .find_map(|e| self.music_path(e.id).map(|p| (e.id, p)))
     }
 
     /// Memoised [`actor_textures`](Self::actor_textures) — decodes the skins for

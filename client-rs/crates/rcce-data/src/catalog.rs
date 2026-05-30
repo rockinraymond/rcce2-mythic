@@ -181,3 +181,100 @@ impl TextureCatalog {
         self.entries.iter().find(|e| e.id == id)
     }
 }
+
+/// One music record from `Music.dat` (`Media.bb:671-672`): just a length-
+/// prefixed `Filename` relative to `Data/Music/`. Same 65535-slot i32 index as
+/// the other catalogs.
+#[derive(Debug, Clone, PartialEq)]
+pub struct MusicEntry {
+    pub id: u16,
+    /// Path relative to `Data/Music/`, as stored (Windows separators).
+    pub filename: String,
+}
+
+/// A parsed `Music.dat`: only populated slots, ascending by id.
+#[derive(Debug, Clone, Default)]
+pub struct MusicCatalog {
+    pub entries: Vec<MusicEntry>,
+}
+
+impl MusicCatalog {
+    pub fn parse(data: &[u8]) -> Result<ParsedCatalog<MusicCatalog>, ReadError> {
+        if data.len() < INDEX_BYTES {
+            return Err(ReadError::UnexpectedEof {
+                offset: 0,
+                needed: INDEX_BYTES,
+                available: data.len(),
+            });
+        }
+        let mut entries = Vec::new();
+        let mut skipped = Vec::new();
+        for id in 0..CATALOG_SLOTS {
+            let i = id * 4;
+            let offset = i32::from_le_bytes([data[i], data[i + 1], data[i + 2], data[i + 3]]);
+            if offset <= 0 {
+                if offset < 0 {
+                    skipped.push((id as u16, "negative offset"));
+                }
+                continue;
+            }
+            let mut r = BlitzReader::new(data);
+            let parsed = (|| {
+                r.seek(offset as usize)?;
+                let filename = r.read_string(260)?;
+                Ok::<_, ReadError>(MusicEntry { id: id as u16, filename })
+            })();
+            match parsed {
+                Ok(e) if !e.filename.is_empty() => entries.push(e),
+                Ok(_) => skipped.push((id as u16, "empty filename")),
+                Err(_) => skipped.push((id as u16, "record decode failed")),
+            }
+        }
+        Ok(ParsedCatalog {
+            value: MusicCatalog { entries },
+            skipped,
+        })
+    }
+
+    pub fn get(&self, id: u16) -> Option<&MusicEntry> {
+        self.entries.iter().find(|e| e.id == id)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn music_catalog_resolves_one_entry() {
+        // Build a synthetic Music.dat: zeroed index + one record at id 5.
+        let mut data = vec![0u8; INDEX_BYTES];
+        let record_off = INDEX_BYTES as i32;
+        // index[5] = record_off
+        data[5 * 4..5 * 4 + 4].copy_from_slice(&record_off.to_le_bytes());
+        // record = Blitz string (4-byte LE len + bytes)
+        let name = b"Tribal/Tribal.ogg";
+        data.extend_from_slice(&(name.len() as i32).to_le_bytes());
+        data.extend_from_slice(name);
+
+        let cat = MusicCatalog::parse(&data).expect("parse").value;
+        assert_eq!(cat.entries.len(), 1);
+        let e = cat.get(5).expect("id 5");
+        assert_eq!(e.filename, "Tribal/Tribal.ogg");
+        assert!(cat.get(6).is_none());
+    }
+
+    #[test]
+    fn empty_index_yields_no_entries() {
+        // The shipped starter project's Music.dat is exactly this: index only.
+        let data = vec![0u8; INDEX_BYTES];
+        let cat = MusicCatalog::parse(&data).expect("parse").value;
+        assert!(cat.entries.is_empty());
+    }
+
+    #[test]
+    fn truncated_index_errors() {
+        let data = vec![0u8; INDEX_BYTES - 1];
+        assert!(MusicCatalog::parse(&data).is_err());
+    }
+}

@@ -146,6 +146,8 @@ struct App {
     target: Option<u16>,
     /// Floating combat-damage numbers (drained from world.combat_events).
     floaters: rcce_client::floaters::Floaters,
+    /// Audio output (zone music). `None` when there's no audio device.
+    audio: Option<rcce_client::audio::Audio>,
 }
 
 impl App {
@@ -183,6 +185,7 @@ impl App {
             chat_input: None,
             target: None,
             floaters: rcce_client::floaters::Floaters::new(),
+            audio: rcce_client::audio::Audio::new(),
         }
     }
 }
@@ -381,6 +384,11 @@ impl ApplicationHandler for App {
             self.fog_far = env.fog_far;
             self.ambient = env.ambient;
             self.light_dir = env.light_dir;
+            // Zone music (looped), if this zone sets a LoadingMusicID and the
+            // track resolves through Music.dat to a file on disk.
+            if let Some(audio) = self.audio.as_mut() {
+                audio.set_music(env.music_id, 0.4, |id| store.music_path(id));
+            }
         }
 
         // Try to log into the live server.

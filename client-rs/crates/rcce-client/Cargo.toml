@@ -23,6 +23,9 @@ pollster = "0.3"
 bytemuck = { version = "1", features = ["derive"] }
 glam = "0.29"
 png = "0.17"
+# Audio: zone music + SFX. Default features include the Vorbis (.ogg) decoder,
+# which is the format the game ships. cpal backend links system audio.
+rodio = "0.19"
 
 [lib]
 name = "rcce_client"
@@ -51,3 +54,7 @@ path = "src/bin/chat_test.rs"
 [[bin]]
 name = "combat-test"
 path = "src/bin/combat_test.rs"
+
+[[bin]]
+name = "sound-test"
+path = "src/bin/sound_test.rs"
