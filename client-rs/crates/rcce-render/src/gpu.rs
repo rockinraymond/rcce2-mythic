@@ -254,6 +254,57 @@ pub fn build_drawables(
     instances: &[SceneInstance],
     ground_y: f32,
 ) -> Vec<Drawable> {
+    let (mut drawables, min, max) = build_instance_drawables(device, queue, pipeline, instances);
+
+    // Ground plane spanning the instances.
+    if min.x <= max.x {
+        let pad = (max - min).length().max(20.0) * 0.4;
+        let (gx0, gx1) = (min.x - pad, max.x + pad);
+        let (gz0, gz1) = (min.z - pad, max.z + pad);
+        let gcol = [0.13, 0.18, 0.14];
+        let n = [0.0, 1.0, 0.0];
+        let v = |x: f32, z: f32| Vertex { pos: [x, ground_y, z], normal: n, uv: [0.0, 0.0], color: gcol };
+        let verts = [v(gx0, gz0), v(gx1, gz0), v(gx1, gz1), v(gx0, gz1)];
+        let idx: [u32; 6] = [0, 1, 2, 0, 2, 3];
+        let vbuf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("gv"),
+            contents: bytemuck::cast_slice(&verts),
+            usage: wgpu::BufferUsages::VERTEX,
+        });
+        let ibuf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("gi"),
+            contents: bytemuck::cast_slice(&idx),
+            usage: wgpu::BufferUsages::INDEX,
+        });
+        drawables.push(Drawable {
+            vbuf,
+            ibuf,
+            n_idx: 6,
+            tex_bind: pipeline.texture_bind(device, queue, None),
+        });
+    }
+    drawables
+}
+
+/// Like [`build_drawables`] but without the ground plane — for dynamic actors
+/// drawn over an already-grounded static scene.
+pub fn build_actor_drawables(
+    device: &wgpu::Device,
+    queue: &wgpu::Queue,
+    pipeline: &Pipeline,
+    instances: &[SceneInstance],
+) -> Vec<Drawable> {
+    build_instance_drawables(device, queue, pipeline, instances).0
+}
+
+/// Core: bake every (instance, mesh) into a world-space drawable; also returns
+/// the bounding box (min,max) of the instance translations.
+fn build_instance_drawables(
+    device: &wgpu::Device,
+    queue: &wgpu::Queue,
+    pipeline: &Pipeline,
+    instances: &[SceneInstance],
+) -> (Vec<Drawable>, Vec3, Vec3) {
     let mut drawables = Vec::new();
     let (mut min, mut max) = (Vec3::splat(f32::MAX), Vec3::splat(f32::MIN));
 
@@ -305,33 +356,5 @@ pub fn build_drawables(
             });
         }
     }
-
-    // Ground plane.
-    if min.x <= max.x {
-        let pad = (max - min).length().max(20.0) * 0.4;
-        let (gx0, gx1) = (min.x - pad, max.x + pad);
-        let (gz0, gz1) = (min.z - pad, max.z + pad);
-        let gcol = [0.13, 0.18, 0.14];
-        let n = [0.0, 1.0, 0.0];
-        let v = |x: f32, z: f32| Vertex { pos: [x, ground_y, z], normal: n, uv: [0.0, 0.0], color: gcol };
-        let verts = [v(gx0, gz0), v(gx1, gz0), v(gx1, gz1), v(gx0, gz1)];
-        let idx: [u32; 6] = [0, 1, 2, 0, 2, 3];
-        let vbuf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("gv"),
-            contents: bytemuck::cast_slice(&verts),
-            usage: wgpu::BufferUsages::VERTEX,
-        });
-        let ibuf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("gi"),
-            contents: bytemuck::cast_slice(&idx),
-            usage: wgpu::BufferUsages::INDEX,
-        });
-        drawables.push(Drawable {
-            vbuf,
-            ibuf,
-            n_idx: 6,
-            tex_bind: pipeline.texture_bind(device, queue, None),
-        });
-    }
-    drawables
+    (drawables, min, max)
 }

@@ -14,7 +14,10 @@ pub struct WorldView {
     uniform_buf: wgpu::Buffer,
     bind0: wgpu::BindGroup,
     depth: wgpu::TextureView,
-    drawables: Vec<Drawable>,
+    /// Static geometry (terrain/scenery), uploaded once.
+    statics: Vec<Drawable>,
+    /// Per-frame geometry (actors), rebuilt as they move/animate.
+    dynamics: Vec<Drawable>,
 }
 
 fn make_depth(device: &wgpu::Device, w: u32, h: u32) -> wgpu::TextureView {
@@ -53,11 +56,12 @@ impl WorldView {
             uniform_buf,
             bind0,
             depth: make_depth(device, w, h),
-            drawables: Vec::new(),
+            statics: Vec::new(),
+            dynamics: Vec::new(),
         }
     }
 
-    /// Replace the scene geometry (uploads new GPU buffers).
+    /// Replace the static scene geometry (terrain/scenery + ground plane).
     pub fn set_scene(
         &mut self,
         device: &wgpu::Device,
@@ -65,11 +69,21 @@ impl WorldView {
         instances: &[SceneInstance],
         ground_y: f32,
     ) {
-        self.drawables = gpu::build_drawables(device, queue, &self.pipeline, instances, ground_y);
+        self.statics = gpu::build_drawables(device, queue, &self.pipeline, instances, ground_y);
+    }
+
+    /// Replace the dynamic (per-frame) geometry — actors. No ground plane.
+    pub fn set_dynamic(
+        &mut self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        instances: &[SceneInstance],
+    ) {
+        self.dynamics = gpu::build_actor_drawables(device, queue, &self.pipeline, instances);
     }
 
     pub fn drawable_count(&self) -> usize {
-        self.drawables.len()
+        self.statics.len() + self.dynamics.len()
     }
 
     pub fn resize(&mut self, device: &wgpu::Device, w: u32, h: u32) {
@@ -111,7 +125,7 @@ impl WorldView {
             });
             rp.set_pipeline(&self.pipeline.pipeline);
             rp.set_bind_group(0, &self.bind0, &[]);
-            for d in &self.drawables {
+            for d in self.statics.iter().chain(self.dynamics.iter()) {
                 rp.set_bind_group(1, &d.tex_bind, &[]);
                 rp.set_vertex_buffer(0, d.vbuf.slice(..));
                 rp.set_index_buffer(d.ibuf.slice(..), wgpu::IndexFormat::Uint32);
