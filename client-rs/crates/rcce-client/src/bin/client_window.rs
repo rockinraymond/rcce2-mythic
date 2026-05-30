@@ -15,9 +15,12 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use winit::application::ApplicationHandler;
-use winit::event::WindowEvent;
+use winit::event::{ElementState, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
+use winit::keyboard::{KeyCode, PhysicalKey};
 use winit::window::{Window, WindowId};
+
+use rcce_client::net::movement_packet;
 
 use enet_sys::EnetTransport;
 use rcce_client::assets::{clip_frame, AssetStore};
@@ -114,6 +117,14 @@ struct App {
     /// Hash of the last dynamic-actor build (anim tick + actor states); the
     /// expensive re-skin/re-upload is skipped while it's unchanged.
     last_dyn_hash: u64,
+    /// Movement input: W/A/S/D held + Shift (run). Camera yaw (radians) rotated
+    /// by Left/Right arrows; WASD move relative to it. `last_move` throttles the
+    /// P_StandardUpdate send; `was_moving` lets us send one stop packet on idle.
+    keys_wasd: [bool; 4],
+    run: bool,
+    cam_yaw: f32,
+    last_move: Instant,
+    was_moving: bool,
 }
 
 impl App {
@@ -135,6 +146,11 @@ impl App {
             frames: 0,
             last_log: now,
             last_dyn_hash: u64::MAX,
+            keys_wasd: [false; 4],
+            run: false,
+            cam_yaw: 0.0,
+            last_move: now,
+            was_moving: false,
         }
     }
 }
@@ -364,6 +380,23 @@ impl ApplicationHandler for App {
                     view.resize(&gfx.device, size.width, size.height);
                 }
             }
+            WindowEvent::KeyboardInput { event, .. } => {
+                let pressed = event.state == ElementState::Pressed;
+                if let PhysicalKey::Code(code) = event.physical_key {
+                    match code {
+                        KeyCode::KeyW | KeyCode::ArrowUp => self.keys_wasd[0] = pressed,
+                        KeyCode::KeyA => self.keys_wasd[1] = pressed,
+                        KeyCode::KeyS | KeyCode::ArrowDown => self.keys_wasd[2] = pressed,
+                        KeyCode::KeyD => self.keys_wasd[3] = pressed,
+                        KeyCode::ShiftLeft | KeyCode::ShiftRight => self.run = pressed,
+                        // Discrete camera turn (WASD move relative to it).
+                        KeyCode::ArrowLeft | KeyCode::KeyQ if pressed => self.cam_yaw -= 0.18,
+                        KeyCode::ArrowRight | KeyCode::KeyE if pressed => self.cam_yaw += 0.18,
+                        KeyCode::Escape => event_loop.exit(),
+                        _ => {}
+                    }
+                }
+            }
             WindowEvent::RedrawRequested => {
                 self.render();
                 if let Some(w) = &self.window {
@@ -384,17 +417,48 @@ impl App {
         };
         let elapsed = self.start.elapsed().as_secs_f32();
 
-        // Pump the network and rebuild animated actors.
+        // Movement intent from WASD relative to the camera yaw (computed before
+        // borrowing `net`). Camera-space basis: forward = into-screen, right.
+        let (sy, cy) = self.cam_yaw.sin_cos();
+        let fwd = [-sy, -cy];
+        let right = [cy, -sy];
+        let mut dir = [0.0f32, 0.0];
+        // RCCE_AUTOWALK forces forward movement (for headless verification of
+        // the movement-send path without a keyboard).
+        let auto = std::env::var_os("RCCE_AUTOWALK").is_some();
+        if self.keys_wasd[0] || auto { dir[0] += fwd[0]; dir[1] += fwd[1]; }
+        if self.keys_wasd[2] { dir[0] -= fwd[0]; dir[1] -= fwd[1]; }
+        if self.keys_wasd[3] { dir[0] += right[0]; dir[1] += right[1]; }
+        if self.keys_wasd[1] { dir[0] -= right[0]; dir[1] -= right[1]; }
+        let mag = (dir[0] * dir[0] + dir[1] * dir[1]).sqrt();
+        let moving = mag > 0.01;
+        let want_send = self.last_move.elapsed().as_millis() >= 110;
+        let run = self.run;
+
+        // Pump the network, send movement, and rebuild animated actors.
         let mut cam_target = self.center;
         let mut following = false;
+        let mut did_send = false;
         if let Some(net) = self.net.as_mut() {
             for m in net.transport.poll() {
                 net.updates += 1;
                 net.world.apply(&m);
             }
-            // Only re-skin + re-upload actors when their visible state changed
-            // (animation tick advanced, or an actor moved/turned). The camera
-            // still renders every frame; this just gates the expensive rebuild.
+            // Send a P_StandardUpdate toward the input direction (unreliable,
+            // like ClientNet.bb): the server walks the actor toward Dest and
+            // echoes its authoritative position, which on_standard_update
+            // applies back to me_x/z. A single stop packet on key-release.
+            let (mx, my, mz) = (net.world.me_x, net.world.me_y, net.world.me_z);
+            if moving && want_send {
+                let (nx, nz) = (dir[0] / mag, dir[1] / mag);
+                let p = movement_packet(mx + nx * 16.0, mz + nz * 16.0, my, mx, mz, run, false);
+                net.transport.send(net.peer, rcce_net::packet_id::STANDARD_UPDATE, &p, false);
+                did_send = true;
+            } else if !moving && self.was_moving {
+                let p = movement_packet(mx, mz, my, mx, mz, false, false);
+                net.transport.send(net.peer, rcce_net::packet_id::STANDARD_UPDATE, &p, false);
+            }
+
             let hash = dyn_hash(&net.world, elapsed);
             if hash != self.last_dyn_hash {
                 let (models, textures, place) =
@@ -416,6 +480,10 @@ impl App {
             cam_target = [net.world.me_x, net.world.me_y, net.world.me_z];
             following = true;
         }
+        if did_send {
+            self.last_move = Instant::now();
+        }
+        self.was_moving = moving;
 
         let frame = match gfx.surface.get_current_texture() {
             Ok(f) => f,
@@ -429,13 +497,19 @@ impl App {
         };
         let tview = frame.texture.create_view(&Default::default());
 
-        // Camera: orbit the player (live) or the zone centre (spectator).
-        let ang = elapsed * 0.3;
+        // Camera: third-person follow behind the player along cam_yaw (live),
+        // or a slow orbit of the zone centre (spectator). `behind = -forward`.
         let (eye, target) = if following {
-            let r = 9.0;
-            let eye = [cam_target[0] + r * ang.cos(), cam_target[1] + 6.0, cam_target[2] + r * ang.sin()];
-            (eye, [cam_target[0], cam_target[1] + 3.0, cam_target[2]])
+            let behind = [sy, cy];
+            let (dist, height) = (12.0, 6.5);
+            let eye = [
+                cam_target[0] + behind[0] * dist,
+                cam_target[1] + height,
+                cam_target[2] + behind[1] * dist,
+            ];
+            (eye, [cam_target[0], cam_target[1] + 3.5, cam_target[2]])
         } else {
+            let ang = elapsed * 0.3;
             let r = self.span * 0.75;
             let eye = [self.center[0] + r * ang.cos(), self.ground_y + self.span * 0.55, self.center[2] + r * ang.sin()];
             (eye, [self.center[0], self.ground_y + self.span * 0.05, self.center[2]])
@@ -448,12 +522,15 @@ impl App {
         self.frames += 1;
         if self.last_log.elapsed().as_secs_f32() >= 2.0 {
             let fps = self.frames as f32 / elapsed.max(0.001);
-            let (actors, ups) = self
+            let (actors, ups, pos) = self
                 .net
                 .as_ref()
-                .map(|n| (n.world.actors.len(), n.updates))
-                .unwrap_or((0, 0));
-            println!("[client-window] frame {} (~{fps:.0} fps), {actors} actor(s), {ups} packets", self.frames);
+                .map(|n| (n.world.actors.len(), n.updates, (n.world.me_x, n.world.me_z)))
+                .unwrap_or((0, 0, (0.0, 0.0)));
+            println!(
+                "[client-window] frame {} (~{fps:.0} fps), {actors} actor(s), {ups} packets, me=({:.1},{:.1})",
+                self.frames, pos.0, pos.1
+            );
             self.last_log = Instant::now();
         }
     }
