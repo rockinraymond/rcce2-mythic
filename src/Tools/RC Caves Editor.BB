@@ -2677,7 +2677,15 @@ sfl=WriteFile(TmpPath$)
 
  
  
+; Count lights as written. Zero lights is a legitimate state, but the .LGT
+; save writes nothing outside this loop, so zero lights => a 0-byte temp that
+; SafeWriteCommit refuses to promote -- which would leave the stale old .LGT
+; and resurrect deleted lights on reload. Track the count and, when empty,
+; clear the .LGT directly at the commit site below. (The loader at ~:2750
+; treats a missing .LGT as "no lights".)
+Local lightCount = 0
 For dm.dropmodel=Each DropModel
+   lightCount = lightCount + 1
 
    WriteInt sfl,dm\islight
    WriteInt sfl,dm\meshid
@@ -2702,7 +2710,17 @@ For dm.dropmodel=Each DropModel
 
 Next
 
-SafeWriteCommit%(TmpPath$, CaveLightPath$, sfl)
+If lightCount = 0
+	; No lights to save. SafeWriteCommit refuses a 0-byte temp (its
+	; write-failure guard), which would keep the previous .LGT and bring
+	; deleted lights back on reload. Persist the cleared state by removing
+	; the .LGT directly -- the loader treats a missing .LGT as "no lights".
+	CloseFile sfl
+	SafeWriteAbort(TmpPath$)
+	If FileType(CaveLightPath$) = 1 Then DeleteFile(CaveLightPath$)
+Else
+	SafeWriteCommit%(TmpPath$, CaveLightPath$, sfl)
+EndIf
 
 ChangeDir thispath$
 fui_notify("Cave Saved.")
