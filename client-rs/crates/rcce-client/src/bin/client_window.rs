@@ -106,6 +106,7 @@ struct App {
     window: Option<Arc<Window>>,
     gfx: Option<Gfx>,
     view: Option<WorldView>,
+    overlay: Option<rcce_render::Overlay>,
     store: Option<AssetStore>,
     net: Option<Net>,
     center: [f32; 3],
@@ -140,6 +141,7 @@ impl App {
             window: None,
             gfx: None,
             view: None,
+            overlay: None,
             store: None,
             net: None,
             center: [0.0; 3],
@@ -369,6 +371,7 @@ impl ApplicationHandler for App {
             Err(e) => eprintln!("[client-window] login failed ({e}); zone-only spectator view"),
         }
 
+        self.overlay = Some(rcce_render::Overlay::new(&gfx.device, format));
         self.store = Some(store);
         self.gfx = Some(gfx);
         self.view = Some(view);
@@ -544,6 +547,41 @@ impl App {
                 a: 1.0,
             },
         );
+
+        // 2D overlay: actor health bars (projected above heads) + player HUD.
+        if let Some(overlay) = self.overlay.as_mut() {
+            let (sw, sh) = (gfx.config.width as f32, gfx.config.height as f32);
+            if let Some(net) = self.net.as_ref() {
+                for a in net.world.actors.values() {
+                    if !a.alive {
+                        continue;
+                    }
+                    if let Some((px, py)) = rcce_render::project(&vp, [a.x, a.y + 5.5, a.z], sw, sh) {
+                        let frac = if a.health_max > 0 {
+                            a.health as f32 / a.health_max as f32
+                        } else {
+                            1.0
+                        };
+                        let col = if a.is_player {
+                            [0.4, 0.7, 1.0, 1.0]
+                        } else {
+                            [0.9, 0.3, 0.3, 1.0]
+                        };
+                        overlay.bar(px - 20.0, py - 16.0, 40.0, 5.0, frac, col);
+                    }
+                }
+                // Player HUD: own health bar, bottom-left.
+                let hpf = if net.world.me_health_max > 0 {
+                    net.world.me_health as f32 / net.world.me_health_max as f32
+                } else {
+                    1.0
+                };
+                overlay.rect(12.0, sh - 40.0, 244.0, 28.0, [0.0, 0.0, 0.0, 0.45]);
+                overlay.bar(20.0, sh - 32.0, 220.0, 12.0, hpf, [0.2, 0.8, 0.25, 1.0]);
+            }
+            overlay.render(&gfx.device, &gfx.queue, &tview, sw, sh);
+        }
+
         frame.present();
 
         self.frames += 1;

@@ -44,6 +44,9 @@ pub struct Actor {
     pub body_tex: u8,
     pub hair: u8,
     pub beard: u8,
+    /// Health value/maximum from P_NewActor (spawn HP; the bar fraction).
+    pub health: i16,
+    pub health_max: i16,
     /// Attribute index → (value, maximum), as delivered by P_StatUpdate.
     /// Sparse — only attributes the server has sent. Health/Energy/etc. indices
     /// come from Fixed Attributes.dat (the caller maps them).
@@ -72,6 +75,8 @@ pub struct World {
     pub me_gender: u8,
     pub me_face_tex: u8,
     pub me_body_tex: u8,
+    pub me_health: i16,
+    pub me_health_max: i16,
     /// Template gender mode (`Actors.dat` `Genders`) keyed by template id.
     /// Populated by the host before applying packets so `on_new_actor` knows
     /// whether the wire carries a gender byte (only when mode == 0). Empty map
@@ -171,6 +176,10 @@ impl World {
         let hair = clamp4(r.u16());
         let body_tex = clamp4(r.u16());
         let beard = clamp4(r.u16());
+        // Speed (value, max) then Health (value, max).
+        let _speed = (r.u16(), r.u16());
+        let health = r.u16().unwrap_or(0) as i16;
+        let health_max = r.u16().unwrap_or(0) as i16;
 
         if runtime_id == self.my_runtime_id {
             self.me_x = x;
@@ -180,6 +189,8 @@ impl World {
             self.me_gender = gender;
             self.me_face_tex = face_tex;
             self.me_body_tex = body_tex;
+            self.me_health = health;
+            self.me_health_max = health_max;
             return; // don't list ourselves among "other actors"
         }
         self.actors.insert(
@@ -202,6 +213,8 @@ impl World {
                 body_tex,
                 hair,
                 beard,
+                health,
+                health_max,
                 ..Default::default()
             },
         );

@@ -22,6 +22,7 @@ wgpu = "22"
 pollster = "0.3"
 bytemuck = { version = "1", features = ["derive"] }
 glam = "0.29"
+png = "0.17"
 
 [lib]
 name = "rcce_client"
@@ -38,3 +39,7 @@ path = "src/bin/move_test.rs"
 [[bin]]
 name = "client-window"
 path = "src/bin/client_window.rs"
+
+[[bin]]
+name = "overlay-test"
+path = "src/bin/overlay_test.rs"
