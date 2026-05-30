@@ -97,6 +97,8 @@ pub struct World {
     /// Items dropped in the world (P_InventoryUpdate "D"), keyed by the
     /// server's DroppedItem handle. Removed on pickup ("P"/"R").
     pub dropped_items: HashMap<u32, DroppedItem>,
+    /// The open vendor/trade window, if any (P_OpenTrading).
+    pub current_trade: Option<crate::trade::TradeWindow>,
 }
 
 /// An item lying on the ground, from `P_InventoryUpdate "D"`.
@@ -127,6 +129,7 @@ impl World {
             pk::NAME_CHANGE => self.on_name_change(&m.data),
             pk::INVENTORY_UPDATE => self.on_inventory_update(&m.data),
             pk::WEATHER_CHANGE => self.on_weather_change(&m.data),
+            pk::OPEN_TRADING => self.current_trade = crate::trade::TradeWindow::parse(&m.data),
             _ => {}
         }
     }

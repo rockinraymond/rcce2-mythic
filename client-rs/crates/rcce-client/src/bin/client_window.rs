@@ -587,8 +587,17 @@ impl ApplicationHandler for App {
                         // Toggle the inventory / spellbook panel.
                         KeyCode::KeyI if pressed => self.show_inventory = !self.show_inventory,
                         KeyCode::Escape => {
+                            let trade_open = self
+                                .net
+                                .as_ref()
+                                .map(|n| n.world.current_trade.is_some())
+                                .unwrap_or(false);
                             if self.mouse_look {
                                 self.set_mouse_look(false);
+                            } else if trade_open {
+                                if let Some(net) = self.net.as_mut() {
+                                    net.world.current_trade = None;
+                                }
                             } else {
                                 event_loop.exit();
                             }
@@ -995,6 +1004,41 @@ impl App {
                     }
                 } else {
                     overlay.text(px + 10.0, y, 1.0, "(no character data)", dim);
+                }
+            }
+
+            // Vendor / trade window (P_OpenTrading) — lists what the NPC offers,
+            // with names from Items.dat and prices from each item's value.
+            if let Some(trade) = self.net.as_ref().and_then(|n| n.world.current_trade.as_ref()) {
+                use rcce_client::trade::TradeKind;
+                let dimc = [0.6, 0.6, 0.6, 1.0];
+                let (pw, ph) = (320.0, 300.0);
+                let (px, py) = ((sw - pw - 40.0).round(), ((sh - ph) * 0.5).round());
+                overlay.rect(px, py, pw, ph, [0.07, 0.06, 0.05, 0.92]);
+                overlay.rect(px, py, pw, 22.0, [0.28, 0.22, 0.12, 0.96]);
+                let title = match trade.kind {
+                    TradeKind::Npc => "Vendor",
+                    TradeKind::Scenery => "Container",
+                    TradeKind::Player => "Trade",
+                };
+                overlay.text_shadow(px + 10.0, py + 6.0, 1.5, title, white);
+                overlay.text(px + pw - 80.0, py + 7.0, 1.0, "[Esc] close", dimc);
+                let mut y = py + 30.0;
+                if trade.offers.is_empty() {
+                    overlay.text(px + 10.0, y, 1.0, "(nothing for sale)", dimc);
+                } else {
+                    for off in &trade.offers {
+                        if y > py + ph - 16.0 { break; }
+                        let name = store.item_name(off.item_id);
+                        let qty = if off.amount > 1 { format!(" x{}", off.amount) } else { String::new() };
+                        let line: String = format!("{name}{qty}").chars().take(30).collect();
+                        overlay.text(px + 12.0, y, 1.0, &line, white);
+                        // Price = the item's base value (Items.dat), right-aligned.
+                        let price = format!("{}g", store.item_value(off.item_id).max(0));
+                        let pw2 = rcce_render::font::text_width(&price, 1.0);
+                        overlay.text(px + pw - pw2 - 12.0, y, 1.0, &price, [1.0, 0.88, 0.4, 1.0]);
+                        y += 14.0;
+                    }
                 }
             }
 

@@ -162,6 +162,25 @@ fn main() {
         }
     }
 
+    // Vendor panel mock (P_OpenTrading layout): name left, price right.
+    {
+        let white = [1.0, 1.0, 1.0, 1.0];
+        let dim = [0.6, 0.6, 0.6, 1.0];
+        let (pw, ph) = (220.0, 130.0);
+        let (px, py) = (90.0, 250.0);
+        overlay.rect(px, py, pw, ph, [0.07, 0.06, 0.05, 0.92]);
+        overlay.rect(px, py, pw, 22.0, [0.28, 0.22, 0.12, 0.96]);
+        overlay.text_shadow(px + 10.0, py + 6.0, 1.5, "Vendor", white);
+        overlay.text(px + pw - 80.0, py + 7.0, 1.0, "[Esc] close", dim);
+        let mut y = py + 30.0;
+        for (name, price) in [("Sword", "10g"), ("Shield", "10g"), ("Health Potion x5", "2g")] {
+            overlay.text(px + 12.0, y, 1.0, name, white);
+            let pwid = rcce_render::font::text_width(price, 1.0);
+            overlay.text(px + pw - pwid - 12.0, y, 1.0, price, [1.0, 0.88, 0.4, 1.0]);
+            y += 14.0;
+        }
+    }
+
     overlay.render(&device, &queue, &view, w as f32, h as f32);
 
     // Readback → PNG.

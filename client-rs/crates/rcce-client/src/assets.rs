@@ -125,6 +125,11 @@ impl AssetStore {
         self.items.name_or_id(id)
     }
 
+    /// Base value (gold) for an item id, 0 if unknown.
+    pub fn item_value(&self, id: u16) -> i32 {
+        self.items.get(id).map(|i| i.value).unwrap_or(0)
+    }
+
     /// Footstep `.ogg` files under `Data/Sounds/Footsteps/`, sorted. Empty if
     /// the folder is absent.
     pub fn footstep_sounds(&self) -> Vec<PathBuf> {
