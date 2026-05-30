@@ -5,12 +5,15 @@
 //! a GPU adapter. Real offscreen rendering of the world state follows once the
 //! target is confirmed viable.
 
+pub mod gpu;
 pub mod render;
 pub mod render3d;
 pub mod scene;
+pub mod world_view;
 pub use render::{render_markers_png, Marker};
 pub use render3d::render_model_png;
 pub use scene::{render_scene_png, SceneInstance};
+pub use world_view::{view_proj, WorldView};
 
 use pollster::block_on;
 
