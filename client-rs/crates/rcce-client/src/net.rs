@@ -27,6 +27,19 @@ pub fn movement_packet(
     w.into_bytes()
 }
 
+/// Build a `P_SpellUpdate` cast request (`Interface3D.bb:1121-1128`): `"F"` +
+/// spell id (u16) + an optional target RuntimeID (u16). The target bytes are
+/// omitted when there's no target — the server tolerates a missing target
+/// rather than the client sending a stale handle. Sent reliable.
+pub fn cast_packet(spell_id: u16, target: Option<u16>) -> Vec<u8> {
+    let mut w = MsgWriter::new();
+    w.u8(b'F').u16(spell_id);
+    if let Some(rid) = target {
+        w.u16(rid);
+    }
+    w.into_bytes()
+}
+
 /// Build a `P_InventoryUpdate` pickup request (`ServerNet.bb:1611`): `"P"` +
 /// DroppedItem handle (u32) + target inventory slot (u8). The server validates
 /// same-area + distance + slot, then replies `"R"` to the picker and `"P"` to
@@ -35,4 +48,27 @@ pub fn pickup_packet(handle: u32, slot: u8) -> Vec<u8> {
     let mut w = MsgWriter::new();
     w.u8(b'P').u32(handle).u8(slot);
     w.into_bytes()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn cast_without_target_omits_rid() {
+        // "F" + spell id 101 (LE), no target → 3 bytes.
+        assert_eq!(cast_packet(101, None), vec![b'F', 101, 0]);
+    }
+
+    #[test]
+    fn cast_with_target_appends_rid() {
+        // "F" + spell 101 + target 7 (both LE u16) → 5 bytes.
+        assert_eq!(cast_packet(101, Some(7)), vec![b'F', 101, 0, 7, 0]);
+    }
+
+    #[test]
+    fn pickup_layout() {
+        // "P" + handle 0x01020304 (LE) + slot 14.
+        assert_eq!(pickup_packet(0x0102_0304, 14), vec![b'P', 0x04, 0x03, 0x02, 0x01, 14]);
+    }
 }

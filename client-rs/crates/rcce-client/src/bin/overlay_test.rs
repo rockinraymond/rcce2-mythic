@@ -181,6 +181,25 @@ fn main() {
         }
     }
 
+    // Action bar mock: number-keyed spell slots, one mid-cooldown.
+    {
+        let white = [1.0, 1.0, 1.0, 1.0];
+        let (slot, gap) = (30.0f32, 4.0f32);
+        let names = ["Fire", "Heal", "Bolt", "Ward"];
+        let total = names.len() as f32 * (slot + gap) - gap;
+        let x0 = (w as f32 - total) * 0.5;
+        let y0 = h as f32 - slot - 64.0;
+        for (i, name) in names.iter().enumerate() {
+            let x = x0 + i as f32 * (slot + gap);
+            overlay.rect(x, y0, slot, slot, [0.1, 0.1, 0.16, 0.82]);
+            if i == 1 {
+                overlay.rect(x, y0, slot, slot * 0.55, [0.0, 0.0, 0.0, 0.6]); // cooldown
+            }
+            overlay.text_shadow(x + 2.0, y0 + 1.0, 1.0, &format!("{}", i + 1), [1.0, 1.0, 0.6, 1.0]);
+            overlay.text(x + 2.0, y0 + slot - 9.0, 1.0, name, white);
+        }
+    }
+
     overlay.render(&device, &queue, &view, w as f32, h as f32);
 
     // Readback → PNG.

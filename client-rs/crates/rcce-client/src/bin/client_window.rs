@@ -158,6 +158,8 @@ struct App {
     /// Rain/snow particles + the previous frame's elapsed time (for dt).
     weather: rcce_client::weather::WeatherSystem,
     prev_elapsed: f32,
+    /// Per-spell-id cooldown end time (elapsed seconds) for the action bar.
+    spell_cooldowns: std::collections::HashMap<u16, f32>,
 }
 
 impl App {
@@ -202,6 +204,7 @@ impl App {
             footstep_paths: Vec::new(),
             weather: rcce_client::weather::WeatherSystem::new(240),
             prev_elapsed: 0.0,
+            spell_cooldowns: std::collections::HashMap::new(),
         }
     }
 }
@@ -567,6 +570,52 @@ impl ApplicationHandler for App {
                                         &rcce_client::net::pickup_packet(h, slot),
                                         true,
                                     );
+                                }
+                            }
+                        }
+                        // Action bar: cast the Nth memorised spell (1-9).
+                        KeyCode::Digit1
+                        | KeyCode::Digit2
+                        | KeyCode::Digit3
+                        | KeyCode::Digit4
+                        | KeyCode::Digit5
+                        | KeyCode::Digit6
+                        | KeyCode::Digit7
+                        | KeyCode::Digit8
+                        | KeyCode::Digit9
+                            if pressed =>
+                        {
+                            let idx = match code {
+                                KeyCode::Digit1 => 0,
+                                KeyCode::Digit2 => 1,
+                                KeyCode::Digit3 => 2,
+                                KeyCode::Digit4 => 3,
+                                KeyCode::Digit5 => 4,
+                                KeyCode::Digit6 => 5,
+                                KeyCode::Digit7 => 6,
+                                KeyCode::Digit8 => 7,
+                                _ => 8,
+                            };
+                            let cast = self
+                                .sheet
+                                .as_ref()
+                                .and_then(|s| s.spells.iter().filter(|x| x.memorised).nth(idx))
+                                .map(|sp| (sp.id, sp.recharge));
+                            if let Some((spell_id, recharge)) = cast {
+                                let now = self.start.elapsed().as_secs_f32();
+                                let ready = self.spell_cooldowns.get(&spell_id).copied().unwrap_or(0.0);
+                                if now >= ready {
+                                    let target = self.target;
+                                    if let Some(net) = self.net.as_mut() {
+                                        net.transport.send(
+                                            net.peer,
+                                            rcce_net::packet_id::SPELL_UPDATE,
+                                            &rcce_client::net::cast_packet(spell_id, target),
+                                            true,
+                                        );
+                                    }
+                                    self.spell_cooldowns
+                                        .insert(spell_id, now + recharge as f32 / 1000.0);
                                 }
                             }
                         }
@@ -1038,6 +1087,32 @@ impl App {
                         let pw2 = rcce_render::font::text_width(&price, 1.0);
                         overlay.text(px + pw - pw2 - 12.0, y, 1.0, &price, [1.0, 0.88, 0.4, 1.0]);
                         y += 14.0;
+                    }
+                }
+            }
+
+            // Action bar: memorised spells (number-keyed 1-9) with cooldown
+            // shading that drains as the spell recharges.
+            if let Some(sheet) = &self.sheet {
+                let mem: Vec<_> = sheet.spells.iter().filter(|s| s.memorised).take(9).collect();
+                if !mem.is_empty() {
+                    let (slot, gap) = (30.0f32, 4.0f32);
+                    let total = mem.len() as f32 * (slot + gap) - gap;
+                    let x0 = ((sw - total) * 0.5).round();
+                    let y0 = sh - slot - 64.0;
+                    for (i, sp) in mem.iter().enumerate() {
+                        let x = x0 + i as f32 * (slot + gap);
+                        overlay.rect(x, y0, slot, slot, [0.1, 0.1, 0.16, 0.82]);
+                        let ready = self.spell_cooldowns.get(&sp.id).copied().unwrap_or(0.0);
+                        let remaining = (ready - elapsed).max(0.0);
+                        if remaining > 0.0 {
+                            let span = (sp.recharge as f32 / 1000.0).max(0.1);
+                            let frac = (remaining / span).clamp(0.0, 1.0);
+                            overlay.rect(x, y0, slot, slot * frac, [0.0, 0.0, 0.0, 0.6]);
+                        }
+                        overlay.text_shadow(x + 2.0, y0 + 1.0, 1.0, &format!("{}", i + 1), [1.0, 1.0, 0.6, 1.0]);
+                        let abbr: String = sp.name.chars().take(4).collect();
+                        overlay.text(x + 2.0, y0 + slot - 9.0, 1.0, &abbr, white);
                     }
                 }
             }
