@@ -111,26 +111,28 @@ fn main() {
     // Resolve a model per actor (cached). The local player is the character we
     // created — actor template 0 (Human).
     let mut models: Vec<std::rc::Rc<rcce_data::B3dModel>> = Vec::new();
-    let mut placements: Vec<(usize, [f32; 3], f32, [f32; 3])> = Vec::new(); // (model idx, pos, yaw, color)
+    // (model idx, world pos, yaw degrees, color, render scale)
+    let mut placements: Vec<(usize, [f32; 3], f32, [f32; 3], f32)> = Vec::new();
 
-    let mut push = |store: &mut rcce_client::assets::AssetStore,
-                    models: &mut Vec<std::rc::Rc<rcce_data::B3dModel>>,
-                    placements: &mut Vec<(usize, [f32; 3], f32, [f32; 3])>,
-                    tmpl: u16,
-                    pos: [f32; 3],
-                    yaw: f32,
-                    color: [f32; 3]| {
+    let mut add_actor = |store: &mut rcce_client::assets::AssetStore,
+                         models: &mut Vec<std::rc::Rc<rcce_data::B3dModel>>,
+                         placements: &mut Vec<(usize, [f32; 3], f32, [f32; 3], f32)>,
+                         tmpl: u16,
+                         pos: [f32; 3],
+                         yaw: f32,
+                         color: [f32; 3]| {
         if let Some(m) = store.actor_model(tmpl, 0) {
+            let scale = store.actor_render_scale(tmpl, 0).unwrap_or(0.05);
             let idx = models.len();
             models.push(m);
-            placements.push((idx, pos, yaw, color));
+            placements.push((idx, pos, yaw, color, scale));
         }
     };
 
-    push(&mut store, &mut models, &mut placements, 0, [world.me_x, world.me_y, world.me_z], world.me_yaw, [0.35, 0.9, 0.45]);
+    add_actor(&mut store, &mut models, &mut placements, 0, [world.me_x, world.me_y, world.me_z], world.me_yaw, [0.35, 0.9, 0.45]);
     for a in world.actors.values() {
         let color = if a.is_player { [0.4, 0.6, 1.0] } else { [0.85, 0.8, 0.7] };
-        push(&mut store, &mut models, &mut placements, a.template_id, [a.x, a.y, a.z], a.yaw, color);
+        add_actor(&mut store, &mut models, &mut placements, a.template_id, [a.x, a.y, a.z], a.yaw, color);
     }
 
     if placements.is_empty() {
@@ -138,45 +140,33 @@ fn main() {
         return;
     }
 
-    // Build instances, auto-scaling each model to a consistent ~14-unit height
-    // and seating its feet on the ground plane (y = 0).
-    const TARGET_H: f32 = 14.0;
+    // Build instances at the engine's real scale, feet seated on the ground.
     let ground_y = 0.0f32;
     let instances: Vec<rcce_render::SceneInstance> = placements
         .iter()
-        .map(|&(idx, pos, yaw, color)| {
+        .map(|&(idx, pos, yaw, color, scale)| {
             let model: &rcce_data::B3dModel = &models[idx];
-            let (min, max) = model.bounds();
-            let height = (max[1] - min[1]).max(0.001);
-            let scale = TARGET_H / height;
+            let (min, _max) = model.bounds();
             rcce_render::SceneInstance {
                 model,
                 translation: [pos[0], ground_y - min[1] * scale, pos[2]],
-                yaw,
+                yaw: yaw.to_radians(),
                 scale,
                 color,
             }
         })
         .collect();
 
-    // Camera: elevated 3/4 view framing all actors.
-    let (mut cx, mut cz, mut maxr) = (0.0f32, 0.0f32, 1.0f32);
-    for &(_, p, _, _) in &placements {
-        cx += p[0];
-        cz += p[2];
-    }
-    cx /= placements.len() as f32;
-    cz /= placements.len() as f32;
-    for &(_, p, _, _) in &placements {
-        let d = ((p[0] - cx).powi(2) + (p[2] - cz).powi(2)).sqrt();
-        maxr = maxr.max(d);
-    }
-    let dist = maxr * 1.6 + 60.0;
-    let eye = [cx, ground_y + dist * 0.8 + 30.0, cz + dist];
-    let target = [cx, ground_y + 8.0, cz];
+    // Third-person camera framing the local player (placement 0).
+    let (p_idx, p_pos, _, _, p_scale) = placements[0];
+    let (pmin, pmax) = models[p_idx].bounds();
+    let player_h = ((pmax[1] - pmin[1]) * p_scale).max(0.5);
+    let d = player_h * 3.2;
+    let eye = [p_pos[0] + d * 0.65, ground_y + player_h * 2.3, p_pos[2] + d * 0.9];
+    let target = [p_pos[0], ground_y + player_h * 0.55, p_pos[2]];
 
     let out = "rcce_world3d.png";
-    match rcce_render::render_scene_png(&instances, eye, target, ground_y, 1200, 800, out) {
+    match rcce_render::render_scene_png(&instances, eye, target, ground_y, 1200, 900, out) {
         Ok(adapter) => println!(
             "[client] rendered 3D world ({} actors) via {adapter} -> {out}",
             instances.len()

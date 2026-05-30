@@ -43,6 +43,19 @@ impl AssetStore {
         self.mesh_model(mesh_id)
     }
 
+    /// The actor's in-world render scale, matching the engine
+    /// (`Actors3D.bb:45`): `0.05 × LoadedMeshScales[mesh] × Actor.Scale`.
+    /// Positions stay in raw world units. Falls back to `0.05` if a stored
+    /// scale is non-positive.
+    pub fn actor_render_scale(&self, template_id: u16, gender: u8) -> Option<f32> {
+        let mesh_id = self.actors.mesh_for(template_id, gender)?;
+        let mesh = self.meshes.get(mesh_id)?;
+        let actor = self.actors.templates.get(&template_id)?;
+        let ms = if mesh.scale > 0.0 { mesh.scale } else { 1.0 };
+        let as_ = if actor.scale > 0.0 { actor.scale } else { 1.0 };
+        Some(0.05 * ms * as_)
+    }
+
     /// A model by mesh-catalog id, cached (including negative cache for misses).
     pub fn mesh_model(&mut self, mesh_id: u16) -> Option<Rc<B3dModel>> {
         if let Some(cached) = self.cache.get(&mesh_id) {
