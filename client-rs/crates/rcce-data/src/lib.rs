@@ -6,10 +6,12 @@
 //! indexed media catalogs; B3D meshes, area `.dat`, and `Accounts.dat` saves
 //! land next in this crate.
 
+pub mod actors;
 pub mod b3d;
 pub mod catalog;
 pub mod reader;
 
+pub use actors::{ActorCatalog, ActorTemplate};
 pub use b3d::{B3dMesh, B3dModel};
 pub use catalog::{MeshCatalog, MeshEntry, ParsedCatalog, CATALOG_SLOTS};
 pub use reader::{BlitzReader, ReadError};
@@ -156,5 +158,52 @@ mod tests {
         if !parsed_any {
             eprintln!("skipping: no .b3d files present under data/Meshes/");
         }
+    }
+
+    /// Verify the data-driven asset chain end to end: parse `Actors.dat`,
+    /// resolve each actor's base mesh through the `Meshes.dat` catalog to a
+    /// `.b3d` path, and confirm that path actually loads.
+    #[test]
+    fn actor_to_mesh_to_b3d_chain() {
+        let root = repo_root();
+        let Ok(actors_bytes) = std::fs::read(root.join("data/Server Data/Actors.dat")) else {
+            eprintln!("skipping: no Actors.dat");
+            return;
+        };
+        let Ok(mesh_bytes) = std::fs::read(root.join("data/Game Data/Meshes.dat")) else {
+            eprintln!("skipping: no Meshes.dat");
+            return;
+        };
+        let actors = ActorCatalog::parse(&actors_bytes).expect("Actors.dat parse");
+        let meshes = MeshCatalog::parse(&mesh_bytes).expect("Meshes.dat parse").value;
+        assert!(!actors.templates.is_empty(), "no actor templates");
+
+        let mut resolved = 0;
+        for t in actors.templates.values() {
+            assert!(t.scale.is_finite() && t.scale > 0.0, "actor {} bad scale", t.id);
+            let Some(mesh_id) = actors.mesh_for(t.id, 0) else {
+                continue;
+            };
+            let Some(entry) = meshes.get(mesh_id) else {
+                continue;
+            };
+            let path = root.join("data/Meshes").join(entry.filename.replace('\\', "/"));
+            if let Ok(b3d_bytes) = std::fs::read(&path) {
+                let model = B3dModel::parse(&b3d_bytes)
+                    .unwrap_or_else(|e| panic!("actor '{}' mesh {}: {e}", t.race, entry.filename));
+                assert!(model.vertex_count() > 0);
+                resolved += 1;
+                eprintln!(
+                    "actor #{} '{}' -> mesh {} '{}' -> {} verts",
+                    t.id, t.race, mesh_id, entry.filename, model.vertex_count()
+                );
+            }
+        }
+        eprintln!(
+            "{} actor templates, {} resolved full chain to a loadable .b3d",
+            actors.templates.len(),
+            resolved
+        );
+        assert!(resolved > 0, "no actor resolved to a loadable mesh");
     }
 }

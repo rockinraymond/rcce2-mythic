@@ -13,6 +13,7 @@ description = "RCCE2 game client (drop-in Client.exe replacement) — state mode
 rcce-net = { path = "../rcce-net", default-features = false }
 enet-sys = { path = "../enet-sys" }
 rcce-render = { path = "../rcce-render" }
+rcce-data = { path = "../rcce-data" }
 
 [lib]
 name = "rcce_client"

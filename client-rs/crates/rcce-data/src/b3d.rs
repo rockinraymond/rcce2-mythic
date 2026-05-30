@@ -34,6 +34,28 @@ impl B3dModel {
         self.meshes.iter().map(|m| m.indices.len() / 3).sum()
     }
 
+    /// Axis-aligned bounds `(min, max)` over all vertices. Returns zeros for an
+    /// empty model.
+    pub fn bounds(&self) -> ([f32; 3], [f32; 3]) {
+        let mut min = [f32::MAX; 3];
+        let mut max = [f32::MIN; 3];
+        let mut any = false;
+        for mesh in &self.meshes {
+            for p in &mesh.positions {
+                any = true;
+                for k in 0..3 {
+                    min[k] = min[k].min(p[k]);
+                    max[k] = max[k].max(p[k]);
+                }
+            }
+        }
+        if any {
+            (min, max)
+        } else {
+            ([0.0; 3], [0.0; 3])
+        }
+    }
+
     /// Parse a whole `.b3d` file image.
     pub fn parse(data: &[u8]) -> Result<B3dModel, ReadError> {
         let mut r = BlitzReader::new(data);

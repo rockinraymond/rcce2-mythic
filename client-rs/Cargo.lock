@@ -728,6 +728,7 @@ name = "rcce-client"
 version = "0.1.0"
 dependencies = [
  "enet-sys",
+ "rcce-data",
  "rcce-net",
  "rcce-render",
 ]
