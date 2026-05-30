@@ -8,22 +8,21 @@
 use std::thread::sleep;
 use std::time::{Duration, Instant};
 
+use enet_sys::EnetTransport;
 use rcce_net::Transport;
-use rcenet_ffi::FfiTransport;
 
 use rcce_client::login::{login, Credentials};
 use rcce_client::world::World;
 
 fn main() {
+    // Args: [host] [port] [seconds]. Transport is the compiled-in ENet fork
+    // (enet-sys) — no DLL path needed; this binary is 64-bit.
     let mut args = std::env::args().skip(1);
-    let dll = args
-        .next()
-        .unwrap_or_else(|| r"C:\Users\dyanr\Desktop\rcce2\bin\RCEnet.dll".to_string());
     let host = args.next().unwrap_or_else(|| "127.0.0.1".to_string());
     let port: u16 = args.next().and_then(|s| s.parse().ok()).unwrap_or(25000);
     let run_secs: u64 = args.next().and_then(|s| s.parse().ok()).unwrap_or(12);
 
-    let mut t = FfiTransport::load(&dll).expect("load RCEnet.dll");
+    let mut t = EnetTransport::new();
     let creds = Credentials {
         username: "rustbot".to_string(),
         password: "rustpass".to_string(),
