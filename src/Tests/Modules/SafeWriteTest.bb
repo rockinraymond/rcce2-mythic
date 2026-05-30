@@ -116,6 +116,28 @@ Test testSafeWriteCommitRefusesEmptyTemp()
 	CleanupTestFiles()
 End Test
 
+; A temp that was never created (WriteFile returned 0, so no file exists at
+; the temp path at all) is refused too. This is a DISTINCT branch from the
+; empty-temp case above: SafeWriteCommit bails at the `FileType(TempPath$)
+; <> 1` check (Logging.bb:41) before ever reaching the FileSize check, and
+; must leave the production file untouched. It's the branch a save path hits
+; when the temp WriteFile fails to open at all (disk full, bad dir, perms).
+Test testSafeWriteCommitRefusesMissingTemp()
+	CleanupTestFiles()
+
+	SeedFile(ProductionPath$, "must survive")
+
+	; Never write the temp -- pass its expected path with handle 0.
+	Assert(FileType(TempPathExpected$) <> 1) ; precondition: no temp on disk
+	Local ok% = SafeWriteCommit%(TempPathExpected$, ProductionPath$, 0)
+
+	Assert(ok = False)
+	Assert(FileType(ProductionPath$) = 1) ; production untouched
+	Assert(ReadFileString$(ProductionPath$) = "must survive")
+
+	CleanupTestFiles()
+End Test
+
 ; Successive commits cycle the .bak: after three saves A -> B -> C,
 ; .bak must hold B (the immediately previous version), not A. This pins
 ; the behaviour at Logging.bb's `If FileType(Bak$) = 1 Then DeleteFile(Bak$)`
