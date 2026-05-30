@@ -25,6 +25,11 @@ pub struct Actor {
     pub is_running: bool,
     pub walk_back: bool,
     pub mount_id: u16,
+    pub alive: bool,
+    /// Attribute index → (value, maximum), as delivered by P_StatUpdate.
+    /// Sparse — only attributes the server has sent. Health/Energy/etc. indices
+    /// come from Fixed Attributes.dat (the caller maps them).
+    pub attributes: HashMap<u8, (i16, i16)>,
 }
 
 /// Current zone metadata (from `P_ChangeArea`).
@@ -50,6 +55,11 @@ pub struct World {
     pub actors: HashMap<u16, Actor>,
     /// Recent chat lines (control-byte channel prefixes stripped).
     pub chat: Vec<String>,
+    // Local player progression / stats.
+    pub me_xp: i32,
+    pub me_xp_bar: u8,
+    pub me_gold: i32,
+    pub me_attributes: HashMap<u8, (i16, i16)>,
 }
 
 impl World {
@@ -61,6 +71,10 @@ impl World {
             pk::STANDARD_UPDATE => self.on_standard_update(&m.data),
             pk::ACTOR_GONE => self.on_actor_gone(&m.data),
             pk::CHAT_MESSAGE => self.on_chat(&m.data),
+            pk::XP_UPDATE => self.on_xp_update(&m.data),
+            pk::GOLD_CHANGE => self.on_gold_change(&m.data),
+            pk::STAT_UPDATE => self.on_stat_update(&m.data),
+            pk::ACTOR_DEAD => self.on_actor_dead(&m.data),
             _ => {}
         }
     }
@@ -126,6 +140,7 @@ impl World {
                 yaw,
                 dest_x: x,
                 dest_z: z,
+                alive: true,
                 ..Default::default()
             },
         );
@@ -164,6 +179,72 @@ impl World {
         let mut r = MsgReader::new(d);
         if let Some(rid) = r.u16() {
             self.actors.remove(&rid);
+        }
+    }
+
+    /// `P_XPUpdate` (ClientNet.bb:689): `'B'`+barLevel(u8), or `'M'`+xpGain(i32).
+    fn on_xp_update(&mut self, d: &[u8]) {
+        match d.first() {
+            Some(b'B') => {
+                if let Some(&bar) = d.get(1) {
+                    self.me_xp_bar = bar;
+                }
+            }
+            Some(b'M') => {
+                if let Some(gain) = MsgReader::new(&d[1..]).i32() {
+                    self.me_xp = self.me_xp.saturating_add(gain);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    /// `P_GoldChange` (ClientNet.bb:947): byte0 `'D'`=decrease (else increase),
+    /// then amount(i32). Clamped at 0.
+    fn on_gold_change(&mut self, d: &[u8]) {
+        let decrease = d.first() == Some(&b'D');
+        if let Some(amount) = MsgReader::new(&d[1.min(d.len())..]).i32() {
+            let delta = if decrease { -amount } else { amount };
+            self.me_gold = (self.me_gold + delta).max(0);
+        }
+    }
+
+    /// `P_StatUpdate` (ClientNet.bb:996): byte0 `'A'`(value)/`'M'`(max) +
+    /// RuntimeID(u16) + attrIndex(u8) + value(u16). (`'R'` resistances ignored.)
+    fn on_stat_update(&mut self, d: &[u8]) {
+        let kind = match d.first() {
+            Some(&k) => k,
+            None => return,
+        };
+        let mut r = MsgReader::new(&d[1..]);
+        let (Some(rid), Some(attr), Some(val)) = (r.u16(), r.u8(), r.u16()) else {
+            return;
+        };
+        if attr >= 40 {
+            return;
+        }
+        let val = val as i16;
+        let table = if rid == self.my_runtime_id {
+            &mut self.me_attributes
+        } else if let Some(a) = self.actors.get_mut(&rid) {
+            &mut a.attributes
+        } else {
+            return;
+        };
+        let entry = table.entry(attr).or_default();
+        match kind {
+            b'A' => entry.0 = val, // current value
+            b'M' => entry.1 = val, // maximum
+            _ => {}
+        }
+    }
+
+    /// `P_ActorDead` (ClientNet.bb:1071): RuntimeID(u16) of the actor that died.
+    fn on_actor_dead(&mut self, d: &[u8]) {
+        if let Some(rid) = MsgReader::new(d).u16() {
+            if let Some(a) = self.actors.get_mut(&rid) {
+                a.alive = false;
+            }
         }
     }
 
@@ -231,5 +312,55 @@ mod tests {
         p.u16(50);
         w.apply(&msg(pk::ACTOR_GONE, p.into_bytes()));
         assert!(w.actors.is_empty());
+    }
+
+    /// Build a payload (the builders return `&mut Self`, so chaining
+    /// `.into_bytes()` doesn't work — wrap in an owned writer).
+    fn pkt(build: impl FnOnce(&mut MsgWriter)) -> Vec<u8> {
+        let mut w = MsgWriter::new();
+        build(&mut w);
+        w.into_bytes()
+    }
+
+    #[test]
+    fn xp_gold_stat_dead() {
+        let mut w = World {
+            my_runtime_id: 7,
+            ..Default::default()
+        };
+        // Register an NPC (rnid 50).
+        w.apply(&msg(
+            pk::NEW_ACTOR,
+            pkt(|p| {
+                p.u32(0).u16(50).u16(1).u32(0).u16(3);
+                p.f32(0.0).f32(0.0).f32(0.0).f32(0.0);
+                p.u8(0).str8("Stag");
+            }),
+        ));
+        assert!(w.actors[&50].alive);
+
+        // XP: 'B' bar level, then 'M' xp gain.
+        w.apply(&msg(pk::XP_UPDATE, pkt(|p| { p.u8(b'B').u8(4); })));
+        assert_eq!(w.me_xp_bar, 4);
+        w.apply(&msg(pk::XP_UPDATE, pkt(|p| { p.u8(b'M').i32(150); })));
+        assert_eq!(w.me_xp, 150);
+
+        // Gold: increase then decrease, clamped at 0.
+        w.apply(&msg(pk::GOLD_CHANGE, pkt(|p| { p.u8(b'I').i32(100); })));
+        assert_eq!(w.me_gold, 100);
+        w.apply(&msg(pk::GOLD_CHANGE, pkt(|p| { p.u8(b'D').i32(250); })));
+        assert_eq!(w.me_gold, 0);
+
+        // StatUpdate: NPC health value + max ('A'/'M', attr index 5).
+        w.apply(&msg(pk::STAT_UPDATE, pkt(|p| { p.u8(b'A').u16(50).u8(5).u16(80); })));
+        w.apply(&msg(pk::STAT_UPDATE, pkt(|p| { p.u8(b'M').u16(50).u8(5).u16(100); })));
+        assert_eq!(w.actors[&50].attributes[&5], (80, 100));
+        // StatUpdate for self goes to me_attributes.
+        w.apply(&msg(pk::STAT_UPDATE, pkt(|p| { p.u8(b'A').u16(7).u8(5).u16(42); })));
+        assert_eq!(w.me_attributes[&5], (42, 0));
+
+        // ActorDead marks the NPC dead.
+        w.apply(&msg(pk::ACTOR_DEAD, pkt(|p| { p.u16(50); })));
+        assert!(!w.actors[&50].alive);
     }
 }

@@ -45,6 +45,11 @@ pub mod packet_id {
     pub const STANDARD_UPDATE: u8 = 14;
     pub const INVENTORY_UPDATE: u8 = 15;
     pub const CHAT_MESSAGE: u8 = 16;
+    pub const ATTACK_ACTOR: u8 = 18;
+    pub const ACTOR_DEAD: u8 = 19;
+    pub const STAT_UPDATE: u8 = 22;
+    pub const GOLD_CHANGE: u8 = 24;
+    pub const NAME_CHANGE: u8 = 25;
     pub const XP_UPDATE: u8 = 32;
     pub const ACTOR_EFFECT: u8 = 36;
 }

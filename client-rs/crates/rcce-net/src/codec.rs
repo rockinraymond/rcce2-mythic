@@ -31,6 +31,10 @@ impl MsgWriter {
         self.buf.extend_from_slice(&v.to_le_bytes());
         self
     }
+    pub fn i32(&mut self, v: i32) -> &mut Self {
+        self.buf.extend_from_slice(&v.to_le_bytes());
+        self
+    }
     pub fn f32(&mut self, v: f32) -> &mut Self {
         self.buf.extend_from_slice(&v.to_le_bytes());
         self
@@ -86,6 +90,10 @@ impl<'a> MsgReader<'a> {
     pub fn u32(&mut self) -> Option<u32> {
         self.take(4)
             .map(|b| u32::from_le_bytes([b[0], b[1], b[2], b[3]]))
+    }
+    pub fn i32(&mut self) -> Option<i32> {
+        self.take(4)
+            .map(|b| i32::from_le_bytes([b[0], b[1], b[2], b[3]]))
     }
     pub fn f32(&mut self) -> Option<f32> {
         self.take(4)
