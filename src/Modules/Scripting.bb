@@ -417,6 +417,20 @@ Function UpdateScripts()
 		EndIf
 		S = SNext
 	Wend
+	; No script is executing once the invoke loop exits, so restore the
+	; "engine, not script" invariant: hSI = 0. hSI was set to each invoked
+	; script's handle at the BVM_Invoke call above and, without this reset,
+	; lingered as a stale (often freed) handle between ticks. The main loop
+	; runs RCE_Update() (packet dispatch -> engine-initiated ThreadScript for
+	; chat / spell / right-click / NPC-init) BEFORE the next UpdateScripts(),
+	; so every engine-initiated spawn after the first script ran saw hSI <> 0
+	; and looked script-initiated -- silently defeating ThreadScript's
+	; privileged-script allowlist elevation (the `hSI = 0` gate, #329) for
+	; exactly the shipped content scripts the carve-out exists for. The gate's
+	; own comment documents the assumed invariant ("hSI is 0 at the call
+	; site"); this establishes it. Elevation only denies on stale hSI (never
+	; grants), so the regression was inert allowlist, not privilege escalation.
+	hSI = 0
 	If Pass <> 0 Then Pass = Pass - 1 Else Pass = Threads
 
 End Function
