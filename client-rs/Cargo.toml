@@ -6,6 +6,7 @@ members = [
     "crates/rcenet-ffi-probe",
     "crates/rcce-client",
     "crates/rcce-render",
+    "crates/enet-sys",
 ]
 
 # Phase plan (see docs/rust-client/PLAN.md):
