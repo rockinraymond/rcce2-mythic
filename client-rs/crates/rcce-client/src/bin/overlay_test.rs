@@ -88,6 +88,35 @@ fn main() {
         let base_x = 300.0 + i as f32 * 78.0;
         overlay.text_shadow(base_x, 190.0 - fl.rise(*age), 1.5, &dmg.to_string(), [c[0], c[1], c[2], fl.alpha(*age)]);
     }
+    // Representative inventory/spellbook panel (same primitives the live
+    // client uses; data here is mocked since the bare test character is empty).
+    {
+        let white = [1.0, 1.0, 1.0, 1.0];
+        let dim = [0.6, 0.6, 0.6, 1.0];
+        let (pw, ph) = (300.0, 200.0);
+        let (px, py) = (320.0, 40.0);
+        overlay.rect(px, py, pw, ph, [0.05, 0.06, 0.10, 0.9]);
+        overlay.rect(px, py, pw, 22.0, [0.15, 0.18, 0.28, 0.96]);
+        overlay.text_shadow(px + 10.0, py + 6.0, 1.5, "Character", white);
+        overlay.text(px + pw - 78.0, py + 7.0, 1.0, "[I] close", dim);
+        let mut y = py + 30.0;
+        overlay.text_shadow(px + 10.0, y, 1.0, "Lv 7   1240 gold   3200 xp", [1.0, 0.88, 0.4, 1.0]);
+        y += 18.0;
+        overlay.text_shadow(px + 10.0, y, 1.0, "Inventory (3)", [0.7, 0.85, 1.0, 1.0]);
+        y += 14.0;
+        for line in ["Sword", "Shield", "Health Potion  x5"] {
+            overlay.text(px + 18.0, y, 1.0, line, white);
+            y += 12.0;
+        }
+        y += 8.0;
+        overlay.text_shadow(px + 10.0, y, 1.0, "Spells (2)", [0.85, 0.7, 1.0, 1.0]);
+        y += 14.0;
+        for line in ["Fireball (L3) *", "Heal (L1)"] {
+            overlay.text(px + 18.0, y, 1.0, line, white);
+            y += 12.0;
+        }
+    }
+
     overlay.render(&device, &queue, &view, w as f32, h as f32);
 
     // Readback → PNG.

@@ -11,6 +11,7 @@ pub mod anim;
 pub mod area;
 pub mod b3d;
 pub mod catalog;
+pub mod items;
 pub mod reader;
 pub mod texture;
 
@@ -23,6 +24,7 @@ pub use catalog::{
     MeshCatalog, MeshEntry, MusicCatalog, MusicEntry, ParsedCatalog, TextureCatalog, TextureEntry,
     CATALOG_SLOTS,
 };
+pub use items::{ItemCatalog, ItemDef};
 pub use reader::{BlitzReader, ReadError};
 
 #[cfg(test)]
@@ -78,6 +80,25 @@ mod tests {
             let buf = len.to_le_bytes();
             let mut r = BlitzReader::new(&buf);
             assert_eq!(r.read_string(260).unwrap(), "");
+        }
+    }
+
+    /// Ground-truth test: parse the real `Items.dat` shipped in `data/`. Walks
+    /// the variable-length records to EOF; every item must have a non-empty name
+    /// and an id, which only holds if record boundaries stayed aligned.
+    #[test]
+    fn parse_real_items_dat() {
+        let path = repo_root().join("data/Server Data/Items.dat");
+        let Ok(bytes) = std::fs::read(&path) else {
+            eprintln!("skipping: {} not present", path.display());
+            return;
+        };
+        let cat = items::ItemCatalog::parse(&bytes);
+        eprintln!("Items.dat: {} items", cat.items.len());
+        assert!(!cat.items.is_empty(), "Items.dat parsed zero items");
+        for it in &cat.items {
+            assert!(!it.name.is_empty(), "item #{} has empty name", it.id);
+            eprintln!("  #{:<4} {:<20} type {} value {}", it.id, it.name, it.item_type, it.value);
         }
     }
 

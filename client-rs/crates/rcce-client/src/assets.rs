@@ -8,8 +8,8 @@ use std::path::PathBuf;
 use std::rc::Rc;
 
 use rcce_data::{
-    texture, ActorCatalog, AnimClip, AnimSetCatalog, B3dModel, Image, MeshCatalog, MusicCatalog,
-    TextureCatalog,
+    texture, ActorCatalog, AnimClip, AnimSetCatalog, B3dModel, Image, ItemCatalog, MeshCatalog,
+    MusicCatalog, TextureCatalog,
 };
 
 pub struct AssetStore {
@@ -19,6 +19,7 @@ pub struct AssetStore {
     textures: TextureCatalog,
     anims: AnimSetCatalog,
     music: MusicCatalog,
+    items: ItemCatalog,
     cache: HashMap<u16, Option<Rc<B3dModel>>>,
     /// Memoised decoded actor skins, keyed by appearance, so per-frame actor
     /// rebuilds don't re-read + re-decode the skin files from disk.
@@ -102,6 +103,10 @@ impl AssetStore {
             .and_then(|b| MusicCatalog::parse(&b).ok())
             .map(|p| p.value)
             .unwrap_or_default();
+        // Item definitions (id → name, for the inventory panel). Non-fatal.
+        let items = std::fs::read(data_root.join("Server Data/Items.dat"))
+            .map(|b| ItemCatalog::parse(&b))
+            .unwrap_or_default();
         Ok(Self {
             data_root,
             actors,
@@ -109,9 +114,20 @@ impl AssetStore {
             textures,
             anims,
             music,
+            items,
             cache: HashMap::new(),
             actor_tex_cache: HashMap::new(),
         })
+    }
+
+    /// Display name for an item id (`#<id>` if unknown).
+    pub fn item_name(&self, id: u16) -> String {
+        self.items.name_or_id(id)
+    }
+
+    /// Number of loaded item definitions (for diagnostics).
+    pub fn item_count(&self) -> usize {
+        self.items.items.len()
     }
 
     /// Resolve a `LoadingMusicID` to an on-disk `.ogg` path under `Data/Music/`,

@@ -1,0 +1,218 @@
+//! `Items.dat` — the item definition table (`Items.bb:338` `LoadItems`).
+//!
+//! Unlike the indexed media catalogs, this is a flat sequence of
+//! variable-length records read until EOF. Each record must be walked in full
+//! (strings + an `ItemType`-conditional tail) to find the next one. We keep only
+//! the fields the client needs for display (name, type, value, thumbnail) but
+//! still parse every field so record boundaries stay aligned.
+//!
+//! Record layout (`Items.bb:348-408`), all little-endian, strings = 4-byte LE
+//! length + bytes:
+//! `id i16 · Name str · ExclRace str · ExclClass str · Script str · SMethod str
+//!  · ItemType u8 · Value i32 · Mass i16 · TakesDamage u8 · ThumbnailTexID i16
+//!  · Gubbins 6×i16 · MMeshID i16 · FMeshID i16 · SlotType i16 · Stackable u8
+//!  · 40×(attr i16) · {weapon|armour|potion|image tail} · MiscData str`.
+
+use crate::reader::{BlitzReader, ReadError};
+
+/// One item definition (the subset the client displays).
+#[derive(Debug, Clone, PartialEq)]
+pub struct ItemDef {
+    pub id: u16,
+    pub name: String,
+    /// 1=Weapon 2=Armour 3=Ring 4=Potion 5=Ingredient 6=Image 7=Other.
+    pub item_type: u8,
+    pub value: i32,
+    pub thumbnail_tex_id: i16,
+    pub stackable: bool,
+}
+
+/// All item definitions from `Items.dat`, in file order.
+#[derive(Debug, Clone, Default)]
+pub struct ItemCatalog {
+    pub items: Vec<ItemDef>,
+}
+
+impl ItemCatalog {
+    /// Parse a whole `Items.dat`. Stops cleanly at EOF or the first record that
+    /// fails to decode (a truncated/corrupt tail), keeping what parsed — same
+    /// posture as the engine's `LoadItems`.
+    pub fn parse(data: &[u8]) -> ItemCatalog {
+        let mut r = BlitzReader::new(data);
+        let mut items = Vec::new();
+        while !r.eof() {
+            match Self::parse_record(&mut r) {
+                Ok(item) => items.push(item),
+                Err(_) => break,
+            }
+        }
+        ItemCatalog { items }
+    }
+
+    fn parse_record(r: &mut BlitzReader) -> Result<ItemDef, ReadError> {
+        // ReadShort is signed 16-bit (matches the engine's LoadItems); a
+        // negative id means a corrupt/misaligned record — stop here.
+        let id = r.read_short()?;
+        if id < 0 {
+            return Err(ReadError::UnexpectedEof { offset: 0, needed: 0, available: 0 });
+        }
+        let name = r.read_string(256)?;
+        let _excl_race = r.read_string(256)?;
+        let _excl_class = r.read_string(256)?;
+        let _script = r.read_string(1024)?;
+        let _smethod = r.read_string(1024)?;
+        let item_type = r.read_byte()?;
+        let value = r.read_int()?;
+        let _mass = r.read_short()?;
+        let _takes_damage = r.read_byte()?;
+        let thumbnail_tex_id = r.read_short()?;
+        for _ in 0..6 {
+            r.read_short()?; // Gubbins[0..5]
+        }
+        let _mmesh = r.read_short()?;
+        let _fmesh = r.read_short()?;
+        let _slot_type = r.read_short()?;
+        let stackable = r.read_byte()? != 0;
+        for _ in 0..40 {
+            r.read_short()?; // Attributes\Value[0..39]
+        }
+        // ItemType-conditional tail (Items.bb:378-404).
+        match item_type {
+            1 => {
+                // Weapon: damage, dtype, wtype, rangedProjectile (4×i16),
+                // range f32, rangedAnimation string.
+                for _ in 0..4 {
+                    r.read_short()?;
+                }
+                r.read_float()?;
+                r.read_string(256)?;
+            }
+            2 => {
+                r.read_short()?; // ArmourLevel
+            }
+            4 | 5 => {
+                r.read_short()?; // EatEffectsLength (Potion / Ingredient)
+            }
+            6 => {
+                r.read_short()?; // ImageID
+            }
+            _ => {} // Ring (3), Other (7): no tail
+        }
+        let _misc = r.read_string(4096)?;
+        Ok(ItemDef {
+            id: id as u16,
+            name,
+            item_type,
+            value,
+            thumbnail_tex_id,
+            stackable,
+        })
+    }
+
+    /// Look up an item by id (linear; build a map for hot paths).
+    pub fn get(&self, id: u16) -> Option<&ItemDef> {
+        self.items.iter().find(|i| i.id == id)
+    }
+
+    /// The item's display name, or a `#<id>` placeholder if unknown.
+    pub fn name_or_id(&self, id: u16) -> String {
+        self.get(id).map(|i| i.name.clone()).unwrap_or_else(|| format!("#{id}"))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Encode a Blitz file string: 4-byte LE length + bytes.
+    fn bstr(out: &mut Vec<u8>, s: &str) {
+        out.extend_from_slice(&(s.len() as i32).to_le_bytes());
+        out.extend_from_slice(s.as_bytes());
+    }
+
+    /// Build one minimal Other-type (no tail) record.
+    fn record(id: u16, name: &str, value: i32, stackable: bool) -> Vec<u8> {
+        let mut o = Vec::new();
+        o.extend_from_slice(&(id as i16).to_le_bytes());
+        bstr(&mut o, name);
+        bstr(&mut o, ""); // race
+        bstr(&mut o, ""); // class
+        bstr(&mut o, ""); // script
+        bstr(&mut o, ""); // smethod
+        o.push(7); // ItemType = Other (no conditional tail)
+        o.extend_from_slice(&value.to_le_bytes());
+        o.extend_from_slice(&0i16.to_le_bytes()); // mass
+        o.push(0); // takesdamage
+        o.extend_from_slice(&55i16.to_le_bytes()); // thumbnail
+        for _ in 0..6 {
+            o.extend_from_slice(&0i16.to_le_bytes()); // gubbins
+        }
+        o.extend_from_slice(&0i16.to_le_bytes()); // mmesh
+        o.extend_from_slice(&0i16.to_le_bytes()); // fmesh
+        o.extend_from_slice(&0i16.to_le_bytes()); // slottype
+        o.push(stackable as u8);
+        for _ in 0..40 {
+            o.extend_from_slice(&5000i16.to_le_bytes()); // attrs (value 0)
+        }
+        bstr(&mut o, ""); // miscdata
+        o
+    }
+
+    #[test]
+    fn parse_two_other_items() {
+        let mut data = record(0, "Bread", 5, true);
+        data.extend(record(3, "Iron Key", 0, false));
+        let cat = ItemCatalog::parse(&data);
+        assert_eq!(cat.items.len(), 2);
+        assert_eq!(cat.get(0).unwrap().name, "Bread");
+        assert!(cat.get(0).unwrap().stackable);
+        assert_eq!(cat.get(0).unwrap().value, 5);
+        assert_eq!(cat.get(0).unwrap().thumbnail_tex_id, 55);
+        assert_eq!(cat.get(3).unwrap().name, "Iron Key");
+        assert!(!cat.get(3).unwrap().stackable);
+        assert_eq!(cat.name_or_id(3), "Iron Key");
+        assert_eq!(cat.name_or_id(99), "#99");
+    }
+
+    #[test]
+    fn parse_weapon_record_tail() {
+        // A weapon record (ItemType=1) has an 8+4 byte numeric tail + a string,
+        // so the walker must consume it to align the next record.
+        let mut o = Vec::new();
+        o.extend_from_slice(&5i16.to_le_bytes());
+        bstr(&mut o, "Sword");
+        for _ in 0..4 {
+            bstr(&mut o, "");
+        }
+        o.push(1); // Weapon
+        o.extend_from_slice(&100i32.to_le_bytes());
+        o.extend_from_slice(&3i16.to_le_bytes()); // mass
+        o.push(1); // takesdamage
+        o.extend_from_slice(&12i16.to_le_bytes()); // thumbnail
+        for _ in 0..6 {
+            o.extend_from_slice(&0i16.to_le_bytes());
+        }
+        o.extend_from_slice(&0i16.to_le_bytes());
+        o.extend_from_slice(&0i16.to_le_bytes());
+        o.extend_from_slice(&0i16.to_le_bytes());
+        o.push(0);
+        for _ in 0..40 {
+            o.extend_from_slice(&5000i16.to_le_bytes());
+        }
+        // weapon tail: damage,dtype,wtype,proj (4×i16), range f32, anim string
+        for _ in 0..4 {
+            o.extend_from_slice(&0i16.to_le_bytes());
+        }
+        o.extend_from_slice(&0f32.to_le_bytes());
+        bstr(&mut o, "");
+        bstr(&mut o, ""); // miscdata
+        // a trailing second item to prove alignment held
+        o.extend(record(6, "Apple", 1, true));
+
+        let cat = ItemCatalog::parse(&o);
+        assert_eq!(cat.items.len(), 2);
+        assert_eq!(cat.get(5).unwrap().name, "Sword");
+        assert_eq!(cat.get(5).unwrap().item_type, 1);
+        assert_eq!(cat.get(6).unwrap().name, "Apple");
+    }
+}

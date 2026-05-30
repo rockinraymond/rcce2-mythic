@@ -150,6 +150,8 @@ struct App {
     audio: Option<rcce_client::audio::Audio>,
     /// Character sheet (gold/level/inventory/spells) from login's P_FetchCharacter.
     sheet: Option<rcce_client::fetch::CharacterSheet>,
+    /// Inventory/spellbook panel visible (toggled with I).
+    show_inventory: bool,
 }
 
 impl App {
@@ -189,6 +191,7 @@ impl App {
             floaters: rcce_client::floaters::Floaters::new(),
             audio: rcce_client::audio::Audio::new(),
             sheet: None,
+            show_inventory: false,
         }
     }
 }
@@ -541,6 +544,8 @@ impl ApplicationHandler for App {
                             let on = !self.mouse_look;
                             self.set_mouse_look(on);
                         }
+                        // Toggle the inventory / spellbook panel.
+                        KeyCode::KeyI if pressed => self.show_inventory = !self.show_inventory,
                         KeyCode::Escape => {
                             if self.mouse_look {
                                 self.set_mouse_look(false);
@@ -814,6 +819,56 @@ impl App {
                 let caret = if (elapsed * 2.0) as i64 % 2 == 0 { "_" } else { " " };
                 overlay.text_shadow(14.0, sh - 78.0, 1.0, &format!("> {buf}{caret}"), [1.0, 1.0, 1.0, 1.0]);
             }
+
+            // Inventory / spellbook panel (toggle with I). Item names resolve
+            // through Items.dat; spell names arrive over the wire.
+            if self.show_inventory {
+                let (pw, ph) = (340.0, 384.0);
+                let (px, py) = (((sw - pw) * 0.5).round(), ((sh - ph) * 0.5).round());
+                let dim = [0.6, 0.6, 0.6, 1.0];
+                overlay.rect(px, py, pw, ph, [0.05, 0.06, 0.10, 0.9]);
+                overlay.rect(px, py, pw, 22.0, [0.15, 0.18, 0.28, 0.96]);
+                overlay.text_shadow(px + 10.0, py + 6.0, 1.5, "Character", white);
+                overlay.text(px + pw - 78.0, py + 7.0, 1.0, "[I] close", dim);
+                let mut y = py + 30.0;
+                let limit = py + ph - 14.0;
+                if let Some(s) = &self.sheet {
+                    overlay.text_shadow(px + 10.0, y, 1.0, &format!("Lv {}   {} gold   {} xp", s.level, s.gold, s.xp), [1.0, 0.88, 0.4, 1.0]);
+                    y += 18.0;
+                    overlay.text_shadow(px + 10.0, y, 1.0, &format!("Inventory ({})", s.inventory.len()), [0.7, 0.85, 1.0, 1.0]);
+                    y += 14.0;
+                    if s.inventory.is_empty() {
+                        overlay.text(px + 18.0, y, 1.0, "(empty)", dim);
+                        y += 13.0;
+                    } else {
+                        for it in &s.inventory {
+                            if y > limit - 80.0 { break; }
+                            let name = store.item_name(it.item_id);
+                            let line = if it.amount > 1 { format!("{name}  x{}", it.amount) } else { name };
+                            let line: String = line.chars().take(40).collect();
+                            overlay.text(px + 18.0, y, 1.0, &line, white);
+                            y += 12.0;
+                        }
+                    }
+                    y += 8.0;
+                    overlay.text_shadow(px + 10.0, y, 1.0, &format!("Spells ({})", s.spells.len()), [0.85, 0.7, 1.0, 1.0]);
+                    y += 14.0;
+                    if s.spells.is_empty() {
+                        overlay.text(px + 18.0, y, 1.0, "(none)", dim);
+                    } else {
+                        for sp in &s.spells {
+                            if y > limit { break; }
+                            let mem = if sp.memorised { " *" } else { "" };
+                            let line: String = format!("{} (L{}){mem}", sp.name, sp.level).chars().take(40).collect();
+                            overlay.text(px + 18.0, y, 1.0, &line, white);
+                            y += 12.0;
+                        }
+                    }
+                } else {
+                    overlay.text(px + 10.0, y, 1.0, "(no character data)", dim);
+                }
+            }
+
             overlay.render(&gfx.device, &gfx.queue, &tview, sw, sh);
         }
 
