@@ -19,11 +19,16 @@ fn main() {
         std::process::exit(1);
     });
     println!(
-        "[model-view] {path}: {} meshes, {} verts, {} tris",
+        "[model-view] {path}: {} meshes, {} verts, {} tris, {} textures, {} brushes",
         model.meshes.len(),
         model.vertex_count(),
-        model.triangle_count()
+        model.triangle_count(),
+        model.textures.len(),
+        model.brushes.len(),
     );
+    for (i, m) in model.meshes.iter().enumerate() {
+        println!("[model-view]   mesh {i}: {} verts, brush {}, texture {:?}", m.positions.len(), m.brush_id, m.texture);
+    }
     match rcce_render::render_model_png(&model, 0.6, 900, 900, &out) {
         Ok(adapter) => println!("[model-view] rendered via {adapter} -> {out}"),
         Err(e) => {
