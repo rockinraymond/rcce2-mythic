@@ -95,5 +95,34 @@ fn main() {
         world.zone.name,
         world.actors.len()
     );
+
+    // Render a top-down snapshot of the live world through the GPU pipeline.
+    let mut markers = vec![rcce_render::Marker {
+        x: world.me_x,
+        z: world.me_z,
+        size: 2.5,
+        color: [0.25, 1.0, 0.4], // me: bright green
+    }];
+    for a in world.actors.values() {
+        markers.push(rcce_render::Marker {
+            x: a.x,
+            z: a.z,
+            size: 2.0,
+            color: if a.is_player {
+                [0.3, 0.6, 1.0] // other players: blue
+            } else {
+                [1.0, 0.7, 0.2] // npcs: orange
+            },
+        });
+    }
+    let out = "rcce_world.png";
+    match rcce_render::render_markers_png(&markers, (world.me_x, world.me_z), 300.0, 900, 900, out) {
+        Ok(adapter) => println!(
+            "[client] rendered world map ({} markers) via {adapter} -> {out}",
+            markers.len()
+        ),
+        Err(e) => eprintln!("[client] render failed: {e}"),
+    }
+
     t.disconnect(outcome.peer);
 }

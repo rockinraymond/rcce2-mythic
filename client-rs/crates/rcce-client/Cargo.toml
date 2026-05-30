@@ -12,6 +12,7 @@ description = "RCCE2 game client (drop-in Client.exe replacement) — state mode
 [dependencies]
 rcce-net = { path = "../rcce-net", default-features = false }
 rcenet-ffi-probe = { path = "../rcenet-ffi-probe" }
+rcce-render = { path = "../rcce-render" }
 
 [lib]
 name = "rcce_client"

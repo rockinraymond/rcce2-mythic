@@ -5,6 +5,9 @@
 //! a GPU adapter. Real offscreen rendering of the world state follows once the
 //! target is confirmed viable.
 
+pub mod render;
+pub use render::{render_markers_png, Marker};
+
 use pollster::block_on;
 
 /// Enumerate the GPU and return a human-readable description of the adapter

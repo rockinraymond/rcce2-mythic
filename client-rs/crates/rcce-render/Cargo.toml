@@ -12,8 +12,8 @@ description = "wgpu renderer for the RCCE2 client. Headless-capable (offscreen â
 [dependencies]
 wgpu = "22"
 pollster = "0.3"
-# PNG export + render deps added when the offscreen renderer lands. (image 0.25.10
-# needs rustc 1.88; we're on 1.85 â€” pin a compatible version or use `png` directly.)
+bytemuck = { version = "1", features = ["derive"] }
+png = "0.17"  # lightweight PNG encoder (1.85-compatible, unlike image 0.25.10)
 
 [[bin]]
 name = "gpu-probe"
