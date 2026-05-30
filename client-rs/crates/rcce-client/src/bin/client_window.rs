@@ -15,10 +15,10 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use winit::application::ApplicationHandler;
-use winit::event::{ElementState, WindowEvent};
+use winit::event::{DeviceEvent, DeviceId, ElementState, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
 use winit::keyboard::{KeyCode, PhysicalKey};
-use winit::window::{Window, WindowId};
+use winit::window::{CursorGrabMode, Window, WindowId};
 
 use rcce_client::net::movement_packet;
 
@@ -131,6 +131,12 @@ struct App {
     keys_wasd: [bool; 4],
     run: bool,
     cam_yaw: f32,
+    /// Vertical look angle (radians, + tilts the camera up over the player).
+    cam_pitch: f32,
+    /// Mouse-look active: cursor grabbed/hidden, mouse motion drives yaw/pitch.
+    /// Toggled with Tab; off by default so the headless/autowalk path and the
+    /// arrow/Q-E discrete turn keep working unchanged.
+    mouse_look: bool,
     last_move: Instant,
     was_moving: bool,
     /// `Some` while the chat line is open (the typed buffer); movement keys are
@@ -168,6 +174,8 @@ impl App {
             keys_wasd: [false; 4],
             run: false,
             cam_yaw: 0.0,
+            cam_pitch: 0.25,
+            mouse_look: false,
             last_move: now,
             was_moving: false,
             chat_input: None,
@@ -488,10 +496,22 @@ impl ApplicationHandler for App {
                         KeyCode::KeyS | KeyCode::ArrowDown => self.keys_wasd[2] = pressed,
                         KeyCode::KeyD => self.keys_wasd[3] = pressed,
                         KeyCode::ShiftLeft | KeyCode::ShiftRight => self.run = pressed,
-                        // Discrete camera turn (WASD move relative to it).
+                        // Discrete camera turn (WASD move relative to it) —
+                        // still available as a fallback when mouse-look is off.
                         KeyCode::ArrowLeft | KeyCode::KeyQ if pressed => self.cam_yaw -= 0.18,
                         KeyCode::ArrowRight | KeyCode::KeyE if pressed => self.cam_yaw += 0.18,
-                        KeyCode::Escape => event_loop.exit(),
+                        // Toggle mouse-look (grab/hide the cursor).
+                        KeyCode::Tab if pressed => {
+                            let on = !self.mouse_look;
+                            self.set_mouse_look(on);
+                        }
+                        KeyCode::Escape => {
+                            if self.mouse_look {
+                                self.set_mouse_look(false);
+                            } else {
+                                event_loop.exit();
+                            }
+                        }
                         _ => {}
                     }
                 }
@@ -505,9 +525,37 @@ impl ApplicationHandler for App {
             _ => {}
         }
     }
+
+    fn device_event(&mut self, _: &ActiveEventLoop, _: DeviceId, event: DeviceEvent) {
+        if !self.mouse_look {
+            return;
+        }
+        if let DeviceEvent::MouseMotion { delta: (dx, dy) } = event {
+            const SENS: f32 = 0.0032;
+            self.cam_yaw += dx as f32 * SENS;
+            // Up-drag looks up; clamp so the camera can't flip past the poles.
+            self.cam_pitch = (self.cam_pitch - dy as f32 * SENS).clamp(-0.35, 1.30);
+        }
+    }
 }
 
 impl App {
+    /// Enable/disable mouse-look: grab + hide the cursor (Locked, falling back to
+    /// Confined) when on; release it when off.
+    fn set_mouse_look(&mut self, on: bool) {
+        self.mouse_look = on;
+        let Some(w) = self.window.as_ref() else { return };
+        if on {
+            if w.set_cursor_grab(CursorGrabMode::Locked).is_err() {
+                let _ = w.set_cursor_grab(CursorGrabMode::Confined);
+            }
+            w.set_cursor_visible(false);
+        } else {
+            let _ = w.set_cursor_grab(CursorGrabMode::None);
+            w.set_cursor_visible(true);
+        }
+    }
+
     fn render(&mut self) {
         let (Some(gfx), Some(view), Some(store)) =
             (self.gfx.as_mut(), self.view.as_mut(), self.store.as_mut())
@@ -599,14 +647,17 @@ impl App {
         // Camera: third-person follow behind the player along cam_yaw (live),
         // or a slow orbit of the zone centre (spectator). `behind = -forward`.
         let (eye, target) = if following {
-            let behind = [sy, cy];
-            let (dist, height) = (12.0, 6.5);
+            // Orbit behind the player: yaw places the camera on the -forward
+            // side, pitch raises it. `dist` is the boom length.
+            let dist = 13.0;
+            let (sp, cp) = self.cam_pitch.sin_cos();
+            let look = [cam_target[0], cam_target[1] + 3.5, cam_target[2]];
             let eye = [
-                cam_target[0] + behind[0] * dist,
-                cam_target[1] + height,
-                cam_target[2] + behind[1] * dist,
+                look[0] + sy * dist * cp,
+                look[1] + dist * sp,
+                look[2] + cy * dist * cp,
             ];
-            (eye, [cam_target[0], cam_target[1] + 3.5, cam_target[2]])
+            (eye, look)
         } else {
             let ang = elapsed * 0.3;
             let r = self.span * 0.75;
