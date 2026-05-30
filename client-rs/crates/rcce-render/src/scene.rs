@@ -103,6 +103,8 @@ pub fn render_scene_png(
 
     // Shared pipeline + per-instance drawables (with ground plane).
     let pipeline = Pipeline::new(&device, color_format);
+    let sky = gpu::SkyPipeline::new(&device, color_format);
+    sky.set_colors(&queue, gpu::sky_zenith(fog_color), fog_color);
     let ubuf = device.create_buffer_init_uniform(&uniforms);
     let bind0 = device.create_bind_group(&wgpu::BindGroupDescriptor {
         label: None,
@@ -152,6 +154,7 @@ pub fn render_scene_png(
             timestamp_writes: None,
             occlusion_query_set: None,
         });
+        sky.draw(&mut rp); // gradient sky behind the world
         rp.set_pipeline(&pipeline.pipeline);
         rp.set_bind_group(0, &bind0, &[]);
         for d in &drawables {

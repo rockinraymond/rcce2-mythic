@@ -125,6 +125,121 @@ struct VsOut {
 }
 "#;
 
+/// Zenith (top-of-sky) colour derived from the horizon/fog colour: bluer and a
+/// touch darker, so the gradient reads as sky. Clamped to [0,1].
+pub fn sky_zenith(horizon: [f32; 3]) -> [f32; 3] {
+    [
+        (horizon[0] * 0.45).clamp(0.0, 1.0),
+        (horizon[1] * 0.6 + 0.05).clamp(0.0, 1.0),
+        (horizon[2] * 0.85 + 0.18).clamp(0.0, 1.0),
+    ]
+}
+
+/// Fullscreen vertical gradient drawn at the far plane (no depth write) so the
+/// world's geometry renders over it — a cheap sky. Owns its own 2-colour
+/// uniform; call [`set_colors`](SkyPipeline::set_colors) then [`draw`].
+pub struct SkyPipeline {
+    pipeline: wgpu::RenderPipeline,
+    buf: wgpu::Buffer,
+    bind: wgpu::BindGroup,
+}
+
+const SKY_SHADER: &str = r#"
+struct SkyU { top: vec4<f32>, bottom: vec4<f32> };
+@group(0) @binding(0) var<uniform> sky: SkyU;
+struct VO { @builtin(position) pos: vec4<f32>, @location(0) t: f32 };
+@vertex fn vs(@builtin(vertex_index) vi: u32) -> VO {
+    var p = array<vec2<f32>, 3>(vec2<f32>(-1.0, -1.0), vec2<f32>(3.0, -1.0), vec2<f32>(-1.0, 3.0));
+    var o: VO;
+    let xy = p[vi];
+    o.pos = vec4<f32>(xy, 1.0, 1.0); // z = 1 → far plane
+    o.t = (xy.y + 1.0) * 0.5;        // 0 at screen bottom, 1 at top
+    return o;
+}
+@fragment fn fs(i: VO) -> @location(0) vec4<f32> {
+    return vec4<f32>(mix(sky.bottom.rgb, sky.top.rgb, clamp(i.t, 0.0, 1.0)), 1.0);
+}
+"#;
+
+impl SkyPipeline {
+    pub fn new(device: &wgpu::Device, color_format: wgpu::TextureFormat) -> SkyPipeline {
+        let bgl = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("sky-u"),
+            entries: &[wgpu::BindGroupLayoutEntry {
+                binding: 0,
+                visibility: wgpu::ShaderStages::FRAGMENT,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Uniform,
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+                count: None,
+            }],
+        });
+        let buf = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("sky"),
+            size: 32, // two vec4
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+        let bind = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: None,
+            layout: &bgl,
+            entries: &[wgpu::BindGroupEntry { binding: 0, resource: buf.as_entire_binding() }],
+        });
+        let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("sky"),
+            source: wgpu::ShaderSource::Wgsl(SKY_SHADER.into()),
+        });
+        let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: None,
+            bind_group_layouts: &[&bgl],
+            push_constant_ranges: &[],
+        });
+        let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("sky"),
+            layout: Some(&layout),
+            vertex: wgpu::VertexState {
+                module: &shader,
+                entry_point: "vs",
+                compilation_options: Default::default(),
+                buffers: &[],
+            },
+            fragment: Some(wgpu::FragmentState {
+                module: &shader,
+                entry_point: "fs",
+                compilation_options: Default::default(),
+                targets: &[Some(color_format.into())],
+            }),
+            primitive: wgpu::PrimitiveState::default(),
+            // Behind everything: never writes depth, always passes so it fills
+            // the cleared frame; geometry (depth Less) then draws on top.
+            depth_stencil: Some(wgpu::DepthStencilState {
+                format: DEPTH_FORMAT,
+                depth_write_enabled: false,
+                depth_compare: wgpu::CompareFunction::Always,
+                stencil: Default::default(),
+                bias: Default::default(),
+            }),
+            multisample: wgpu::MultisampleState::default(),
+            multiview: None,
+            cache: None,
+        });
+        SkyPipeline { pipeline, buf, bind }
+    }
+
+    pub fn set_colors(&self, queue: &wgpu::Queue, top: [f32; 3], bottom: [f32; 3]) {
+        let data: [f32; 8] = [top[0], top[1], top[2], 1.0, bottom[0], bottom[1], bottom[2], 1.0];
+        queue.write_buffer(&self.buf, 0, bytemuck::cast_slice(&data));
+    }
+
+    pub fn draw<'a>(&'a self, rp: &mut wgpu::RenderPass<'a>) {
+        rp.set_pipeline(&self.pipeline);
+        rp.set_bind_group(0, &self.bind, &[]);
+        rp.draw(0..3, 0..1);
+    }
+}
+
 /// Per-mesh normals (model space), computed from faces if absent.
 pub fn mesh_normals(mesh: &B3dMesh) -> Vec<Vec3> {
     let has_n = mesh.normals.len() == mesh.positions.len();
@@ -464,4 +579,28 @@ fn build_instance_drawables(
         }
     }
     (drawables, min, max)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::sky_zenith;
+
+    #[test]
+    fn zenith_is_bluer_and_darker_than_horizon() {
+        // A typical pale-blue horizon/fog colour.
+        let horizon = [0.45, 0.62, 0.82];
+        let z = sky_zenith(horizon);
+        // Bluer: blue channel dominates more than at the horizon.
+        assert!(z[2] > z[0] && z[2] > z[1], "zenith should be blue-dominant: {z:?}");
+        // Darker in red/green than the horizon (gradient brightens toward it).
+        assert!(z[0] < horizon[0] && z[1] < horizon[1], "{z:?} vs {horizon:?}");
+        // Stays in range.
+        assert!(z.iter().all(|c| (0.0..=1.0).contains(c)));
+    }
+
+    #[test]
+    fn zenith_clamps() {
+        let z = sky_zenith([2.0, 2.0, 2.0]);
+        assert!(z.iter().all(|c| *c <= 1.0));
+    }
 }

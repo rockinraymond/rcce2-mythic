@@ -6,11 +6,12 @@
 
 use wgpu::util::DeviceExt;
 
-use crate::gpu::{self, Drawable, Pipeline, TexCache, Uniforms};
+use crate::gpu::{self, Drawable, Pipeline, SkyPipeline, TexCache, Uniforms};
 use crate::scene::SceneInstance;
 
 pub struct WorldView {
     pipeline: Pipeline,
+    sky: SkyPipeline,
     uniform_buf: wgpu::Buffer,
     bind0: wgpu::BindGroup,
     depth: wgpu::TextureView,
@@ -41,6 +42,7 @@ fn make_depth(device: &wgpu::Device, w: u32, h: u32) -> wgpu::TextureView {
 impl WorldView {
     pub fn new(device: &wgpu::Device, color_format: wgpu::TextureFormat, w: u32, h: u32) -> WorldView {
         let pipeline = Pipeline::new(device, color_format);
+        let sky = SkyPipeline::new(device, color_format);
         let uniform_buf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("u"),
             contents: bytemuck::bytes_of(&Uniforms::new(
@@ -58,6 +60,7 @@ impl WorldView {
         });
         WorldView {
             pipeline,
+            sky,
             uniform_buf,
             bind0,
             depth: make_depth(device, w, h),
@@ -125,6 +128,9 @@ impl WorldView {
     ) {
         let u = Uniforms::new(view_proj, eye, fog_color, fog_near, fog_far, ambient, light_dir);
         queue.write_buffer(&self.uniform_buf, 0, bytemuck::bytes_of(&u));
+        // Sky gradient: horizon = fog colour (so the world fades into it),
+        // zenith bluer/darker.
+        self.sky.set_colors(queue, gpu::sky_zenith(fog_color), fog_color);
         let mut enc = device.create_command_encoder(&Default::default());
         {
             let mut rp = enc.begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -148,6 +154,7 @@ impl WorldView {
                 timestamp_writes: None,
                 occlusion_query_set: None,
             });
+            self.sky.draw(&mut rp); // behind the world (far plane, no depth write)
             rp.set_pipeline(&self.pipeline.pipeline);
             rp.set_bind_group(0, &self.bind0, &[]);
             for d in self.statics.iter().chain(self.dynamics.iter()) {
