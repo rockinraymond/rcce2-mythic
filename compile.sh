@@ -13,6 +13,7 @@ BLITZPATH="${ROOTDIR}/compiler/BlitzForge"
 TOOLCHAIN=0
 RCCETOOLS=1
 RCCE=1
+RUSTCLIENT=0
 
 usage() {
   cat <<'EOF'
@@ -23,6 +24,7 @@ Usage: compile.sh [flags]
   -t | --skip-tools     Skip compilation of the RCCE2 tool applications in src/Tools
   -b | --blitz          Compile the BlitzForge toolchain
   -e | --skip-engine    Skip compilation of the RCCE2 engine itself in src
+  -r | --rust           Build the Rust client (client-rs) to bin/ClientRS (needs cargo)
   -h | --help           Show this help
 EOF
 }
@@ -32,6 +34,7 @@ while [[ $# -gt 0 ]]; do
     -b|--blitz) TOOLCHAIN=1 ;;
     -t|--skip-tools) RCCETOOLS=0 ;;
     -e|--skip-engine) RCCE=0 ;;
+    -r|--rust) RUSTCLIENT=1 ;;
     -h|--help) usage; exit 0 ;;
     *) echo "Unknown flag: $1" >&2; usage; exit 1 ;;
   esac
@@ -132,6 +135,19 @@ if [[ "${RCCETOOLS}" -eq 1 ]]; then
   shopt -u nullglob nocaseglob
   if [[ "${tool_count}" -eq 0 ]]; then
     echo "No tools found in ${TOOLSDIR}." >&2
+  fi
+fi
+
+if [[ "${RUSTCLIENT}" -eq 1 ]]; then
+  echo "Compiling RealmCrafter CE Rust client (client-rs)..."
+  if ! command -v cargo >/dev/null 2>&1; then
+    echo "  cargo not found on PATH -- install Rust from https://rustup.rs to build the Rust client. Skipping ClientRS." >&2
+  else
+    mkdir -p "${ROOTDIR}/bin"
+    (cd "${ROOTDIR}/client-rs" && cargo build --release -p rcce-client --bin client-window)
+    cp -f "${ROOTDIR}/client-rs/target/release/client-window${EXE_SUFFIX}" \
+      "${ROOTDIR}/bin/ClientRS${EXE_SUFFIX}"
+    echo "  Built bin/ClientRS${EXE_SUFFIX}"
   fi
 fi
 

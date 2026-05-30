@@ -319,6 +319,39 @@ fn dyn_hash(world: &World, elapsed: f32) -> u64 {
     h.finish()
 }
 
+/// Locate the project `data/` directory so the bin/-placed exe finds its
+/// assets like the Blitz client does. Priority: `RCCE_DATA` env → a `data/`
+/// next to or above the current dir → a `data/` next to or above the exe
+/// (so `bin/ClientRS.exe` resolves `bin/../data`). Falls back to `"data"`.
+fn resolve_data_root() -> String {
+    if let Ok(p) = std::env::var("RCCE_DATA") {
+        if !p.is_empty() {
+            return p;
+        }
+    }
+    let mut roots: Vec<std::path::PathBuf> = Vec::new();
+    if let Ok(cwd) = std::env::current_dir() {
+        roots.push(cwd.clone());
+        roots.push(cwd.join(".."));
+    }
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(dir) = exe.parent() {
+            roots.push(dir.to_path_buf()); // e.g. bin/
+            roots.push(dir.join("..")); // bin/.. = project root
+            if let Some(up) = dir.parent() {
+                roots.push(up.join("..")); // target/release/.. ladders
+            }
+        }
+    }
+    for r in &roots {
+        let cand = r.join("data");
+        if cand.is_dir() {
+            return cand.to_string_lossy().into_owned();
+        }
+    }
+    "data".to_string()
+}
+
 fn load_zone_static(store: &mut AssetStore, view: &mut WorldView, gfx: &Gfx, data_root: &str, zone: &str) -> Option<([f32; 3], f32, f32, rcce_data::AreaEnv)> {
     let path = std::path::Path::new(data_root).join("Areas").join(format!("{zone}.dat"));
     let bytes = std::fs::read(&path).map_err(|e| eprintln!("[client-window] {}: {e}", path.display())).ok()?;
@@ -382,8 +415,8 @@ impl ApplicationHandler for App {
         let (gfx, format) = Gfx::new(window.clone());
         let mut view = WorldView::new(&gfx.device, format, gfx.config.width, gfx.config.height);
 
-        let data_root = std::env::var("RCCE_DATA")
-            .unwrap_or_else(|_| r"C:\Users\dyanr\Desktop\rcce2\data".to_string());
+        let data_root = resolve_data_root();
+        println!("[client-window] data root: {data_root}");
         let mut store = match AssetStore::load(&data_root) {
             Ok(s) => s,
             Err(e) => {
