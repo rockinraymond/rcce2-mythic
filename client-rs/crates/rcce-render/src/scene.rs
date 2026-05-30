@@ -62,10 +62,14 @@ struct VsOut {
     return o;
 }
 @fragment fn fs(in: VsOut) -> @location(0) vec4<f32> {
+    let c = textureSample(tex, samp, in.uv);
+    // Alpha-cutout for keyed foliage atlases (TGA/PNG leaves). Opaque diffuse
+    // textures decode with alpha = 1, so this never clips them.
+    if (c.a < 0.5) { discard; }
+    // Two-sided lighting: foliage/leaf cards are viewed from both faces.
     let N = normalize(in.normal);
     let L = normalize(vec3<f32>(0.4, 0.85, 0.35));
-    let d = max(dot(N, L), 0.0) * 0.7 + 0.4;
-    let c = textureSample(tex, samp, in.uv);
+    let d = max(abs(dot(N, L)), 0.0) * 0.7 + 0.4;
     return vec4<f32>(c.rgb * in.color * d, 1.0);
 }
 "#;

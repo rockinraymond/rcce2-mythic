@@ -25,8 +25,115 @@ pub fn load(path: &Path) -> Option<Image> {
         Some("bmp") => decode_bmp(&bytes),
         Some("png") => decode_png(&bytes),
         Some("jpg") | Some("jpeg") => decode_jpeg(&bytes),
+        Some("tga") => decode_tga(&bytes),
         _ => None,
     }
+}
+
+/// Decode a TGA (true-color, uncompressed type 2 or RLE type 10, 24/32-bit) to
+/// RGBA8. This is the format the foliage/tree/grass atlases use — 32-bit BGRA
+/// with a keyed alpha channel for cutout leaves. Color-mapped and grayscale
+/// TGAs (rare here) return `None`.
+pub fn decode_tga(b: &[u8]) -> Option<Image> {
+    if b.len() < 18 {
+        return None;
+    }
+    let id_len = b[0] as usize;
+    let cmap_type = b[1];
+    let img_type = b[2];
+    let width = u16::from_le_bytes([b[12], b[13]]) as u32;
+    let height = u16::from_le_bytes([b[14], b[15]]) as u32;
+    let bpp = b[16];
+    let desc = b[17];
+
+    if width == 0 || height == 0 || cmap_type != 0 {
+        return None;
+    }
+    if !(bpp == 24 || bpp == 32) {
+        return None;
+    }
+    let bytes_pp = (bpp / 8) as usize;
+    let n = (width as usize) * (height as usize);
+    let mut off = 18 + id_len; // no color map when cmap_type == 0
+    let mut pixels = vec![0u8; n * bytes_pp];
+
+    match img_type {
+        2 => {
+            // Uncompressed true-color.
+            let end = off + n * bytes_pp;
+            if b.len() < end {
+                return None;
+            }
+            pixels.copy_from_slice(&b[off..end]);
+        }
+        10 => {
+            // RLE true-color.
+            let mut i = 0usize;
+            while i < n {
+                if off >= b.len() {
+                    return None;
+                }
+                let packet = b[off];
+                off += 1;
+                let count = (packet & 0x7f) as usize + 1;
+                if packet & 0x80 != 0 {
+                    // Run-length: one pixel repeated `count` times.
+                    if off + bytes_pp > b.len() {
+                        return None;
+                    }
+                    for _ in 0..count {
+                        if i >= n {
+                            break;
+                        }
+                        let d = i * bytes_pp;
+                        pixels[d..d + bytes_pp].copy_from_slice(&b[off..off + bytes_pp]);
+                        i += 1;
+                    }
+                    off += bytes_pp;
+                } else {
+                    // Raw: `count` literal pixels.
+                    if off + count * bytes_pp > b.len() {
+                        return None;
+                    }
+                    for _ in 0..count {
+                        if i >= n {
+                            break;
+                        }
+                        let d = i * bytes_pp;
+                        pixels[d..d + bytes_pp].copy_from_slice(&b[off..off + bytes_pp]);
+                        off += bytes_pp;
+                        i += 1;
+                    }
+                }
+            }
+        }
+        _ => return None,
+    }
+
+    // TGA stores BGR(A); bit 5 of the descriptor set = top-left origin, else
+    // bottom-left (flip vertically to top-down).
+    let top_origin = desc & 0x20 != 0;
+    let mut rgba = vec![0u8; n * 4];
+    for y in 0..height as usize {
+        let src_y = if top_origin {
+            y
+        } else {
+            height as usize - 1 - y
+        };
+        for x in 0..width as usize {
+            let s = (src_y * width as usize + x) * bytes_pp;
+            let d = (y * width as usize + x) * 4;
+            rgba[d] = pixels[s + 2]; // R
+            rgba[d + 1] = pixels[s + 1]; // G
+            rgba[d + 2] = pixels[s]; // B
+            rgba[d + 3] = if bytes_pp == 4 { pixels[s + 3] } else { 255 };
+        }
+    }
+    Some(Image {
+        width,
+        height,
+        rgba,
+    })
 }
 
 /// Decode a JPEG (RGB / grayscale) to RGBA8.
@@ -222,6 +329,46 @@ mod tests {
         assert_eq!(basename(r"C:\Users\X\Desktop\Body.bmp"), "Body.bmp");
         assert_eq!(basename("a/b/stag_1.jpg"), "stag_1.jpg");
         assert_eq!(basename("plain.png"), "plain.png");
+    }
+
+    #[test]
+    fn decode_tiny_32bit_tga() {
+        // 2x1 uncompressed (type 2) 32-bit TGA, bottom-left origin. Stored
+        // BGRA. Pixel0 = red opaque, pixel1 = green with alpha 0 (keyed out).
+        let mut b = vec![0u8; 18 + 2 * 4];
+        b[2] = 2; // uncompressed true-color
+        b[12] = 2; // width = 2
+        b[14] = 1; // height = 1
+        b[16] = 32; // bpp
+        let px = 18;
+        // pixel0 BGRA = (0,0,255,255) -> red
+        b[px + 2] = 255;
+        b[px + 3] = 255;
+        // pixel1 BGRA = (0,255,0,0) -> green, alpha 0
+        b[px + 4 + 1] = 255;
+        b[px + 4 + 3] = 0;
+        let img = decode_tga(&b).expect("decode tga");
+        assert_eq!((img.width, img.height), (2, 1));
+        assert_eq!(&img.rgba[0..4], &[255, 0, 0, 255]); // red opaque
+        assert_eq!(&img.rgba[4..8], &[0, 255, 0, 0]); // green, alpha preserved
+    }
+
+    #[test]
+    fn decode_rle_tga_runs() {
+        // 4x1 RLE (type 10) 24-bit TGA: one RLE packet of 4 identical blue px.
+        let mut b = vec![0u8; 18];
+        b[2] = 10; // RLE true-color
+        b[12] = 4; // width = 4
+        b[14] = 1; // height = 1
+        b[16] = 24; // bpp
+        // RLE packet: 0x80 | (4-1) = 0x83, then one BGR pixel (255,0,0)=blue.
+        b.push(0x83);
+        b.extend_from_slice(&[255, 0, 0]);
+        let img = decode_tga(&b).expect("decode rle tga");
+        assert_eq!((img.width, img.height), (4, 1));
+        for i in 0..4 {
+            assert_eq!(&img.rgba[i * 4..i * 4 + 4], &[0, 0, 255, 255]);
+        }
     }
 
     #[test]
