@@ -1,28 +1,25 @@
 //! Verifies the movement SEND path: client A walks (sends P_StandardUpdate),
 //! client B observes. Two accounts, one process.
 //!
-//! KNOWN BLOCKER — root-caused as far as source allows (re-confirmed live):
-//! the server drops A's movement at `FindActorInstanceFromRNID(M\FromID)`
-//! (handler ServerNet.bb:1797; lookup Actors.bb:263-266 returns Null when
-//! `RNID<1 Or RNID>MaxRNID`, MaxRNID=5000).
+//! SOLVED (was a SERVER bug, not a client bug). This now PASSES once the server
+//! carries the FindActorInstanceFromRNID O(n)-fallback fix (see below).
 //!
-//! Exact mechanism (ServerNet.bb P_StartGame 2149-2179): the server keeps TWO
-//! ids — `\RNID = M\FromID` (the connection id; the gameplay-attribution key,
-//! indexed into `ActorByRNID` ONLY `If M\FromID>0 And <=5000`) and a SEPARATE
-//! `\RuntimeID = AssignRuntimeID(...)` (a small counter, the network id that's
-//! BROADCAST and which our client reads back as "7"). So our "7" is NOT the
-//! attribution key. `M\FromID = RCE_GetMessageConnection() = iSender`, and the
-//! vendored RCEnet wrapper sets `iSender = (int)Event.peer` (a heap POINTER,
-//! always >5000) — which would make the `<=5000` guard fail and `ActorByRNID`
-//! never get set, breaking movement for EVERY client. Since real RealmCrafter
-//! games work, bin/Server.exe's actual RCEnet.dll must NOT return the raw
-//! pointer (likely `incomingPeerID`, 0..4999) — i.e. it differs from the
-//! vendored source. Payload FORMAT is correct (ServerNet.bb:1808-1815).
+//! Root cause, proven by temporarily logging M\FromID server-side: the server
+//! resolves a packet's sender with `FindActorInstanceFromRNID(M\FromID)` where
+//! `M\FromID = RCE_GetMessageConnection() = iSender = (int)Event.peer` — a heap
+//! POINTER (e.g. 269070368), STABLE per connection (a client's StartGame and its
+//! movement carry the SAME value). But the O(1) `ActorByRNID` index requires
+//! `RNID <= MaxRNID(5000)`: FindActorInstanceFromRNID (Actors.bb:265) returns
+//! Null for RNID>5000, and StartGame's `If M\FromID<=MaxRNID` guard
+//! (ServerNet.bb:2156) skips populating ActorByRNID for the pointer. So the
+//! O(1) refactor is incompatible with the DLL's pointer iSender — client
+//! movement was dropped for EVERY client (NPCs still move; they're server
+//! driven). The client's send is a FAITHFUL port of ClientNet.bb:1795-1798
+//! (payload order + UNRELIABLE channel-2).
 //!
-//! To crack it (needs data this autonomous env can't get): capture the real
-//! Client.exe's connect+StartGame+move on UDP 25000 and compare the connection
-//! identity, OR temporarily instrument the server to log M\FromID at StartGame
-//! vs at P_StandardUpdate. Until then the Rust client is a live SPECTATOR.
+//! Fix (server, Actors.bb FindActorInstanceFromRNID): keep O(1) for small ids,
+//! else O(n) scan of the unconditionally-set \RNID field. Result: PASS — B
+//! observes A walk (dX ~79). Alt fix: RCEnet `iSender = peer->incomingPeerID`.
 //!
 //!   cargo run --release -p rcce-client --bin move-test -- [host] [port]
 
@@ -109,10 +106,10 @@ fn main() {
     for _ in 0..40 {
         ax += 1.6;
         let p = movement_packet(ax + 15.0, az, ay, ax, az, true, false);
-        // Reliable + immediate service to flush. Do NOT locally set wa.me_x:
-        // the server echoes the player's own authoritative position back, so
-        // wa.me_x reflects what the server accepted.
-        ta.send(a.peer, pk::STANDARD_UPDATE, &p, true);
+        // Match the real client (ClientNet.bb:1798): P_StandardUpdate is sent
+        // UNRELIABLE (no trailing True → channel 2). Do NOT locally set wa.me_x:
+        // the server echoes the player's own authoritative position back.
+        ta.send(a.peer, pk::STANDARD_UPDATE, &p, false);
         for m in ta.poll() {
             wa.apply(&m);
         }
