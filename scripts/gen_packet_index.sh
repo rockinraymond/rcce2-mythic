@@ -142,9 +142,20 @@ pages is a per-iteration documentation task — see CONTRIBUTING.md.
 HEADER
 
 # Build the table.
+#
+# The per-row lookups MUST NOT use `awk ... exit` to stop at the first
+# match. Under `set -euo pipefail`, `exit` closes awk's stdin pipe while the
+# upstream `echo` may still be writing, so `echo` takes SIGPIPE (status 141);
+# pipefail propagates that to the command substitution and `set -e` then
+# aborts this `while` subshell mid-iteration, truncating "$OUTPUT.new". The
+# failure is intermittent (the race only fires when `echo` hasn't finished
+# writing, i.e. under load) and silently produced a truncated docs/protocol/
+# index.md plus a flaky `--check`. Instead, let awk drain all input and keep
+# only the first match via a guard flag -- mirrors gen_bvm_reference.sh,
+# whose awk has no `exit` and never raced.
 echo "$packets" | while IFS='|' read -r id name; do
-    server_line=$(echo "$server_handlers" | awk -F'|' -v n="$name" '$1 == n { print $2; exit }')
-    client_line=$(echo "$client_handlers" | awk -F'|' -v n="$name" '$1 == n { print $2; exit }')
+    server_line=$(echo "$server_handlers" | awk -F'|' -v n="$name" '$1 == n && !seen { print $2; seen = 1 }')
+    client_line=$(echo "$client_handlers" | awk -F'|' -v n="$name" '$1 == n && !seen { print $2; seen = 1 }')
 
     # Direction
     if [ -n "$server_line" ] && [ -n "$client_line" ]; then
