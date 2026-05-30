@@ -22,3 +22,7 @@ path = "src/lib.rs"
 [[bin]]
 name = "rcce-client"
 path = "src/main.rs"
+
+[[bin]]
+name = "move-test"
+path = "src/bin/move_test.rs"

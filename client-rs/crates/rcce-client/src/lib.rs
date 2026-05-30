@@ -4,4 +4,5 @@
 
 pub mod assets;
 pub mod login;
+pub mod net;
 pub mod world;
