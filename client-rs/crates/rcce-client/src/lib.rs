@@ -8,4 +8,5 @@ pub mod fetch;
 pub mod floaters;
 pub mod login;
 pub mod net;
+pub mod radar;
 pub mod world;

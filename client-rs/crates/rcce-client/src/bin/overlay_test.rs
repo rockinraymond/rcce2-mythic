@@ -117,6 +117,36 @@ fn main() {
         }
     }
 
+    // Minimap/radar mock: player-relative blips around the centre (same
+    // world_to_radar projection the live client uses).
+    {
+        use rcce_client::radar::world_to_radar;
+        let r = 64.0f32;
+        let (cx, cy) = (10.0 + r, 10.0 + r + 120.0);
+        let yaw = 0.4f32;
+        let range = 140.0;
+        overlay.rect(cx - r - 4.0, cy - r - 4.0, (r + 4.0) * 2.0, (r + 4.0) * 2.0, [0.0, 0.0, 0.0, 0.55]);
+        overlay.rect(cx - 1.0, cy - r * 0.5, 2.0, r * 0.5, [0.4, 0.8, 0.4, 0.7]);
+        overlay.rect(cx - 2.0, cy - 2.0, 4.0, 4.0, [0.6, 1.0, 0.6, 1.0]);
+        // (dx, dz, colour): an NPC ahead, a player to the side, a far one clipped.
+        let blips = [
+            (0.0f32, -40.0f32, [0.95, 0.35, 0.35, 1.0]),
+            (60.0, 20.0, [0.4, 0.7, 1.0, 1.0]),
+            (-50.0, -30.0, [1.0, 0.85, 0.2, 1.0]),
+            (500.0, 0.0, [1.0, 1.0, 1.0, 1.0]), // out of range → not drawn
+        ];
+        for (dx, dz, col) in blips {
+            if let Some((ox, oy)) = world_to_radar(dx, dz, yaw, range, r) {
+                overlay.rect(cx + ox - 2.0, cy + oy - 2.0, 4.0, 4.0, col);
+            }
+        }
+        for (dx, dz) in [(10.0f32, 10.0f32), (-20.0, 40.0)] {
+            if let Some((ox, oy)) = world_to_radar(dx, dz, yaw, range, r) {
+                overlay.rect(cx + ox - 1.5, cy + oy - 1.5, 3.0, 3.0, [1.0, 0.85, 0.3, 1.0]);
+            }
+        }
+    }
+
     overlay.render(&device, &queue, &view, w as f32, h as f32);
 
     // Readback → PNG.

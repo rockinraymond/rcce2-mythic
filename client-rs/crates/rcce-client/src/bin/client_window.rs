@@ -829,6 +829,36 @@ impl App {
                     }
                 }
 
+                // Minimap (top-left): forward-up radar of nearby actors + loot.
+                {
+                    let r = 64.0f32;
+                    let (cx, cy) = (10.0 + r, 10.0 + r);
+                    let yaw = self.cam_yaw;
+                    let range = 140.0;
+                    let (mx, mz) = (net.world.me_x, net.world.me_z);
+                    overlay.rect(cx - r - 4.0, cy - r - 4.0, (r + 4.0) * 2.0, (r + 4.0) * 2.0, [0.0, 0.0, 0.0, 0.5]);
+                    // Heading line (forward = up) then the player pip at centre.
+                    overlay.rect(cx - 1.0, cy - r * 0.5, 2.0, r * 0.5, [0.4, 0.8, 0.4, 0.7]);
+                    overlay.rect(cx - 2.0, cy - 2.0, 4.0, 4.0, [0.6, 1.0, 0.6, 1.0]);
+                    for a in net.world.actors.values() {
+                        if let Some((ox, oy)) = rcce_client::radar::world_to_radar(a.x - mx, a.z - mz, yaw, range, r) {
+                            let col = if Some(a.runtime_id) == target_rid {
+                                [1.0, 0.85, 0.2, 1.0]
+                            } else if a.is_player {
+                                [0.4, 0.7, 1.0, 1.0]
+                            } else {
+                                [0.95, 0.35, 0.35, 1.0]
+                            };
+                            overlay.rect(cx + ox - 2.0, cy + oy - 2.0, 4.0, 4.0, col);
+                        }
+                    }
+                    for d in net.world.dropped_items.values() {
+                        if let Some((ox, oy)) = rcce_client::radar::world_to_radar(d.x - mx, d.z - mz, yaw, range, r) {
+                            overlay.rect(cx + ox - 1.5, cy + oy - 1.5, 3.0, 3.0, [1.0, 0.85, 0.3, 1.0]);
+                        }
+                    }
+                }
+
                 // Dropped-item loot markers: a gold pip + name/amount at the
                 // item's world position. "[E]" hint on the nearest in range.
                 if !net.world.dropped_items.is_empty() {
