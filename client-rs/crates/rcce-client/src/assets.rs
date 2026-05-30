@@ -18,6 +18,9 @@ pub struct AssetStore {
     textures: TextureCatalog,
     anims: AnimSetCatalog,
     cache: HashMap<u16, Option<Rc<B3dModel>>>,
+    /// Memoised decoded actor skins, keyed by appearance, so per-frame actor
+    /// rebuilds don't re-read + re-decode the skin files from disk.
+    actor_tex_cache: HashMap<String, Rc<Vec<Option<Image>>>>,
 }
 
 /// The looping frame for a clip at `elapsed` seconds, given the timeline `fps`.
@@ -98,7 +101,26 @@ impl AssetStore {
             textures,
             anims,
             cache: HashMap::new(),
+            actor_tex_cache: HashMap::new(),
         })
+    }
+
+    /// Memoised [`actor_textures`](Self::actor_textures) — decodes the skins for
+    /// a (template, gender, face, body) once and returns a shared handle.
+    pub fn actor_textures_rc(
+        &mut self,
+        template_id: u16,
+        gender: u8,
+        face_sel: u8,
+        body_sel: u8,
+    ) -> Rc<Vec<Option<Image>>> {
+        let key = format!("{template_id}:{gender}:{face_sel}:{body_sel}");
+        if let Some(r) = self.actor_tex_cache.get(&key) {
+            return r.clone();
+        }
+        let v = Rc::new(self.actor_textures(template_id, gender, face_sel, body_sel));
+        self.actor_tex_cache.insert(key, v.clone());
+        v
     }
 
     /// The animation clip for an actor's named state ("Idle", "Walk", "Run",

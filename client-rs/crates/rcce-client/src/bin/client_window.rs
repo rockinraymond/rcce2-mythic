@@ -170,15 +170,17 @@ fn build_actors(
     world: &World,
     elapsed: f32,
     ground_y: f32,
-) -> (Vec<Rc<B3dModel>>, Vec<Vec<Option<Image>>>, Vec<Placement>) {
+) -> (Vec<Rc<B3dModel>>, Vec<Rc<Vec<Option<Image>>>>, Vec<Placement>, Vec<String>) {
     let mut models = Vec::new();
-    let mut textures = Vec::new();
+    let mut textures: Vec<Rc<Vec<Option<Image>>>> = Vec::new();
     let mut place = Vec::new();
+    let mut keys: Vec<String> = Vec::new();
 
     let mut push = |store: &mut AssetStore,
                     models: &mut Vec<Rc<B3dModel>>,
-                    textures: &mut Vec<Vec<Option<Image>>>,
+                    textures: &mut Vec<Rc<Vec<Option<Image>>>>,
                     place: &mut Vec<Placement>,
+                    keys: &mut Vec<String>,
                     tmpl: u16,
                     gender: u8,
                     face: u8,
@@ -209,24 +211,25 @@ fn build_actors(
             anim: src.anim,
         });
         let scale = store.actor_render_scale(tmpl, gender).unwrap_or(0.05);
-        let tex = store.actor_textures(tmpl, gender, face, body);
+        let tex = store.actor_textures_rc(tmpl, gender, face, body);
         let (min, _) = posed.bounds();
         let idx = models.len();
         models.push(posed);
         textures.push(tex);
+        keys.push(format!("{tmpl}:{gender}:{face}:{body}"));
         let trans = [pos[0], ground_y - min[1] * scale, pos[2]];
         place.push((idx, trans, [0.0, yaw.to_radians(), 0.0], color, [scale, scale, scale]));
     };
 
-    push(store, &mut models, &mut textures, &mut place, 0, world.me_gender, world.me_face_tex, world.me_body_tex, world.my_runtime_id, false, false, [world.me_x, world.me_y, world.me_z], world.me_yaw, [0.85, 0.95, 0.85]);
+    push(store, &mut models, &mut textures, &mut place, &mut keys, 0, world.me_gender, world.me_face_tex, world.me_body_tex, world.my_runtime_id, false, false, [world.me_x, world.me_y, world.me_z], world.me_yaw, [0.85, 0.95, 0.85]);
     for a in world.actors.values() {
         let dx = a.dest_x - a.x;
         let dz = a.dest_z - a.z;
         let moving = (dx * dx + dz * dz) > 1.0;
         let color = if a.is_player { [0.85, 0.9, 1.0] } else { [1.0, 1.0, 1.0] };
-        push(store, &mut models, &mut textures, &mut place, a.template_id, a.gender, a.face_tex, a.body_tex, a.runtime_id, moving, a.is_running, [a.x, a.y, a.z], a.yaw, color);
+        push(store, &mut models, &mut textures, &mut place, &mut keys, a.template_id, a.gender, a.face_tex, a.body_tex, a.runtime_id, moving, a.is_running, [a.x, a.y, a.z], a.yaw, color);
     }
-    (models, textures, place)
+    (models, textures, place, keys)
 }
 
 /// Cheap fingerprint of everything that affects the actor drawables: a ~12 Hz
@@ -470,20 +473,20 @@ impl App {
 
             let hash = dyn_hash(&net.world, elapsed);
             if hash != self.last_dyn_hash {
-                let (models, textures, place) =
+                let (models, textures, place, keys) =
                     build_actors(store, &net.world, elapsed, self.ground_y);
                 let instances: Vec<SceneInstance> = place
                     .iter()
                     .map(|&(idx, t, r, color, s)| SceneInstance {
                         model: &models[idx],
-                        textures: &textures[idx],
+                        textures: &textures[idx][..],
                         translation: t,
                         rot: r,
                         scale: s,
                         color,
                     })
                     .collect();
-                view.set_dynamic(&gfx.device, &gfx.queue, &instances);
+                view.set_dynamic(&gfx.device, &gfx.queue, &instances, &keys);
                 self.last_dyn_hash = hash;
             }
             cam_target = [net.world.me_x, net.world.me_y, net.world.me_z];

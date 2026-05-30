@@ -4,6 +4,9 @@
 //! and the real-time window (`world_view::ScenePipeline`) build on these so the
 //! two stay visually identical.
 
+use std::collections::HashMap;
+use std::rc::Rc;
+
 use bytemuck::{Pod, Zeroable};
 use glam::{Mat3, Mat4, Vec3};
 use wgpu::util::DeviceExt;
@@ -11,6 +14,11 @@ use wgpu::util::DeviceExt;
 use rcce_data::{B3dMesh, Image};
 
 use crate::scene::SceneInstance;
+
+/// Cache of uploaded texture bind groups, keyed by a caller-supplied string
+/// (e.g. an actor's appearance). Lets per-frame actor rebuilds reuse the
+/// already-uploaded skin instead of re-uploading every frame.
+pub type TexCache = HashMap<String, Rc<wgpu::BindGroup>>;
 
 pub const COLOR_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
 pub const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
@@ -261,12 +269,92 @@ impl Pipeline {
     }
 }
 
-/// A single uploaded mesh ready to draw.
+/// A single uploaded mesh ready to draw. `tex_bind` is reference-counted so
+/// dynamic rebuilds can share a cached upload.
 pub struct Drawable {
     pub vbuf: wgpu::Buffer,
     pub ibuf: wgpu::Buffer,
     pub n_idx: u32,
-    pub tex_bind: wgpu::BindGroup,
+    pub tex_bind: Rc<wgpu::BindGroup>,
+}
+
+/// Bake one mesh into world-space vertex/index buffers (no texture). The
+/// instance's rotation/scale/translation are applied per vertex.
+fn bake_mesh(
+    device: &wgpu::Device,
+    nrot: Mat3,
+    scale: Vec3,
+    trans: Vec3,
+    color: [f32; 3],
+    mesh: &B3dMesh,
+) -> (wgpu::Buffer, wgpu::Buffer, u32) {
+    let normals = mesh_normals(mesh);
+    let has_uv = mesh.uvs.len() == mesh.positions.len();
+    let verts: Vec<Vertex> = mesh
+        .positions
+        .iter()
+        .enumerate()
+        .map(|(i, p)| {
+            let world = trans + nrot * (Vec3::from(*p) * scale);
+            Vertex {
+                pos: world.into(),
+                normal: (nrot * normals[i]).into(),
+                uv: if has_uv { mesh.uvs[i] } else { [0.0, 0.0] },
+                color,
+            }
+        })
+        .collect();
+    let vbuf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+        label: Some("v"),
+        contents: bytemuck::cast_slice(&verts),
+        usage: wgpu::BufferUsages::VERTEX,
+    });
+    let ibuf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+        label: Some("i"),
+        contents: bytemuck::cast_slice(&mesh.indices),
+        usage: wgpu::BufferUsages::INDEX,
+    });
+    (vbuf, ibuf, mesh.indices.len() as u32)
+}
+
+/// Instance rotation matrix (Y·X·Z) from `rot` radians.
+fn inst_nrot(rot: [f32; 3]) -> Mat3 {
+    Mat3::from_mat4(
+        Mat4::from_rotation_y(rot[1]) * Mat4::from_rotation_x(rot[0]) * Mat4::from_rotation_z(rot[2]),
+    )
+}
+
+/// Build dynamic actor drawables, reusing cached texture binds keyed by
+/// `keys[i]` (one per instance). Geometry (posed verts) is rebuilt every call;
+/// only the texture upload is cached. No ground plane.
+pub fn build_actor_drawables_cached(
+    device: &wgpu::Device,
+    queue: &wgpu::Queue,
+    pipeline: &Pipeline,
+    instances: &[SceneInstance],
+    keys: &[String],
+    cache: &mut TexCache,
+) -> Vec<Drawable> {
+    let mut drawables = Vec::new();
+    for (ii, inst) in instances.iter().enumerate() {
+        let nrot = inst_nrot(inst.rot);
+        let scale = Vec3::from(inst.scale);
+        let trans = Vec3::from(inst.translation);
+        let key = keys.get(ii).map(String::as_str).unwrap_or("");
+        for (mi, mesh) in inst.model.meshes.iter().enumerate() {
+            if mesh.positions.is_empty() || mesh.indices.is_empty() {
+                continue;
+            }
+            let (vbuf, ibuf, n_idx) = bake_mesh(device, nrot, scale, trans, inst.color, mesh);
+            let tex = inst.textures.get(mi).and_then(|t| t.as_ref());
+            let tex_bind = cache
+                .entry(format!("{key}:{mi}"))
+                .or_insert_with(|| Rc::new(pipeline.texture_bind(device, queue, tex)))
+                .clone();
+            drawables.push(Drawable { vbuf, ibuf, n_idx, tex_bind });
+        }
+    }
+    drawables
 }
 
 /// Bake every (instance, mesh) into a world-space [`Drawable`] (positions
@@ -305,21 +393,10 @@ pub fn build_drawables(
             vbuf,
             ibuf,
             n_idx: 6,
-            tex_bind: pipeline.texture_bind(device, queue, None),
+            tex_bind: Rc::new(pipeline.texture_bind(device, queue, None)),
         });
     }
     drawables
-}
-
-/// Like [`build_drawables`] but without the ground plane — for dynamic actors
-/// drawn over an already-grounded static scene.
-pub fn build_actor_drawables(
-    device: &wgpu::Device,
-    queue: &wgpu::Queue,
-    pipeline: &Pipeline,
-    instances: &[SceneInstance],
-) -> Vec<Drawable> {
-    build_instance_drawables(device, queue, pipeline, instances).0
 }
 
 /// Core: bake every (instance, mesh) into a world-space drawable; also returns
@@ -334,10 +411,7 @@ fn build_instance_drawables(
     let (mut min, mut max) = (Vec3::splat(f32::MAX), Vec3::splat(f32::MIN));
 
     for inst in instances {
-        let rot = Mat4::from_rotation_y(inst.rot[1])
-            * Mat4::from_rotation_x(inst.rot[0])
-            * Mat4::from_rotation_z(inst.rot[2]);
-        let nrot = Mat3::from_mat4(rot);
+        let nrot = inst_nrot(inst.rot);
         let scale = Vec3::from(inst.scale);
         let trans = Vec3::from(inst.translation);
         min = min.min(trans);
@@ -346,38 +420,13 @@ fn build_instance_drawables(
             if mesh.positions.is_empty() || mesh.indices.is_empty() {
                 continue;
             }
-            let normals = mesh_normals(mesh);
-            let has_uv = mesh.uvs.len() == mesh.positions.len();
-            let verts: Vec<Vertex> = mesh
-                .positions
-                .iter()
-                .enumerate()
-                .map(|(i, p)| {
-                    let world = trans + nrot * (Vec3::from(*p) * scale);
-                    Vertex {
-                        pos: world.into(),
-                        normal: (nrot * normals[i]).into(),
-                        uv: if has_uv { mesh.uvs[i] } else { [0.0, 0.0] },
-                        color: inst.color,
-                    }
-                })
-                .collect();
-            let vbuf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("v"),
-                contents: bytemuck::cast_slice(&verts),
-                usage: wgpu::BufferUsages::VERTEX,
-            });
-            let ibuf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("i"),
-                contents: bytemuck::cast_slice(&mesh.indices),
-                usage: wgpu::BufferUsages::INDEX,
-            });
+            let (vbuf, ibuf, n_idx) = bake_mesh(device, nrot, scale, trans, inst.color, mesh);
             let tex = inst.textures.get(mi).and_then(|t| t.as_ref());
             drawables.push(Drawable {
                 vbuf,
                 ibuf,
-                n_idx: mesh.indices.len() as u32,
-                tex_bind: pipeline.texture_bind(device, queue, tex),
+                n_idx,
+                tex_bind: Rc::new(pipeline.texture_bind(device, queue, tex)),
             });
         }
     }

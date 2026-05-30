@@ -6,7 +6,7 @@
 
 use wgpu::util::DeviceExt;
 
-use crate::gpu::{self, Drawable, Pipeline, Uniforms};
+use crate::gpu::{self, Drawable, Pipeline, TexCache, Uniforms};
 use crate::scene::SceneInstance;
 
 pub struct WorldView {
@@ -18,6 +18,9 @@ pub struct WorldView {
     statics: Vec<Drawable>,
     /// Per-frame geometry (actors), rebuilt as they move/animate.
     dynamics: Vec<Drawable>,
+    /// Cached actor texture binds (keyed by appearance) so per-frame rebuilds
+    /// reuse the upload instead of re-sending skins to the GPU every frame.
+    tex_cache: TexCache,
 }
 
 fn make_depth(device: &wgpu::Device, w: u32, h: u32) -> wgpu::TextureView {
@@ -58,6 +61,7 @@ impl WorldView {
             depth: make_depth(device, w, h),
             statics: Vec::new(),
             dynamics: Vec::new(),
+            tex_cache: TexCache::new(),
         }
     }
 
@@ -72,14 +76,24 @@ impl WorldView {
         self.statics = gpu::build_drawables(device, queue, &self.pipeline, instances, ground_y);
     }
 
-    /// Replace the dynamic (per-frame) geometry — actors. No ground plane.
+    /// Replace the dynamic (per-frame) geometry — actors. `keys[i]` identifies
+    /// instance `i`'s appearance so its texture upload is cached across frames.
+    /// No ground plane.
     pub fn set_dynamic(
         &mut self,
         device: &wgpu::Device,
         queue: &wgpu::Queue,
         instances: &[SceneInstance],
+        keys: &[String],
     ) {
-        self.dynamics = gpu::build_actor_drawables(device, queue, &self.pipeline, instances);
+        self.dynamics = gpu::build_actor_drawables_cached(
+            device,
+            queue,
+            &self.pipeline,
+            instances,
+            keys,
+            &mut self.tex_cache,
+        );
     }
 
     pub fn drawable_count(&self) -> usize {
