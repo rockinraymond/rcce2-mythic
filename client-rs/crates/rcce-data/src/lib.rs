@@ -7,12 +7,14 @@
 //! land next in this crate.
 
 pub mod actors;
+pub mod area;
 pub mod b3d;
 pub mod catalog;
 pub mod reader;
 pub mod texture;
 
 pub use actors::{ActorCatalog, ActorTemplate};
+pub use area::{AreaScenery, SceneryPlacement};
 pub use b3d::{B3dMesh, B3dModel};
 pub use texture::Image;
 pub use catalog::{MeshCatalog, MeshEntry, ParsedCatalog, TextureCatalog, TextureEntry, CATALOG_SLOTS};
@@ -207,6 +209,57 @@ mod tests {
             resolved
         );
         assert!(resolved > 0, "no actor resolved to a loadable mesh");
+    }
+
+    /// Parse real client area files and sanity-check the scenery list: a sane
+    /// count, and mesh ids that resolve through the mesh catalog to loadable
+    /// `.b3d` files (confirms the 61-byte header offset is correct).
+    #[test]
+    fn parse_real_area_scenery() {
+        let root = repo_root();
+        let Ok(mesh_bytes) = std::fs::read(root.join("data/Game Data/Meshes.dat")) else {
+            eprintln!("skipping: no Meshes.dat");
+            return;
+        };
+        let meshes = MeshCatalog::parse(&mesh_bytes).expect("meshes").value;
+
+        let mut any = false;
+        for zone in ["Plains", "Test Zone", "Northern Shrine"] {
+            let path = root.join(format!("data/Areas/{zone}.dat"));
+            let Ok(bytes) = std::fs::read(&path) else { continue };
+            any = true;
+            let area = area::AreaScenery::parse(&bytes)
+                .unwrap_or_else(|e| panic!("{zone}: {e}"));
+            assert!(
+                area.sceneries.len() < 100_000,
+                "{zone}: implausible scenery count {}",
+                area.sceneries.len()
+            );
+            let mut resolved = 0;
+            for s in &area.sceneries {
+                assert!(s.pos.iter().all(|c| c.is_finite()), "{zone}: non-finite pos");
+                assert!(s.scale.iter().all(|c| c.is_finite()), "{zone}: non-finite scale");
+                if meshes.get(s.mesh_id).is_some() {
+                    resolved += 1;
+                }
+            }
+            eprintln!(
+                "{zone}: {} scenery objects, {resolved} with catalog meshes; first: {:?}",
+                area.sceneries.len(),
+                area.sceneries.first().map(|s| (s.mesh_id, s.pos))
+            );
+            // If there's scenery at all, most should resolve to real meshes.
+            if !area.sceneries.is_empty() {
+                assert!(
+                    resolved * 2 >= area.sceneries.len(),
+                    "{zone}: only {resolved}/{} scenery meshes resolved — header offset likely wrong",
+                    area.sceneries.len()
+                );
+            }
+        }
+        if !any {
+            eprintln!("skipping: no area .dat files present");
+        }
     }
 
     /// Does the Human actor's selected body/face texture resolve through
