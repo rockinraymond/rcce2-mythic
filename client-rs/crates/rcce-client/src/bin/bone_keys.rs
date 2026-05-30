@@ -18,6 +18,33 @@ fn main() {
     let model = B3dModel::parse(&std::fs::read(&path).expect("read")).expect("parse");
     println!("{path}: {} bones", model.bones.len());
 
+    // Skin matrices at frame 1 should be ~identity IF every bone's frame-1 key
+    // equals its bind (then currentWorld == bind_world). Deviation localizes a
+    // compose/sample bug. Also report how many bones' frame-1 key != bind.
+    {
+        const ID: [f32; 16] = [
+            1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0,
+        ];
+        let skin1 = model.skinning_matrices(Some(1.0));
+        let mut worst = (0usize, 0.0f32);
+        for (i, m) in skin1.iter().enumerate() {
+            let dev: f32 = m.iter().zip(ID.iter()).map(|(a, b)| (a - b).abs()).sum();
+            if dev > worst.1 {
+                worst = (i, dev);
+            }
+            if dev > 0.01 {
+                println!(
+                    "  frame1 skin NOT identity: bone {} '{}' dev={:.3}",
+                    i, model.bones[i].name, dev
+                );
+            }
+        }
+        println!(
+            "  worst frame-1 skin deviation: bone {} '{}' dev={:.4}\n",
+            worst.0, model.bones[worst.0].name, worst.1
+        );
+    }
+
     for b in &model.bones {
         if !filt.is_empty() && !b.name.to_ascii_lowercase().contains(&filt) {
             continue;

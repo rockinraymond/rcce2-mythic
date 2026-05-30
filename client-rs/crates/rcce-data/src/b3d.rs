@@ -39,10 +39,18 @@ fn mat_mul(a: &Mat4, b: &Mat4) -> Mat4 {
 }
 
 /// Node local transform `T · R · S` from translation, quaternion `(w,x,y,z)`,
-/// and per-axis scale. (B3D NODE/KEYS store the quaternion scalar-first; this
-/// is the order that makes the bind-pose mesh node hierarchy bake upright.)
+/// and per-axis scale.
+///
+/// **B3D quaternions are CONJUGATED relative to the standard math convention**
+/// — the vector part `(x,y,z)` is negated here before building the rotation.
+/// Without this, the bind pose and frame 1 still look correct (both are
+/// identity tautologies: `bind_world · bind_world⁻¹ = I`, and frame-1 keys ==
+/// the bind local), so the bug is invisible until an animated frame, where the
+/// skinned legs splay grossly. The bind mesh node chain is near-identity, so
+/// conjugation leaves it ≈unchanged; only the real bone rotations are corrected.
 fn trs(t: [f32; 3], q: [f32; 4], s: [f32; 3]) -> Mat4 {
-    let (w, x, y, z) = (q[0], q[1], q[2], q[3]);
+    // Conjugate: B3D stores the rotation as the inverse of the math convention.
+    let (w, x, y, z) = (q[0], -q[1], -q[2], -q[3]);
     // Normalise the quaternion.
     let n = (w * w + x * x + y * y + z * z).sqrt();
     let (w, x, y, z) = if n > 1e-12 {
@@ -755,17 +763,18 @@ mod mat_tests {
 
     #[test]
     fn trs_rotates_then_translates() {
-        // 90deg about Y (quat w=cos45,x=0,y=sin45,z=0) maps +X -> -Z, then
-        // translate by (10,0,0). So (1,0,0) -> (10,0,-1).
+        // trs CONJUGATES the b3d quaternion, so the stored (w=cos45,y=sin45)
+        // [s,0,s,0] becomes a -90deg rotation about Y, mapping +X -> +Z. With
+        // translation (10,0,0): (1,0,0) -> (10,0,+1).
         let s = std::f32::consts::FRAC_1_SQRT_2;
         let m = trs([10.0, 0.0, 0.0], [s, 0.0, s, 0.0], [1.0, 1.0, 1.0]);
         let p = xform_point(&m, [1.0, 0.0, 0.0]);
         assert!((p[0] - 10.0).abs() < 1e-4, "x={}", p[0]);
         assert!(p[1].abs() < 1e-4, "y={}", p[1]);
-        assert!((p[2] + 1.0).abs() < 1e-4, "z={}", p[2]);
+        assert!((p[2] - 1.0).abs() < 1e-4, "z={}", p[2]);
         // Directions ignore translation.
         let d = xform_dir(&m, [1.0, 0.0, 0.0]);
-        assert!((d[2] + 1.0).abs() < 1e-4 && d[0].abs() < 1e-4);
+        assert!((d[2] - 1.0).abs() < 1e-4 && d[0].abs() < 1e-4);
     }
 
     #[test]

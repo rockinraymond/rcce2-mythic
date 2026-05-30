@@ -372,6 +372,33 @@ mod tests {
         }
         assert!(moved > 100, "frame 2 barely deformed the mesh ({moved} verts moved)");
         eprintln!("skinning: bind max_err={max_err:.2e}, frame-2 moved {moved} verts");
+
+        // Regression guard for the conjugate-quaternion bug: a valid animated
+        // pose stays within the body's silhouette — the distortion splayed
+        // limbs far outside it, inflating the bounding box. Frame 10 (mid-Walk)
+        // must not exceed 1.6x the bind extent in any axis.
+        let bbox = |meshes: &[B3dMesh]| {
+            let mut lo = [f32::MAX; 3];
+            let mut hi = [f32::MIN; 3];
+            for m in meshes {
+                for p in &m.positions {
+                    for k in 0..3 {
+                        lo[k] = lo[k].min(p[k]);
+                        hi[k] = hi[k].max(p[k]);
+                    }
+                }
+            }
+            [hi[0] - lo[0], hi[1] - lo[1], hi[2] - lo[2]]
+        };
+        let bind_ext = bbox(&model.meshes);
+        let walk_ext = bbox(&model.posed_meshes(Some(10.0)));
+        for k in 0..3 {
+            assert!(
+                walk_ext[k] <= bind_ext[k] * 1.6 + 1.0,
+                "frame-10 axis {k} extent {} >> bind {} — skinning distortion regressed",
+                walk_ext[k], bind_ext[k]
+            );
+        }
     }
 
     /// Does the Human actor's selected body/face texture resolve through
