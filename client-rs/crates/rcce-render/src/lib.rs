@@ -5,6 +5,7 @@
 //! a GPU adapter. Real offscreen rendering of the world state follows once the
 //! target is confirmed viable.
 
+pub mod font;
 pub mod gpu;
 pub mod overlay;
 pub mod render;

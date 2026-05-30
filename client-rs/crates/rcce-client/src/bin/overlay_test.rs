@@ -68,6 +68,11 @@ fn main() {
     overlay.bar(300.0, 140.0, 80.0, 8.0, 0.55, [0.9, 0.8, 0.1, 1.0]);
     overlay.bar(420.0, 220.0, 80.0, 8.0, 0.2, [0.9, 0.2, 0.2, 1.0]);
     overlay.rect(317.0, 175.0, 6.0, 6.0, [1.0, 1.0, 1.0, 0.9]);
+    // Font verification: render the printable charset.
+    overlay.text_shadow(16.0, 16.0, 2.0, "RCCE2 Rust Client", [1.0, 1.0, 1.0, 1.0]);
+    overlay.text(16.0, 250.0, 2.0, "ABCDEFGHIJKLMNOPQRSTUVWXYZ", [1.0, 1.0, 0.6, 1.0]);
+    overlay.text(16.0, 274.0, 2.0, "abcdefghijklmnopqrstuvwxyz", [0.7, 1.0, 0.7, 1.0]);
+    overlay.text(16.0, 298.0, 2.0, "0123456789 .,:;!?'-/()[]+=", [0.7, 0.8, 1.0, 1.0]);
     overlay.render(&device, &queue, &view, w as f32, h as f32);
 
     // Readback → PNG.

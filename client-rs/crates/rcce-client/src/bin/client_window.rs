@@ -548,9 +548,10 @@ impl App {
             },
         );
 
-        // 2D overlay: actor health bars (projected above heads) + player HUD.
+        // 2D overlay: nameplates + health bars over actors, and a player HUD.
         if let Some(overlay) = self.overlay.as_mut() {
             let (sw, sh) = (gfx.config.width as f32, gfx.config.height as f32);
+            let white = [1.0, 1.0, 1.0, 1.0];
             if let Some(net) = self.net.as_ref() {
                 for a in net.world.actors.values() {
                     if !a.alive {
@@ -567,17 +568,37 @@ impl App {
                         } else {
                             [0.9, 0.3, 0.3, 1.0]
                         };
-                        overlay.bar(px - 20.0, py - 16.0, 40.0, 5.0, frac, col);
+                        overlay.bar(px - 24.0, py - 14.0, 48.0, 5.0, frac, col);
+                        if !a.name.is_empty() {
+                            let tw = rcce_render::font::text_width(&a.name, 1.0);
+                            overlay.text_shadow(px - tw * 0.5, py - 26.0, 1.0, &a.name, white);
+                        }
                     }
                 }
-                // Player HUD: own health bar, bottom-left.
-                let hpf = if net.world.me_health_max > 0 {
-                    net.world.me_health as f32 / net.world.me_health_max as f32
+
+                // Player HUD: zone, HP bar + numbers, fps; chat log above it.
+                let w = &net.world;
+                let hpf = if w.me_health_max > 0 {
+                    w.me_health as f32 / w.me_health_max as f32
                 } else {
                     1.0
                 };
-                overlay.rect(12.0, sh - 40.0, 244.0, 28.0, [0.0, 0.0, 0.0, 0.45]);
-                overlay.bar(20.0, sh - 32.0, 220.0, 12.0, hpf, [0.2, 0.8, 0.25, 1.0]);
+                let fps = self.frames as f32 / elapsed.max(0.001);
+                overlay.rect(10.0, sh - 56.0, 270.0, 48.0, [0.0, 0.0, 0.0, 0.45]);
+                overlay.text_shadow(18.0, sh - 50.0, 2.0, &w.zone.name, white);
+                overlay.bar(18.0, sh - 28.0, 200.0, 12.0, hpf, [0.2, 0.8, 0.25, 1.0]);
+                let hp = format!("{}/{}", w.me_health.max(0), w.me_health_max.max(0));
+                overlay.text(224.0, sh - 28.0, 1.0, &hp, white);
+                overlay.text(sw - 84.0, 10.0, 1.0, &format!("{fps:.0} fps"), [0.8, 1.0, 0.8, 1.0]);
+
+                // Chat log: the last few lines, just above the HUD.
+                let lines = w.chat.len();
+                for (i, line) in w.chat.iter().rev().take(5).enumerate() {
+                    let y = sh - 70.0 - i as f32 * 12.0;
+                    let s: String = line.chars().take(60).collect();
+                    overlay.text_shadow(14.0, y, 1.0, &s, [0.9, 0.9, 0.7, 1.0]);
+                }
+                let _ = lines;
             }
             overlay.render(&gfx.device, &gfx.queue, &tview, sw, sh);
         }

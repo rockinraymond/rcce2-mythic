@@ -105,6 +105,34 @@ impl Overlay {
         self.rects.push((x, y, w, h, color));
     }
 
+    /// Draw `s` as 8×8 bitmap glyphs (one quad per lit pixel) at `scale` px per
+    /// font pixel, top-left at `(x, y)`. Newlines advance a line.
+    pub fn text(&mut self, x: f32, y: f32, scale: f32, s: &str, color: [f32; 4]) {
+        let (mut cx, mut cy) = (x, y);
+        for ch in s.chars() {
+            if ch == '\n' {
+                cx = x;
+                cy += 9.0 * scale;
+                continue;
+            }
+            let g = crate::font::glyph(ch as u8);
+            for (row, bits) in g.iter().enumerate() {
+                for col in 0..8u8 {
+                    if bits & (1 << col) != 0 {
+                        self.rect(cx + col as f32 * scale, cy + row as f32 * scale, scale, scale, color);
+                    }
+                }
+            }
+            cx += 9.0 * scale;
+        }
+    }
+
+    /// `text` with a 1px dark drop-shadow for legibility over the 3D scene.
+    pub fn text_shadow(&mut self, x: f32, y: f32, scale: f32, s: &str, color: [f32; 4]) {
+        self.text(x + scale, y + scale, scale, s, [0.0, 0.0, 0.0, 0.7]);
+        self.text(x, y, scale, s, color);
+    }
+
     /// A `frac`-filled bar: dark background + a coloured foreground (e.g. HP).
     pub fn bar(&mut self, x: f32, y: f32, w: f32, h: f32, frac: f32, color: [f32; 4]) {
         self.rect(x - 1.0, y - 1.0, w + 2.0, h + 2.0, [0.0, 0.0, 0.0, 0.6]);
