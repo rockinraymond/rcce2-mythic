@@ -466,9 +466,18 @@ Next
 		
 			;	Updates phase texture
 
-			If (S\ShowPhases = True) And (TimeH = S\StartH[CurrentSeason]) And (TimeM = S\StartM[CurrentSeason])
+			; Guard Phase_Length > 0: the phase-index calc below does an integer
+			; `Day Mod (8 * S\Phase_Length)` and `/ S\Phase_Length`, and
+			; Phase_Length is read unclamped from the area .dat (Environment.bb)
+			; independently of ShowPhases. A sun with ShowPhases=1 and
+			; Phase_Length=0 (hand-edited / placeholder content) would hit
+			; Mod-by-zero / divide-by-zero, which BlitzForge surfaces as a
+			; "Stack overflow!" crash on the render tick -- the same class the
+			; adjacent PathLength block below already guards. Zero-length phases
+			; simply don't advance.
+			If (S\ShowPhases = True) And (S\Phase_Length > 0) And (TimeH = S\StartH[CurrentSeason]) And (TimeM = S\StartM[CurrentSeason])
 				; Convert day to phase index
-				S\CurrentPhase = Int((Day Mod (8 * S\Phase_Length)) / S\Phase_Length - 0.05) ;8 = number of phases			
+				S\CurrentPhase = Int((Day Mod (8 * S\Phase_Length)) / S\Phase_Length - 0.05) ;8 = number of phases
 
 				Tex = GetTexture(S\TexID[S\CurrentPhase])			
 				If Tex <> 0 Then EntityTexture(S\EN, Tex)
