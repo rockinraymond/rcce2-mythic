@@ -791,7 +791,8 @@ Function UpdateActorInstances()
 					If AI\ShieldEN <> 0 Then EntityAlpha AI\ShieldEN, Alpha#
 					If AI\HatEN <> 0 Then EntityAlpha AI\HatEN, Alpha#
 					Else
-						SafeFreeActorInstance(AI)
+						FreeProjectilesTargeting(AI) ; clear homing projectiles before the actor is freed (death/fade-out path; see Projectiles3D.bb)
+							SafeFreeActorInstance(AI)
 					EndIf 
 				EndIf
 			EndIf
