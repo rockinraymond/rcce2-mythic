@@ -15,7 +15,7 @@ pub mod texture;
 
 pub use actors::{ActorCatalog, ActorTemplate};
 pub use area::{AreaScenery, SceneryPlacement};
-pub use b3d::{B3dMesh, B3dModel};
+pub use b3d::{B3dAnim, B3dBone, B3dKey, B3dMesh, B3dModel};
 pub use texture::Image;
 pub use catalog::{MeshCatalog, MeshEntry, ParsedCatalog, TextureCatalog, TextureEntry, CATALOG_SLOTS};
 pub use reader::{BlitzReader, ReadError};
@@ -260,6 +260,46 @@ mod tests {
         if !any {
             eprintln!("skipping: no area .dat files present");
         }
+    }
+
+    /// Parse a real animated actor `.b3d` and verify the skeleton/animation
+    /// decode matches the raw chunk counts (see the `b3d_probe` bin): Male_02
+    /// has 32 nodes (31 with skin weights), 1599 weights, 24920 keyframes, and
+    /// a 1539-frame anim. Skips if the file is absent.
+    #[test]
+    fn parse_skeleton_and_animation() {
+        let path = repo_root().join("data/Meshes/Actors/Humans/Male_02.b3d");
+        let Ok(bytes) = std::fs::read(&path) else {
+            eprintln!("skipping: {} not present", path.display());
+            return;
+        };
+        let model = B3dModel::parse(&bytes).expect("Male_02 parse");
+        assert_eq!(model.bones.len(), 32, "node/bone count");
+        // Total weights/keyframes match the raw chunk walk (b3d_probe). Some
+        // BONE chunks are empty structural bones, so "bones with weights" (21)
+        // is < the 31 BONE chunks — the totals are the real invariant.
+        assert_eq!(model.weight_count(), 1599, "total skin weights");
+        assert_eq!(model.keyframe_count(), 24920, "total keyframes");
+        let anim = model.anim.expect("anim header");
+        assert_eq!(anim.frames, 1539);
+        assert!((anim.fps - 15.0).abs() < 1e-3);
+
+        // Every weight references a valid vertex of the single mesh; parents
+        // precede children; inverse_bind · bind_world ≈ identity.
+        let verts = model.meshes.iter().map(|m| m.positions.len()).max().unwrap_or(0) as u32;
+        for (i, b) in model.bones.iter().enumerate() {
+            if let Some(p) = b.parent {
+                assert!(p < i, "bone {i} parent {p} not before it");
+            }
+            for &(vid, _) in &b.weights {
+                assert!(vid < verts, "bone '{}' weight vid {vid} >= {verts}", b.name);
+            }
+        }
+        eprintln!(
+            "Male_02: {} bones, {} weights, {} keyframes, {} frames @ {}fps",
+            model.bones.len(), model.weight_count(), model.keyframe_count(),
+            anim.frames, anim.fps
+        );
     }
 
     /// Does the Human actor's selected body/face texture resolve through

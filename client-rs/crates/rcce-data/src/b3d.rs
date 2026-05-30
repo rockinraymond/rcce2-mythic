@@ -88,6 +88,85 @@ fn xform_dir(m: &Mat4, v: [f32; 3]) -> [f32; 3] {
     ]
 }
 
+/// Invert an affine matrix (upper-3×3 invertible + translation). Node matrices
+/// are always affine, so this is exact and cheaper than a full 4×4 inverse.
+/// Returns identity if the 3×3 is singular.
+pub(crate) fn invert_affine(m: &Mat4) -> Mat4 {
+    let a = [
+        m[0], m[1], m[2], //
+        m[4], m[5], m[6], //
+        m[8], m[9], m[10],
+    ];
+    let det = a[0] * (a[4] * a[8] - a[5] * a[7]) - a[1] * (a[3] * a[8] - a[5] * a[6])
+        + a[2] * (a[3] * a[7] - a[4] * a[6]);
+    if det.abs() < 1e-20 {
+        return IDENTITY;
+    }
+    let inv_det = 1.0 / det;
+    // Inverse of the 3×3 (row-major).
+    let i = [
+        (a[4] * a[8] - a[5] * a[7]) * inv_det,
+        (a[2] * a[7] - a[1] * a[8]) * inv_det,
+        (a[1] * a[5] - a[2] * a[4]) * inv_det,
+        (a[5] * a[6] - a[3] * a[8]) * inv_det,
+        (a[0] * a[8] - a[2] * a[6]) * inv_det,
+        (a[2] * a[3] - a[0] * a[5]) * inv_det,
+        (a[3] * a[7] - a[4] * a[6]) * inv_det,
+        (a[1] * a[6] - a[0] * a[7]) * inv_det,
+        (a[0] * a[4] - a[1] * a[3]) * inv_det,
+    ];
+    let t = [m[3], m[7], m[11]];
+    // -inv3x3 · t
+    let nt = [
+        -(i[0] * t[0] + i[1] * t[1] + i[2] * t[2]),
+        -(i[3] * t[0] + i[4] * t[1] + i[5] * t[2]),
+        -(i[6] * t[0] + i[7] * t[1] + i[8] * t[2]),
+    ];
+    [
+        i[0], i[1], i[2], nt[0], //
+        i[3], i[4], i[5], nt[1], //
+        i[6], i[7], i[8], nt[2], //
+        0.0, 0.0, 0.0, 1.0,
+    ]
+}
+
+/// One animation keyframe for a bone (any of position/scale/rotation may be
+/// absent, per the `KEYS` flags). Rotation is a quaternion `(w,x,y,z)`.
+#[derive(Debug, Clone)]
+pub struct B3dKey {
+    pub frame: i32,
+    pub position: Option<[f32; 3]>,
+    pub scale: Option<[f32; 3]>,
+    pub rotation: Option<[f32; 4]>,
+}
+
+/// A skeleton bone/joint: a node in the B3D hierarchy with its bind-pose
+/// transforms, the vertices it skins (by mesh vertex id + weight), and its
+/// animation keyframes.
+#[derive(Debug, Clone)]
+pub struct B3dBone {
+    pub name: String,
+    /// Index of the parent bone in [`B3dModel::bones`], or `None` for a root.
+    pub parent: Option<usize>,
+    /// This node's own local transform (`T·R·S`) in the bind pose.
+    pub local_bind: Mat4,
+    /// Accumulated bind-pose world matrix.
+    pub bind_world: Mat4,
+    /// `bind_world⁻¹` — maps a vertex from model space into this bone's space.
+    pub inverse_bind: Mat4,
+    /// `(vertex_id, weight)` into the (single) mesh's vertex array.
+    pub weights: Vec<(u32, f32)>,
+    /// Per-bone animation keyframes (sorted by frame as stored).
+    pub keys: Vec<B3dKey>,
+}
+
+/// Top-level animation header (`ANIM`).
+#[derive(Debug, Clone, Copy, Default)]
+pub struct B3dAnim {
+    pub frames: i32,
+    pub fps: f32,
+}
+
 /// One mesh's geometry, ready for upload to the GPU.
 #[derive(Debug, Default, Clone)]
 pub struct B3dMesh {
@@ -113,13 +192,12 @@ pub struct B3dModel {
     /// `BRUS` brushes — each brush's texture-slot indices into `textures`
     /// (`-1` = empty slot).
     pub brushes: Vec<Vec<i32>>,
-    /// Every `NODE`'s name and its bind-pose world position (the translation of
-    /// its fully-composed node matrix). Used to find attach points like the
-    /// `"Head"` joint. NB: for **skinned** meshes a bone's world position is the
-    /// skeleton-space joint location, which need not coincide with the deformed
-    /// geometry (vertices bind via inverse-bind matrices) — exact hair/hat
-    /// attachment needs the inverse-bind handling that lands with skinning.
-    pub joints: Vec<(String, [f32; 3])>,
+    /// Skeleton — every `NODE` in hierarchy order (parents before children),
+    /// with bind-pose transforms, skin weights, and animation keyframes. Empty
+    /// for unskinned meshes.
+    pub bones: Vec<B3dBone>,
+    /// Animation header (`ANIM`): total frames + fps. `None` if not animated.
+    pub anim: Option<B3dAnim>,
 }
 
 impl B3dModel {
@@ -127,13 +205,22 @@ impl B3dModel {
         self.meshes.iter().map(|m| m.positions.len()).sum()
     }
 
-    /// Accumulated model-space position of the first node whose name matches
+    /// Bind-pose world position of the first bone/node whose name matches
     /// `name` (case-insensitive), e.g. `"Head"`. `None` if absent.
     pub fn joint_pos(&self, name: &str) -> Option<[f32; 3]> {
-        self.joints
+        self.bones
             .iter()
-            .find(|(n, _)| n.eq_ignore_ascii_case(name))
-            .map(|(_, p)| *p)
+            .find(|b| b.name.eq_ignore_ascii_case(name))
+            .map(|b| [b.bind_world[3], b.bind_world[7], b.bind_world[11]])
+    }
+
+    /// Total skin-weight count across all bones (diagnostic).
+    pub fn weight_count(&self) -> usize {
+        self.bones.iter().map(|b| b.weights.len()).sum()
+    }
+    /// Total keyframe count across all bones (diagnostic).
+    pub fn keyframe_count(&self) -> usize {
+        self.bones.iter().map(|b| b.keys.len()).sum()
     }
     pub fn triangle_count(&self) -> usize {
         self.meshes.iter().map(|m| m.indices.len() / 3).sum()
@@ -217,12 +304,66 @@ fn parse_chunks(
         match &tag {
             b"TEXS" => parse_texs(r, chunk_end, model)?,
             b"BRUS" => parse_brus(r, chunk_end, model)?,
-            b"NODE" => parse_node(r, chunk_end, parent, model)?,
+            b"NODE" => parse_node(r, chunk_end, parent, None, model)?,
+            b"ANIM" => parse_anim(r, model)?,
             _ => {}
         }
         r.seek(chunk_end)?;
     }
     Ok(())
+}
+
+/// `ANIM`: flags(i32) · frames(i32) · fps(f32).
+fn parse_anim(r: &mut BlitzReader, model: &mut B3dModel) -> Result<(), ReadError> {
+    let _flags = r.read_int()?;
+    let frames = r.read_int()?;
+    let fps = r.read_float()?;
+    model.anim = Some(B3dAnim { frames, fps });
+    Ok(())
+}
+
+/// `BONE`: a sequence of `{vertex_id(i32), weight(f32)}` for the bone's node.
+fn parse_bone(r: &mut BlitzReader, end: usize) -> Result<Vec<(u32, f32)>, ReadError> {
+    let mut w = Vec::new();
+    while r.position() + 8 <= end {
+        let vid = r.read_int()? as u32;
+        let weight = r.read_float()?;
+        w.push((vid, weight));
+    }
+    Ok(w)
+}
+
+/// `KEYS`: flags(i32) then per key `frame(i32)` + optional position(3f, flag&1)
+/// + scale(3f, flag&2) + rotation(4f w,x,y,z, flag&4).
+fn parse_keys(r: &mut BlitzReader, end: usize) -> Result<Vec<B3dKey>, ReadError> {
+    let flags = r.read_int()?;
+    let (has_pos, has_scale, has_rot) = (flags & 1 != 0, flags & 2 != 0, flags & 4 != 0);
+    let mut keys = Vec::new();
+    while r.position() + 4 <= end {
+        let frame = r.read_int()?;
+        let position = if has_pos {
+            Some([r.read_float()?, r.read_float()?, r.read_float()?])
+        } else {
+            None
+        };
+        let scale = if has_scale {
+            Some([r.read_float()?, r.read_float()?, r.read_float()?])
+        } else {
+            None
+        };
+        let rotation = if has_rot {
+            Some([r.read_float()?, r.read_float()?, r.read_float()?, r.read_float()?])
+        } else {
+            None
+        };
+        keys.push(B3dKey {
+            frame,
+            position,
+            scale,
+            rotation,
+        });
+    }
+    Ok(keys)
 }
 
 /// `TEXS`: a sequence of textures, each `file(cstr) · flags(i32) · blend(i32) ·
@@ -267,6 +408,7 @@ fn parse_node(
     r: &mut BlitzReader,
     end: usize,
     parent: &Mat4,
+    parent_bone: Option<usize>,
     model: &mut B3dModel,
 ) -> Result<(), ReadError> {
     let name = r.read_cstr(256)?;
@@ -282,12 +424,18 @@ fn parse_node(
     let rz = r.read_float()?;
     let local = trs([px, py, pz], [rw, rx, ry, rz], [sx, sy, sz]);
     let world = mat_mul(parent, &local);
-    if !name.is_empty() {
-        // Joint world position = the matrix's translation column.
-        model
-            .joints
-            .push((name, [world[3], world[7], world[11]]));
-    }
+
+    // Every node is a skeleton joint; weights/keys filled from sub-chunks below.
+    let this_bone = model.bones.len();
+    model.bones.push(B3dBone {
+        name,
+        parent: parent_bone,
+        local_bind: local,
+        bind_world: world,
+        inverse_bind: invert_affine(&world),
+        weights: Vec::new(),
+        keys: Vec::new(),
+    });
 
     while r.position() + 8 <= end {
         let (tag, size) = chunk_header(r)?;
@@ -300,8 +448,17 @@ fn parse_node(
                     }
                 }
             }
-            b"NODE" => parse_node(r, chunk_end, &world, model)?,
-            _ => {} // BONE / KEYS / ANIM — skipped for now
+            b"NODE" => parse_node(r, chunk_end, &world, Some(this_bone), model)?,
+            b"BONE" => {
+                let w = parse_bone(r, chunk_end)?;
+                model.bones[this_bone].weights = w;
+            }
+            b"KEYS" => {
+                let k = parse_keys(r, chunk_end)?;
+                model.bones[this_bone].keys = k;
+            }
+            b"ANIM" => parse_anim(r, model)?,
+            _ => {} // unknown sub-chunk
         }
         r.seek(chunk_end)?;
     }
