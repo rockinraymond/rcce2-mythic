@@ -73,6 +73,21 @@ fn main() {
     overlay.text(16.0, 250.0, 2.0, "ABCDEFGHIJKLMNOPQRSTUVWXYZ", [1.0, 1.0, 0.6, 1.0]);
     overlay.text(16.0, 274.0, 2.0, "abcdefghijklmnopqrstuvwxyz", [0.7, 1.0, 0.7, 1.0]);
     overlay.text(16.0, 298.0, 2.0, "0123456789 .,:;!?'-/()[]+=", [0.7, 0.8, 1.0, 1.0]);
+
+    // Floating damage numbers at different damage-types and ages (alpha + rise
+    // come from the same Floater math the live client uses).
+    let palette: [[f32; 3]; 6] = [
+        [1.0, 0.85, 0.30], [1.0, 0.45, 0.20], [0.50, 0.80, 1.0],
+        [0.70, 1.0, 0.40], [0.85, 0.50, 1.0], [1.0, 0.40, 0.40],
+    ];
+    let samples: [(u16, u8, f32); 4] =
+        [(120, 0, 0.0), (45, 1, 0.4), (310, 2, 0.8), (7, 5, 1.1)];
+    for (i, (dmg, dt, age)) in samples.iter().enumerate() {
+        let fl = rcce_client::floaters::Floater { rid: 0, damage: *dmg, damage_type: *dt, t0: 0.0 };
+        let c = palette[*dt as usize % 6];
+        let base_x = 300.0 + i as f32 * 78.0;
+        overlay.text_shadow(base_x, 190.0 - fl.rise(*age), 1.5, &dmg.to_string(), [c[0], c[1], c[2], fl.alpha(*age)]);
+    }
     overlay.render(&device, &queue, &view, w as f32, h as f32);
 
     // Readback → PNG.

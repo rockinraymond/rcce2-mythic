@@ -144,6 +144,8 @@ struct App {
     chat_input: Option<String>,
     /// Runtime id of the last-attacked actor (for the target highlight).
     target: Option<u16>,
+    /// Floating combat-damage numbers (drained from world.combat_events).
+    floaters: rcce_client::floaters::Floaters,
 }
 
 impl App {
@@ -180,6 +182,7 @@ impl App {
             was_moving: false,
             chat_input: None,
             target: None,
+            floaters: rcce_client::floaters::Floaters::new(),
         }
     }
 }
@@ -188,6 +191,21 @@ impl App {
 /// current frame. Returns owned models/textures (the instances borrow them) and
 /// placement tuples (idx, translation, rot, color, scale).
 type Placement = (usize, [f32; 3], [f32; 3], [f32; 3], [f32; 3]);
+/// Colour a damage number by its damage-type index (defaults to red). The
+/// indices loosely follow the engine's Damage.dat ordering; exact names aren't
+/// loaded yet, so this is a stable palette for visual variety.
+fn damage_color(dtype: u8, alpha: f32) -> [f32; 4] {
+    let [r, g, b] = match dtype {
+        0 => [1.0, 0.85, 0.30], // physical — amber
+        1 => [1.0, 0.45, 0.20], // fire — orange
+        2 => [0.50, 0.80, 1.0], // cold — blue
+        3 => [0.70, 1.0, 0.40], // nature/poison — green
+        4 => [0.85, 0.50, 1.0], // magic — violet
+        _ => [1.0, 0.40, 0.40], // default — red
+    };
+    [r, g, b, alpha]
+}
+
 fn build_actors(
     store: &mut AssetStore,
     world: &World,
@@ -591,6 +609,9 @@ impl App {
                 net.updates += 1;
                 net.world.apply(&m);
             }
+            // Spawn floating damage numbers for any new combat hits, expire old.
+            self.floaters.ingest(&net.world.combat_events, elapsed);
+            self.floaters.tick(elapsed);
             // Send a P_StandardUpdate toward the input direction (unreliable,
             // like ClientNet.bb): the server walks the actor toward Dest and
             // echoes its authoritative position, which on_standard_update
@@ -720,6 +741,23 @@ impl App {
                             let nc = if is_target { col } else { white };
                             overlay.text_shadow(px - tw * 0.5, py - 26.0, 1.0, &a.name, nc);
                         }
+                    }
+                }
+
+                // Floating damage numbers, anchored over their target actor
+                // (or me), rising and fading over their lifetime.
+                for fl in self.floaters.iter() {
+                    let pos = if fl.rid == net.world.my_runtime_id {
+                        Some([net.world.me_x, net.world.me_y, net.world.me_z])
+                    } else {
+                        net.world.actors.get(&fl.rid).map(|a| [a.x, a.y, a.z])
+                    };
+                    let Some(p) = pos else { continue };
+                    if let Some((px, py)) = rcce_render::project(&vp, [p[0], p[1] + 6.5, p[2]], sw, sh) {
+                        let s = fl.damage.to_string();
+                        let col = damage_color(fl.damage_type, fl.alpha(elapsed));
+                        let tw = rcce_render::font::text_width(&s, 1.5);
+                        overlay.text_shadow(px - tw * 0.5, py - 30.0 - fl.rise(elapsed), 1.5, &s, col);
                     }
                 }
 

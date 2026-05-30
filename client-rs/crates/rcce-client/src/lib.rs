@@ -3,6 +3,7 @@
 //! reuse the same `world` + `login` over the same `Transport` seam.
 
 pub mod assets;
+pub mod floaters;
 pub mod login;
 pub mod net;
 pub mod world;
