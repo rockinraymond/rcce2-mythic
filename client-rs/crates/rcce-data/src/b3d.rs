@@ -39,10 +39,11 @@ fn mat_mul(a: &Mat4, b: &Mat4) -> Mat4 {
 }
 
 /// Node local transform `T · R · S` from translation, quaternion `(w,x,y,z)`,
-/// and per-axis scale.
+/// and per-axis scale. (B3D NODE/KEYS store the quaternion scalar-first; this
+/// is the order that makes the bind-pose mesh node hierarchy bake upright.)
 fn trs(t: [f32; 3], q: [f32; 4], s: [f32; 3]) -> Mat4 {
-    // Normalise the quaternion (b3d stores w,x,y,z).
     let (w, x, y, z) = (q[0], q[1], q[2], q[3]);
+    // Normalise the quaternion.
     let n = (w * w + x * x + y * y + z * z).sqrt();
     let (w, x, y, z) = if n > 1e-12 {
         (w / n, x / n, y / n, z / n)
