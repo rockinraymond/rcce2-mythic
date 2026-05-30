@@ -94,6 +94,20 @@ pub struct World {
     pub me_attributes: HashMap<u8, (i16, i16)>,
     /// Recent combat hits (from P_AttackActor).
     pub combat_events: Vec<CombatEvent>,
+    /// Items dropped in the world (P_InventoryUpdate "D"), keyed by the
+    /// server's DroppedItem handle. Removed on pickup ("P"/"R").
+    pub dropped_items: HashMap<u32, DroppedItem>,
+}
+
+/// An item lying on the ground, from `P_InventoryUpdate "D"`.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct DroppedItem {
+    pub handle: u32,
+    pub item_id: u16,
+    pub amount: u16,
+    pub x: f32,
+    pub y: f32,
+    pub z: f32,
 }
 
 impl World {
@@ -111,6 +125,7 @@ impl World {
             pk::ACTOR_DEAD => self.on_actor_dead(&m.data),
             pk::ATTACK_ACTOR => self.on_attack_actor(&m.data),
             pk::NAME_CHANGE => self.on_name_change(&m.data),
+            pk::INVENTORY_UPDATE => self.on_inventory_update(&m.data),
             _ => {}
         }
     }
@@ -377,6 +392,38 @@ impl World {
         }
     }
 
+    /// `P_InventoryUpdate` (ClientNet.bb:1277): a sub-typed family. We track the
+    /// world-loot subset — "D" spawns a dropped item, "P"/"R" remove it. (Per-
+    /// slot inventory edits flow through the P_FetchCharacter sheet panel.)
+    fn on_inventory_update(&mut self, d: &[u8]) {
+        match d.first() {
+            // Item dropped: amount u16, x/y/z f32, handle u32, then the 83-byte
+            // ItemInstance (its id is the first 2 bytes).
+            Some(b'D') => {
+                let mut r = MsgReader::new(&d[1..]);
+                let (Some(amount), Some(x), Some(y), Some(z), Some(handle)) =
+                    (r.u16(), r.f32(), r.f32(), r.f32(), r.u32())
+                else {
+                    return;
+                };
+                let item_id = r.u16().unwrap_or(0xFFFF);
+                if item_id == 0xFFFF {
+                    return; // no-item sentinel
+                }
+                self.dropped_items
+                    .insert(handle, DroppedItem { handle, item_id, amount, x, y, z });
+            }
+            // Gone: "P" (someone else took it) / "R" (I did) both lead with the
+            // 4-byte handle. Drop it from the world either way.
+            Some(b'P') | Some(b'R') => {
+                if let Some(h) = MsgReader::new(&d[1..]).u32() {
+                    self.dropped_items.remove(&h);
+                }
+            }
+            _ => {}
+        }
+    }
+
     /// `P_ChatMessage`: a leading control byte (channel, e.g. 253/254) then text.
     fn on_chat(&mut self, d: &[u8]) {
         let text: String = d
@@ -572,5 +619,34 @@ mod tests {
         ));
         assert_eq!(w.actors[&50].name, "Boss");
         assert_eq!(w.actors[&50].tag, "[Elite]");
+    }
+
+    #[test]
+    fn dropped_item_spawn_and_pickup() {
+        let mut w = World::default();
+        // P_InventoryUpdate "D": amount u16, x/y/z f32, handle u32, then the
+        // 83-byte ItemInstance (id = first u16).
+        let drop = pkt(|p| {
+            p.u8(b'D').u16(3).f32(12.0).f32(0.0).f32(34.0).u32(777);
+            p.u16(42); // ItemInstance id
+            p.raw(&[0u8; 81]); // rest of the 83-byte ItemInstance
+        });
+        w.apply(&msg(pk::INVENTORY_UPDATE, drop));
+        assert_eq!(w.dropped_items.len(), 1);
+        let di = w.dropped_items[&777];
+        assert_eq!((di.item_id, di.amount), (42, 3));
+        assert!((di.x - 12.0).abs() < 0.01 && (di.z - 34.0).abs() < 0.01);
+
+        // "P" (someone else grabbed it) removes it by handle.
+        w.apply(&msg(pk::INVENTORY_UPDATE, pkt(|p| { p.u8(b'P').u32(777); })));
+        assert!(w.dropped_items.is_empty());
+
+        // A no-item-sentinel drop is ignored.
+        let bad = pkt(|p| {
+            p.u8(b'D').u16(1).f32(0.0).f32(0.0).f32(0.0).u32(9);
+            p.u16(0xFFFF).raw(&[0u8; 81]);
+        });
+        w.apply(&msg(pk::INVENTORY_UPDATE, bad));
+        assert!(w.dropped_items.is_empty());
     }
 }

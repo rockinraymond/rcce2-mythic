@@ -26,3 +26,13 @@ pub fn movement_packet(
         .u8(walking_backward as u8);
     w.into_bytes()
 }
+
+/// Build a `P_InventoryUpdate` pickup request (`ServerNet.bb:1611`): `"P"` +
+/// DroppedItem handle (u32) + target inventory slot (u8). The server validates
+/// same-area + distance + slot, then replies `"R"` to the picker and `"P"` to
+/// everyone else. Sent reliable.
+pub fn pickup_packet(handle: u32, slot: u8) -> Vec<u8> {
+    let mut w = MsgWriter::new();
+    w.u8(b'P').u32(handle).u8(slot);
+    w.into_bytes()
+}

@@ -537,6 +537,34 @@ impl ApplicationHandler for App {
                                 }
                             }
                         }
+                        // Pick up the nearest dropped item within range.
+                        KeyCode::KeyE if pressed => {
+                            let occupied: std::collections::HashSet<u8> = self
+                                .sheet
+                                .as_ref()
+                                .map(|s| s.inventory.iter().map(|i| i.slot).collect())
+                                .unwrap_or_default();
+                            let slot = (14u8..=45).find(|s| !occupied.contains(s)).unwrap_or(14);
+                            if let Some(net) = self.net.as_mut() {
+                                let (mx, mz) = (net.world.me_x, net.world.me_z);
+                                let nearest = net
+                                    .world
+                                    .dropped_items
+                                    .values()
+                                    .map(|d| (d.handle, (d.x - mx).powi(2) + (d.z - mz).powi(2)))
+                                    .filter(|(_, d2)| *d2 < 60.0 * 60.0)
+                                    .min_by(|a, b| a.1.total_cmp(&b.1))
+                                    .map(|(h, _)| h);
+                                if let Some(h) = nearest {
+                                    net.transport.send(
+                                        net.peer,
+                                        rcce_net::packet_id::INVENTORY_UPDATE,
+                                        &rcce_client::net::pickup_packet(h, slot),
+                                        true,
+                                    );
+                                }
+                            }
+                        }
                         KeyCode::KeyW | KeyCode::ArrowUp => self.keys_wasd[0] = pressed,
                         KeyCode::KeyA => self.keys_wasd[1] = pressed,
                         KeyCode::KeyS | KeyCode::ArrowDown => self.keys_wasd[2] = pressed,
@@ -798,6 +826,30 @@ impl App {
                         let col = damage_color(fl.damage_type, fl.alpha(elapsed));
                         let tw = rcce_render::font::text_width(&s, 1.5);
                         overlay.text_shadow(px - tw * 0.5, py - 30.0 - fl.rise(elapsed), 1.5, &s, col);
+                    }
+                }
+
+                // Dropped-item loot markers: a gold pip + name/amount at the
+                // item's world position. "[E]" hint on the nearest in range.
+                if !net.world.dropped_items.is_empty() {
+                    let (mx, mz) = (net.world.me_x, net.world.me_z);
+                    let nearest = net
+                        .world
+                        .dropped_items
+                        .values()
+                        .map(|d| (d.handle, (d.x - mx).powi(2) + (d.z - mz).powi(2)))
+                        .min_by(|a, b| a.1.total_cmp(&b.1));
+                    let gold = [1.0, 0.85, 0.3, 1.0];
+                    for d in net.world.dropped_items.values() {
+                        if let Some((px, py)) = rcce_render::project(&vp, [d.x, d.y + 1.2, d.z], sw, sh) {
+                            overlay.rect(px - 3.0, py - 3.0, 6.0, 6.0, gold);
+                            let name = store.item_name(d.item_id);
+                            let label = if d.amount > 1 { format!("{name} x{}", d.amount) } else { name };
+                            let in_range = nearest.map(|(h, d2)| h == d.handle && d2 < 60.0 * 60.0).unwrap_or(false);
+                            let label = if in_range { format!("{label}  [E]") } else { label };
+                            let tw = rcce_render::font::text_width(&label, 1.0);
+                            overlay.text_shadow(px - tw * 0.5, py - 16.0, 1.0, &label, gold);
+                        }
                     }
                 }
 
