@@ -24,8 +24,47 @@ pub fn load(path: &Path) -> Option<Image> {
     {
         Some("bmp") => decode_bmp(&bytes),
         Some("png") => decode_png(&bytes),
+        Some("jpg") | Some("jpeg") => decode_jpeg(&bytes),
         _ => None,
     }
+}
+
+/// Decode a JPEG (RGB / grayscale) to RGBA8.
+pub fn decode_jpeg(b: &[u8]) -> Option<Image> {
+    let mut decoder = jpeg_decoder::Decoder::new(b);
+    let pixels = decoder.decode().ok()?;
+    let info = decoder.info()?;
+    let (w, h) = (info.width as u32, info.height as u32);
+    let n = (w as usize) * (h as usize);
+    let rgba = match info.pixel_format {
+        jpeg_decoder::PixelFormat::RGB24 if pixels.len() >= n * 3 => {
+            let mut out = vec![0u8; n * 4];
+            for i in 0..n {
+                out[i * 4] = pixels[i * 3];
+                out[i * 4 + 1] = pixels[i * 3 + 1];
+                out[i * 4 + 2] = pixels[i * 3 + 2];
+                out[i * 4 + 3] = 255;
+            }
+            out
+        }
+        jpeg_decoder::PixelFormat::L8 if pixels.len() >= n => {
+            let mut out = vec![0u8; n * 4];
+            for i in 0..n {
+                let g = pixels[i];
+                out[i * 4] = g;
+                out[i * 4 + 1] = g;
+                out[i * 4 + 2] = g;
+                out[i * 4 + 3] = 255;
+            }
+            out
+        }
+        _ => return None,
+    };
+    Some(Image {
+        width: w,
+        height: h,
+        rgba,
+    })
 }
 
 /// Decode an uncompressed 24/32-bit BMP (`BITMAPINFOHEADER`) to RGBA8.
