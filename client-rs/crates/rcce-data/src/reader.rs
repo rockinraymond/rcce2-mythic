@@ -122,6 +122,30 @@ impl<'a> BlitzReader<'a> {
         Ok(f32::from_le_bytes([b[0], b[1], b[2], b[3]]))
     }
 
+    /// A 4-byte ASCII chunk tag (e.g. `BB3D`, `MESH`), not length-prefixed.
+    pub fn read_tag(&mut self) -> Result<[u8; 4], ReadError> {
+        let b = self.take(4)?;
+        Ok([b[0], b[1], b[2], b[3]])
+    }
+
+    /// A NUL-terminated string (B3D format uses these, unlike the length-prefixed
+    /// `.dat` strings). Bytes are decoded lossily as UTF-8. `max` bounds a
+    /// corrupt/unterminated string.
+    pub fn read_cstr(&mut self, max: usize) -> Result<String, ReadError> {
+        let mut bytes = Vec::new();
+        loop {
+            let b = self.read_byte()?;
+            if b == 0 {
+                break;
+            }
+            bytes.push(b);
+            if bytes.len() >= max {
+                break;
+            }
+        }
+        Ok(String::from_utf8_lossy(&bytes).into_owned())
+    }
+
     /// Length-prefixed string: 4-byte LE int length, then that many bytes.
     ///
     /// Matches `MediaReadFilename$` (`Media.bb:23`): a negative or

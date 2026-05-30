@@ -6,9 +6,11 @@
 //! indexed media catalogs; B3D meshes, area `.dat`, and `Accounts.dat` saves
 //! land next in this crate.
 
+pub mod b3d;
 pub mod catalog;
 pub mod reader;
 
+pub use b3d::{B3dMesh, B3dModel};
 pub use catalog::{MeshCatalog, MeshEntry, ParsedCatalog, CATALOG_SLOTS};
 pub use reader::{BlitzReader, ReadError};
 
@@ -112,5 +114,47 @@ mod tests {
             parsed.skipped.len(),
             cat.entries.first()
         );
+    }
+
+    /// Parse real `.b3d` models shipped in `data/Meshes/` and sanity-check the
+    /// geometry. Skips gracefully if the data tree isn't present.
+    #[test]
+    fn parse_real_b3d_models() {
+        let candidates = [
+            "data/Meshes/Actors/Animals/rat.b3d",
+            "data/Meshes/Actors/Animals/stag.b3d",
+            "data/Meshes/Actors/Humans/Male_02.b3d",
+        ];
+        let root = repo_root();
+        let mut parsed_any = false;
+        for rel in candidates {
+            let path = root.join(rel);
+            let Ok(bytes) = std::fs::read(&path) else {
+                continue;
+            };
+            parsed_any = true;
+            let model = B3dModel::parse(&bytes)
+                .unwrap_or_else(|e| panic!("{rel}: parse failed: {e}"));
+            let vtx = model.vertex_count();
+            let tris = model.triangle_count();
+            assert!(!model.meshes.is_empty(), "{rel}: no meshes");
+            assert!(vtx > 0, "{rel}: no vertices");
+            assert!(tris > 0, "{rel}: no triangles");
+            // Every index must reference a real vertex within its mesh, and
+            // positions must be finite.
+            for m in &model.meshes {
+                for p in &m.positions {
+                    assert!(p.iter().all(|c| c.is_finite()), "{rel}: non-finite vertex");
+                }
+                let n = m.positions.len() as u32;
+                for &i in &m.indices {
+                    assert!(i < n, "{rel}: index {i} out of range (verts {n})");
+                }
+            }
+            eprintln!("{rel}: {} meshes, {vtx} verts, {tris} tris", model.meshes.len());
+        }
+        if !parsed_any {
+            eprintln!("skipping: no .b3d files present under data/Meshes/");
+        }
     }
 }
