@@ -262,8 +262,20 @@ Dim FactionDefaultRatings(99, 99)
 ; that want those use FindActorInstanceFromName instead).
 Function FindActorInstanceFromRNID.ActorInstance(RNID)
 
-	If RNID < 1 Or RNID > MaxRNID Then Return Null
-	Return ActorByRNID(RNID)
+	If RNID < 1 Then Return Null
+	; Small connection ids resolve through the O(1) ActorByRNID index.
+	If RNID <= MaxRNID Then Return ActorByRNID(RNID)
+	; RCEnet's RCE_GetMessageConnection returns iSender = (int)Event.peer — a
+	; heap POINTER (> MaxRNID) — so M\FromID (and the \RNID set from it at
+	; StartGame) overflows the O(1) index and the <=MaxRNID guard skips the
+	; ActorByRNID population. The pointer is stable per connection, so fall
+	; back to an O(n) scan of the unconditionally-set \RNID field. Without
+	; this every client P_StandardUpdate / gameplay packet that resolves the
+	; sender via FindActorInstanceFromRNID is silently dropped.
+	For A.ActorInstance = Each ActorInstance
+		If A\RNID = RNID Then Return A
+	Next
+	Return Null
 
 End Function
 
