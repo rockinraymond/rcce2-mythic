@@ -258,3 +258,65 @@ Test testScriptInitiatedNonAllowlistedStaysNonPriv()
 	MockAdd("marriage")
 	Assert(MockEffectivePriv%("user_script", 0, 12345) = 0)
 End Test
+
+; ====================================================================
+; hSI lifecycle (PR fixing the stale-hSI elevation regression).
+;
+; The elevation gate above keys "engine-initiated" off hSI = 0. Its
+; correctness depends on hSI ACTUALLY being 0 when no script is running.
+; UpdateScripts sets hSI = Handle(S) for each invoked script (BVM_Invoke)
+; but, before the fix, never reset it after the invoke loop -- so hSI
+; lingered as the last (often freed) script's handle between ticks. The
+; main loop runs RCE_Update() (engine-initiated ThreadScript for chat /
+; spell / right-click / NPC-init) BEFORE the next UpdateScripts(), so
+; after the first script ever ran, every engine-initiated allowlisted
+; spawn saw hSI <> 0, was misclassified as script-initiated, and did NOT
+; elevate -- the #329 allowlist was silently inert. The fix resets hSI = 0
+; at the end of UpdateScripts's invoke loop. These tests model the tick
+; lifecycle to pin both the bug and the fix.
+; ====================================================================
+
+Global LifecycleHSI% = 0
+
+; Models UpdateScripts's invoke loop WITH the fix: hSI is set per invoked
+; script, then reset to 0 once the loop exits (no script running after).
+Function TickInvokeLoopFixed(ScriptHandle%)
+	LifecycleHSI = ScriptHandle   ; hSI = Handle(S) at the BVM_Invoke call
+	LifecycleHSI = 0              ; the fix: reset after the invoke loop
+End Function
+
+; Models the pre-fix loop: hSI set, never reset -> lingers stale.
+Function TickInvokeLoopBuggy(ScriptHandle%)
+	LifecycleHSI = ScriptHandle
+End Function
+
+Test testEngineSpawnAfterScriptRanStillElevatesWithReset()
+	; A script ran this tick (hSI got set); the fix resets it. The next
+	; engine-initiated allowlisted spawn reads hSI = 0 and elevates.
+	MockReset()
+	MockAdd("marriage")
+	TickInvokeLoopFixed(98765)
+	Assert(LifecycleHSI = 0)
+	Assert(MockEffectivePriv%("marriage", 0, LifecycleHSI) = 1)
+End Test
+
+Test testWithoutResetStaleHSIDefeatsElevation()
+	; Demonstrates the regression the reset closes: without the reset, hSI
+	; lingers nonzero, so the engine-initiated allowlisted spawn is
+	; misclassified as script-initiated and silently does NOT elevate.
+	MockReset()
+	MockAdd("marriage")
+	TickInvokeLoopBuggy(98765)
+	Assert(LifecycleHSI = 98765)
+	Assert(MockEffectivePriv%("marriage", 0, LifecycleHSI) = 0)
+End Test
+
+Test testStaleHSIStillBlocksGenuineScriptInitiatedBypass()
+	; The reset must not weaken the BVM_THREADEXECUTE protection: a spawn
+	; genuinely initiated from inside a running script (hSI set to the live
+	; script's handle during the invoke loop) must still NOT elevate.
+	MockReset()
+	MockAdd("In-game Commands")
+	LifecycleHSI = 55555   ; a live script is mid-invoke
+	Assert(MockEffectivePriv%("In-game Commands", 0, LifecycleHSI) = 0)
+End Test
