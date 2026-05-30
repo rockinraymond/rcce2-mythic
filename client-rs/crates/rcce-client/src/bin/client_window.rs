@@ -148,6 +148,8 @@ struct App {
     floaters: rcce_client::floaters::Floaters,
     /// Audio output (zone music). `None` when there's no audio device.
     audio: Option<rcce_client::audio::Audio>,
+    /// Character sheet (gold/level/inventory/spells) from login's P_FetchCharacter.
+    sheet: Option<rcce_client::fetch::CharacterSheet>,
 }
 
 impl App {
@@ -186,6 +188,7 @@ impl App {
             target: None,
             floaters: rcce_client::floaters::Floaters::new(),
             audio: rcce_client::audio::Audio::new(),
+            sheet: None,
         }
     }
 }
@@ -415,6 +418,13 @@ impl ApplicationHandler for App {
                     world.apply(m);
                 }
                 println!("[client-window] ✓ in world '{}', RuntimeID={}", world.zone.name, outcome.runtime_id);
+                if let Some(s) = &outcome.sheet {
+                    println!(
+                        "[client-window] sheet: gold={} level={} {} item(s) {} spell(s)",
+                        s.gold, s.level, s.inventory.len(), s.spells.len()
+                    );
+                }
+                self.sheet = outcome.sheet;
                 self.net = Some(Net { transport, world, peer: outcome.peer, updates: 0 });
             }
             Err(e) => eprintln!("[client-window] login failed ({e}); zone-only spectator view"),
@@ -783,6 +793,12 @@ impl App {
                 let hp = format!("{}/{}", w.me_health.max(0), w.me_health_max.max(0));
                 overlay.text(224.0, sh - 28.0, 1.0, &hp, white);
                 overlay.text(sw - 84.0, 10.0, 1.0, &format!("{fps:.0} fps"), [0.8, 1.0, 0.8, 1.0]);
+                // Character sheet readout (level + gold) from P_FetchCharacter.
+                if let Some(sheet) = &self.sheet {
+                    let line = format!("Lv {}   {}g", sheet.level, sheet.gold);
+                    let tw = rcce_render::font::text_width(&line, 1.0);
+                    overlay.text_shadow(sw - tw - 12.0, 24.0, 1.0, &line, [1.0, 0.88, 0.4, 1.0]);
+                }
 
                 // Chat log: the last few lines, just above the HUD.
                 let chat_base = if self.chat_input.is_some() { 84.0 } else { 70.0 };

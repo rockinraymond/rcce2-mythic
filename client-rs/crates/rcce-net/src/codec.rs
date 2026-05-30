@@ -99,9 +99,20 @@ impl<'a> MsgReader<'a> {
         self.take(4)
             .map(|b| f32::from_le_bytes([b[0], b[1], b[2], b[3]]))
     }
+    /// Read `n` raw bytes, advancing the cursor. `None` if fewer remain.
+    pub fn bytes(&mut self, n: usize) -> Option<&'a [u8]> {
+        self.take(n)
+    }
     /// 1-byte-length-prefixed string (lossy UTF-8).
     pub fn str8(&mut self) -> Option<String> {
         let n = self.u8()? as usize;
+        let b = self.take(n)?;
+        Some(String::from_utf8_lossy(b).into_owned())
+    }
+    /// 2-byte-(LE)-length-prefixed string (lossy UTF-8). Used by the
+    /// `P_FetchCharacter` spell/quest blocks (`RCE_StrFromInt$(Len, 2)`).
+    pub fn str16(&mut self) -> Option<String> {
+        let n = self.u16()? as usize;
         let b = self.take(n)?;
         Some(String::from_utf8_lossy(b).into_owned())
     }

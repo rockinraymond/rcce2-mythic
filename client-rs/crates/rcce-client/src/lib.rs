@@ -4,6 +4,7 @@
 
 pub mod assets;
 pub mod audio;
+pub mod fetch;
 pub mod floaters;
 pub mod login;
 pub mod net;

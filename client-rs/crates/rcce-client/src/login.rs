@@ -11,6 +11,8 @@ use rcce_net::auth::{encrypt_email, md5_hex};
 use rcce_net::codec::{MsgReader, MsgWriter};
 use rcce_net::{packet_id as pk, RecvMessage, Transport};
 
+use crate::fetch::CharacterSheet;
+
 pub struct Credentials {
     pub username: String,
     pub password: String,
@@ -24,6 +26,41 @@ pub struct LoginOutcome {
     pub peer: i32,
     /// World packets received during the StartGame wait (apply these first).
     pub world_packets: Vec<RecvMessage>,
+    /// Character sheet (stats/inventory/spells) from `P_FetchCharacter`, if the
+    /// fetch on connection #1 succeeded. `None` if the server didn't answer.
+    pub sheet: Option<CharacterSheet>,
+}
+
+/// Request + collect the `P_FetchCharacter` stream on connection #1 for
+/// character `index`. Non-fatal: returns `None` if the server doesn't answer in
+/// time (e.g. an older build), so login proceeds regardless.
+fn fetch_character<T: Transport>(
+    t: &mut T,
+    peer: i32,
+    user: &str,
+    md5: &str,
+    index: u8,
+) -> Option<CharacterSheet> {
+    let mut w = MsgWriter::new();
+    w.str8(user).str8(md5).u8(index);
+    t.send(peer, pk::FETCH_CHARACTER, w.as_slice(), true);
+
+    let mut sheet = CharacterSheet::default();
+    let deadline = Instant::now() + Duration::from_secs(3);
+    while Instant::now() < deadline && !sheet.done {
+        for m in t.poll() {
+            if m.msg_type == pk::FETCH_CHARACTER {
+                sheet.apply_packet(&m.data);
+            }
+        }
+        sleep(Duration::from_millis(15));
+    }
+    // Only surface a sheet we actually received data for.
+    if sheet.done || sheet.level > 0 || !sheet.inventory.is_empty() || !sheet.spells.is_empty() {
+        Some(sheet)
+    } else {
+        None
+    }
 }
 
 fn pump<T: Transport>(t: &mut T, ms: u64) -> Vec<RecvMessage> {
@@ -128,6 +165,10 @@ pub fn login<T: Transport>(
         }
     }
 
+    // Fetch the character sheet (stats/inventory/spells) while conn #1 is still
+    // open. Non-fatal — the world is entered regardless.
+    let sheet = fetch_character(t, peer, &c.username, &md5, 0);
+
     t.disconnect(peer);
     sleep(Duration::from_millis(300));
 
@@ -164,5 +205,6 @@ pub fn login<T: Transport>(
         runtime_id,
         peer: peer2,
         world_packets,
+        sheet,
     })
 }
