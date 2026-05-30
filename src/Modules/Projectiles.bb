@@ -5,7 +5,7 @@ Type Projectile
 	Field MeshID
 	Field Emitter1$, Emitter1TexID
 	Field Emitter2$, Emitter2TexID
-	Field Homing, HitChance
+	Field Homing, DamageDie
 	Field Attribute$, Skill$
 	Field Damage, DamageType, SaveType
 	Field Speed
@@ -46,7 +46,7 @@ Function LoadProjectiles(Filename$)
 			P\Emitter1TexID = ReadShort(F)
 			P\Emitter2TexID = ReadShort(F)
 			P\Homing = ReadByte(F)
-			P\HitChance = ReadByte(F)
+			P\DamageDie = ReadByte(F)
 			P\Attribute$ = ReadString$(F)
 			P\Skill$ = ReadString$(F)
 			P\Damage = ReadShort(F)
@@ -77,7 +77,7 @@ Function SaveProjectiles(Filename$)
 			WriteShort F, P\Emitter1TexID
 			WriteShort F, P\Emitter2TexID
 			WriteByte F, P\Homing
-			WriteByte F, P\HitChance
+			WriteByte F, P\DamageDie
 			WriteString F, P\Attribute$
 			WriteString F, P\Skill$
 			WriteShort F, P\Damage

@@ -700,9 +700,9 @@ For C.RP_EmitterConfig = Each RP_EmitterConfig
 	Item = FUI_ComboBoxItem(CProjEmitter2, C\Name$) : FUI_SendMessage(Item, M_SETDATA, Handle(C))
 Next
 Global BProjHoming = FUI_CheckBox(G, 10, 180, "Projectile homes in on target")
-FUI_Label(G, 10, 202, "Chance to hit:")
-Global SProjHitChance = FUI_Spinner(G, 100, 200, 90, 20, 1, 100, 0, 1, DTYPE_INTEGER, "%")
-FUI_Label(G, 10, 232, "Damage:")
+FUI_Label(G, 10, 202, "Damage Die:")
+Global SProjDamageDie = FUI_Spinner(G, 100, 200, 90, 20, 0, 5000, 0, 1, DTYPE_INTEGER)
+FUI_Label(G, 10, 232, "Damage Bonus:")
 Global SProjDamage = FUI_Spinner(G, 100, 230, 90, 20, 0, 5000, 0, 1, DTYPE_INTEGER)
 FUI_Label(G, 10, 262, "Damage type:")
 Global CProjDamageType = FUI_ComboBox(G, 100, 260, 200, 20, 6)
@@ -732,14 +732,14 @@ For i = 0 to 49
 	EndIf
 Next
 
-FUI_Label(G, 10, 382, "Save type:")
-Global CProjSaveType = FUI_ComboBox(G, 100, 380, 200, 20, 6)
-For i = 0 To 19
-	If DamageTypes$(i) <> ""
-		Item = FUI_ComboBoxItem(CProjSaveType, DamageTypes$(i))
-		FUI_SendMessage(Item, M_SETDATA, i)
-	EndIf
-Next
+;FUI_Label(G, 10, 382, "Save type:")
+;Global CProjSaveType = FUI_ComboBox(G, 100, 380, 200, 20, 6)
+; For i = 0 To 19
+; 	If DamageTypes$(i) <> ""
+; 		Item = FUI_ComboBoxItem(CProjSaveType, DamageTypes$(i))
+; 		FUI_SendMessage(Item, M_SETDATA, i)
+; 	EndIf
+; Next
 
 ; Init display
 FUI_SendMessage(CProjSelected, M_SETINDEX, 1)
@@ -3967,7 +3967,7 @@ Cls
 					P\Emitter1TexID = SelectedProj\Emitter1TexID
 					P\Emitter2TexID = SelectedProj\Emitter2TexID
 					P\Homing = SelectedProj\Homing
-					P\HitChance = SelectedProj\HitChance
+					P\DamageDie = SelectedProj\DamageDie
 					P\Damage = SelectedProj\Damage
 					P\DamageType = SelectedProj\DamageType
 					P\Speed = SelectedProj\Speed
@@ -4062,8 +4062,8 @@ Cls
 				EndIf
 			Case BProjHoming
 				If SelectedProj <> Null Then SelectedProj\Homing = E\EventData : ProjectilesSaved = False
-			Case SProjHitChance
-				If SelectedProj <> Null Then SelectedProj\HitChance = E\EventData : ProjectilesSaved = False
+			Case SProjDamageDie
+				If SelectedProj <> Null Then SelectedProj\DamageDie = E\EventData : ProjectilesSaved = False
 			Case SProjDamage
 				If SelectedProj <> Null Then SelectedProj\Damage = E\EventData : ProjectilesSaved = False
 			Case CProjDamageType
@@ -4071,11 +4071,11 @@ Cls
 					SelectedProj\DamageType = FUI_SendMessage(FUI_SendMessage(CProjDamageType, M_GETSELECTED), M_GETDATA)
 					ProjectilesSaved = False
 				EndIf
-			Case CProjSaveType
-				If SelectedProj <> Null
-					SelectedProj\SaveType = FUI_SendMessage(FUI_SendMessage(CProjSaveType, M_GETSELECTED), M_GETDATA)
-					ProjectilesSaved = False
-				EndIf
+			; Case CProjSaveType
+			; 	If SelectedProj <> Null
+			; 		SelectedProj\SaveType = FUI_SendMessage(FUI_SendMessage(CProjSaveType, M_GETSELECTED), M_GETDATA)
+			; 		ProjectilesSaved = False
+			; 	EndIf
 			Case SProjSpeed
 				If SelectedProj <> Null Then SelectedProj\Speed = E\EventData : ProjectilesSaved = False
 			Case CProjectileSkill
@@ -6834,12 +6834,12 @@ Cls
 						DamageTypes$(i) = E\EventData
 						FUI_SendMessage(CItemDamageType, M_RESET)
 						FUI_SendMessage(CProjDamageType, M_RESET)
-						FUI_SendMessage(CProjSaveType, M_RESET)
+						;FUI_SendMessage(CProjSaveType, M_RESET)
 						FUI_SendMessage(CWaterDamageType, M_RESET)
 						For i = 0 To 19
 							If DamageTypes$(i) <> ""
 								Item = FUI_ComboBoxItem(CItemDamageType, DamageTypes$(i)) : FUI_SendMessage(Item, M_SETDATA, i)
-								Item = FUI_ComboBoxItem(CProjSaveType, DamageTypes$(i)) : FUI_SendMessage(Item, M_SETDATA, i)
+								;Item = FUI_ComboBoxItem(CProjSaveType, DamageTypes$(i)) : FUI_SendMessage(Item, M_SETDATA, i)
 								Item = FUI_ComboBoxItem(CProjDamageType, DamageTypes$(i)) : FUI_SendMessage(Item, M_SETDATA, i)
 								Item = FUI_ComboBoxItem(CWaterDamageType, DamageTypes$(i)) : FUI_SendMessage(Item, M_SETDATA, i)
 							EndIf
@@ -7622,10 +7622,10 @@ Function UpdateProjectileDisplay()
 		FUI_SendMessage(CProjEmitter2, M_SETINDEX, 1)
 		FUI_SendMessage(LProjTex2, M_SETTEXT, "Emitter texture: [NONE]")
 		FUI_SendMessage(BProjHoming, M_SETCHECKED, False)
-		FUI_SendMessage(SProjHitChance, M_SETVALUE, 1)
+		FUI_SendMessage(SProjDamageDie, M_SETVALUE, 1)
 		FUI_SendMessage(SProjDamage, M_SETVALUE, 1)
 		FUI_SendMessage(CProjDamageType, M_SETINDEX, 1)
-		FUI_SendMessage(CProjSaveType, M_SETINDEX, 1)
+		;FUI_SendMessage(CProjSaveType, M_SETINDEX, 1)
 		FUI_SendMessage(SProjSpeed, M_SETVALUE, 1)
 		FUI_SendMessage(CProjectileAttribute, M_SETINDEX, 1)
 		FUI_SendMessage(CProjectileSkill, M_SETINDEX, 1)
@@ -7659,7 +7659,7 @@ Function UpdateProjectileDisplay()
 		EndIf
 		FUI_SendMessage(LProjTex2, M_SETTEXT, "Emitter texture: " + GetFilename$(EditorTexName$(SelectedProj\Emitter2TexID)))
 		FUI_SendMessage(BProjHoming, M_SETCHECKED, SelectedProj\Homing)
-		FUI_SendMessage(SProjHitChance, M_SETVALUE, SelectedProj\HitChance)
+		FUI_SendMessage(SProjDamageDie, M_SETVALUE, SelectedProj\DamageDie)
 		FUI_SendMessage(SProjDamage, M_SETVALUE, SelectedProj\Damage)
 		Idx = 0
 		For i = 0 To 19
@@ -7675,7 +7675,7 @@ Function UpdateProjectileDisplay()
 			If DamageTypes$(i) <> ""
 				Idx = Idx + 1
 				If i = SelectedProj\SaveType
-					FUI_SendMessage(CProjSaveType, M_SETINDEX, Idx)
+					;FUI_SendMessage(CProjSaveType, M_SETINDEX, Idx)
 					Exit
 				EndIf
 			EndIf

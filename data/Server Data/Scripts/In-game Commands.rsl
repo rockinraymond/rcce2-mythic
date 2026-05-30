@@ -163,7 +163,7 @@ SetAttribute(actor(), "Stealth", 75)
 End function
 
 function SpellTest()
-	AddAbility(Actor(), "Magic Missile", 1)
+	AddAbility(Actor(), "Magic Missile I", 1)
 	AddAbility(Actor(), "Resist Bludgeon", 1)
 	AddAbility(Actor(), "Shield", 1)
 	AddAbility(Actor(), "Burning Hands", 1)

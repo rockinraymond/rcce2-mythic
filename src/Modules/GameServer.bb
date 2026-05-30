@@ -194,15 +194,14 @@ Function FireProjectile%(P.Projectile, A1.ActorInstance, A2.ActorInstance)
 
 	ProjAttBns = GetAttributeModifier(A1\Attributes\Value[FindAttribute(P\Attribute$)])
 	ProjSkillBns = GetSkillModifier(A1\Attributes\Value[FindAttribute(P\Skill$)])
+	DefenderResistance = (A2\Resistances[P\DamageType])
 	; Does the projectile hit the target?
 	ToHit = Rand(1,20)
-	HitChance = P\HitChance + ProjSkillBns - A2\Resistances[P\SaveType] - A2\Attributes\Value[FindAttribute("Armor Bonus")]
-	If ToHit <= P\HitChance
+	HitChance = 10 + ProjSkillBns - DefenderResistance - A2\Attributes\Value[FindAttribute("Armor Bonus")]
+	If ToHit <= HitChance
 		; Calculate damage
 		TargetIsHit = 1
-		DefenderResistance = (A2\Resistances[P\DamageType])
-		Damage = Rand(1, P\Damage) - DefenderResistance
-		If Damage < 1 Then Damage = 1
+		Damage = Rand(1, P\DamageDie) + P\Damage + ProjAttBns
 
 		; Apply damage
 		A2\Attributes\Value[HealthStat] = A2\Attributes\Value[HealthStat] - Damage

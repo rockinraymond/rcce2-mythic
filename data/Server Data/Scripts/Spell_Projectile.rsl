@@ -263,7 +263,7 @@ Function Spell_MagicMissle()
 
     SpellCost = 1
     ResourceName$ = "Mana"
-    SpellName$ = "Magic Missile"
+    SpellName$ = "Magic Missile I"
     ProjectileName$ = "Magic Missile"
     SkillName$ = "Arcane Casting"
     castingTime = 2
