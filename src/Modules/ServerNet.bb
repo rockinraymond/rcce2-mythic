@@ -2951,6 +2951,13 @@ Function UpdateNetwork()
 							If Number > -1 And Number < 10
 								; Delete the character
 								If A\QuestLog[Number] <> Null Then Delete A\QuestLog[Number]
+								; Free the per-character ActionBar too: the shift loop below
+								; overwrites A\ActionBar[Number] without releasing it, leaking one
+								; ActionBarData (+ its 36 slot strings) per character deletion.
+								; DeleteCharacter() only frees the ActorInstance, and the load
+								; cleanup at AccountsServer.bb:366 frees QuestLog AND ActionBar
+								; together -- restore that symmetry here. No double-free.
+								If A\ActionBar[Number] <> Null Then Delete A\ActionBar[Number]
 								If MySQL = True
 									//My_DeleteCharacter(A, Number)
 								Else
