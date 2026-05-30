@@ -17,6 +17,42 @@ pub struct AssetStore {
     cache: HashMap<u16, Option<Rc<B3dModel>>>,
 }
 
+/// A head attachment (hair or beard): its model + textures, plus the mesh
+/// catalog's own position offset and scale (the engine's `LoadedMeshX/Y/Z` and
+/// `LoadedMeshScales`, applied relative to the body's `Head` joint).
+pub struct Attachment {
+    pub mesh_id: u16,
+    pub model: Rc<B3dModel>,
+    pub textures: Vec<Option<Image>>,
+    pub offset: [f32; 3],
+    pub scale: f32,
+}
+
+/// World placement (translation, rot radians, per-axis scale) for an attachment
+/// parented to the body's `Head` joint. Mirrors the engine: the attachment sits
+/// at `head_offset + catalog_offset` in the actor's scaled, yaw-rotated frame.
+/// `body_translation` is the body instance's ground-seated world translation;
+/// `yaw` matches `glam::Mat4::from_rotation_y`.
+pub fn attachment_placement(
+    body_translation: [f32; 3],
+    yaw: f32,
+    actor_scale: f32,
+    head_offset: [f32; 3],
+    att: &Attachment,
+) -> ([f32; 3], [f32; 3], [f32; 3]) {
+    let lx = (head_offset[0] + att.offset[0]) * actor_scale;
+    let ly = (head_offset[1] + att.offset[1]) * actor_scale;
+    let lz = (head_offset[2] + att.offset[2]) * actor_scale;
+    let (s, c) = yaw.sin_cos(); // from_rotation_y: x' = x c + z s, z' = -x s + z c
+    let translation = [
+        body_translation[0] + lx * c + lz * s,
+        body_translation[1] + ly,
+        body_translation[2] - lx * s + lz * c,
+    ];
+    let scale = actor_scale * att.scale;
+    (translation, [0.0, yaw, 0.0], [scale, scale, scale])
+}
+
 impl AssetStore {
     /// `data_root` is the project `data/` directory (containing `Server Data/`,
     /// `Game Data/`, `Meshes/`).
@@ -201,6 +237,55 @@ impl AssetStore {
             .collect()
     }
 
+    /// Head attachments (hair, and beard for males) for an actor, resolved from
+    /// the template's Hair/Beard selection (0..4). Empty when the slots are
+    /// unset (65535) or the meshes don't resolve.
+    pub fn actor_attachments(
+        &mut self,
+        template_id: u16,
+        gender: u8,
+        hair_sel: u8,
+        beard_sel: u8,
+    ) -> Vec<Attachment> {
+        let Some(t) = self.actors.templates.get(&template_id).cloned() else {
+            return Vec::new();
+        };
+        let mut out = Vec::new();
+        let hair_ids = if gender == 1 {
+            t.female_hair_ids
+        } else {
+            t.male_hair_ids
+        };
+        if let Some(a) = self.mesh_attachment(hair_ids[(hair_sel as usize).min(4)]) {
+            out.push(a);
+        }
+        // Beards are male-only.
+        if gender != 1 {
+            if let Some(a) = self.mesh_attachment(t.beard_ids[(beard_sel as usize).min(4)]) {
+                out.push(a);
+            }
+        }
+        out
+    }
+
+    /// Build an [`Attachment`] for a mesh-catalog id (its model + textures +
+    /// catalog offset/scale). `None` for the 65535 "none" slot or a miss.
+    fn mesh_attachment(&mut self, mesh_id: u16) -> Option<Attachment> {
+        if mesh_id == 65535 {
+            return None;
+        }
+        let entry = self.meshes.get(mesh_id)?.clone();
+        let model = self.mesh_model(mesh_id)?;
+        let textures = self.scenery_textures(mesh_id, 65535);
+        Some(Attachment {
+            mesh_id,
+            model,
+            textures,
+            offset: entry.offset,
+            scale: if entry.scale > 0.0 { entry.scale } else { 1.0 },
+        })
+    }
+
     /// A model by mesh-catalog id, cached (including negative cache for misses).
     pub fn mesh_model(&mut self, mesh_id: u16) -> Option<Rc<B3dModel>> {
         if let Some(cached) = self.cache.get(&mesh_id) {
@@ -220,5 +305,42 @@ impl AssetStore {
             .map(Rc::new);
         self.cache.insert(mesh_id, result.clone());
         result
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn att(offset: [f32; 3], scale: f32) -> Attachment {
+        Attachment {
+            mesh_id: 1,
+            model: Rc::new(B3dModel::default()),
+            textures: Vec::new(),
+            offset,
+            scale,
+        }
+    }
+
+    #[test]
+    fn attachment_placement_no_yaw() {
+        // Head 100 up, no catalog offset, actor scale 0.05 -> head sits at
+        // body_y + 5; attachment scale = actor_scale * catalog_scale.
+        let (t, r, s) = attachment_placement([10.0, 0.0, 20.0], 0.0, 0.05, [0.0, 100.0, 0.0], &att([0.0, 0.0, 0.0], 2.0));
+        assert!((t[0] - 10.0).abs() < 1e-4);
+        assert!((t[1] - 5.0).abs() < 1e-4);
+        assert!((t[2] - 20.0).abs() < 1e-4);
+        assert_eq!(r, [0.0, 0.0, 0.0]);
+        assert!((s[0] - 0.1).abs() < 1e-4);
+    }
+
+    #[test]
+    fn attachment_placement_yaw_rotates_offset() {
+        // A +Z head offset under a 90° yaw rotates to +X (glam from_rotation_y).
+        use std::f32::consts::FRAC_PI_2;
+        let (t, _r, _s) = attachment_placement([0.0, 0.0, 0.0], FRAC_PI_2, 1.0, [0.0, 0.0, 10.0], &att([0.0, 0.0, 0.0], 1.0));
+        assert!((t[0] - 10.0).abs() < 1e-3, "x={}", t[0]);
+        assert!(t[1].abs() < 1e-3);
+        assert!(t[2].abs() < 1e-3, "z={}", t[2]);
     }
 }

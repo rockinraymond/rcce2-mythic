@@ -137,6 +137,8 @@ fn main() {
                          gender: u8,
                          face: u8,
                          body: u8,
+                         hair: u8,
+                         beard: u8,
                          pos: [f32; 3],
                          yaw: f32,
                          color: [f32; 3]| {
@@ -155,17 +157,40 @@ fn main() {
             }
         };
         let scale = store.actor_render_scale(tmpl, gender).unwrap_or(0.05);
+        let yaw_r = yaw.to_radians();
         // Seat the model's feet on the ground.
         let (min, _max) = models[idx].bounds();
-        let pos = [pos[0], ground_y - min[1] * scale, pos[2]];
-        placements.push((idx, pos, [0.0, yaw.to_radians(), 0.0], color, [scale, scale, scale]));
+        let body_trans = [pos[0], ground_y - min[1] * scale, pos[2]];
+        placements.push((idx, body_trans, [0.0, yaw_r, 0.0], color, [scale, scale, scale]));
+
+        // Hair + beard attached at the body's "Head" joint (fallback: model top
+        // centre). Each attachment carries the body's color tint.
+        let head = models[idx]
+            .joint_pos("Head")
+            .unwrap_or([0.0, models[idx].bounds().1[1], 0.0]);
+        for att in store.actor_attachments(tmpl, gender, hair, beard) {
+            let akey = format!("attach:{}", att.mesh_id);
+            let aidx = match dedup.get(&akey) {
+                Some(&i) => i,
+                None => {
+                    let i = models.len();
+                    models.push(att.model.clone());
+                    textures.push(att.textures.clone());
+                    dedup.insert(akey, i);
+                    i
+                }
+            };
+            let (t, r, s) =
+                rcce_client::assets::attachment_placement(body_trans, yaw_r, scale, head, &att);
+            placements.push((aidx, t, r, color, s));
+        }
     };
 
-    add_actor(&mut store, &mut models, &mut textures, &mut dedup, &mut placements, 0, world.me_gender, world.me_face_tex, world.me_body_tex, [world.me_x, world.me_y, world.me_z], world.me_yaw, [0.85, 0.95, 0.85]);
+    add_actor(&mut store, &mut models, &mut textures, &mut dedup, &mut placements, 0, world.me_gender, world.me_face_tex, world.me_body_tex, 0, 0, [world.me_x, world.me_y, world.me_z], world.me_yaw, [0.85, 0.95, 0.85]);
     let actor_player_idx = placements.first().map(|p| p.0);
     for a in world.actors.values() {
         let color = if a.is_player { [0.85, 0.9, 1.0] } else { [1.0, 1.0, 1.0] };
-        add_actor(&mut store, &mut models, &mut textures, &mut dedup, &mut placements, a.template_id, a.gender, a.face_tex, a.body_tex, [a.x, a.y, a.z], a.yaw, color);
+        add_actor(&mut store, &mut models, &mut textures, &mut dedup, &mut placements, a.template_id, a.gender, a.face_tex, a.body_tex, a.hair, a.beard, [a.x, a.y, a.z], a.yaw, color);
     }
     let actor_count = placements.len();
 

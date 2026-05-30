@@ -35,11 +35,25 @@ pub struct B3dModel {
     /// `BRUS` brushes — each brush's texture-slot indices into `textures`
     /// (`-1` = empty slot).
     pub brushes: Vec<Vec<i32>>,
+    /// Every `NODE`'s name and its accumulated translation in model space (same
+    /// space as the flattened vertices). Used to find attach points like the
+    /// `"Head"` joint for hair/beard/hat. Translation-only (node scale/rotation
+    /// are not yet composed — fine for static bind-pose attachment).
+    pub joints: Vec<(String, [f32; 3])>,
 }
 
 impl B3dModel {
     pub fn vertex_count(&self) -> usize {
         self.meshes.iter().map(|m| m.positions.len()).sum()
+    }
+
+    /// Accumulated model-space position of the first node whose name matches
+    /// `name` (case-insensitive), e.g. `"Head"`. `None` if absent.
+    pub fn joint_pos(&self, name: &str) -> Option<[f32; 3]> {
+        self.joints
+            .iter()
+            .find(|(n, _)| n.eq_ignore_ascii_case(name))
+            .map(|(_, p)| *p)
     }
     pub fn triangle_count(&self) -> usize {
         self.meshes.iter().map(|m| m.indices.len() / 3).sum()
@@ -174,7 +188,7 @@ fn parse_node(
     parent_offset: [f32; 3],
     model: &mut B3dModel,
 ) -> Result<(), ReadError> {
-    let _name = r.read_cstr(256)?;
+    let name = r.read_cstr(256)?;
     let px = r.read_float()?;
     let py = r.read_float()?;
     let pz = r.read_float()?;
@@ -190,6 +204,9 @@ fn parse_node(
         parent_offset[1] + py,
         parent_offset[2] + pz,
     ];
+    if !name.is_empty() {
+        model.joints.push((name, offset));
+    }
 
     while r.position() + 8 <= end {
         let (tag, size) = chunk_header(r)?;

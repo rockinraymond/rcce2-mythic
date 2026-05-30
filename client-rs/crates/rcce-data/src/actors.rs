@@ -19,6 +19,11 @@ pub struct ActorTemplate {
     pub radius: f32,
     /// 0 = male base, 1 = female base, 2..8 = gubbins/equipment meshes.
     pub mesh_ids: [u16; 8],
+    /// Selectable hair/beard mesh-catalog ids (index by the character's
+    /// Hair/Beard selection 0..4). `65535` = none. Beards are male-only.
+    pub beard_ids: [u16; 5],
+    pub male_hair_ids: [u16; 5],
+    pub female_hair_ids: [u16; 5],
     /// Selectable face/body texture-catalog ids (index by the character's
     /// FaceTex/BodyTex selection 0..4), per gender.
     pub male_face_ids: [u16; 5],
@@ -83,15 +88,6 @@ fn parse_record(r: &mut BlitzReader) -> Result<ActorTemplate, ReadError> {
 
     // Appearance id arrays (order per LoadActors): Beard(5), MaleHair(5),
     // FemHair(5), MaleFace(5), FemFace(5), MaleBody(5), FemBody(5).
-    let mut skip5 = |r: &mut BlitzReader| -> Result<(), ReadError> {
-        for _ in 0..5 {
-            r.read_short()?;
-        }
-        Ok(())
-    };
-    skip5(r)?; // Beard
-    skip5(r)?; // MaleHair
-    skip5(r)?; // FemaleHair
     let mut read5 = |r: &mut BlitzReader| -> Result<[u16; 5], ReadError> {
         let mut a = [0u16; 5];
         for slot in &mut a {
@@ -99,6 +95,9 @@ fn parse_record(r: &mut BlitzReader) -> Result<ActorTemplate, ReadError> {
         }
         Ok(a)
     };
+    let beard_ids = read5(r)?;
+    let male_hair_ids = read5(r)?;
+    let female_hair_ids = read5(r)?;
     let male_face_ids = read5(r)?;
     let female_face_ids = read5(r)?;
     let male_body_ids = read5(r)?;
@@ -135,6 +134,9 @@ fn parse_record(r: &mut BlitzReader) -> Result<ActorTemplate, ReadError> {
         scale,
         radius,
         mesh_ids,
+        beard_ids,
+        male_hair_ids,
+        female_hair_ids,
         male_face_ids,
         female_face_ids,
         male_body_ids,
