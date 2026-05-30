@@ -106,3 +106,26 @@ Function FreeProjectileInstance(P.ProjectileInstance)
 	Delete(P)
 
 End Function
+
+; Frees every in-flight homing projectile whose Target is actor A. MUST be
+; called before A is freed (SafeFreeActorInstance / FreeActorInstance) on any
+; client path, otherwise UpdateProjectiles derefs P\Target\CollisionEN on the
+; next frame against a freed actor. The `If P\Target <> Null` guard there does
+; NOT protect this: Blitz3D Delete does not null other references, so P\Target
+; stays a DANGLING (non-Null) handle, and FreeActorInstance3D has already freed
+; CollisionEN regardless -- a hard crash either way. The P_ActorGone and
+; zone-change handlers in ClientNet.bb already inline this sweep on their paths;
+; the NPC death/fade-out path (Client.bb, the common combat case) did not.
+; After-cursor walk: FreeProjectileInstance Deletes the current element, same
+; idiom as UpdateProjectiles above.
+Function FreeProjectilesTargeting(A.ActorInstance)
+
+	Local P.ProjectileInstance = First ProjectileInstance
+	Local PNext.ProjectileInstance = Null
+	While P <> Null
+		PNext = After P
+		If P\Target = A Then FreeProjectileInstance(P)
+		P = PNext
+	Wend
+
+End Function
