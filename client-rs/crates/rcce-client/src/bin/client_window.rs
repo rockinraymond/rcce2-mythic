@@ -111,6 +111,9 @@ struct App {
     start: Instant,
     frames: u64,
     last_log: Instant,
+    /// Hash of the last dynamic-actor build (anim tick + actor states); the
+    /// expensive re-skin/re-upload is skipped while it's unchanged.
+    last_dyn_hash: u64,
 }
 
 impl App {
@@ -131,6 +134,7 @@ impl App {
             start: now,
             frames: 0,
             last_log: now,
+            last_dyn_hash: u64::MAX,
         }
     }
 }
@@ -201,6 +205,30 @@ fn build_actors(
         push(store, &mut models, &mut textures, &mut place, a.template_id, a.gender, a.face_tex, a.body_tex, a.runtime_id, moving, a.is_running, [a.x, a.y, a.z], a.yaw, color);
     }
     (models, textures, place)
+}
+
+/// Cheap fingerprint of everything that affects the actor drawables: a ~12 Hz
+/// animation tick plus each actor's quantised position/yaw/run state. When it's
+/// unchanged the dynamic geometry is reused (no re-skin/re-upload).
+fn dyn_hash(world: &World, elapsed: f32) -> u64 {
+    use std::hash::{Hash, Hasher};
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    ((elapsed * 12.0) as u64).hash(&mut h);
+    world.my_runtime_id.hash(&mut h);
+    ((world.me_x * 2.0) as i32).hash(&mut h);
+    ((world.me_z * 2.0) as i32).hash(&mut h);
+    (world.me_yaw as i32).hash(&mut h);
+    let mut rids: Vec<u16> = world.actors.keys().copied().collect();
+    rids.sort_unstable();
+    for rid in rids {
+        let a = &world.actors[&rid];
+        rid.hash(&mut h);
+        ((a.x * 2.0) as i32).hash(&mut h);
+        ((a.z * 2.0) as i32).hash(&mut h);
+        (a.yaw as i32).hash(&mut h);
+        a.is_running.hash(&mut h);
+    }
+    h.finish()
 }
 
 fn load_zone_static(store: &mut AssetStore, view: &mut WorldView, gfx: &Gfx, data_root: &str, zone: &str) -> Option<([f32; 3], f32, f32)> {
@@ -364,19 +392,27 @@ impl App {
                 net.updates += 1;
                 net.world.apply(&m);
             }
-            let (models, textures, place) = build_actors(store, &net.world, elapsed, self.ground_y);
-            let instances: Vec<SceneInstance> = place
-                .iter()
-                .map(|&(idx, t, r, color, s)| SceneInstance {
-                    model: &models[idx],
-                    textures: &textures[idx],
-                    translation: t,
-                    rot: r,
-                    scale: s,
-                    color,
-                })
-                .collect();
-            view.set_dynamic(&gfx.device, &gfx.queue, &instances);
+            // Only re-skin + re-upload actors when their visible state changed
+            // (animation tick advanced, or an actor moved/turned). The camera
+            // still renders every frame; this just gates the expensive rebuild.
+            let hash = dyn_hash(&net.world, elapsed);
+            if hash != self.last_dyn_hash {
+                let (models, textures, place) =
+                    build_actors(store, &net.world, elapsed, self.ground_y);
+                let instances: Vec<SceneInstance> = place
+                    .iter()
+                    .map(|&(idx, t, r, color, s)| SceneInstance {
+                        model: &models[idx],
+                        textures: &textures[idx],
+                        translation: t,
+                        rot: r,
+                        scale: s,
+                        color,
+                    })
+                    .collect();
+                view.set_dynamic(&gfx.device, &gfx.queue, &instances);
+                self.last_dyn_hash = hash;
+            }
             cam_target = [net.world.me_x, net.world.me_y, net.world.me_z];
             following = true;
         }
