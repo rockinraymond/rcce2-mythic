@@ -26,8 +26,136 @@ pub fn load(path: &Path) -> Option<Image> {
         Some("png") => decode_png(&bytes),
         Some("jpg") | Some("jpeg") => decode_jpeg(&bytes),
         Some("tga") => decode_tga(&bytes),
+        Some("dds") => decode_dds(&bytes),
         _ => None,
     }
+}
+
+/// Decode a DXT-compressed DDS (BC1/DXT1, BC2/DXT3, BC3/DXT5) to RGBA8 — the
+/// format a few prop textures use. Uncompressed/other-fourCC DDS (cubemaps,
+/// spherical-harmonic maps) return `None`. Only the top mip is decoded.
+pub fn decode_dds(b: &[u8]) -> Option<Image> {
+    if b.len() < 128 || &b[0..4] != b"DDS " {
+        return None;
+    }
+    let height = u32::from_le_bytes([b[12], b[13], b[14], b[15]]);
+    let width = u32::from_le_bytes([b[16], b[17], b[18], b[19]]);
+    if width == 0 || height == 0 || width > 16384 || height > 16384 {
+        return None;
+    }
+    let (block_bytes, kind) = match &b[84..88] {
+        b"DXT1" => (8usize, 1u8),
+        b"DXT3" => (16, 3),
+        b"DXT5" => (16, 5),
+        _ => return None,
+    };
+    let data = &b[128..];
+    let (w, h) = (width as usize, height as usize);
+    let bw = w.div_ceil(4);
+    let bh = h.div_ceil(4);
+    if data.len() < bw * bh * block_bytes {
+        return None;
+    }
+
+    // RGB565 -> (r,g,b) with full-range rounding.
+    let rgb565 = |c: u16| -> (u8, u8, u8) {
+        let r = ((c >> 11) & 0x1f) as u32;
+        let g = ((c >> 5) & 0x3f) as u32;
+        let bl = (c & 0x1f) as u32;
+        (
+            ((r * 255 + 15) / 31) as u8,
+            ((g * 255 + 31) / 63) as u8,
+            ((bl * 255 + 15) / 31) as u8,
+        )
+    };
+
+    let mut rgba = vec![0u8; w * h * 4];
+    for by in 0..bh {
+        for bx in 0..bw {
+            let block = &data[(by * bw + bx) * block_bytes..];
+
+            // Per-texel alpha (16 values), and the 8-byte color sub-block.
+            let mut alpha = [255u8; 16];
+            let color: &[u8] = match kind {
+                1 => block,
+                3 => {
+                    for (i, a) in alpha.iter_mut().enumerate() {
+                        let byte = block[i / 2];
+                        let nib = if i % 2 == 0 { byte & 0x0f } else { byte >> 4 };
+                        *a = nib * 17; // 0..15 -> 0..255
+                    }
+                    &block[8..]
+                }
+                5 => {
+                    let (a0, a1) = (block[0] as u16, block[1] as u16);
+                    let mut lut = [0u16; 8];
+                    lut[0] = a0;
+                    lut[1] = a1;
+                    if a0 > a1 {
+                        for i in 1..7 {
+                            lut[i + 1] = ((7 - i as u16) * a0 + i as u16 * a1) / 7;
+                        }
+                    } else {
+                        for i in 1..5 {
+                            lut[i + 1] = ((5 - i as u16) * a0 + i as u16 * a1) / 5;
+                        }
+                        lut[6] = 0;
+                        lut[7] = 255;
+                    }
+                    let mut bits: u64 = 0;
+                    for i in 0..6 {
+                        bits |= (block[2 + i] as u64) << (8 * i);
+                    }
+                    for (i, a) in alpha.iter_mut().enumerate() {
+                        *a = lut[((bits >> (3 * i)) & 0x7) as usize] as u8;
+                    }
+                    &block[8..]
+                }
+                _ => unreachable!(),
+            };
+
+            let c0 = u16::from_le_bytes([color[0], color[1]]);
+            let c1 = u16::from_le_bytes([color[2], color[3]]);
+            let (r0, g0, b0) = rgb565(c0);
+            let (r1, g1, b1) = rgb565(c1);
+            let mut pal = [[0u8; 4]; 4];
+            pal[0] = [r0, g0, b0, 255];
+            pal[1] = [r1, g1, b1, 255];
+            let mix = |a: u8, b: u8, na: u16, nb: u16, d: u16| -> u8 {
+                ((a as u16 * na + b as u16 * nb) / d) as u8
+            };
+            if kind == 1 && c0 <= c1 {
+                // DXT1 1-bit-alpha mode: index 2 = average, index 3 = transparent.
+                pal[2] = [mix(r0, r1, 1, 1, 2), mix(g0, g1, 1, 1, 2), mix(b0, b1, 1, 1, 2), 255];
+                pal[3] = [0, 0, 0, 0];
+            } else {
+                pal[2] = [mix(r0, r1, 2, 1, 3), mix(g0, g1, 2, 1, 3), mix(b0, b1, 2, 1, 3), 255];
+                pal[3] = [mix(r0, r1, 1, 2, 3), mix(g0, g1, 1, 2, 3), mix(b0, b1, 1, 2, 3), 255];
+            }
+
+            let idx_bits = u32::from_le_bytes([color[4], color[5], color[6], color[7]]);
+            for py in 0..4 {
+                for px in 0..4 {
+                    let pix = py * 4 + px;
+                    let ci = ((idx_bits >> (2 * pix)) & 0x3) as usize;
+                    let mut col = pal[ci];
+                    if kind != 1 {
+                        col[3] = alpha[pix];
+                    }
+                    let (x, y) = (bx * 4 + px, by * 4 + py);
+                    if x < w && y < h {
+                        let o = (y * w + x) * 4;
+                        rgba[o..o + 4].copy_from_slice(&col);
+                    }
+                }
+            }
+        }
+    }
+    Some(Image {
+        width,
+        height,
+        rgba,
+    })
 }
 
 /// Decode a TGA (true-color, uncompressed type 2 or RLE type 10, 24/32-bit) to
@@ -368,6 +496,24 @@ mod tests {
         assert_eq!((img.width, img.height), (4, 1));
         for i in 0..4 {
             assert_eq!(&img.rgba[i * 4..i * 4 + 4], &[0, 0, 255, 255]);
+        }
+    }
+
+    #[test]
+    fn decode_dxt1_solid_block() {
+        // Minimal DDS: 4x4 DXT1, one block. c0 = white (0xFFFF), c1 = black,
+        // all indices 0 -> every texel = c0 = white opaque.
+        let mut b = vec![0u8; 128];
+        b[0..4].copy_from_slice(b"DDS ");
+        b[12..16].copy_from_slice(&4u32.to_le_bytes()); // height
+        b[16..20].copy_from_slice(&4u32.to_le_bytes()); // width
+        b[84..88].copy_from_slice(b"DXT1");
+        // color block: c0=0xFFFF, c1=0x0000, indices=0
+        b.extend_from_slice(&[0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]);
+        let img = decode_dds(&b).expect("decode dxt1");
+        assert_eq!((img.width, img.height), (4, 4));
+        for px in img.rgba.chunks_exact(4) {
+            assert_eq!(px, &[255, 255, 255, 255]);
         }
     }
 
