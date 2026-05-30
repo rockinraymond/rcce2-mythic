@@ -2855,6 +2855,17 @@ Function UpdateNetwork()
 										; creation cleanly and log instead.
 										WriteLog(MainLog, "P_CreateCharacter: race '" + C\Actor\Race$ + "' StartArea '" + C\Area$ + "' not found, rejecting")
 										FreeActorInstance(A\Character[FreeSlot])
+										; Reject must leave the slot fully empty. FreeActorInstance does NOT
+										; null A\Character[FreeSlot], so without this the slot is left dangling
+										; -- the FreeSlot/TotalChars scan (2796/2799) then counts it as occupied,
+										; and the P_GetCharacters list-send (2426) derefs the freed instance
+										; (use-after-free). The QuestLog/ActionBar New'd in lockstep above also
+										; leak (mirror of #447). Clear all three.
+										If A\QuestLog[FreeSlot] <> Null Then Delete(A\QuestLog[FreeSlot])
+										If A\ActionBar[FreeSlot] <> Null Then Delete(A\ActionBar[FreeSlot])
+										A\Character[FreeSlot] = Null
+										A\QuestLog[FreeSlot] = Null
+										A\ActionBar[FreeSlot] = Null
 										RCE_Send(Host, M\FromID, P_CreateCharacter, "N", True)
 										Exists = True : Exit
 									EndIf
@@ -2881,6 +2892,17 @@ Function UpdateNetwork()
 										; Check for cheating
 										If TotalAmount > AttributeAssignment
 											FreeActorInstance(A\Character[FreeSlot])
+										; Reject must leave the slot fully empty. FreeActorInstance does NOT
+										; null A\Character[FreeSlot], so without this the slot is left dangling
+										; -- the FreeSlot/TotalChars scan (2796/2799) then counts it as occupied,
+										; and the P_GetCharacters list-send (2426) derefs the freed instance
+										; (use-after-free). The QuestLog/ActionBar New'd in lockstep above also
+										; leak (mirror of #447). Clear all three.
+										If A\QuestLog[FreeSlot] <> Null Then Delete(A\QuestLog[FreeSlot])
+										If A\ActionBar[FreeSlot] <> Null Then Delete(A\ActionBar[FreeSlot])
+										A\Character[FreeSlot] = Null
+										A\QuestLog[FreeSlot] = Null
+										A\ActionBar[FreeSlot] = Null
 									        RCE_Send(Host, M\FromID, P_CreateCharacter, "N", True)
 											Exists = True : Exit
 										EndIf
