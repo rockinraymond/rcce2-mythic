@@ -4,11 +4,89 @@
 //! `BONE`/`ANIM`/`KEYS`). All values little-endian; node names are NUL-terminated.
 //!
 //! This extracts geometry (positions + optional normals/UVs + triangle indices)
-//! per mesh, with each mesh's node translation applied so a model assembles in
-//! place — enough to render. Skeleton/animation (`BONE`/`ANIM`) are skipped for
-//! now (added when skeletal animation lands).
+//! per mesh, with each mesh's full node bind-pose transform (translate · rotate
+//! · scale, composed down the hierarchy) applied so a model assembles in place —
+//! enough to render. Skeleton/animation (`BONE`/`ANIM`) are skipped for now
+//! (added when skeletal animation lands).
 
 use crate::reader::{BlitzReader, ReadError};
+
+/// A 4×4 row-major matrix (`p' = M · [p,1]`). Just enough linear algebra to
+/// compose the B3D node hierarchy's bind-pose transforms (translate · rotate ·
+/// scale) without pulling in a math crate.
+type Mat4 = [f32; 16];
+
+const IDENTITY: Mat4 = [
+    1.0, 0.0, 0.0, 0.0, //
+    0.0, 1.0, 0.0, 0.0, //
+    0.0, 0.0, 1.0, 0.0, //
+    0.0, 0.0, 0.0, 1.0,
+];
+
+/// `a · b` (row-major).
+fn mat_mul(a: &Mat4, b: &Mat4) -> Mat4 {
+    let mut m = [0.0f32; 16];
+    for r in 0..4 {
+        for c in 0..4 {
+            let mut s = 0.0;
+            for k in 0..4 {
+                s += a[r * 4 + k] * b[k * 4 + c];
+            }
+            m[r * 4 + c] = s;
+        }
+    }
+    m
+}
+
+/// Node local transform `T · R · S` from translation, quaternion `(w,x,y,z)`,
+/// and per-axis scale.
+fn trs(t: [f32; 3], q: [f32; 4], s: [f32; 3]) -> Mat4 {
+    // Normalise the quaternion (b3d stores w,x,y,z).
+    let (w, x, y, z) = (q[0], q[1], q[2], q[3]);
+    let n = (w * w + x * x + y * y + z * z).sqrt();
+    let (w, x, y, z) = if n > 1e-12 {
+        (w / n, x / n, y / n, z / n)
+    } else {
+        (1.0, 0.0, 0.0, 0.0)
+    };
+    // Rotation 3×3.
+    let r = [
+        1.0 - 2.0 * (y * y + z * z),
+        2.0 * (x * y - w * z),
+        2.0 * (x * z + w * y),
+        2.0 * (x * y + w * z),
+        1.0 - 2.0 * (x * x + z * z),
+        2.0 * (y * z - w * x),
+        2.0 * (x * z - w * y),
+        2.0 * (y * z + w * x),
+        1.0 - 2.0 * (x * x + y * y),
+    ];
+    // M = T · R · S : scale multiplies each rotation column; translation last col.
+    [
+        r[0] * s[0], r[1] * s[1], r[2] * s[2], t[0], //
+        r[3] * s[0], r[4] * s[1], r[5] * s[2], t[1], //
+        r[6] * s[0], r[7] * s[1], r[8] * s[2], t[2], //
+        0.0, 0.0, 0.0, 1.0,
+    ]
+}
+
+/// Transform a position (includes translation).
+fn xform_point(m: &Mat4, p: [f32; 3]) -> [f32; 3] {
+    [
+        m[0] * p[0] + m[1] * p[1] + m[2] * p[2] + m[3],
+        m[4] * p[0] + m[5] * p[1] + m[6] * p[2] + m[7],
+        m[8] * p[0] + m[9] * p[1] + m[10] * p[2] + m[11],
+    ]
+}
+
+/// Transform a direction (rotation + scale, no translation) — for normals.
+fn xform_dir(m: &Mat4, v: [f32; 3]) -> [f32; 3] {
+    [
+        m[0] * v[0] + m[1] * v[1] + m[2] * v[2],
+        m[4] * v[0] + m[5] * v[1] + m[6] * v[2],
+        m[8] * v[0] + m[9] * v[1] + m[10] * v[2],
+    ]
+}
 
 /// One mesh's geometry, ready for upload to the GPU.
 #[derive(Debug, Default, Clone)]
@@ -35,10 +113,12 @@ pub struct B3dModel {
     /// `BRUS` brushes — each brush's texture-slot indices into `textures`
     /// (`-1` = empty slot).
     pub brushes: Vec<Vec<i32>>,
-    /// Every `NODE`'s name and its accumulated translation in model space (same
-    /// space as the flattened vertices). Used to find attach points like the
-    /// `"Head"` joint for hair/beard/hat. Translation-only (node scale/rotation
-    /// are not yet composed — fine for static bind-pose attachment).
+    /// Every `NODE`'s name and its bind-pose world position (the translation of
+    /// its fully-composed node matrix). Used to find attach points like the
+    /// `"Head"` joint. NB: for **skinned** meshes a bone's world position is the
+    /// skeleton-space joint location, which need not coincide with the deformed
+    /// geometry (vertices bind via inverse-bind matrices) — exact hair/hat
+    /// attachment needs the inverse-bind handling that lands with skinning.
     pub joints: Vec<(String, [f32; 3])>,
 }
 
@@ -93,7 +173,7 @@ impl B3dModel {
         let _version = r.read_int()?;
 
         let mut model = B3dModel::default();
-        parse_chunks(&mut r, end.min(data.len()), [0.0; 3], &mut model)?;
+        parse_chunks(&mut r, end.min(data.len()), &IDENTITY, &mut model)?;
         model.resolve_textures();
         Ok(model)
     }
@@ -124,11 +204,11 @@ fn chunk_header(r: &mut BlitzReader) -> Result<([u8; 4], usize), ReadError> {
     Ok((tag, size))
 }
 
-/// Walk sibling chunks until `end`. `offset` is the accumulated node translation.
+/// Walk sibling chunks until `end`. `parent` is the accumulated node matrix.
 fn parse_chunks(
     r: &mut BlitzReader,
     end: usize,
-    offset: [f32; 3],
+    parent: &Mat4,
     model: &mut B3dModel,
 ) -> Result<(), ReadError> {
     while r.position() + 8 <= end {
@@ -137,7 +217,7 @@ fn parse_chunks(
         match &tag {
             b"TEXS" => parse_texs(r, chunk_end, model)?,
             b"BRUS" => parse_brus(r, chunk_end, model)?,
-            b"NODE" => parse_node(r, chunk_end, offset, model)?,
+            b"NODE" => parse_node(r, chunk_end, parent, model)?,
             _ => {}
         }
         r.seek(chunk_end)?;
@@ -181,31 +261,32 @@ fn parse_brus(r: &mut BlitzReader, end: usize, model: &mut B3dModel) -> Result<(
     Ok(())
 }
 
-/// `NODE`: name(cstr) · position(3f) · scale(3f) · rotation(4f) · sub-chunks.
+/// `NODE`: name(cstr) · position(3f) · scale(3f) · rotation(4f, w,x,y,z) ·
+/// sub-chunks. Composes the node's bind-pose matrix onto `parent`.
 fn parse_node(
     r: &mut BlitzReader,
     end: usize,
-    parent_offset: [f32; 3],
+    parent: &Mat4,
     model: &mut B3dModel,
 ) -> Result<(), ReadError> {
     let name = r.read_cstr(256)?;
     let px = r.read_float()?;
     let py = r.read_float()?;
     let pz = r.read_float()?;
-    let _sx = r.read_float()?;
-    let _sy = r.read_float()?;
-    let _sz = r.read_float()?;
-    let _rw = r.read_float()?;
-    let _rx = r.read_float()?;
-    let _ry = r.read_float()?;
-    let _rz = r.read_float()?;
-    let offset = [
-        parent_offset[0] + px,
-        parent_offset[1] + py,
-        parent_offset[2] + pz,
-    ];
+    let sx = r.read_float()?;
+    let sy = r.read_float()?;
+    let sz = r.read_float()?;
+    let rw = r.read_float()?;
+    let rx = r.read_float()?;
+    let ry = r.read_float()?;
+    let rz = r.read_float()?;
+    let local = trs([px, py, pz], [rw, rx, ry, rz], [sx, sy, sz]);
+    let world = mat_mul(parent, &local);
     if !name.is_empty() {
-        model.joints.push((name, offset));
+        // Joint world position = the matrix's translation column.
+        model
+            .joints
+            .push((name, [world[3], world[7], world[11]]));
     }
 
     while r.position() + 8 <= end {
@@ -213,13 +294,13 @@ fn parse_node(
         let chunk_end = (r.position() + size).min(end);
         match &tag {
             b"MESH" => {
-                for mesh in parse_mesh(r, chunk_end, offset)? {
+                for mesh in parse_mesh(r, chunk_end, &world)? {
                     if !mesh.positions.is_empty() && !mesh.indices.is_empty() {
                         model.meshes.push(mesh);
                     }
                 }
             }
-            b"NODE" => parse_node(r, chunk_end, offset, model)?,
+            b"NODE" => parse_node(r, chunk_end, &world, model)?,
             _ => {} // BONE / KEYS / ANIM — skipped for now
         }
         r.seek(chunk_end)?;
@@ -230,7 +311,7 @@ fn parse_node(
 /// `MESH`: meshBrush(i32) · `VRTS`(shared vertices) · `TRIS`(one or more, each a
 /// brush_id + index list). Emits one [`B3dMesh`] per TRIS group (so each can
 /// carry its own texture), sharing the mesh's vertex data.
-fn parse_mesh(r: &mut BlitzReader, end: usize, offset: [f32; 3]) -> Result<Vec<B3dMesh>, ReadError> {
+fn parse_mesh(r: &mut BlitzReader, end: usize, world: &Mat4) -> Result<Vec<B3dMesh>, ReadError> {
     let mesh_brush = r.read_int()?;
     let mut positions = Vec::new();
     let mut normals = Vec::new();
@@ -241,7 +322,7 @@ fn parse_mesh(r: &mut BlitzReader, end: usize, offset: [f32; 3]) -> Result<Vec<B
         let (tag, size) = chunk_header(r)?;
         let chunk_end = (r.position() + size).min(end);
         match &tag {
-            b"VRTS" => parse_vrts(r, chunk_end, offset, &mut positions, &mut normals, &mut uvs)?,
+            b"VRTS" => parse_vrts(r, chunk_end, world, &mut positions, &mut normals, &mut uvs)?,
             b"TRIS" => {
                 let brush = r.read_int()?;
                 let mut indices = Vec::new();
@@ -281,7 +362,7 @@ fn parse_mesh(r: &mut BlitzReader, end: usize, offset: [f32; 3]) -> Result<Vec<B
 fn parse_vrts(
     r: &mut BlitzReader,
     end: usize,
-    offset: [f32; 3],
+    world: &Mat4,
     positions: &mut Vec<[f32; 3]>,
     normals: &mut Vec<[f32; 3]>,
     uvs: &mut Vec<[f32; 2]>,
@@ -296,13 +377,13 @@ fn parse_vrts(
         let x = r.read_float()?;
         let y = r.read_float()?;
         let z = r.read_float()?;
-        positions.push([x + offset[0], y + offset[1], z + offset[2]]);
+        positions.push(xform_point(world, [x, y, z]));
 
         if has_normal {
             let nx = r.read_float()?;
             let ny = r.read_float()?;
             let nz = r.read_float()?;
-            normals.push([nx, ny, nz]);
+            normals.push(xform_dir(world, [nx, ny, nz]));
         }
         if has_color {
             let _ = (r.read_float()?, r.read_float()?, r.read_float()?, r.read_float()?);
@@ -321,4 +402,39 @@ fn parse_vrts(
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod mat_tests {
+    use super::*;
+
+    #[test]
+    fn identity_is_neutral() {
+        let p = xform_point(&IDENTITY, [3.0, -2.0, 5.0]);
+        assert_eq!(p, [3.0, -2.0, 5.0]);
+    }
+
+    #[test]
+    fn trs_rotates_then_translates() {
+        // 90deg about Y (quat w=cos45,x=0,y=sin45,z=0) maps +X -> -Z, then
+        // translate by (10,0,0). So (1,0,0) -> (10,0,-1).
+        let s = std::f32::consts::FRAC_1_SQRT_2;
+        let m = trs([10.0, 0.0, 0.0], [s, 0.0, s, 0.0], [1.0, 1.0, 1.0]);
+        let p = xform_point(&m, [1.0, 0.0, 0.0]);
+        assert!((p[0] - 10.0).abs() < 1e-4, "x={}", p[0]);
+        assert!(p[1].abs() < 1e-4, "y={}", p[1]);
+        assert!((p[2] + 1.0).abs() < 1e-4, "z={}", p[2]);
+        // Directions ignore translation.
+        let d = xform_dir(&m, [1.0, 0.0, 0.0]);
+        assert!((d[2] + 1.0).abs() < 1e-4 && d[0].abs() < 1e-4);
+    }
+
+    #[test]
+    fn nested_matrices_compose() {
+        // Parent translates +X by 5, child translates +X by 3 in parent frame.
+        let parent = trs([5.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0], [1.0; 3]);
+        let child = trs([3.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0], [1.0; 3]);
+        let world = mat_mul(&parent, &child);
+        assert_eq!(xform_point(&world, [0.0, 0.0, 0.0]), [8.0, 0.0, 0.0]);
+    }
 }
