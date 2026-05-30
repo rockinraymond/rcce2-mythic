@@ -1111,7 +1111,13 @@ cb=0
  Next
 
  ChangeDir BRANCHPATH$
-sfile=WriteFile (fn$)
+; Atomic save: write to a .tmp under BRANCHPATH$ and only promote on success
+; so a crash/partial write can't truncate the user's existing tree file.
+; (CLAUDE.md atomic writes; matches the .tmp-protected path at ~:2671 here.)
+; No ChangeDir occurs between here and the commit below, so the relative
+; temp/final paths resolve consistently.
+Local TmpPath$ = SafeWriteOpen$(fn$)
+sfile=WriteFile (TmpPath$)
 ;new
  WriteFloat sfile, barkscale#
  WriteInt sfile, maxtrunks
@@ -1168,7 +1174,7 @@ If FileType(newpath$+lt$)<>1 Then Savetexture  t,newpath$+lt$
  Next
 
 
-CloseFile sfile
+SafeWriteCommit%(TmpPath$, fn$, sfile)
 
 End Function
 
