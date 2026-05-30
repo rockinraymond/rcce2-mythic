@@ -8,3 +8,4 @@ description = "On-disk format parsers for RCCE2 project files (drop-in client po
 
 [dependencies]
 thiserror = "2"
+png = "0.17" # PNG textures; BMP is decoded in-crate, JPG is a later add

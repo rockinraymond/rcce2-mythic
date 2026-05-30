@@ -10,9 +10,11 @@ pub mod actors;
 pub mod b3d;
 pub mod catalog;
 pub mod reader;
+pub mod texture;
 
 pub use actors::{ActorCatalog, ActorTemplate};
 pub use b3d::{B3dMesh, B3dModel};
+pub use texture::Image;
 pub use catalog::{MeshCatalog, MeshEntry, ParsedCatalog, CATALOG_SLOTS};
 pub use reader::{BlitzReader, ReadError};
 

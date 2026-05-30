@@ -1,8 +1,7 @@
-//! Offscreen 3D renderer: draws a [`B3dModel`] with a perspective camera and
-//! simple directional lighting, to a PNG. Verifiable headlessly (look at the
-//! image). This is the real-geometry step toward the in-world 3D view; the same
-//! pipeline (depth buffer, MVP uniform, per-vertex normals) scales up to the
-//! full scene with textures + skeletal animation.
+//! Offscreen 3D model renderer: draws a [`B3dModel`] with a perspective camera,
+//! per-mesh textures, and simple directional lighting, to a PNG. Each mesh is
+//! drawn separately so it can bind its own texture; untextured meshes get a 1×1
+//! white texture. Verifiable headlessly (look at the image).
 
 use std::io::BufWriter;
 
@@ -11,13 +10,14 @@ use glam::{Mat4, Vec3};
 use pollster::block_on;
 use wgpu::util::DeviceExt;
 
-use rcce_data::B3dModel;
+use rcce_data::{B3dMesh, B3dModel, Image};
 
 #[repr(C)]
 #[derive(Clone, Copy, Pod, Zeroable)]
 struct Vertex {
     pos: [f32; 3],
     normal: [f32; 3],
+    uv: [f32; 2],
 }
 
 #[repr(C)]
@@ -28,104 +28,82 @@ struct Uniforms {
 }
 
 const SHADER: &str = r#"
-struct Uniforms { mvp: mat4x4<f32>, model: mat4x4<f32> };
-@group(0) @binding(0) var<uniform> u: Uniforms;
-struct VsOut { @builtin(position) clip: vec4<f32>, @location(0) normal: vec3<f32> };
-
-@vertex fn vs(@location(0) pos: vec3<f32>, @location(1) normal: vec3<f32>) -> VsOut {
+struct U { mvp: mat4x4<f32>, model: mat4x4<f32> };
+@group(0) @binding(0) var<uniform> u: U;
+@group(1) @binding(0) var tex: texture_2d<f32>;
+@group(1) @binding(1) var samp: sampler;
+struct VsOut {
+    @builtin(position) clip: vec4<f32>,
+    @location(0) normal: vec3<f32>,
+    @location(1) uv: vec2<f32>,
+};
+@vertex fn vs(@location(0) pos: vec3<f32>, @location(1) normal: vec3<f32>, @location(2) uv: vec2<f32>) -> VsOut {
     var o: VsOut;
     o.clip = u.mvp * vec4<f32>(pos, 1.0);
     o.normal = (u.model * vec4<f32>(normal, 0.0)).xyz;
+    o.uv = uv;
     return o;
 }
 @fragment fn fs(in: VsOut) -> @location(0) vec4<f32> {
     let N = normalize(in.normal);
     let L = normalize(vec3<f32>(0.4, 0.85, 0.35));
-    let diff = max(dot(N, L), 0.0) * 0.8 + 0.2;
-    let base = vec3<f32>(0.72, 0.76, 0.82);
-    return vec4<f32>(base * diff, 1.0);
+    let diff = max(dot(N, L), 0.0) * 0.7 + 0.45;
+    let c = textureSample(tex, samp, in.uv);
+    return vec4<f32>(c.rgb * diff, 1.0);
 }
 "#;
 
-/// Flatten a model's meshes into one vertex/index buffer, ensuring per-vertex
-/// normals (computed from faces when the mesh lacks them).
-fn build_geometry(model: &B3dModel) -> (Vec<Vertex>, Vec<u32>, [f32; 3], [f32; 3]) {
-    let mut verts: Vec<Vertex> = Vec::new();
-    let mut indices: Vec<u32> = Vec::new();
-    let (mut min, mut max) = ([f32::MAX; 3], [f32::MIN; 3]);
-
-    for mesh in &model.meshes {
-        let base = verts.len() as u32;
-        let has_normals = mesh.normals.len() == mesh.positions.len();
-
-        for (i, p) in mesh.positions.iter().enumerate() {
-            for k in 0..3 {
-                min[k] = min[k].min(p[k]);
-                max[k] = max[k].max(p[k]);
+/// Per-mesh vertices (pos+normal+uv), computing normals from faces if absent.
+fn mesh_vertices(mesh: &B3dMesh) -> (Vec<Vertex>, Vec<u32>) {
+    let has_n = mesh.normals.len() == mesh.positions.len();
+    let has_uv = mesh.uvs.len() == mesh.positions.len();
+    let mut verts: Vec<Vertex> = mesh
+        .positions
+        .iter()
+        .enumerate()
+        .map(|(i, p)| Vertex {
+            pos: *p,
+            normal: if has_n { mesh.normals[i] } else { [0.0; 3] },
+            uv: if has_uv { mesh.uvs[i] } else { [0.0; 2] },
+        })
+        .collect();
+    if !has_n {
+        for tri in mesh.indices.chunks_exact(3) {
+            let (a, b, c) = (tri[0] as usize, tri[1] as usize, tri[2] as usize);
+            let pa = Vec3::from(verts[a].pos);
+            let fnv = (Vec3::from(verts[b].pos) - pa).cross(Vec3::from(verts[c].pos) - pa);
+            for &v in &[a, b, c] {
+                let n = Vec3::from(verts[v].normal) + fnv;
+                verts[v].normal = n.into();
             }
-            let n = if has_normals {
-                mesh.normals[i]
+        }
+        for v in &mut verts {
+            let n = Vec3::from(v.normal);
+            v.normal = if n.length_squared() > 1e-12 {
+                n.normalize().into()
             } else {
-                [0.0, 0.0, 0.0] // filled below from faces
+                [0.0, 1.0, 0.0]
             };
-            verts.push(Vertex { pos: *p, normal: n });
-        }
-
-        // Face-normal accumulation when normals are missing.
-        if !has_normals {
-            for tri in mesh.indices.chunks_exact(3) {
-                let (a, b, c) = (
-                    base as usize + tri[0] as usize,
-                    base as usize + tri[1] as usize,
-                    base as usize + tri[2] as usize,
-                );
-                let pa = Vec3::from(verts[a].pos);
-                let pb = Vec3::from(verts[b].pos);
-                let pc = Vec3::from(verts[c].pos);
-                let fn_ = (pb - pa).cross(pc - pa);
-                for &v in &[a, b, c] {
-                    let n = Vec3::from(verts[v].normal) + fn_;
-                    verts[v].normal = n.into();
-                }
-            }
-        }
-
-        for &idx in &mesh.indices {
-            indices.push(base + idx);
         }
     }
-
-    // Normalize any accumulated normals.
-    for v in &mut verts {
-        let n = Vec3::from(v.normal);
-        if n.length_squared() > 1e-12 {
-            v.normal = n.normalize().into();
-        } else {
-            v.normal = [0.0, 1.0, 0.0];
-        }
-    }
-
-    if verts.is_empty() {
-        min = [0.0; 3];
-        max = [0.0; 3];
-    }
-    (verts, indices, min, max)
+    (verts, mesh.indices.clone())
 }
 
-/// Render `model` to a `width`x`height` PNG at `path`. `yaw` rotates the model
-/// (radians) for a chosen viewing angle. Returns the adapter name.
+/// Render `model` (with optional per-mesh `textures`, aligned to `model.meshes`)
+/// to a PNG. `yaw` rotates the model. Returns the adapter name.
 pub fn render_model_png(
     model: &B3dModel,
+    textures: &[Option<Image>],
     yaw: f32,
     width: u32,
     height: u32,
     path: &str,
 ) -> Result<String, String> {
-    let (verts, indices, min, max) = build_geometry(model);
-    if verts.is_empty() || indices.is_empty() {
-        return Err("model has no geometry".into());
+    if model.meshes.is_empty() {
+        return Err("model has no meshes".into());
     }
 
+    let (min, max) = model.bounds();
     let center = Vec3::new(
         (min[0] + max[0]) * 0.5,
         (min[1] + max[1]) * 0.5,
@@ -133,22 +111,17 @@ pub fn render_model_png(
     );
     let extent = Vec3::new(max[0] - min[0], max[1] - min[1], max[2] - min[2]);
     let radius = extent.max_element().max(0.001) * 0.5;
-
-    // Camera: a 3/4 view, framed to the model's bounds.
     let dir = Vec3::new(0.55, 0.45, 1.0).normalize();
     let eye = center + dir * (radius * 3.2);
     let aspect = width as f32 / height as f32;
     let proj = Mat4::perspective_rh(45f32.to_radians(), aspect, radius * 0.05, radius * 20.0);
     let view = Mat4::look_at_rh(eye, center, Vec3::Y);
     let model_mat = Mat4::from_rotation_y(yaw);
-    let mvp = proj * view * model_mat;
-
     let uniforms = Uniforms {
-        mvp: mvp.to_cols_array(),
+        mvp: (proj * view * model_mat).to_cols_array(),
         model: model_mat.to_cols_array(),
     };
 
-    // ---- wgpu setup ----
     let instance = wgpu::Instance::default();
     let adapter = block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
         power_preference: wgpu::PowerPreference::HighPerformance,
@@ -159,7 +132,7 @@ pub fn render_model_png(
     let adapter_name = adapter.get_info().name;
     let (device, queue) = block_on(adapter.request_device(
         &wgpu::DeviceDescriptor {
-            label: Some("rcce-render3d"),
+            label: Some("model3d"),
             required_features: wgpu::Features::empty(),
             required_limits: wgpu::Limits::downlevel_defaults(),
             memory_hints: wgpu::MemoryHints::Performance,
@@ -180,7 +153,6 @@ pub fn render_model_png(
         view_formats: &[],
     });
     let color_view = target.create_view(&Default::default());
-
     let depth = device.create_texture(&wgpu::TextureDescriptor {
         label: Some("depth"),
         size: wgpu::Extent3d { width, height, depth_or_array_layers: 1 },
@@ -193,12 +165,13 @@ pub fn render_model_png(
     });
     let depth_view = depth.create_view(&Default::default());
 
+    // Uniform bind group (0).
     let ubuf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-        label: Some("uniforms"),
+        label: Some("u"),
         contents: bytemuck::bytes_of(&uniforms),
         usage: wgpu::BufferUsages::UNIFORM,
     });
-    let bgl = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+    let bgl0 = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
         label: None,
         entries: &[wgpu::BindGroupLayoutEntry {
             binding: 0,
@@ -211,14 +184,82 @@ pub fn render_model_png(
             count: None,
         }],
     });
-    let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+    let bind0 = device.create_bind_group(&wgpu::BindGroupDescriptor {
         label: None,
-        layout: &bgl,
-        entries: &[wgpu::BindGroupEntry {
-            binding: 0,
-            resource: ubuf.as_entire_binding(),
-        }],
+        layout: &bgl0,
+        entries: &[wgpu::BindGroupEntry { binding: 0, resource: ubuf.as_entire_binding() }],
     });
+
+    // Texture bind group layout (1).
+    let bgl1 = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+        label: None,
+        entries: &[
+            wgpu::BindGroupLayoutEntry {
+                binding: 0,
+                visibility: wgpu::ShaderStages::FRAGMENT,
+                ty: wgpu::BindingType::Texture {
+                    sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                    view_dimension: wgpu::TextureViewDimension::D2,
+                    multisampled: false,
+                },
+                count: None,
+            },
+            wgpu::BindGroupLayoutEntry {
+                binding: 1,
+                visibility: wgpu::ShaderStages::FRAGMENT,
+                ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                count: None,
+            },
+        ],
+    });
+    let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+        address_mode_u: wgpu::AddressMode::Repeat,
+        address_mode_v: wgpu::AddressMode::Repeat,
+        mag_filter: wgpu::FilterMode::Linear,
+        min_filter: wgpu::FilterMode::Linear,
+        ..Default::default()
+    });
+
+    let make_tex_bind = |img: Option<&Image>| -> wgpu::BindGroup {
+        let (w, h, data): (u32, u32, Vec<u8>) = match img {
+            Some(i) if i.width > 0 && i.height > 0 => (i.width, i.height, i.rgba.clone()),
+            _ => (1, 1, vec![255, 255, 255, 255]),
+        };
+        let tex = device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("mesh-tex"),
+            size: wgpu::Extent3d { width: w, height: h, depth_or_array_layers: 1 },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Rgba8Unorm,
+            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+            view_formats: &[],
+        });
+        queue.write_texture(
+            wgpu::ImageCopyTexture {
+                texture: &tex,
+                mip_level: 0,
+                origin: wgpu::Origin3d::ZERO,
+                aspect: wgpu::TextureAspect::All,
+            },
+            &data,
+            wgpu::ImageDataLayout {
+                offset: 0,
+                bytes_per_row: Some(w * 4),
+                rows_per_image: Some(h),
+            },
+            wgpu::Extent3d { width: w, height: h, depth_or_array_layers: 1 },
+        );
+        let view = tex.create_view(&Default::default());
+        device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: None,
+            layout: &bgl1,
+            entries: &[
+                wgpu::BindGroupEntry { binding: 0, resource: wgpu::BindingResource::TextureView(&view) },
+                wgpu::BindGroupEntry { binding: 1, resource: wgpu::BindingResource::Sampler(&sampler) },
+            ],
+        })
+    };
 
     let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
         label: Some("model"),
@@ -226,7 +267,7 @@ pub fn render_model_png(
     });
     let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
         label: None,
-        bind_group_layouts: &[&bgl],
+        bind_group_layouts: &[&bgl0, &bgl1],
         push_constant_ranges: &[],
     });
     let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
@@ -239,7 +280,7 @@ pub fn render_model_png(
             buffers: &[wgpu::VertexBufferLayout {
                 array_stride: std::mem::size_of::<Vertex>() as u64,
                 step_mode: wgpu::VertexStepMode::Vertex,
-                attributes: &wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32x3],
+                attributes: &wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32x3, 2 => Float32x2],
             }],
         },
         fragment: Some(wgpu::FragmentState {
@@ -248,10 +289,7 @@ pub fn render_model_png(
             compilation_options: Default::default(),
             targets: &[Some(color_format.into())],
         }),
-        primitive: wgpu::PrimitiveState {
-            cull_mode: None, // B3D winding varies; draw both sides
-            ..Default::default()
-        },
+        primitive: wgpu::PrimitiveState { cull_mode: None, ..Default::default() },
         depth_stencil: Some(wgpu::DepthStencilState {
             format: wgpu::TextureFormat::Depth32Float,
             depth_write_enabled: true,
@@ -264,22 +302,38 @@ pub fn render_model_png(
         cache: None,
     });
 
-    let vbuf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-        label: Some("verts"),
-        contents: bytemuck::cast_slice(&verts),
-        usage: wgpu::BufferUsages::VERTEX,
-    });
-    let ibuf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-        label: Some("indices"),
-        contents: bytemuck::cast_slice(&indices),
-        usage: wgpu::BufferUsages::INDEX,
-    });
+    // Per-mesh GPU buffers + texture bind groups.
+    struct Drawable {
+        vbuf: wgpu::Buffer,
+        ibuf: wgpu::Buffer,
+        n_idx: u32,
+        tex_bind: wgpu::BindGroup,
+    }
+    let mut drawables = Vec::with_capacity(model.meshes.len());
+    for (i, mesh) in model.meshes.iter().enumerate() {
+        let (verts, indices) = mesh_vertices(mesh);
+        if verts.is_empty() || indices.is_empty() {
+            continue;
+        }
+        let vbuf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("v"),
+            contents: bytemuck::cast_slice(&verts),
+            usage: wgpu::BufferUsages::VERTEX,
+        });
+        let ibuf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("i"),
+            contents: bytemuck::cast_slice(&indices),
+            usage: wgpu::BufferUsages::INDEX,
+        });
+        let tex_bind = make_tex_bind(textures.get(i).and_then(|t| t.as_ref()));
+        drawables.push(Drawable { vbuf, ibuf, n_idx: indices.len() as u32, tex_bind });
+    }
 
     let bpp = 4u32;
     let unpadded = width * bpp;
     let padded = unpadded.div_ceil(256) * 256;
     let readback = device.create_buffer(&wgpu::BufferDescriptor {
-        label: Some("readback"),
+        label: Some("rb"),
         size: (padded * height) as u64,
         usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
         mapped_at_creation: false,
@@ -309,10 +363,13 @@ pub fn render_model_png(
             occlusion_query_set: None,
         });
         rp.set_pipeline(&pipeline);
-        rp.set_bind_group(0, &bind_group, &[]);
-        rp.set_vertex_buffer(0, vbuf.slice(..));
-        rp.set_index_buffer(ibuf.slice(..), wgpu::IndexFormat::Uint32);
-        rp.draw_indexed(0..indices.len() as u32, 0, 0..1);
+        rp.set_bind_group(0, &bind0, &[]);
+        for d in &drawables {
+            rp.set_bind_group(1, &d.tex_bind, &[]);
+            rp.set_vertex_buffer(0, d.vbuf.slice(..));
+            rp.set_index_buffer(d.ibuf.slice(..), wgpu::IndexFormat::Uint32);
+            rp.draw_indexed(0..d.n_idx, 0, 0..1);
+        }
     }
     enc.copy_texture_to_buffer(
         wgpu::ImageCopyTexture {
