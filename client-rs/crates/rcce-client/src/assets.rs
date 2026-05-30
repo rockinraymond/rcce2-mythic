@@ -7,14 +7,28 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::rc::Rc;
 
-use rcce_data::{texture, ActorCatalog, B3dModel, Image, MeshCatalog, TextureCatalog};
+use rcce_data::{
+    texture, ActorCatalog, AnimClip, AnimSetCatalog, B3dModel, Image, MeshCatalog, TextureCatalog,
+};
 
 pub struct AssetStore {
     data_root: PathBuf,
     actors: ActorCatalog,
     meshes: MeshCatalog,
     textures: TextureCatalog,
+    anims: AnimSetCatalog,
     cache: HashMap<u16, Option<Rc<B3dModel>>>,
+}
+
+/// The looping frame for a clip at `elapsed` seconds, given the timeline `fps`.
+/// Honors the clip's speed; single-frame clips return their start.
+pub fn clip_frame(clip: &AnimClip, fps: f32, elapsed: f32) -> f32 {
+    let len = (clip.end - clip.start).max(0) as f32;
+    if len <= 0.0 {
+        return clip.start as f32;
+    }
+    let advanced = elapsed * fps.max(0.001) * clip.speed.max(0.001);
+    clip.start as f32 + advanced.rem_euclid(len + 1.0)
 }
 
 /// A head attachment (hair or beard): its model + textures, plus the mesh
@@ -72,13 +86,36 @@ impl AssetStore {
             .and_then(|b| TextureCatalog::parse(&b).ok())
             .map(|p| p.value)
             .unwrap_or_default();
+        // Animation-set table (named clip ranges). Non-fatal if absent.
+        let anims = std::fs::read(data_root.join("Game Data/Animations.dat"))
+            .ok()
+            .and_then(|b| AnimSetCatalog::parse(&b).ok())
+            .unwrap_or_default();
         Ok(Self {
             data_root,
             actors,
             meshes,
             textures,
+            anims,
             cache: HashMap::new(),
         })
+    }
+
+    /// The animation clip for an actor's named state ("Idle", "Walk", "Run",
+    /// "Default attack", "Death 1", …), resolved through the actor's animation
+    /// set (per gender). Tries the names in order; `None` if unmatched.
+    pub fn actor_clip(&self, template_id: u16, gender: u8, names: &[&str]) -> Option<&AnimClip> {
+        let t = self.actors.templates.get(&template_id)?;
+        let set_id = if gender == 1 { t.f_anim_set } else { t.m_anim_set };
+        let set = self.anims.get(set_id)?;
+        // Exact (case-insensitive) match wins over a fuzzy substring — so
+        // "Idle" picks "Idle", not "Sit idle"; "Run" picks "Run", not "Ride run".
+        for n in names {
+            if let Some(c) = set.clip(n).filter(|c| c.end >= c.start) {
+                return Some(c);
+            }
+        }
+        set.find(names).filter(|c| c.end >= c.start)
     }
 
     /// Template gender-mode (`Actors.dat` `Genders`) for every actor template,
@@ -311,6 +348,22 @@ impl AssetStore {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use rcce_data::AnimClip;
+
+    #[test]
+    fn clip_frame_loops_within_range() {
+        let clip = AnimClip { name: "Walk".into(), start: 10, end: 20, speed: 1.0 };
+        // t=0 -> start.
+        assert!((clip_frame(&clip, 10.0, 0.0) - 10.0).abs() < 1e-4);
+        // Always within [start, end] (inclusive-ish, len+1 wrap).
+        for i in 0..200 {
+            let f = clip_frame(&clip, 10.0, i as f32 * 0.05);
+            assert!(f >= 10.0 && f < 21.0, "frame {f} out of [10,21)");
+        }
+        // Single-frame clip pins to start.
+        let one = AnimClip { name: "Sit".into(), start: 142, end: 142, speed: 1.0 };
+        assert_eq!(clip_frame(&one, 30.0, 5.0), 142.0);
+    }
 
     fn att(offset: [f32; 3], scale: f32) -> Attachment {
         Attachment {

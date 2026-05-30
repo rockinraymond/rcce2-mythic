@@ -12,16 +12,14 @@ use std::rc::Rc;
 
 fn main() {
     // Args: <templateId> [gender] [frame|"bind"] [out.png]
+    // Args: <templateId> [gender] [bind | <frameNumber> | <clipName>] [out.png]
+    // Default (no frame arg) poses the actor mid-Idle.
     let mut args = std::env::args().skip(1);
     let tmpl: u16 = args.next().and_then(|s| s.parse().ok()).unwrap_or(0);
     let gender: u8 = args.next().and_then(|s| s.parse().ok()).unwrap_or(0);
     let frame_arg = args.next();
-    let frame: Option<f32> = match frame_arg.as_deref() {
-        None | Some("bind") => None,
-        Some(s) => Some(s.parse().unwrap_or(0.0)),
-    };
     let out = args.next().unwrap_or_else(|| {
-        let tag = frame.map(|f| format!("f{f}")).unwrap_or_else(|| "bind".into());
+        let tag = frame_arg.as_deref().unwrap_or("idle").replace(' ', "_");
         format!("actor_{tmpl}_g{gender}_{tag}.png")
     });
 
@@ -38,6 +36,30 @@ fn main() {
     let Some(src) = store.actor_model(tmpl, gender) else {
         eprintln!("[actor_render] no body model for template {tmpl} gender {gender}");
         std::process::exit(1);
+    };
+    let fps = src.anim.map(|a| a.fps).unwrap_or(15.0);
+
+    // Resolve the frame: "bind" → bind pose; a number → that frame; a clip name
+    // (or nothing → "Idle") → the clip's mid-frame via the actor's anim set.
+    let frame: Option<f32> = match frame_arg.as_deref() {
+        Some("bind") => None,
+        Some(s) if s.parse::<f32>().is_ok() => Some(s.parse().unwrap()),
+        other => {
+            let name = other.unwrap_or("Idle");
+            match store.actor_clip(tmpl, gender, &[name]) {
+                Some(c) => {
+                    // Mid-clip: half the clip's duration in.
+                    let mid = (c.end - c.start).max(0) as f32 * 0.5 / fps.max(0.001);
+                    let f = rcce_client::assets::clip_frame(c, fps, mid);
+                    println!("[actor_render] clip '{}' [{}..{}] -> frame {f:.1}", c.name, c.start, c.end);
+                    Some(f)
+                }
+                None => {
+                    eprintln!("[actor_render] no '{name}' clip for this actor; using bind");
+                    None
+                }
+            }
+        }
     };
     // Pose the body (linear-blend skinning) at `frame`; None = bind pose.
     if let Some(a) = &src.anim {

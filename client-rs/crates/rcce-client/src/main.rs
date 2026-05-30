@@ -139,15 +139,29 @@ fn main() {
                          body: u8,
                          hair: u8,
                          beard: u8,
+                         frame: Option<f32>,
                          pos: [f32; 3],
                          yaw: f32,
                          color: [f32; 3]| {
-        // Model varies by gender; textures also by face/body selection.
-        let key = format!("actor:{tmpl}:{gender}:{face}:{body}");
+        // Model varies by gender + animation frame; textures by face/body.
+        let fkey = frame.map(|f| f.round() as i32).unwrap_or(-1);
+        let key = format!("actor:{tmpl}:{gender}:{face}:{body}:{fkey}");
         let idx = match dedup.get(&key) {
             Some(&i) => i,
             None => {
-                let Some(m) = store.actor_model(tmpl, gender) else { return };
+                let Some(src) = store.actor_model(tmpl, gender) else { return };
+                // Pose the body via skinning at `frame` (None = bind).
+                let m = if frame.is_some() {
+                    std::rc::Rc::new(rcce_data::B3dModel {
+                        meshes: src.posed_meshes(frame),
+                        textures: src.textures.clone(),
+                        brushes: src.brushes.clone(),
+                        bones: src.bones.clone(),
+                        anim: src.anim,
+                    })
+                } else {
+                    src
+                };
                 let tex = store.actor_textures(tmpl, gender, face, body);
                 let i = models.len();
                 models.push(m);
@@ -186,11 +200,45 @@ fn main() {
         }
     };
 
-    add_actor(&mut store, &mut models, &mut textures, &mut dedup, &mut placements, 0, world.me_gender, world.me_face_tex, world.me_body_tex, 0, 0, [world.me_x, world.me_y, world.me_z], world.me_yaw, [0.85, 0.95, 0.85]);
+    // Animation frame for an actor: pick the clip by movement state and sample
+    // it at a per-actor phase (so a crowd isn't in lockstep). Falls back to bind
+    // (None) if the actor has no anim set / clip.
+    let pose_frame = |store: &rcce_client::assets::AssetStore,
+                      tmpl: u16,
+                      gender: u8,
+                      rid: u16,
+                      moving: bool,
+                      running: bool| -> Option<f32> {
+        let names: &[&str] = if running {
+            &["Run"]
+        } else if moving {
+            &["Walk"]
+        } else {
+            &["Idle", "Sit idle"]
+        };
+        let clip = store.actor_clip(tmpl, gender, names)?;
+        // Static snapshot: spread actors across the clip by runtime id so a
+        // crowd isn't frozen on the same frame. (The real-time window will
+        // advance by dt*fps via assets::clip_frame instead.)
+        let len = (clip.end - clip.start).max(0) as f32;
+        let off = if len > 0.0 {
+            ((rid as f32) * 2.0).rem_euclid(len + 1.0)
+        } else {
+            0.0
+        };
+        Some(clip.start as f32 + off)
+    };
+
+    let me_frame = pose_frame(&store, 0, world.me_gender, world.my_runtime_id, false, false);
+    add_actor(&mut store, &mut models, &mut textures, &mut dedup, &mut placements, 0, world.me_gender, world.me_face_tex, world.me_body_tex, 0, 0, me_frame, [world.me_x, world.me_y, world.me_z], world.me_yaw, [0.85, 0.95, 0.85]);
     let actor_player_idx = placements.first().map(|p| p.0);
     for a in world.actors.values() {
         let color = if a.is_player { [0.85, 0.9, 1.0] } else { [1.0, 1.0, 1.0] };
-        add_actor(&mut store, &mut models, &mut textures, &mut dedup, &mut placements, a.template_id, a.gender, a.face_tex, a.body_tex, a.hair, a.beard, [a.x, a.y, a.z], a.yaw, color);
+        let dx = a.dest_x - a.x;
+        let dz = a.dest_z - a.z;
+        let moving = (dx * dx + dz * dz) > 1.0;
+        let frame = pose_frame(&store, a.template_id, a.gender, a.runtime_id, moving, a.is_running);
+        add_actor(&mut store, &mut models, &mut textures, &mut dedup, &mut placements, a.template_id, a.gender, a.face_tex, a.body_tex, a.hair, a.beard, frame, [a.x, a.y, a.z], a.yaw, color);
     }
     let actor_count = placements.len();
 
