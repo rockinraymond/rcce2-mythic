@@ -7,6 +7,7 @@
 //! land next in this crate.
 
 pub mod actors;
+pub mod anim;
 pub mod area;
 pub mod b3d;
 pub mod catalog;
@@ -14,6 +15,7 @@ pub mod reader;
 pub mod texture;
 
 pub use actors::{ActorCatalog, ActorTemplate};
+pub use anim::{AnimClip, AnimSet, AnimSetCatalog};
 pub use area::{AreaScenery, SceneryPlacement};
 pub use b3d::{B3dAnim, B3dBone, B3dKey, B3dMesh, B3dModel};
 pub use texture::Image;
@@ -299,6 +301,35 @@ mod tests {
             "Male_02: {} bones, {} weights, {} keyframes, {} frames @ {}fps",
             model.bones.len(), model.weight_count(), model.keyframe_count(),
             anim.frames, anim.fps
+        );
+    }
+
+    /// Parse the real `Animations.dat` and verify the Player set's named clips
+    /// (Idle/Walk/Run) decode with sane frame ranges. Skips if absent.
+    #[test]
+    fn parse_animation_sets() {
+        let path = repo_root().join("data/Game Data/Animations.dat");
+        let Ok(bytes) = std::fs::read(&path) else {
+            eprintln!("skipping: {} not present", path.display());
+            return;
+        };
+        let cat = anim::AnimSetCatalog::parse(&bytes).expect("Animations.dat parse");
+        assert!(!cat.sets.is_empty(), "no anim sets");
+        // The Player set (id 0) carries the human clips.
+        let player = cat.get(0).expect("player anim set 0");
+        let walk = player.clip("Walk").expect("Walk clip");
+        let run = player.clip("Run").expect("Run clip");
+        let idle = player.find(&["Idle"]).expect("an Idle clip");
+        assert!(walk.start >= 0 && walk.end >= walk.start, "walk range");
+        assert!(run.end >= run.start, "run range");
+        assert!(idle.end >= idle.start, "idle range");
+        // All clip ranges must sit inside a plausible timeline bound.
+        for c in &player.clips {
+            assert!(c.start >= 0 && c.end < 100_000, "clip '{}' insane range", c.name);
+        }
+        eprintln!(
+            "Player set: {} clips; Walk[{}..{}] Run[{}..{}] Idle[{}..{}]",
+            player.clips.len(), walk.start, walk.end, run.start, run.end, idle.start, idle.end
         );
     }
 

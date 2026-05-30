@@ -19,6 +19,10 @@ pub struct ActorTemplate {
     pub radius: f32,
     /// 0 = male base, 1 = female base, 2..8 = gubbins/equipment meshes.
     pub mesh_ids: [u16; 8],
+    /// Animation-set ids (`Animations.dat`) for the named anim ranges, per
+    /// gender. `mesh_for`'s gender selects which to use.
+    pub m_anim_set: u16,
+    pub f_anim_set: u16,
     /// Selectable hair/beard mesh-catalog ids (index by the character's
     /// Hair/Beard selection 0..4). `65535` = none. Beards are male-only.
     pub beard_ids: [u16; 5],
@@ -76,8 +80,8 @@ fn parse_record(r: &mut BlitzReader) -> Result<ActorTemplate, ReadError> {
     let _description = r.read_string(4096)?;
     let _start_area = r.read_string(256)?;
     let _start_portal = r.read_string(256)?;
-    let _m_anim = r.read_short()?;
-    let _f_anim = r.read_short()?;
+    let m_anim_set = r.read_short_u()?;
+    let f_anim_set = r.read_short_u()?;
     let scale = r.read_float()?;
     let radius = r.read_float()?;
 
@@ -134,6 +138,8 @@ fn parse_record(r: &mut BlitzReader) -> Result<ActorTemplate, ReadError> {
         scale,
         radius,
         mesh_ids,
+        m_anim_set,
+        f_anim_set,
         beard_ids,
         male_hair_ids,
         female_hair_ids,
