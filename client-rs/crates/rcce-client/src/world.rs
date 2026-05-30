@@ -10,11 +10,21 @@ use rcce_net::codec::MsgReader;
 use rcce_net::{packet_id as pk, RecvMessage};
 
 /// One actor instance in the current zone (player or NPC).
+/// A combat hit reported by `P_AttackActor`.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct CombatEvent {
+    pub target: u16,
+    pub damage: u16,
+    /// Damage-type index (maps to a name via Damage.dat).
+    pub damage_type: u8,
+}
+
 #[derive(Debug, Clone, Default)]
 pub struct Actor {
     pub runtime_id: u16,
     pub template_id: u16,
     pub name: String,
+    pub tag: String,
     pub is_player: bool,
     pub x: f32,
     pub y: f32,
@@ -60,6 +70,8 @@ pub struct World {
     pub me_xp_bar: u8,
     pub me_gold: i32,
     pub me_attributes: HashMap<u8, (i16, i16)>,
+    /// Recent combat hits (from P_AttackActor).
+    pub combat_events: Vec<CombatEvent>,
 }
 
 impl World {
@@ -75,6 +87,8 @@ impl World {
             pk::GOLD_CHANGE => self.on_gold_change(&m.data),
             pk::STAT_UPDATE => self.on_stat_update(&m.data),
             pk::ACTOR_DEAD => self.on_actor_dead(&m.data),
+            pk::ATTACK_ACTOR => self.on_attack_actor(&m.data),
+            pk::NAME_CHANGE => self.on_name_change(&m.data),
             _ => {}
         }
     }
@@ -248,6 +262,41 @@ impl World {
         }
     }
 
+    /// `P_AttackActor` (ClientNet.bb:1115): byte0 `'H'`(hit) + targetRID(u16) +
+    /// rawDamage(u16, −1) + damageType(u8). HP itself arrives via P_StatUpdate;
+    /// this records the hit for feedback.
+    fn on_attack_actor(&mut self, d: &[u8]) {
+        if d.first() != Some(&b'H') {
+            return;
+        }
+        let mut r = MsgReader::new(&d[1..]);
+        let (Some(target), Some(raw_dmg), Some(dtype)) = (r.u16(), r.u16(), r.u8()) else {
+            return;
+        };
+        let damage = raw_dmg.saturating_sub(1);
+        self.combat_events.push(CombatEvent {
+            target,
+            damage,
+            damage_type: dtype,
+        });
+    }
+
+    /// `P_NameChange` (ClientNet.bb:936): RID(u16) + nameLen(u8) + name + tag.
+    fn on_name_change(&mut self, d: &[u8]) {
+        let mut r = MsgReader::new(d);
+        let (Some(rid), Some(name_len)) = (r.u16(), r.u8()) else {
+            return;
+        };
+        let rest = r.rest();
+        let n = (name_len as usize).min(rest.len());
+        let name = String::from_utf8_lossy(&rest[..n]).into_owned();
+        let tag = String::from_utf8_lossy(&rest[n..]).into_owned();
+        if let Some(a) = self.actors.get_mut(&rid) {
+            a.name = name;
+            a.tag = tag;
+        }
+    }
+
     /// `P_ChatMessage`: a leading control byte (channel, e.g. 253/254) then text.
     fn on_chat(&mut self, d: &[u8]) {
         let text: String = d
@@ -362,5 +411,36 @@ mod tests {
         // ActorDead marks the NPC dead.
         w.apply(&msg(pk::ACTOR_DEAD, pkt(|p| { p.u16(50); })));
         assert!(!w.actors[&50].alive);
+    }
+
+    #[test]
+    fn attack_and_rename() {
+        let mut w = World::default();
+        // Register an actor (rnid 50).
+        w.apply(&msg(
+            pk::NEW_ACTOR,
+            pkt(|p| {
+                p.u32(0).u16(50).u16(1).u32(0).u16(3);
+                p.f32(0.0).f32(0.0).f32(0.0).f32(0.0);
+                p.u8(0).str8("Stag");
+            }),
+        ));
+
+        // P_AttackActor: 'H', target 50, raw damage 11 (-> 10), type 2.
+        w.apply(&msg(pk::ATTACK_ACTOR, pkt(|p| { p.u8(b'H').u16(50).u16(11).u8(2); })));
+        assert_eq!(
+            w.combat_events.last().copied(),
+            Some(CombatEvent { target: 50, damage: 10, damage_type: 2 })
+        );
+
+        // P_NameChange: rid 50, name "Boss", tag "[Elite]".
+        w.apply(&msg(
+            pk::NAME_CHANGE,
+            pkt(|p| {
+                p.u16(50).u8(4).raw(b"Boss").raw(b"[Elite]");
+            }),
+        ));
+        assert_eq!(w.actors[&50].name, "Boss");
+        assert_eq!(w.actors[&50].tag, "[Elite]");
     }
 }
