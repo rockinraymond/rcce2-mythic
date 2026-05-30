@@ -1267,7 +1267,14 @@ Function BVM_ACTORBACKPACK%(Param1%, Param2%)
 	Actor.ActorInstance = Object.ActorInstance(Param1)
 	If Actor <> Null
 		Num = Param2 - 1
-		Result% = Handle(Actor\Inventory\Items[SlotI_Backpack + Num])
+		; Param2 is a raw script-supplied int. Items is Field [Slots_Inventory];
+		; bound the computed slot before indexing, mirroring BVM_BACKPACKCOUNT.
+		; Without it an out-of-range slot is an OOB Field read whose garbage flows
+		; into Handle() -> server crash / type-confused handle. Out of range => 0
+		; ("no item"), the sentinel callers already expect.
+		If SlotI_Backpack + Num >= SlotI_Backpack And SlotI_Backpack + Num <= Slots_Inventory
+			Result% = Handle(Actor\Inventory\Items[SlotI_Backpack + Num])
+		EndIf
 	EndIf
 Return Result
 End Function
@@ -1342,7 +1349,10 @@ Function BVM_ACTORRING%(Param1%, Param2%)
 	Actor.ActorInstance = Object.ActorInstance(Param1%)
 	If Actor <> Null
 		Num = Param2% - 1
-		Result% = Handle(Actor\Inventory\Items[SlotI_Ring1 + Num])
+		; Bound the script-supplied ring slot (8..11) before indexing Items[].
+		If SlotI_Ring1 + Num >= SlotI_Ring1 And SlotI_Ring1 + Num <= SlotI_Ring4
+			Result% = Handle(Actor\Inventory\Items[SlotI_Ring1 + Num])
+		EndIf
 	EndIf
 Return Result%
 End Function
@@ -1351,7 +1361,10 @@ Function BVM_ACTORAMULET%(Param1%, Param2%)
 	Actor.ActorInstance = Object.ActorInstance(Param1%)
 	If Actor <> Null
 		Num = Param2% - 1
-		Result% = Handle(Actor\Inventory\Items[SlotI_Amulet1 + Num])
+		; Bound the script-supplied amulet slot (12..13) before indexing Items[].
+		If SlotI_Amulet1 + Num >= SlotI_Amulet1 And SlotI_Amulet1 + Num <= SlotI_Amulet2
+			Result% = Handle(Actor\Inventory\Items[SlotI_Amulet1 + Num])
+		EndIf
 	EndIf
 Return Result%
 End Function
