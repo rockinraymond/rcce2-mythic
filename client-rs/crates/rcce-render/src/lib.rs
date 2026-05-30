@@ -6,7 +6,9 @@
 //! target is confirmed viable.
 
 pub mod render;
+pub mod render3d;
 pub use render::{render_markers_png, Marker};
+pub use render3d::render_model_png;
 
 use pollster::block_on;
 
