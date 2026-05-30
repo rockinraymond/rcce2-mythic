@@ -1881,7 +1881,7 @@ Function CharSelect()
 							; Block 1
 							If Mid$(M\MessageData$, 2, 1) = "1"
 								Me\Gold = RCE_IntFromStr(Mid$(M\MessageData$, 3, 4))
-								Me\Reputation = RCE_IntFromStr(Mid$(M\MessageData$, 7, 2))
+								Me\Reputation = RCE_SignedShortFromStr(Mid$(M\MessageData$, 7, 2))  ; signed: reputation can be negative
 								Me\Level = RCE_IntFromStr(Mid$(M\MessageData$, 9, 2))
 								Me\XP = RCE_IntFromStr(Mid$(M\MessageData$, 11, 4))
 								Me\HomeFaction = RCE_IntFromStr(Mid$(M\MessageData$, 15, 1))

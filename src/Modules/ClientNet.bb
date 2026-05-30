@@ -1006,7 +1006,7 @@ Function UpdateNetwork()
 							A\Attributes\Maximum[Attribute] = RCE_IntFromStr(Mid$(M\MessageData$, 5, 2))
 						EndIf
 					ElseIf Left$(M\MessageData$, 1) = "R"
-						A\Reputation = RCE_IntFromStr(Mid$(M\MessageData$, 4, 2))
+						A\Reputation = RCE_SignedShortFromStr(Mid$(M\MessageData$, 4, 2))  ; signed: reputation can be negative
 					EndIf
 				EndIf
 

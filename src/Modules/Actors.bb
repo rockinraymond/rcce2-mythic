@@ -1154,7 +1154,7 @@ Function ActorInstanceFromString.ActorInstance(Pa$)
 	A\Tag$ = Mid$(Pa$, Offset + 1, NameLen)
 	Offset = Offset + 1 + NameLen
 	If A\Actor\Genders = 0 Then A\Gender = RCE_IntFromStr(Mid$(Pa$, Offset, 1)) : Offset = Offset + 1
-	A\Reputation = RCE_IntFromStr(Mid$(Pa$, Offset, 2))
+	A\Reputation = RCE_SignedShortFromStr(Mid$(Pa$, Offset, 2))  ; signed: reputation can be negative
 	A\FaceTex = RCE_IntFromStr(Mid$(Pa$, Offset + 2, 2))
 	A\Hair    = RCE_IntFromStr(Mid$(Pa$, Offset + 4, 2))
 	A\BodyTex = RCE_IntFromStr(Mid$(Pa$, Offset + 6, 2))

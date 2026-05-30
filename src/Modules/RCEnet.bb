@@ -82,6 +82,20 @@ Function RCE_IntFromStr(Dat$)
   Return PeekInt(RCE_ConvertBank, 0)
 End Function
 
+; Reads a SIGNED 16-bit value from a 2-byte wire field. RCE_IntFromStr zero-
+; fills the 4-byte bank and writes only the bytes present, so a 2-byte field
+; always decodes 0..65535 (unsigned). A field that carries a signed value in
+; a 2-byte slot must sign-extend: a decoded value >= 32768 is negative. Use
+; this (not RCE_IntFromStr) for such fields -- e.g. reputation, which the
+; save path already stores signed via WriteShort/ReadShort, but every wire
+; reader had been decoding unsigned (so a hostile/negative reputation arrived
+; as a large positive on the client).
+Function RCE_SignedShortFromStr(Dat$)
+  Local v = RCE_IntFromStr(Dat$)
+  If v >= 32768 Then v = v - 65536
+  Return v
+End Function
+
 Function RCE_StrFromInt$(Num, Length = 4)
   PokeInt RCE_ConvertBank, 0, Num
   Dat$ = ""

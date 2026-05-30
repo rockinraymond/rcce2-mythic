@@ -285,3 +285,46 @@ Test testByteOrderTwoBytePreservesHighLowOrder()
 	Assert(Asc(Mid$(encoded$, 1, 1)) = 2)
 	Assert(Asc(Mid$(encoded$, 2, 1)) = 1)
 End Test
+
+; ====================================================================
+; RCE_SignedShortFromStr: decode a 2-byte field as SIGNED 16-bit.
+; RCE_IntFromStr alone decodes 0..65535 (unsigned) because it zero-fills
+; the 4-byte bank and writes only the bytes present. A field carrying a
+; signed value in a 2-byte slot (reputation -- stored signed by the save
+; path via WriteShort/ReadShort, but historically read UNSIGNED by every
+; wire reader) must sign-extend: decoded >= 32768 is negative. Replicated
+; here per the same offline-Include constraint; mirrors RCEnet.bb.
+; ====================================================================
+
+Function TestSignedShortFromStr(Dat$)
+	Local v = TestIntFromStr(Dat$)
+	If v >= 32768 Then v = v - 65536
+	Return v
+End Function
+
+Test testSignedShortNonNegativeUnchanged()
+	; 0..32767 decode identically to the unsigned read.
+	Assert(TestSignedShortFromStr(TestStrFromInt$(0, 2))     = 0)
+	Assert(TestSignedShortFromStr(TestStrFromInt$(1, 2))     = 1)
+	Assert(TestSignedShortFromStr(TestStrFromInt$(12345, 2)) = 12345)
+	Assert(TestSignedShortFromStr(TestStrFromInt$(32767, 2)) = 32767)
+End Test
+
+Test testSignedShortNegativeRoundTrip()
+	; A negative value sent through the 2-byte field (its low 2 bytes) is
+	; recovered exactly by the sign-extend -- the reputation fix. Plain
+	; RCE_IntFromStr would return these as large positives.
+	Assert(TestSignedShortFromStr(TestStrFromInt$(-1, 2))     = -1)
+	Assert(TestSignedShortFromStr(TestStrFromInt$(-100, 2))   = -100)
+	Assert(TestSignedShortFromStr(TestStrFromInt$(-10000, 2)) = -10000)
+	Assert(TestSignedShortFromStr(TestStrFromInt$(-32768, 2)) = -32768)
+End Test
+
+Test testSignedShortContrastWithUnsigned()
+	; Wire bytes for -1 are 0xFFFF. Unsigned read = 65535; signed = -1.
+	; Pins the exact behavioural difference the fix makes at the reputation
+	; reader sites (ClientNet.bb, Actors.bb, MainMenu.bb).
+	Local wire$ = TestStrFromInt$(-1, 2)
+	Assert(TestIntFromStr(wire$)         = 65535)
+	Assert(TestSignedShortFromStr(wire$) = -1)
+End Test
