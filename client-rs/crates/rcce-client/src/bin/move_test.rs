@@ -1,15 +1,28 @@
 //! Verifies the movement SEND path: client A walks (sends P_StandardUpdate),
 //! client B observes. Two accounts, one process.
 //!
-//! KNOWN BLOCKER (2026-05-30): the server DROPS A's movement —
-//! `FindActorInstanceFromRNID(M\FromID)` (Actors.bb:263) returns Null because
-//! `M\FromID > MaxRNID`, so `ActorByRNID(M\FromID)` was never set at StartGame
-//! (ServerNet.bb:57). The wrapper sets `iSender = (int)Event.peer`
-//! (RCEnet/main.cpp:426), and our raw-enet connection's server-side identity
-//! isn't mapping into the actor table the way the real DLL client's does. The
-//! payload FORMAT is correct (matches ServerNet.bb:1796). Diagnostics confirm:
-//! A's own server-echoed position stays frozen and B sees the NPCs move but not
-//! A. Root-causing needs a packet capture of the real client's connect+move.
+//! KNOWN BLOCKER — root-caused as far as source allows (re-confirmed live):
+//! the server drops A's movement at `FindActorInstanceFromRNID(M\FromID)`
+//! (handler ServerNet.bb:1797; lookup Actors.bb:263-266 returns Null when
+//! `RNID<1 Or RNID>MaxRNID`, MaxRNID=5000).
+//!
+//! Exact mechanism (ServerNet.bb P_StartGame 2149-2179): the server keeps TWO
+//! ids — `\RNID = M\FromID` (the connection id; the gameplay-attribution key,
+//! indexed into `ActorByRNID` ONLY `If M\FromID>0 And <=5000`) and a SEPARATE
+//! `\RuntimeID = AssignRuntimeID(...)` (a small counter, the network id that's
+//! BROADCAST and which our client reads back as "7"). So our "7" is NOT the
+//! attribution key. `M\FromID = RCE_GetMessageConnection() = iSender`, and the
+//! vendored RCEnet wrapper sets `iSender = (int)Event.peer` (a heap POINTER,
+//! always >5000) — which would make the `<=5000` guard fail and `ActorByRNID`
+//! never get set, breaking movement for EVERY client. Since real RealmCrafter
+//! games work, bin/Server.exe's actual RCEnet.dll must NOT return the raw
+//! pointer (likely `incomingPeerID`, 0..4999) — i.e. it differs from the
+//! vendored source. Payload FORMAT is correct (ServerNet.bb:1808-1815).
+//!
+//! To crack it (needs data this autonomous env can't get): capture the real
+//! Client.exe's connect+StartGame+move on UDP 25000 and compare the connection
+//! identity, OR temporarily instrument the server to log M\FromID at StartGame
+//! vs at P_StandardUpdate. Until then the Rust client is a live SPECTATOR.
 //!
 //!   cargo run --release -p rcce-client --bin move-test -- [host] [port]
 
