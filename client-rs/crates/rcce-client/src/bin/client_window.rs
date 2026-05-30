@@ -115,6 +115,10 @@ struct App {
     fog_color: [f32; 3],
     fog_near: f32,
     fog_far: f32,
+    /// Zone lighting: ambient floor + toward-light unit vector (from the area
+    /// header's DefaultLightPitch/Yaw).
+    ambient: [f32; 3],
+    light_dir: [f32; 3],
     start: Instant,
     frames: u64,
     last_log: Instant,
@@ -155,6 +159,8 @@ impl App {
             fog_color: [0.45, 0.62, 0.82],
             fog_near: 1000.0,
             fog_far: 9000.0,
+            ambient: [0.5, 0.5, 0.5],
+            light_dir: [0.0, 0.5, -0.866],
             start: now,
             frames: 0,
             last_log: now,
@@ -347,6 +353,8 @@ impl ApplicationHandler for App {
             self.fog_color = env.fog_color;
             self.fog_near = env.fog_near;
             self.fog_far = env.fog_far;
+            self.ambient = env.ambient;
+            self.light_dir = env.light_dir;
         }
 
         // Try to log into the live server.
@@ -616,6 +624,8 @@ impl App {
             self.fog_color,
             self.fog_near,
             self.fog_far,
+            self.ambient,
+            self.light_dir,
             wgpu::Color {
                 r: self.fog_color[0] as f64,
                 g: self.fog_color[1] as f64,

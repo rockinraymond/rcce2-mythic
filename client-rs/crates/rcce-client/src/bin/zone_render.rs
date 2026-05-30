@@ -122,7 +122,7 @@ fn main() {
         })
         .collect();
 
-    match rcce_render::render_scene_png(&instances, eye, target, ground_y, env.fog_color, env.fog_near, env.fog_far, 1600, 1000, &out) {
+    match rcce_render::render_scene_png(&instances, eye, target, ground_y, env.fog_color, env.fog_near, env.fog_far, env.ambient, env.light_dir, 1600, 1000, &out) {
         Ok(adapter) => println!(
             "[zone_render] rendered {} instances via {adapter} -> {out}",
             instances.len()

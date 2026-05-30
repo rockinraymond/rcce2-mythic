@@ -37,7 +37,20 @@ pub struct AreaEnv {
     pub fog_near: f32,
     pub fog_far: f32,
     pub ambient: [f32; 3],
+    /// Unit vector *toward* the zone's directional light (for diffuse shading),
+    /// derived from the stored `DefaultLightPitch`/`Yaw` the engine feeds to
+    /// `RotateEntity(DefaultLight, pitch, yaw, 0)`.
+    pub light_dir: [f32; 3],
     pub outdoors: bool,
+}
+
+/// Toward-light unit vector from the engine's pitch/yaw (degrees). The Blitz
+/// directional light shines along its rotated local +Z; shading wants the
+/// opposite (the direction light arrives from).
+pub fn light_dir_from_pitch_yaw(pitch_deg: f32, yaw_deg: f32) -> [f32; 3] {
+    let (p, y) = (pitch_deg.to_radians(), yaw_deg.to_radians());
+    // Forward (shine) = (cosP·sinY, -sinP, cosP·cosY); toward-light = -forward.
+    [-(p.cos() * y.sin()), p.sin(), -(p.cos() * y.cos())]
 }
 
 impl Default for AreaEnv {
@@ -48,6 +61,7 @@ impl Default for AreaEnv {
             fog_near: 1000.0,
             fog_far: 8000.0,
             ambient: [0.5, 0.5, 0.5],
+            light_dir: [0.0, 0.5, -0.866],
             outdoors: true,
         }
     }
@@ -85,12 +99,17 @@ impl AreaScenery {
                 r.read_byte()? as f32 / 255.0,
                 r.read_byte()? as f32 / 255.0,
             ];
+            // DefaultLightPitch, DefaultLightYaw (degrees), SlopeRestrict follow.
+            let light_pitch = r.read_float()?;
+            let light_yaw = r.read_float()?;
+            let light_dir = light_dir_from_pitch_yaw(light_pitch, light_yaw);
             Ok(AreaEnv {
                 sky_tex_id,
                 fog_color,
                 fog_near,
                 fog_far,
                 ambient,
+                light_dir,
                 outdoors,
             })
         })()
@@ -123,5 +142,38 @@ impl AreaScenery {
             });
         }
         Ok(AreaScenery { env, sceneries })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn approx(a: [f32; 3], b: [f32; 3]) -> bool {
+        (0..3).all(|i| (a[i] - b[i]).abs() < 1e-4)
+    }
+
+    #[test]
+    fn light_dir_default_pitch() {
+        // The engine default (pitch 30, yaw 0): light from above-and-behind.
+        let l = light_dir_from_pitch_yaw(30.0, 0.0);
+        assert!(approx(l, [0.0, 0.5, -0.8660254]), "got {l:?}");
+        // Always a unit vector.
+        let mag = (l[0] * l[0] + l[1] * l[1] + l[2] * l[2]).sqrt();
+        assert!((mag - 1.0).abs() < 1e-4, "mag {mag}");
+    }
+
+    #[test]
+    fn light_dir_straight_down() {
+        // Pitch 90: light straight overhead → toward-light points +Y.
+        let l = light_dir_from_pitch_yaw(90.0, 0.0);
+        assert!(approx(l, [0.0, 1.0, 0.0]), "got {l:?}");
+    }
+
+    #[test]
+    fn light_dir_yaw_rotates_horizontal() {
+        // Pitch 0, yaw 90: purely horizontal, rotated onto -X.
+        let l = light_dir_from_pitch_yaw(0.0, 90.0);
+        assert!(approx(l, [-1.0, 0.0, 0.0]), "got {l:?}");
     }
 }

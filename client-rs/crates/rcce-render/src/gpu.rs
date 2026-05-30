@@ -32,9 +32,13 @@ pub struct Vertex {
     pub color: [f32; 3],
 }
 
+/// Strength of the zone's directional light relative to its ambient floor.
+pub const LIGHT_INTENSITY: f32 = 0.6;
+
 /// Camera + atmosphere uniform. Field order matches the WGSL `U` block: each
 /// vec3 packs a trailing scalar into its 16-byte slot (eye|fog_near,
-/// fog_color|fog_far), so the struct is a tight 96 bytes with no padding.
+/// fog_color|fog_far, ambient|light_intensity, light_dir|pad), so the struct is
+/// a tight 128 bytes with no implicit padding.
 #[repr(C)]
 #[derive(Clone, Copy, Pod, Zeroable)]
 pub struct Uniforms {
@@ -43,11 +47,33 @@ pub struct Uniforms {
     pub fog_near: f32,
     pub fog_color: [f32; 3],
     pub fog_far: f32,
+    pub ambient: [f32; 3],
+    pub light_intensity: f32,
+    pub light_dir: [f32; 3],
+    pub _pad: f32,
 }
 
 impl Uniforms {
-    pub fn new(mvp: [f32; 16], eye: [f32; 3], fog_color: [f32; 3], fog_near: f32, fog_far: f32) -> Uniforms {
-        Uniforms { mvp, eye, fog_near, fog_color, fog_far }
+    pub fn new(
+        mvp: [f32; 16],
+        eye: [f32; 3],
+        fog_color: [f32; 3],
+        fog_near: f32,
+        fog_far: f32,
+        ambient: [f32; 3],
+        light_dir: [f32; 3],
+    ) -> Uniforms {
+        Uniforms {
+            mvp,
+            eye,
+            fog_near,
+            fog_color,
+            fog_far,
+            ambient,
+            light_intensity: LIGHT_INTENSITY,
+            light_dir,
+            _pad: 0.0,
+        }
     }
 }
 
@@ -58,6 +84,10 @@ struct U {
     fog_near: f32,
     fog_color: vec3<f32>,
     fog_far: f32,
+    ambient: vec3<f32>,
+    light_intensity: f32,
+    light_dir: vec3<f32>,
+    _pad: f32,
 };
 @group(0) @binding(0) var<uniform> u: U;
 @group(1) @binding(0) var tex: texture_2d<f32>;
@@ -82,9 +112,12 @@ struct VsOut {
     let c = textureSample(tex, samp, in.uv);
     if (c.a < 0.5) { discard; }
     let N = normalize(in.normal);
-    let L = normalize(vec3<f32>(0.4, 0.85, 0.35));
-    let d = max(abs(dot(N, L)), 0.0) * 0.7 + 0.4;
-    let lit = c.rgb * in.color * d;
+    let L = normalize(u.light_dir);
+    // Two-sided (cull is off): abs() keeps backfaces/interiors lit. The zone's
+    // ambient is the floor; its directional light adds on top.
+    let diff = abs(dot(N, L)) * u.light_intensity;
+    let shade = u.ambient + vec3<f32>(diff);
+    let lit = c.rgb * in.color * shade;
     // Distance fog toward the sky/fog colour.
     let dist = distance(in.world, u.eye);
     let f = clamp((dist - u.fog_near) / max(u.fog_far - u.fog_near, 1.0), 0.0, 1.0);

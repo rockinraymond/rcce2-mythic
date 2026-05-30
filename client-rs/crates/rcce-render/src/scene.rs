@@ -39,6 +39,8 @@ pub fn render_scene_png(
     fog_color: [f32; 3],
     fog_near: f32,
     fog_far: f32,
+    ambient: [f32; 3],
+    light_dir: [f32; 3],
     width: u32,
     height: u32,
     path: &str,
@@ -46,7 +48,15 @@ pub fn render_scene_png(
     let aspect = width as f32 / height as f32;
     let proj = Mat4::perspective_rh(50f32.to_radians(), aspect, 1.0, 100_000.0);
     let view = Mat4::look_at_rh(Vec3::from(eye), Vec3::from(target), Vec3::Y);
-    let uniforms = Uniforms::new((proj * view).to_cols_array(), eye, fog_color, fog_near, fog_far);
+    let uniforms = Uniforms::new(
+        (proj * view).to_cols_array(),
+        eye,
+        fog_color,
+        fog_near,
+        fog_far,
+        ambient,
+        light_dir,
+    );
 
     let instance = wgpu::Instance::default();
     let adapter = block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {

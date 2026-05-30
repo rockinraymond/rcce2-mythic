@@ -43,7 +43,9 @@ impl WorldView {
         let pipeline = Pipeline::new(device, color_format);
         let uniform_buf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("u"),
-            contents: bytemuck::bytes_of(&Uniforms::new([0.0; 16], [0.0; 3], [0.0; 3], 1.0, 2.0)),
+            contents: bytemuck::bytes_of(&Uniforms::new(
+                [0.0; 16], [0.0; 3], [0.0; 3], 1.0, 2.0, [0.5; 3], [0.0, 1.0, 0.0],
+            )),
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
         });
         let bind0 = device.create_bind_group(&wgpu::BindGroupDescriptor {
@@ -117,9 +119,11 @@ impl WorldView {
         fog_color: [f32; 3],
         fog_near: f32,
         fog_far: f32,
+        ambient: [f32; 3],
+        light_dir: [f32; 3],
         clear: wgpu::Color,
     ) {
-        let u = Uniforms::new(view_proj, eye, fog_color, fog_near, fog_far);
+        let u = Uniforms::new(view_proj, eye, fog_color, fog_near, fog_far, ambient, light_dir);
         queue.write_buffer(&self.uniform_buf, 0, bytemuck::bytes_of(&u));
         let mut enc = device.create_command_encoder(&Default::default());
         {
