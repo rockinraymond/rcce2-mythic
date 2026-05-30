@@ -211,7 +211,18 @@ Function LoadActorInstance3D(A.ActorInstance, Scale# = 1.0, SkipAttachments = Fa
 		Name$ = GetMeshName$(A\Actor\MeshIDs[0])
 		; CE model
 		If Upper$(Left$(Name$, 10)) = "CE\CESAVES"
-			A\EN = LoadCEMesh(A\Actor\MeshIDs[0], ActorAnimSet\AnimStart[Anim_Idle], ActorAnimSet\AnimStart[Anim_Idle])
+			; ActorAnimSet (the AnimList slot for MAnimationSet) is sparse and can
+			; be Null when the referenced set was deleted from Animations.dat. The
+			; later sequence loop (~line 432) and PlayAnimation (Animations.bb:53)
+			; both guard this, but the CE branch derefs AnimStart[] first -- an
+			; every-frame client crash at actor spawn for any CE-mesh actor whose
+			; animset slot is empty. Guard the idle-frame read; frame 0 is the
+			; consistent degraded state (a Null set extracts no sequences anyway).
+			If ActorAnimSet <> Null
+				A\EN = LoadCEMesh(A\Actor\MeshIDs[0], ActorAnimSet\AnimStart[Anim_Idle], ActorAnimSet\AnimStart[Anim_Idle])
+			Else
+				A\EN = LoadCEMesh(A\Actor\MeshIDs[0], 0, 0)
+			EndIf
 		; Normal model
 		Else
 			A\EN = GetMesh(A\Actor\MeshIDs[0], ActorHasMultipleTextures(A\Actor, 0))
@@ -341,7 +352,12 @@ Function LoadActorInstance3D(A.ActorInstance, Scale# = 1.0, SkipAttachments = Fa
 		Name$ = GetMeshName$(A\Actor\MeshIDs[1])
 		; CE model
 		If Upper$(Left$(Name$, 10)) = "CE\CESAVES"
-			A\EN = LoadCEMesh(A\Actor\MeshIDs[1], ActorAnimSet\AnimStart[Anim_Idle], ActorAnimSet\AnimStart[Anim_Idle])
+			; Null-animset guard -- see the male branch above (AnimList is sparse).
+			If ActorAnimSet <> Null
+				A\EN = LoadCEMesh(A\Actor\MeshIDs[1], ActorAnimSet\AnimStart[Anim_Idle], ActorAnimSet\AnimStart[Anim_Idle])
+			Else
+				A\EN = LoadCEMesh(A\Actor\MeshIDs[1], 0, 0)
+			EndIf
 		; Normal model
 		Else
 			A\EN = GetMesh(A\Actor\MeshIDs[1], ActorHasMultipleTextures(A\Actor, 1))
