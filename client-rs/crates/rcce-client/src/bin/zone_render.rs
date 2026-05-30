@@ -47,6 +47,11 @@ fn main() {
         }
     };
     println!("[zone_render] '{zone}': {} scenery objects", scenery.sceneries.len());
+    let env = scenery.env.clone();
+    println!(
+        "[zone_render] env: fog {:?} near {:.0} far {:.0} ambient {:?} outdoors {}",
+        env.fog_color, env.fog_near, env.fog_far, env.ambient, env.outdoors
+    );
 
     // Resolve + dedupe models/textures by (mesh, retexture).
     let mut models: Vec<Rc<B3dModel>> = Vec::new();
@@ -117,7 +122,7 @@ fn main() {
         })
         .collect();
 
-    match rcce_render::render_scene_png(&instances, eye, target, ground_y, 1600, 1000, &out) {
+    match rcce_render::render_scene_png(&instances, eye, target, ground_y, env.fog_color, env.fog_near, env.fog_far, 1600, 1000, &out) {
         Ok(adapter) => println!(
             "[zone_render] rendered {} instances via {adapter} -> {out}",
             instances.len()

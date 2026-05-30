@@ -111,6 +111,9 @@ struct App {
     center: [f32; 3],
     span: f32,
     ground_y: f32,
+    fog_color: [f32; 3],
+    fog_near: f32,
+    fog_far: f32,
     start: Instant,
     frames: u64,
     last_log: Instant,
@@ -142,6 +145,9 @@ impl App {
             center: [0.0; 3],
             span: 100.0,
             ground_y: 0.0,
+            fog_color: [0.45, 0.62, 0.82],
+            fog_near: 1000.0,
+            fog_far: 9000.0,
             start: now,
             frames: 0,
             last_log: now,
@@ -247,7 +253,7 @@ fn dyn_hash(world: &World, elapsed: f32) -> u64 {
     h.finish()
 }
 
-fn load_zone_static(store: &mut AssetStore, view: &mut WorldView, gfx: &Gfx, data_root: &str, zone: &str) -> Option<([f32; 3], f32, f32)> {
+fn load_zone_static(store: &mut AssetStore, view: &mut WorldView, gfx: &Gfx, data_root: &str, zone: &str) -> Option<([f32; 3], f32, f32, rcce_data::AreaEnv)> {
     let path = std::path::Path::new(data_root).join("Areas").join(format!("{zone}.dat"));
     let bytes = std::fs::read(&path).map_err(|e| eprintln!("[client-window] {}: {e}", path.display())).ok()?;
     let scenery = AreaScenery::parse(&bytes).ok()?;
@@ -295,7 +301,7 @@ fn load_zone_static(store: &mut AssetStore, view: &mut WorldView, gfx: &Gfx, dat
     let center = [(min[0] + max[0]) * 0.5, (min[1] + max[1]) * 0.5, (min[2] + max[2]) * 0.5];
     let span = ((max[0] - min[0]).powi(2) + (max[2] - min[2]).powi(2)).sqrt().max(50.0);
     println!("[client-window] zone '{zone}': {} objects, {} meshes, span {span:.0}", place.len(), models.len());
-    Some((center, span, min[1]))
+    Some((center, span, min[1], scenery.env.clone()))
 }
 
 impl ApplicationHandler for App {
@@ -322,10 +328,13 @@ impl ApplicationHandler for App {
         };
 
         // Static scenery (always — also the fallback view).
-        if let Some((center, span, gy)) = load_zone_static(&mut store, &mut view, &gfx, &data_root, &self.zone) {
+        if let Some((center, span, gy, env)) = load_zone_static(&mut store, &mut view, &gfx, &data_root, &self.zone) {
             self.center = center;
             self.span = span;
             self.ground_y = gy;
+            self.fog_color = env.fog_color;
+            self.fog_near = env.fog_near;
+            self.fog_far = env.fog_far;
         }
 
         // Try to log into the live server.
@@ -516,7 +525,22 @@ impl App {
         };
         let aspect = gfx.config.width as f32 / gfx.config.height.max(1) as f32;
         let vp = rcce_render::view_proj(eye, target, aspect);
-        view.render(&gfx.device, &gfx.queue, &tview, vp, wgpu::Color { r: 0.45, g: 0.62, b: 0.82, a: 1.0 });
+        view.render(
+            &gfx.device,
+            &gfx.queue,
+            &tview,
+            vp,
+            eye,
+            self.fog_color,
+            self.fog_near,
+            self.fog_far,
+            wgpu::Color {
+                r: self.fog_color[0] as f64,
+                g: self.fog_color[1] as f64,
+                b: self.fog_color[2] as f64,
+                a: 1.0,
+            },
+        );
         frame.present();
 
         self.frames += 1;

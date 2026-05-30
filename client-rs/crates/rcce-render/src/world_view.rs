@@ -40,7 +40,7 @@ impl WorldView {
         let pipeline = Pipeline::new(device, color_format);
         let uniform_buf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("u"),
-            contents: bytemuck::bytes_of(&Uniforms { mvp: [0.0; 16] }),
+            contents: bytemuck::bytes_of(&Uniforms::new([0.0; 16], [0.0; 3], [0.0; 3], 1.0, 2.0)),
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
         });
         let bind0 = device.create_bind_group(&wgpu::BindGroupDescriptor {
@@ -90,16 +90,23 @@ impl WorldView {
         self.depth = make_depth(device, w, h);
     }
 
-    /// Draw the scene to `view` with the given view-projection matrix.
+    /// Draw the scene to `view` with the camera + atmosphere. `eye` is the
+    /// camera position (for fog distance); `fog_*` define the distance fog.
+    #[allow(clippy::too_many_arguments)]
     pub fn render(
         &self,
         device: &wgpu::Device,
         queue: &wgpu::Queue,
         view: &wgpu::TextureView,
         view_proj: [f32; 16],
+        eye: [f32; 3],
+        fog_color: [f32; 3],
+        fog_near: f32,
+        fog_far: f32,
         clear: wgpu::Color,
     ) {
-        queue.write_buffer(&self.uniform_buf, 0, bytemuck::bytes_of(&Uniforms { mvp: view_proj }));
+        let u = Uniforms::new(view_proj, eye, fog_color, fog_near, fog_far);
+        queue.write_buffer(&self.uniform_buf, 0, bytemuck::bytes_of(&u));
         let mut enc = device.create_command_encoder(&Default::default());
         {
             let mut rp = enc.begin_render_pass(&wgpu::RenderPassDescriptor {

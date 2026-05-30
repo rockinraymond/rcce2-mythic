@@ -24,14 +24,33 @@ pub struct Vertex {
     pub color: [f32; 3],
 }
 
+/// Camera + atmosphere uniform. Field order matches the WGSL `U` block: each
+/// vec3 packs a trailing scalar into its 16-byte slot (eye|fog_near,
+/// fog_color|fog_far), so the struct is a tight 96 bytes with no padding.
 #[repr(C)]
 #[derive(Clone, Copy, Pod, Zeroable)]
 pub struct Uniforms {
     pub mvp: [f32; 16],
+    pub eye: [f32; 3],
+    pub fog_near: f32,
+    pub fog_color: [f32; 3],
+    pub fog_far: f32,
+}
+
+impl Uniforms {
+    pub fn new(mvp: [f32; 16], eye: [f32; 3], fog_color: [f32; 3], fog_near: f32, fog_far: f32) -> Uniforms {
+        Uniforms { mvp, eye, fog_near, fog_color, fog_far }
+    }
 }
 
 pub const SHADER: &str = r#"
-struct U { mvp: mat4x4<f32> };
+struct U {
+    mvp: mat4x4<f32>,
+    eye: vec3<f32>,
+    fog_near: f32,
+    fog_color: vec3<f32>,
+    fog_far: f32,
+};
 @group(0) @binding(0) var<uniform> u: U;
 @group(1) @binding(0) var tex: texture_2d<f32>;
 @group(1) @binding(1) var samp: sampler;
@@ -40,6 +59,7 @@ struct VsOut {
     @location(0) normal: vec3<f32>,
     @location(1) uv: vec2<f32>,
     @location(2) color: vec3<f32>,
+    @location(3) world: vec3<f32>,
 };
 @vertex fn vs(@location(0) pos: vec3<f32>, @location(1) normal: vec3<f32>, @location(2) uv: vec2<f32>, @location(3) color: vec3<f32>) -> VsOut {
     var o: VsOut;
@@ -47,6 +67,7 @@ struct VsOut {
     o.normal = normal;
     o.uv = uv;
     o.color = color;
+    o.world = pos;
     return o;
 }
 @fragment fn fs(in: VsOut) -> @location(0) vec4<f32> {
@@ -55,7 +76,11 @@ struct VsOut {
     let N = normalize(in.normal);
     let L = normalize(vec3<f32>(0.4, 0.85, 0.35));
     let d = max(abs(dot(N, L)), 0.0) * 0.7 + 0.4;
-    return vec4<f32>(c.rgb * in.color * d, 1.0);
+    let lit = c.rgb * in.color * d;
+    // Distance fog toward the sky/fog colour.
+    let dist = distance(in.world, u.eye);
+    let f = clamp((dist - u.fog_near) / max(u.fog_far - u.fog_near, 1.0), 0.0, 1.0);
+    return vec4<f32>(mix(lit, u.fog_color, f), 1.0);
 }
 "#;
 
@@ -103,7 +128,7 @@ impl Pipeline {
             label: Some("u"),
             entries: &[wgpu::BindGroupLayoutEntry {
                 binding: 0,
-                visibility: wgpu::ShaderStages::VERTEX,
+                visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
                 ty: wgpu::BindingType::Buffer {
                     ty: wgpu::BufferBindingType::Uniform,
                     has_dynamic_offset: false,

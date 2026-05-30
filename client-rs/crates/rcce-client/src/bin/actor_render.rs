@@ -128,7 +128,8 @@ fn main() {
     let eye = [h * 1.4, ground_y + h * 0.75, h * 2.4];
     let target = [0.0, ground_y + h * 0.55, 0.0];
 
-    match rcce_render::render_scene_png(&instances, eye, target, ground_y, 900, 1200, &out) {
+    // No fog for a close-up actor render (far plane way beyond the model).
+    match rcce_render::render_scene_png(&instances, eye, target, ground_y, [0.45, 0.62, 0.82], 1.0e6, 2.0e6, 900, 1200, &out) {
         Ok(adapter) => println!(
             "[actor_render] rendered {} instances via {adapter} -> {out}",
             instances.len()

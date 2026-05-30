@@ -27,8 +27,35 @@ pub struct SceneryPlacement {
     pub texture_id: u16,
 }
 
+/// Zone environment/atmosphere from the area header — what the renderer needs
+/// for sky colour, distance fog, and ambient light.
+#[derive(Debug, Clone)]
+pub struct AreaEnv {
+    pub sky_tex_id: u16,
+    /// Fog colour (0..1). Also the natural sky/clear colour.
+    pub fog_color: [f32; 3],
+    pub fog_near: f32,
+    pub fog_far: f32,
+    pub ambient: [f32; 3],
+    pub outdoors: bool,
+}
+
+impl Default for AreaEnv {
+    fn default() -> Self {
+        AreaEnv {
+            sky_tex_id: 65535,
+            fog_color: [0.45, 0.62, 0.82],
+            fog_near: 1000.0,
+            fog_far: 8000.0,
+            ambient: [0.5, 0.5, 0.5],
+            outdoors: true,
+        }
+    }
+}
+
 #[derive(Debug, Default, Clone)]
 pub struct AreaScenery {
+    pub env: AreaEnv,
     pub sceneries: Vec<SceneryPlacement>,
 }
 
@@ -38,6 +65,37 @@ const SCENERY_COUNT_OFFSET: usize = 41;
 impl AreaScenery {
     pub fn parse(data: &[u8]) -> Result<AreaScenery, ReadError> {
         let mut r = BlitzReader::new(data);
+        // Header (41 bytes): 6×i16 tex/music ids · FogRGB(u8×3) · FogNear,Far
+        // (f32×2) · MapTexID(i16) · Outdoors(u8) · AmbientRGB(u8×3) · light(f32×3).
+        let env = (|| -> Result<AreaEnv, ReadError> {
+            r.seek(4)?; // skip LoadingTexID, LoadingMusicID
+            let sky_tex_id = r.read_short_u()?;
+            r.seek(12)?; // to FogRGB
+            let fog_color = [
+                r.read_byte()? as f32 / 255.0,
+                r.read_byte()? as f32 / 255.0,
+                r.read_byte()? as f32 / 255.0,
+            ];
+            let fog_near = r.read_float()?;
+            let fog_far = r.read_float()?;
+            r.seek(25)?; // skip MapTexID(i16) to Outdoors
+            let outdoors = r.read_byte()? != 0;
+            let ambient = [
+                r.read_byte()? as f32 / 255.0,
+                r.read_byte()? as f32 / 255.0,
+                r.read_byte()? as f32 / 255.0,
+            ];
+            Ok(AreaEnv {
+                sky_tex_id,
+                fog_color,
+                fog_near,
+                fog_far,
+                ambient,
+                outdoors,
+            })
+        })()
+        .unwrap_or_default();
+
         r.seek(SCENERY_COUNT_OFFSET)?;
         let count = r.read_short_u()?;
         let mut sceneries = Vec::with_capacity(count as usize);
@@ -64,6 +122,6 @@ impl AreaScenery {
                 texture_id,
             });
         }
-        Ok(AreaScenery { sceneries })
+        Ok(AreaScenery { env, sceneries })
     }
 }
