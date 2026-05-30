@@ -111,11 +111,13 @@ fn main() {
     // Resolve a model per actor (cached). The local player is the character we
     // created — actor template 0 (Human).
     let mut models: Vec<std::rc::Rc<rcce_data::B3dModel>> = Vec::new();
+    let mut textures: Vec<Vec<Option<rcce_data::Image>>> = Vec::new();
     // (model idx, world pos, yaw degrees, color, render scale)
     let mut placements: Vec<(usize, [f32; 3], f32, [f32; 3], f32)> = Vec::new();
 
-    let mut add_actor = |store: &mut rcce_client::assets::AssetStore,
-                         models: &mut Vec<std::rc::Rc<rcce_data::B3dModel>>,
+    let add_actor = |store: &mut rcce_client::assets::AssetStore,
+                     models: &mut Vec<std::rc::Rc<rcce_data::B3dModel>>,
+                     textures: &mut Vec<Vec<Option<rcce_data::Image>>>,
                          placements: &mut Vec<(usize, [f32; 3], f32, [f32; 3], f32)>,
                          tmpl: u16,
                          pos: [f32; 3],
@@ -123,16 +125,18 @@ fn main() {
                          color: [f32; 3]| {
         if let Some(m) = store.actor_model(tmpl, 0) {
             let scale = store.actor_render_scale(tmpl, 0).unwrap_or(0.05);
+            let tex = store.actor_textures(tmpl, 0);
             let idx = models.len();
             models.push(m);
+            textures.push(tex);
             placements.push((idx, pos, yaw, color, scale));
         }
     };
 
-    add_actor(&mut store, &mut models, &mut placements, 0, [world.me_x, world.me_y, world.me_z], world.me_yaw, [0.35, 0.9, 0.45]);
+    add_actor(&mut store, &mut models, &mut textures, &mut placements, 0, [world.me_x, world.me_y, world.me_z], world.me_yaw, [0.85, 0.95, 0.85]);
     for a in world.actors.values() {
-        let color = if a.is_player { [0.4, 0.6, 1.0] } else { [0.85, 0.8, 0.7] };
-        add_actor(&mut store, &mut models, &mut placements, a.template_id, [a.x, a.y, a.z], a.yaw, color);
+        let color = if a.is_player { [0.85, 0.9, 1.0] } else { [1.0, 1.0, 1.0] };
+        add_actor(&mut store, &mut models, &mut textures, &mut placements, a.template_id, [a.x, a.y, a.z], a.yaw, color);
     }
 
     if placements.is_empty() {
@@ -149,6 +153,7 @@ fn main() {
             let (min, _max) = model.bounds();
             rcce_render::SceneInstance {
                 model,
+                textures: &textures[idx],
                 translation: [pos[0], ground_y - min[1] * scale, pos[2]],
                 yaw: yaw.to_radians(),
                 scale,

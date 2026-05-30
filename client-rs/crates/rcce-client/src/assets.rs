@@ -7,7 +7,7 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::rc::Rc;
 
-use rcce_data::{ActorCatalog, B3dModel, MeshCatalog};
+use rcce_data::{texture, ActorCatalog, B3dModel, Image, MeshCatalog};
 
 pub struct AssetStore {
     data_root: PathBuf,
@@ -54,6 +54,40 @@ impl AssetStore {
         let ms = if mesh.scale > 0.0 { mesh.scale } else { 1.0 };
         let as_ = if actor.scale > 0.0 { actor.scale } else { 1.0 };
         Some(0.05 * ms * as_)
+    }
+
+    /// Textures for an actor's model, one per mesh (aligned to
+    /// `actor_model(...).meshes`). Each mesh's B3D texture filename is resolved
+    /// by basename against the mesh's own directory and the project texture
+    /// trees, then decoded (BMP/PNG/JPG). `None` where unresolved/undecodable.
+    pub fn actor_textures(&mut self, template_id: u16, gender: u8) -> Vec<Option<Image>> {
+        let Some(mesh_id) = self.actors.mesh_for(template_id, gender) else {
+            return Vec::new();
+        };
+        // Build search roots from the mesh's path before borrowing the cache.
+        let mut roots = Vec::new();
+        if let Some(entry) = self.meshes.get(mesh_id) {
+            let rel = entry.filename.replace('\\', "/");
+            if let Some(dir) = self.data_root.join("Meshes").join(&rel).parent() {
+                roots.push(dir.to_path_buf());
+            }
+        }
+        roots.push(self.data_root.join("Textures"));
+        roots.push(self.data_root.join("Meshes"));
+
+        let Some(model) = self.mesh_model(mesh_id) else {
+            return Vec::new();
+        };
+        model
+            .meshes
+            .iter()
+            .map(|m| {
+                m.texture
+                    .as_ref()
+                    .and_then(|name| texture::find_texture(&roots, name))
+                    .and_then(|p| texture::load(&p))
+            })
+            .collect()
     }
 
     /// A model by mesh-catalog id, cached (including negative cache for misses).
