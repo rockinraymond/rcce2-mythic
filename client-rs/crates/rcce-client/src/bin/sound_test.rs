@@ -89,12 +89,26 @@ fn main() {
         std::process::exit(1);
     }
 
+    // Footstep sounds: resolve + decode the first one (one-shot path).
+    let footsteps = store.footstep_sounds();
+    println!("[sound] footstep sounds: {} found", footsteps.len());
+    if let Some(fp) = footsteps.first() {
+        let fn_ = File::open(fp).expect("open footstep");
+        let fc = Decoder::new(BufReader::new(fn_)).expect("decode footstep").count();
+        println!("[sound] footstep '{}' decoded {fc} samples", fp.display());
+    }
+
     // Best-effort playback (silent-skips if no device, e.g. headless CI).
     match rcce_client::audio::Audio::new() {
         Some(mut audio) => {
             let played = audio.play_music_looped(&path, 0.5, music_id);
-            println!("[sound] playback started = {played}; holding 1s");
-            std::thread::sleep(Duration::from_millis(1000));
+            println!("[sound] music playback started = {played}; holding 1s");
+            std::thread::sleep(Duration::from_millis(600));
+            if let Some(fp) = footsteps.first() {
+                audio.play_oneshot(fp, 0.6); // fire a footstep one-shot
+                println!("[sound] footstep one-shot fired");
+                std::thread::sleep(Duration::from_millis(600));
+            }
         }
         None => println!("[sound] no audio device — decode verified, playback skipped"),
     }

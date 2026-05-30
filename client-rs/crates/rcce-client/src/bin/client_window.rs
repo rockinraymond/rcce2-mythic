@@ -152,6 +152,9 @@ struct App {
     sheet: Option<rcce_client::fetch::CharacterSheet>,
     /// Inventory/spellbook panel visible (toggled with I).
     show_inventory: bool,
+    /// Footstep cadence + the resolved footstep .ogg files.
+    footsteps: rcce_client::audio::FootstepTimer,
+    footstep_paths: Vec<std::path::PathBuf>,
 }
 
 impl App {
@@ -192,6 +195,8 @@ impl App {
             audio: rcce_client::audio::Audio::new(),
             sheet: None,
             show_inventory: false,
+            footsteps: rcce_client::audio::FootstepTimer::new(),
+            footstep_paths: Vec::new(),
         }
     }
 }
@@ -396,6 +401,8 @@ impl ApplicationHandler for App {
                 audio.set_music(env.music_id, 0.4, |id| store.music_path(id));
             }
         }
+        // Resolve footstep sounds once (played as one-shots while moving).
+        self.footstep_paths = store.footstep_sounds();
 
         // Try to log into the live server.
         println!("[client-window] logging in to {}:{} ...", self.host, self.port);
@@ -675,6 +682,16 @@ impl App {
             self.last_move = Instant::now();
         }
         self.was_moving = moving;
+
+        // Footstep one-shots while the local player moves (faster when running).
+        if let Some(idx) = self.footsteps.tick(elapsed, moving && following, self.run) {
+            if let Some(audio) = self.audio.as_ref() {
+                if !self.footstep_paths.is_empty() {
+                    let p = &self.footstep_paths[idx % self.footstep_paths.len()];
+                    audio.play_oneshot(p, 0.55);
+                }
+            }
+        }
 
         let frame = match gfx.surface.get_current_texture() {
             Ok(f) => f,

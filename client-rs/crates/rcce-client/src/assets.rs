@@ -125,6 +125,21 @@ impl AssetStore {
         self.items.name_or_id(id)
     }
 
+    /// Footstep `.ogg` files under `Data/Sounds/Footsteps/`, sorted. Empty if
+    /// the folder is absent.
+    pub fn footstep_sounds(&self) -> Vec<PathBuf> {
+        let dir = self.data_root.join("Sounds").join("Footsteps");
+        let mut v: Vec<PathBuf> = std::fs::read_dir(dir)
+            .into_iter()
+            .flatten()
+            .flatten()
+            .map(|e| e.path())
+            .filter(|p| p.extension().map(|x| x.eq_ignore_ascii_case("ogg")).unwrap_or(false))
+            .collect();
+        v.sort();
+        v
+    }
+
     /// Number of loaded item definitions (for diagnostics).
     pub fn item_count(&self) -> usize {
         self.items.items.len()

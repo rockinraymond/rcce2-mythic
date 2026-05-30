@@ -92,4 +92,90 @@ impl Audio {
             }
         }
     }
+
+    /// Fire-and-forget a one-shot sound (footstep, UI blip). The sink detaches
+    /// and frees itself when the clip finishes. Silently no-ops on failure.
+    pub fn play_oneshot(&self, path: &Path, volume: f32) {
+        let Ok(file) = File::open(path) else { return };
+        let Ok(decoder) = Decoder::new(BufReader::new(file)) else { return };
+        let Ok(sink) = Sink::try_new(&self.handle) else { return };
+        sink.set_volume(volume);
+        sink.append(decoder);
+        sink.detach();
+    }
+}
+
+/// Decides when the local player's footstep one-shot should fire, based on a
+/// cadence that quickens when running. Pure (no audio device) so it's testable.
+#[derive(Debug)]
+pub struct FootstepTimer {
+    last_step: f32,
+    /// Advances each step so the caller can alternate between sound files.
+    count: usize,
+}
+
+/// Seconds between footsteps at a walk / run.
+pub const WALK_INTERVAL: f32 = 0.46;
+pub const RUN_INTERVAL: f32 = 0.30;
+
+impl Default for FootstepTimer {
+    fn default() -> Self {
+        FootstepTimer { last_step: f32::MIN, count: 0 }
+    }
+}
+
+impl FootstepTimer {
+    pub fn new() -> FootstepTimer {
+        FootstepTimer::default()
+    }
+
+    /// Call once per frame. Returns `Some(step_index)` when a footstep should
+    /// play (the index increments each step, for alternating sounds); `None`
+    /// otherwise. Standing still never steps.
+    pub fn tick(&mut self, now: f32, moving: bool, running: bool) -> Option<usize> {
+        if !moving {
+            return None;
+        }
+        let interval = if running { RUN_INTERVAL } else { WALK_INTERVAL };
+        if now - self.last_step >= interval {
+            self.last_step = now;
+            let idx = self.count;
+            self.count = self.count.wrapping_add(1);
+            Some(idx)
+        } else {
+            None
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn no_step_when_still() {
+        let mut t = FootstepTimer::new();
+        assert_eq!(t.tick(0.0, false, false), None);
+        assert_eq!(t.tick(100.0, false, false), None);
+    }
+
+    #[test]
+    fn first_move_steps_immediately_then_paces() {
+        let mut t = FootstepTimer::new();
+        // First moving frame fires (last_step starts at -inf).
+        assert_eq!(t.tick(0.0, true, false), Some(0));
+        // Too soon for the next.
+        assert_eq!(t.tick(0.2, true, false), None);
+        // After a walk interval, the next step (index advances).
+        assert_eq!(t.tick(WALK_INTERVAL + 0.01, true, false), Some(1));
+    }
+
+    #[test]
+    fn running_is_faster_than_walking() {
+        let mut t = FootstepTimer::new();
+        assert_eq!(t.tick(0.0, true, true), Some(0));
+        // A gap that's enough for a run but not a walk only steps when running.
+        assert_eq!(t.tick(RUN_INTERVAL + 0.01, true, false), None);
+        assert_eq!(t.tick(RUN_INTERVAL + 0.01, true, true), Some(1));
+    }
 }
