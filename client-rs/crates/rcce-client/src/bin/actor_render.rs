@@ -11,12 +11,19 @@ use rcce_data::{B3dModel, Image};
 use std::rc::Rc;
 
 fn main() {
+    // Args: <templateId> [gender] [frame|"bind"] [out.png]
     let mut args = std::env::args().skip(1);
     let tmpl: u16 = args.next().and_then(|s| s.parse().ok()).unwrap_or(0);
     let gender: u8 = args.next().and_then(|s| s.parse().ok()).unwrap_or(0);
-    let out = args
-        .next()
-        .unwrap_or_else(|| format!("actor_{tmpl}_g{gender}.png"));
+    let frame_arg = args.next();
+    let frame: Option<f32> = match frame_arg.as_deref() {
+        None | Some("bind") => None,
+        Some(s) => Some(s.parse().unwrap_or(0.0)),
+    };
+    let out = args.next().unwrap_or_else(|| {
+        let tag = frame.map(|f| format!("f{f}")).unwrap_or_else(|| "bind".into());
+        format!("actor_{tmpl}_g{gender}_{tag}.png")
+    });
 
     let data_root = std::env::var("RCCE_DATA")
         .unwrap_or_else(|_| r"C:\Users\dyanr\Desktop\rcce2\data".to_string());
@@ -28,10 +35,24 @@ fn main() {
         }
     };
 
-    let Some(body) = store.actor_model(tmpl, gender) else {
+    let Some(src) = store.actor_model(tmpl, gender) else {
         eprintln!("[actor_render] no body model for template {tmpl} gender {gender}");
         std::process::exit(1);
     };
+    // Pose the body (linear-blend skinning) at `frame`; None = bind pose.
+    if let Some(a) = &src.anim {
+        println!(
+            "[actor_render] anim: {} frames @ {}fps, {} bones; rendering frame {:?}",
+            a.frames, a.fps, src.bones.len(), frame
+        );
+    }
+    let body = Rc::new(B3dModel {
+        meshes: src.posed_meshes(frame),
+        textures: src.textures.clone(),
+        brushes: src.brushes.clone(),
+        bones: src.bones.clone(),
+        anim: src.anim,
+    });
     let scale = store.actor_render_scale(tmpl, gender).unwrap_or(0.05);
     let body_tex = store.actor_textures(tmpl, gender, 0, 0);
     let ground_y = 0.0f32;

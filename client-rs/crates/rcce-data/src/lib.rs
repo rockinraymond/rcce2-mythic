@@ -302,6 +302,47 @@ mod tests {
         );
     }
 
+    /// Skinning correctness: posing at the bind pose must reproduce the bind
+    /// geometry exactly (skin matrices are identity), and posing at a real frame
+    /// must actually move vertices. Skips if the model is absent.
+    #[test]
+    fn skinning_bind_is_identity_and_frame_deforms() {
+        let path = repo_root().join("data/Meshes/Actors/Humans/Male_02.b3d");
+        let Ok(bytes) = std::fs::read(&path) else {
+            eprintln!("skipping: {} not present", path.display());
+            return;
+        };
+        let model = B3dModel::parse(&bytes).expect("parse");
+
+        // Bind pose == original geometry (within fp tolerance).
+        let bind = model.posed_meshes(None);
+        assert_eq!(bind.len(), model.meshes.len());
+        let mut max_err = 0.0f32;
+        for (a, b) in bind.iter().zip(&model.meshes) {
+            assert_eq!(a.positions.len(), b.positions.len());
+            for (p, q) in a.positions.iter().zip(&b.positions) {
+                for k in 0..3 {
+                    max_err = max_err.max((p[k] - q[k]).abs());
+                }
+            }
+        }
+        assert!(max_err < 1e-2, "bind-pose skin drifted from bind geometry: {max_err}");
+
+        // A real frame must move at least some vertices a non-trivial amount.
+        let posed = model.posed_meshes(Some(2.0));
+        let mut moved = 0usize;
+        for (a, b) in posed.iter().zip(&model.meshes) {
+            for (p, q) in a.positions.iter().zip(&b.positions) {
+                let d = ((p[0] - q[0]).powi(2) + (p[1] - q[1]).powi(2) + (p[2] - q[2]).powi(2)).sqrt();
+                if d > 0.1 {
+                    moved += 1;
+                }
+            }
+        }
+        assert!(moved > 100, "frame 2 barely deformed the mesh ({moved} verts moved)");
+        eprintln!("skinning: bind max_err={max_err:.2e}, frame-2 moved {moved} verts");
+    }
+
     /// Does the Human actor's selected body/face texture resolve through
     /// Textures.dat to a real, loadable skin image? (Decides whether the actor
     /// texture system can replace the b3d UV-guide textures.)

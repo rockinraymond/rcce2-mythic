@@ -130,6 +130,78 @@ pub(crate) fn invert_affine(m: &Mat4) -> Mat4 {
     ]
 }
 
+/// Which channel of a keyframe to sample.
+#[derive(Clone, Copy)]
+enum KeyChan {
+    Pos,
+    Scale,
+}
+
+/// Find the keyframe bracket around `frame` and the interpolation factor.
+/// Returns `(i, j, t)` with the value = lerp(key[i], key[j], t).
+fn bracket(keys: &[B3dKey], frame: f32) -> (usize, usize, f32) {
+    if keys.len() == 1 || frame <= keys[0].frame as f32 {
+        return (0, 0, 0.0);
+    }
+    let last = keys.len() - 1;
+    if frame >= keys[last].frame as f32 {
+        return (last, last, 0.0);
+    }
+    let mut i = 0;
+    while i + 1 < keys.len() && (keys[i + 1].frame as f32) <= frame {
+        i += 1;
+    }
+    let (f0, f1) = (keys[i].frame as f32, keys[i + 1].frame as f32);
+    let t = if f1 > f0 { (frame - f0) / (f1 - f0) } else { 0.0 };
+    (i, i + 1, t)
+}
+
+/// Sample a Vec3 channel (position/scale) at `frame`, falling back to
+/// `default` if the channel is absent.
+fn sample_v3(keys: &[B3dKey], frame: f32, chan: KeyChan, default: [f32; 3]) -> [f32; 3] {
+    let pick = |k: &B3dKey| match chan {
+        KeyChan::Pos => k.position,
+        KeyChan::Scale => k.scale,
+    };
+    if keys.iter().all(|k| pick(k).is_none()) {
+        return default;
+    }
+    let (i, j, t) = bracket(keys, frame);
+    let a = pick(&keys[i]).unwrap_or(default);
+    let b = pick(&keys[j]).unwrap_or(default);
+    [
+        a[0] + (b[0] - a[0]) * t,
+        a[1] + (b[1] - a[1]) * t,
+        a[2] + (b[2] - a[2]) * t,
+    ]
+}
+
+/// Sample the rotation channel at `frame` (nlerp), falling back to `default`.
+fn sample_quat(keys: &[B3dKey], frame: f32, default: [f32; 4]) -> [f32; 4] {
+    if keys.iter().all(|k| k.rotation.is_none()) {
+        return default;
+    }
+    let (i, j, t) = bracket(keys, frame);
+    let a = keys[i].rotation.unwrap_or(default);
+    let mut b = keys[j].rotation.unwrap_or(default);
+    // Shortest-path: flip b if the dot product is negative.
+    let dot = a[0] * b[0] + a[1] * b[1] + a[2] * b[2] + a[3] * b[3];
+    if dot < 0.0 {
+        b = [-b[0], -b[1], -b[2], -b[3]];
+    }
+    let mut q = [
+        a[0] + (b[0] - a[0]) * t,
+        a[1] + (b[1] - a[1]) * t,
+        a[2] + (b[2] - a[2]) * t,
+        a[3] + (b[3] - a[3]) * t,
+    ];
+    let n = (q[0] * q[0] + q[1] * q[1] + q[2] * q[2] + q[3] * q[3]).sqrt();
+    if n > 1e-8 {
+        q = [q[0] / n, q[1] / n, q[2] / n, q[3] / n];
+    }
+    q
+}
+
 /// One animation keyframe for a bone (any of position/scale/rotation may be
 /// absent, per the `KEYS` flags). Rotation is a quaternion `(w,x,y,z)`.
 #[derive(Debug, Clone)]
@@ -150,6 +222,11 @@ pub struct B3dBone {
     pub parent: Option<usize>,
     /// This node's own local transform (`T·R·S`) in the bind pose.
     pub local_bind: Mat4,
+    /// Decomposed bind-pose local channels (translation, quaternion w,x,y,z,
+    /// scale) — the fallback for animation channels a `KEYS` stream omits.
+    pub local_t: [f32; 3],
+    pub local_r: [f32; 4],
+    pub local_s: [f32; 3],
     /// Accumulated bind-pose world matrix.
     pub bind_world: Mat4,
     /// `bind_world⁻¹` — maps a vertex from model space into this bone's space.
@@ -221,6 +298,107 @@ impl B3dModel {
     /// Total keyframe count across all bones (diagnostic).
     pub fn keyframe_count(&self) -> usize {
         self.bones.iter().map(|b| b.keys.len()).sum()
+    }
+
+    /// Per-bone skinning matrix `currentWorld · inverseBind` for a pose.
+    /// `frame = None` is the bind pose (every matrix ≈ identity). With a frame,
+    /// each bone's local transform is sampled from its `KEYS` (channels the
+    /// stream omits fall back to the bind local), recomposed down the hierarchy.
+    /// Bones precede their children, so a single forward pass suffices.
+    pub fn skinning_matrices(&self, frame: Option<f32>) -> Vec<Mat4> {
+        let n = self.bones.len();
+        let mut world = vec![IDENTITY; n];
+        let mut skin = vec![IDENTITY; n];
+        for i in 0..n {
+            let b = &self.bones[i];
+            let local = match frame {
+                Some(f) if !b.keys.is_empty() => {
+                    let t = sample_v3(&b.keys, f, KeyChan::Pos, b.local_t);
+                    let s = sample_v3(&b.keys, f, KeyChan::Scale, b.local_s);
+                    let r = sample_quat(&b.keys, f, b.local_r);
+                    trs(t, r, s)
+                }
+                _ => b.local_bind,
+            };
+            world[i] = match b.parent {
+                Some(p) => mat_mul(&world[p], &local),
+                None => local,
+            };
+            skin[i] = mat_mul(&world[i], &b.inverse_bind);
+        }
+        skin
+    }
+
+    /// Deformed copy of the meshes for a pose (linear-blend skinning). `frame =
+    /// None` reproduces the bind pose exactly (skin matrices are identity), the
+    /// sanity check for the pipeline. Mesh count/order is preserved so existing
+    /// per-mesh textures still align. Unweighted vertices keep their bind
+    /// position. Unskinned models (no bones) are returned unchanged.
+    pub fn posed_meshes(&self, frame: Option<f32>) -> Vec<B3dMesh> {
+        if self.bones.is_empty() || self.weight_count() == 0 {
+            return self.meshes.clone();
+        }
+        let skin = self.skinning_matrices(frame);
+        // Per-vertex influences (vertex id is shared across the split meshes).
+        let maxv = self
+            .meshes
+            .iter()
+            .map(|m| m.positions.len())
+            .max()
+            .unwrap_or(0);
+        let mut infl: Vec<Vec<(usize, f32)>> = vec![Vec::new(); maxv];
+        for (bi, b) in self.bones.iter().enumerate() {
+            for &(vid, w) in &b.weights {
+                let v = vid as usize;
+                if v < maxv && w != 0.0 {
+                    infl[v].push((bi, w));
+                }
+            }
+        }
+        for list in &mut infl {
+            let sum: f32 = list.iter().map(|x| x.1).sum();
+            if sum > 0.0 {
+                for e in list.iter_mut() {
+                    e.1 /= sum;
+                }
+            }
+        }
+
+        self.meshes
+            .iter()
+            .map(|m| {
+                let mut out = m.clone();
+                let has_n = m.normals.len() == m.positions.len();
+                for (vi, p) in m.positions.iter().enumerate() {
+                    let list = if vi < infl.len() { &infl[vi] } else { continue };
+                    if list.is_empty() {
+                        continue; // unweighted: keep bind position
+                    }
+                    let mut acc = [0.0f32; 3];
+                    let mut nrm = [0.0f32; 3];
+                    for &(bi, w) in list {
+                        let d = xform_point(&skin[bi], *p);
+                        acc[0] += d[0] * w;
+                        acc[1] += d[1] * w;
+                        acc[2] += d[2] * w;
+                        if has_n {
+                            let nd = xform_dir(&skin[bi], m.normals[vi]);
+                            nrm[0] += nd[0] * w;
+                            nrm[1] += nd[1] * w;
+                            nrm[2] += nd[2] * w;
+                        }
+                    }
+                    out.positions[vi] = acc;
+                    if has_n {
+                        let len = (nrm[0] * nrm[0] + nrm[1] * nrm[1] + nrm[2] * nrm[2]).sqrt();
+                        if len > 1e-8 {
+                            out.normals[vi] = [nrm[0] / len, nrm[1] / len, nrm[2] / len];
+                        }
+                    }
+                }
+                out
+            })
+            .collect()
     }
     pub fn triangle_count(&self) -> usize {
         self.meshes.iter().map(|m| m.indices.len() / 3).sum()
@@ -431,6 +609,9 @@ fn parse_node(
         name,
         parent: parent_bone,
         local_bind: local,
+        local_t: [px, py, pz],
+        local_r: [rw, rx, ry, rz],
+        local_s: [sx, sy, sz],
         bind_world: world,
         inverse_bind: invert_affine(&world),
         weights: Vec::new(),
