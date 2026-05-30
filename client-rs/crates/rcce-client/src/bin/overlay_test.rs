@@ -147,6 +147,21 @@ fn main() {
         }
     }
 
+    // Weather mock: rain streaks on the right half (run the sim a few frames
+    // so particles spread out).
+    {
+        use rcce_client::weather::{Weather, WeatherSystem};
+        let mut ws = WeatherSystem::new(160);
+        for _ in 0..20 {
+            ws.update(0.03, w as f32, h as f32, Weather::Rain);
+        }
+        for p in ws.particles() {
+            if p.x > 430.0 {
+                overlay.rect(p.x, p.y, 1.5, 9.0, [0.6, 0.7, 0.9, 0.55]);
+            }
+        }
+    }
+
     overlay.render(&device, &queue, &view, w as f32, h as f32);
 
     // Readback → PNG.

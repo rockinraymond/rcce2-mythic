@@ -155,6 +155,9 @@ struct App {
     /// Footstep cadence + the resolved footstep .ogg files.
     footsteps: rcce_client::audio::FootstepTimer,
     footstep_paths: Vec<std::path::PathBuf>,
+    /// Rain/snow particles + the previous frame's elapsed time (for dt).
+    weather: rcce_client::weather::WeatherSystem,
+    prev_elapsed: f32,
 }
 
 impl App {
@@ -197,6 +200,8 @@ impl App {
             show_inventory: false,
             footsteps: rcce_client::audio::FootstepTimer::new(),
             footstep_paths: Vec::new(),
+            weather: rcce_client::weather::WeatherSystem::new(240),
+            prev_elapsed: 0.0,
         }
     }
 }
@@ -779,6 +784,31 @@ impl App {
         if let Some(overlay) = self.overlay.as_mut() {
             let (sw, sh) = (gfx.config.width as f32, gfx.config.height as f32);
             let white = [1.0, 1.0, 1.0, 1.0];
+
+            // Weather particles (rain/snow) — drawn first so they sit behind the
+            // HUD/nameplates. Driven by the zone's weather byte.
+            let wkind = self
+                .net
+                .as_ref()
+                .map(|n| rcce_client::weather::weather_from_byte(n.world.zone.weather))
+                .unwrap_or(rcce_client::weather::Weather::Clear);
+            let dt = (elapsed - self.prev_elapsed).clamp(0.0, 0.1);
+            self.prev_elapsed = elapsed;
+            self.weather.update(dt, sw, sh, wkind);
+            match wkind {
+                rcce_client::weather::Weather::Rain => {
+                    for p in self.weather.particles() {
+                        overlay.rect(p.x, p.y, 1.5, 9.0, [0.6, 0.7, 0.9, 0.5]);
+                    }
+                }
+                rcce_client::weather::Weather::Snow => {
+                    for p in self.weather.particles() {
+                        overlay.rect(p.x, p.y, 3.0, 3.0, [1.0, 1.0, 1.0, 0.8]);
+                    }
+                }
+                rcce_client::weather::Weather::Clear => {}
+            }
+
             if let Some(net) = self.net.as_ref() {
                 for a in net.world.actors.values() {
                     if !a.alive {

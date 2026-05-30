@@ -126,6 +126,7 @@ impl World {
             pk::ATTACK_ACTOR => self.on_attack_actor(&m.data),
             pk::NAME_CHANGE => self.on_name_change(&m.data),
             pk::INVENTORY_UPDATE => self.on_inventory_update(&m.data),
+            pk::WEATHER_CHANGE => self.on_weather_change(&m.data),
             _ => {}
         }
     }
@@ -424,6 +425,18 @@ impl World {
         }
     }
 
+    /// `P_WeatherChange` (ClientNet.bb:1272): areaId u32 + weather u8. Applies
+    /// only when it targets the area we're standing in.
+    fn on_weather_change(&mut self, d: &[u8]) {
+        let mut r = MsgReader::new(d);
+        let (Some(area), Some(weather)) = (r.u32(), r.u8()) else {
+            return;
+        };
+        if area == self.zone.area_id {
+            self.zone.weather = weather;
+        }
+    }
+
     /// `P_ChatMessage`: a leading control byte (channel, e.g. 253/254) then text.
     fn on_chat(&mut self, d: &[u8]) {
         let text: String = d
@@ -648,5 +661,18 @@ mod tests {
         });
         w.apply(&msg(pk::INVENTORY_UPDATE, bad));
         assert!(w.dropped_items.is_empty());
+    }
+
+    #[test]
+    fn weather_change_only_for_current_area() {
+        let mut w = World::default();
+        w.zone.area_id = 7;
+        w.zone.weather = 0;
+        // A change for our area applies.
+        w.apply(&msg(pk::WEATHER_CHANGE, pkt(|p| { p.u32(7).u8(1); })));
+        assert_eq!(w.zone.weather, 1);
+        // A change for a different area is ignored.
+        w.apply(&msg(pk::WEATHER_CHANGE, pkt(|p| { p.u32(99).u8(2); })));
+        assert_eq!(w.zone.weather, 1);
     }
 }
