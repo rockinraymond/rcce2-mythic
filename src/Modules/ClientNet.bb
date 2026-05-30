@@ -290,6 +290,9 @@ Function UpdateNetwork()
 								; RuntimeError as the controlled crash.
 								If AI <> Me
 									WriteLog(MainLog, "P_AppearanceUpdate C: missing mesh for race '" + AI\Actor\Race$ + "' (RNID=" + AI\RNID + "), dropping actor")
+									; Sweep homing projectiles first -- dropping this in-zone actor
+									; otherwise leaves a dangling ProjectileInstance\Target (#457).
+									FreeProjectilesTargeting(AI)
 									SafeFreeActorInstance(AI)
 								Else
 									RuntimeError("Could not load actor mesh for " + AI\Actor\Race$ + "!")
@@ -326,6 +329,9 @@ Function UpdateNetwork()
 							If Result = False
 								If AI <> Me
 									WriteLog(MainLog, "P_AppearanceUpdate G: missing mesh for race '" + AI\Actor\Race$ + "' (RNID=" + AI\RNID + "), dropping actor")
+									; Sweep homing projectiles first -- dropping this in-zone actor
+									; otherwise leaves a dangling ProjectileInstance\Target (#457).
+									FreeProjectilesTargeting(AI)
 									SafeFreeActorInstance(AI)
 								Else
 									RuntimeError("Could not load actor mesh for " + AI\Actor\Race$ + "!")
