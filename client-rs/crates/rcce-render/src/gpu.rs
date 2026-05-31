@@ -620,14 +620,19 @@ impl Pipeline {
     }
 }
 
-/// A single uploaded mesh ready to draw. `tex_bind` is reference-counted so
-/// dynamic rebuilds can share a cached upload.
+/// A single uploaded mesh ready to draw. `tex_bind` and `ibuf` are
+/// reference-counted so dynamic rebuilds can share cached uploads — the index
+/// (topology) buffer is constant across animation frames, so it's cached and
+/// reused instead of recreated every rebuild.
 pub struct Drawable {
     pub vbuf: wgpu::Buffer,
-    pub ibuf: wgpu::Buffer,
+    pub ibuf: Rc<wgpu::Buffer>,
     pub n_idx: u32,
     pub tex_bind: Rc<wgpu::BindGroup>,
 }
+
+/// Cache of constant index (topology) buffers, keyed like [`TexCache`].
+pub type IndexCache = HashMap<String, Rc<wgpu::Buffer>>;
 
 /// Bake one mesh into world-space vertex/index buffers (no texture). The
 /// instance's rotation/scale/translation are applied per vertex.
@@ -638,7 +643,15 @@ fn bake_mesh(
     trans: Vec3,
     color: [f32; 3],
     mesh: &B3dMesh,
-) -> (wgpu::Buffer, wgpu::Buffer, u32) {
+) -> (wgpu::Buffer, Rc<wgpu::Buffer>, u32) {
+    let vbuf = bake_verts(device, nrot, scale, trans, color, mesh);
+    let ibuf = Rc::new(bake_indices(device, mesh));
+    (vbuf, ibuf, mesh.indices.len() as u32)
+}
+
+/// World-space vertex buffer for `mesh` (positions transformed by the instance).
+/// Rebuilt every frame for animated meshes (positions change).
+fn bake_verts(device: &wgpu::Device, nrot: Mat3, scale: Vec3, trans: Vec3, color: [f32; 3], mesh: &B3dMesh) -> wgpu::Buffer {
     let normals = mesh_normals(mesh);
     let has_uv = mesh.uvs.len() == mesh.positions.len();
     let verts: Vec<Vertex> = mesh
@@ -655,17 +668,20 @@ fn bake_mesh(
             }
         })
         .collect();
-    let vbuf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+    device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
         label: Some("v"),
         contents: bytemuck::cast_slice(&verts),
         usage: wgpu::BufferUsages::VERTEX,
-    });
-    let ibuf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+    })
+}
+
+/// Index (topology) buffer for `mesh` — constant across animation frames.
+fn bake_indices(device: &wgpu::Device, mesh: &B3dMesh) -> wgpu::Buffer {
+    device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
         label: Some("i"),
         contents: bytemuck::cast_slice(&mesh.indices),
         usage: wgpu::BufferUsages::INDEX,
-    });
-    (vbuf, ibuf, mesh.indices.len() as u32)
+    })
 }
 
 /// Instance rotation matrix (Y·X·Z) from `rot` radians.
@@ -685,6 +701,7 @@ pub fn build_actor_drawables_cached(
     instances: &[SceneInstance],
     keys: &[String],
     cache: &mut TexCache,
+    idx_cache: &mut IndexCache,
 ) -> Vec<Drawable> {
     let mut drawables = Vec::new();
     for (ii, inst) in instances.iter().enumerate() {
@@ -696,10 +713,18 @@ pub fn build_actor_drawables_cached(
             if mesh.positions.is_empty() || mesh.indices.is_empty() {
                 continue;
             }
-            let (vbuf, ibuf, n_idx) = bake_mesh(device, nrot, scale, trans, inst.color, mesh);
+            // Posed vertices change every frame; the index topology is constant,
+            // so cache + reuse the index buffer instead of recreating it.
+            let vbuf = bake_verts(device, nrot, scale, trans, inst.color, mesh);
+            let ckey = format!("{key}:{mi}");
+            let ibuf = idx_cache
+                .entry(ckey.clone())
+                .or_insert_with(|| Rc::new(bake_indices(device, mesh)))
+                .clone();
+            let n_idx = mesh.indices.len() as u32;
             let tex = inst.textures.get(mi).and_then(|t| t.as_ref());
             let tex_bind = cache
-                .entry(format!("{key}:{mi}"))
+                .entry(ckey)
                 .or_insert_with(|| Rc::new(pipeline.texture_bind(device, queue, tex)))
                 .clone();
             drawables.push(Drawable { vbuf, ibuf, n_idx, tex_bind });
@@ -735,11 +760,11 @@ pub fn build_drawables(
             contents: bytemuck::cast_slice(&verts),
             usage: wgpu::BufferUsages::VERTEX,
         });
-        let ibuf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+        let ibuf = Rc::new(device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("gi"),
             contents: bytemuck::cast_slice(&idx),
             usage: wgpu::BufferUsages::INDEX,
-        });
+        }));
         drawables.push(Drawable {
             vbuf,
             ibuf,

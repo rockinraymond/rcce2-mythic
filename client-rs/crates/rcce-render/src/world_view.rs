@@ -6,7 +6,7 @@
 
 use wgpu::util::DeviceExt;
 
-use crate::gpu::{self, Drawable, Pipeline, SkyPipeline, TexCache, Uniforms};
+use crate::gpu::{self, Drawable, IndexCache, Pipeline, SkyPipeline, TexCache, Uniforms};
 use crate::scene::SceneInstance;
 
 pub struct WorldView {
@@ -22,6 +22,9 @@ pub struct WorldView {
     /// Cached actor texture binds (keyed by appearance) so per-frame rebuilds
     /// reuse the upload instead of re-sending skins to the GPU every frame.
     tex_cache: TexCache,
+    /// Cached constant index buffers (keyed like the textures) so per-frame
+    /// rebuilds don't recreate the topology buffer each tick.
+    idx_cache: IndexCache,
 }
 
 fn make_depth(device: &wgpu::Device, w: u32, h: u32) -> wgpu::TextureView {
@@ -67,6 +70,7 @@ impl WorldView {
             statics: Vec::new(),
             dynamics: Vec::new(),
             tex_cache: TexCache::new(),
+            idx_cache: IndexCache::new(),
         }
     }
 
@@ -98,6 +102,7 @@ impl WorldView {
             instances,
             keys,
             &mut self.tex_cache,
+            &mut self.idx_cache,
         );
     }
 
