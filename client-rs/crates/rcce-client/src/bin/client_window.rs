@@ -668,6 +668,23 @@ impl ApplicationHandler for App {
                         }
                         // Toggle the inventory / spellbook panel.
                         KeyCode::KeyI if pressed => self.show_inventory = !self.show_inventory,
+                        // Audio: M mutes, [ / ] lower / raise master volume.
+                        KeyCode::KeyM if pressed => {
+                            if let Some(a) = self.audio.as_mut() {
+                                let m = a.toggle_mute();
+                                println!("[audio] muted = {m}");
+                            }
+                        }
+                        KeyCode::BracketLeft if pressed => {
+                            if let Some(a) = self.audio.as_mut() {
+                                a.adjust_master_volume(-0.1);
+                            }
+                        }
+                        KeyCode::BracketRight if pressed => {
+                            if let Some(a) = self.audio.as_mut() {
+                                a.adjust_master_volume(0.1);
+                            }
+                        }
                         KeyCode::Escape => {
                             let trade_open = self
                                 .net
@@ -1023,6 +1040,17 @@ impl App {
                     let line = format!("Lv {}   {}g", sheet.level, sheet.gold);
                     let tw = rcce_render::font::text_width(&line, 1.0);
                     overlay.text_shadow(sw - tw - 12.0, 24.0, 1.0, &line, [1.0, 0.88, 0.4, 1.0]);
+                }
+                // Audio readout (M mute, [ / ] volume).
+                if let Some(a) = self.audio.as_ref() {
+                    let s = if a.is_muted() {
+                        "Audio: muted".to_string()
+                    } else {
+                        format!("Vol {}%", (a.master_volume() * 100.0).round() as i32)
+                    };
+                    let tw = rcce_render::font::text_width(&s, 1.0);
+                    let col = if a.is_muted() { [1.0, 0.6, 0.6, 1.0] } else { [0.7, 0.85, 1.0, 1.0] };
+                    overlay.text_shadow(sw - tw - 12.0, 38.0, 1.0, &s, col);
                 }
 
                 // Chat log: the last few lines, just above the HUD.

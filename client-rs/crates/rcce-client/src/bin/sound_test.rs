@@ -109,6 +109,14 @@ fn main() {
                 println!("[sound] footstep one-shot fired");
                 std::thread::sleep(Duration::from_millis(600));
             }
+            // Exercise the volume / mute controls (re-applies to the music sink).
+            audio.set_master_volume(0.3);
+            println!("[sound] master volume -> {:.0}%", audio.master_volume() * 100.0);
+            std::thread::sleep(Duration::from_millis(300));
+            let m = audio.toggle_mute();
+            println!("[sound] muted -> {m}");
+            std::thread::sleep(Duration::from_millis(300));
+            audio.toggle_mute();
         }
         None => println!("[sound] no audio device — decode verified, playback skipped"),
     }

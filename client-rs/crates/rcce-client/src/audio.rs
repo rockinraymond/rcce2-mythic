@@ -12,6 +12,16 @@ use std::path::Path;
 
 use rodio::{Decoder, OutputStream, OutputStreamHandle, Sink, Source};
 
+/// Effective linear gain for a sound: its base volume scaled by the master
+/// volume, or 0 when muted. Pure so it's testable without an audio device.
+pub fn effective_gain(master: f32, base: f32, muted: bool) -> f32 {
+    if muted {
+        0.0
+    } else {
+        (master.clamp(0.0, 1.0) * base).clamp(0.0, 1.0)
+    }
+}
+
 /// Owns the output stream + the current music sink. Dropping it stops audio.
 pub struct Audio {
     // Keep the stream alive for as long as we play; dropping it cuts output.
@@ -20,6 +30,12 @@ pub struct Audio {
     music: Option<Sink>,
     /// The music id currently playing, so a re-entered zone doesn't restart it.
     current_music: Option<u16>,
+    /// Master volume (0..1) and mute, applied on top of each sound's base gain.
+    master_volume: f32,
+    muted: bool,
+    /// Base volume of the current music track (pre-master), to re-derive the
+    /// sink gain when master/mute change.
+    music_base: f32,
 }
 
 impl Audio {
@@ -32,6 +48,9 @@ impl Audio {
                 handle,
                 music: None,
                 current_music: None,
+                master_volume: 0.8,
+                muted: false,
+                music_base: 0.0,
             }),
             Err(e) => {
                 eprintln!("[audio] no output device ({e}); running silent");
@@ -68,13 +87,46 @@ impl Audio {
                 return false;
             }
         };
-        sink.set_volume(volume);
+        self.music_base = volume;
+        sink.set_volume(effective_gain(self.master_volume, volume, self.muted));
         // `.buffered()` makes the source `Clone`, which `repeat_infinite`
         // requires (a bare Decoder isn't restartable).
         sink.append(decoder.buffered().repeat_infinite());
         self.music = Some(sink);
         self.current_music = Some(id);
         true
+    }
+
+    /// Set the master volume (0..1) and re-apply it to the playing music.
+    pub fn set_master_volume(&mut self, v: f32) {
+        self.master_volume = v.clamp(0.0, 1.0);
+        self.reapply_music_gain();
+    }
+
+    /// Nudge the master volume by `delta`, clamped to [0,1].
+    pub fn adjust_master_volume(&mut self, delta: f32) {
+        self.set_master_volume(self.master_volume + delta);
+    }
+
+    /// Toggle mute; returns the new muted state.
+    pub fn toggle_mute(&mut self) -> bool {
+        self.muted = !self.muted;
+        self.reapply_music_gain();
+        self.muted
+    }
+
+    pub fn master_volume(&self) -> f32 {
+        self.master_volume
+    }
+
+    pub fn is_muted(&self) -> bool {
+        self.muted
+    }
+
+    fn reapply_music_gain(&self) {
+        if let Some(s) = &self.music {
+            s.set_volume(effective_gain(self.master_volume, self.music_base, self.muted));
+        }
     }
 
     /// Play the zone's music by id if it differs from what's already playing.
@@ -96,10 +148,14 @@ impl Audio {
     /// Fire-and-forget a one-shot sound (footstep, UI blip). The sink detaches
     /// and frees itself when the clip finishes. Silently no-ops on failure.
     pub fn play_oneshot(&self, path: &Path, volume: f32) {
+        let gain = effective_gain(self.master_volume, volume, self.muted);
+        if gain <= 0.0 {
+            return; // muted / zero — skip the decode entirely
+        }
         let Ok(file) = File::open(path) else { return };
         let Ok(decoder) = Decoder::new(BufReader::new(file)) else { return };
         let Ok(sink) = Sink::try_new(&self.handle) else { return };
-        sink.set_volume(volume);
+        sink.set_volume(gain);
         sink.append(decoder);
         sink.detach();
     }
@@ -151,6 +207,25 @@ impl FootstepTimer {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn gain_scales_by_master() {
+        assert!((effective_gain(0.5, 0.8, false) - 0.4).abs() < 1e-6);
+        assert_eq!(effective_gain(1.0, 0.6, false), 0.6);
+    }
+
+    #[test]
+    fn gain_muted_is_zero() {
+        assert_eq!(effective_gain(1.0, 1.0, true), 0.0);
+        assert_eq!(effective_gain(0.5, 0.8, true), 0.0);
+    }
+
+    #[test]
+    fn gain_clamps() {
+        assert_eq!(effective_gain(2.0, 1.0, false), 1.0); // master clamped
+        assert_eq!(effective_gain(1.0, 2.0, false), 1.0); // product clamped
+        assert_eq!(effective_gain(-1.0, 0.5, false), 0.0); // negative master → 0
+    }
 
     #[test]
     fn no_step_when_still() {
