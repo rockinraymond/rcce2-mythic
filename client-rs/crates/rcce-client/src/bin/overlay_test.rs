@@ -173,7 +173,9 @@ fn main() {
         overlay.text_shadow(px + 10.0, py + 6.0, 1.5, "Vendor", white);
         overlay.text(px + pw - 80.0, py + 7.0, 1.0, "[Esc] close", dim);
         let mut y = py + 30.0;
-        for (name, price) in [("Sword", "10g"), ("Shield", "10g"), ("Health Potion x5", "2g")] {
+        overlay.text(px + 10.0, y, 1.0, "Press 1-9 to buy:", dim);
+        y += 14.0;
+        for (name, price) in [("1. Sword", "10g"), ("2. Shield", "10g"), ("3. Health Potion x5", "2g")] {
             overlay.text(px + 12.0, y, 1.0, name, white);
             let pwid = rcce_render::font::text_width(price, 1.0);
             overlay.text(px + pw - pwid - 12.0, y, 1.0, price, [1.0, 0.88, 0.4, 1.0]);

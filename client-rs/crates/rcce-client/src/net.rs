@@ -64,9 +64,73 @@ pub fn examine_packet(runtime_id: u16) -> Vec<u8> {
     runtime_id.to_le_bytes().to_vec()
 }
 
+/// Number of vendor/inventory slots in a trade basket (client `Dim(31)`).
+const TRADE_SLOTS: usize = 32;
+
+/// Build a `P_OpenTrading` buy/sell confirmation (`Interface3D.bb:2335-2350`):
+/// 32 "his" slots of `ServerTradeID i32 + amount u16` (the items being bought;
+/// unused slots are `-1, 0`), then 32 "mine" slots of `backpackSlot u8 +
+/// amount u16` (items being sold; unused `0, 0`). Sent reliable.
+pub fn trade_confirm_packet(buys: &[(u32, u16)], sells: &[(u8, u16)]) -> Vec<u8> {
+    let mut w = MsgWriter::new();
+    for i in 0..TRADE_SLOTS {
+        match buys.get(i) {
+            Some(&(id, amt)) => {
+                w.u32(id).u16(amt);
+            }
+            None => {
+                w.u32(0xFFFF_FFFF).u16(0); // -1 sentinel = empty slot
+            }
+        }
+    }
+    for i in 0..TRADE_SLOTS {
+        match sells.get(i) {
+            Some(&(slot, amt)) => {
+                w.u8(slot).u16(amt);
+            }
+            None => {
+                w.u8(0).u16(0);
+            }
+        }
+    }
+    w.into_bytes()
+}
+
+/// Build a `P_OpenTrading` close (`Interface3D.bb:2303`): an empty body tells
+/// the server the trade window was dismissed. Sent reliable.
+pub fn trade_close_packet() -> Vec<u8> {
+    Vec::new()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn trade_confirm_one_buy_layout() {
+        let p = trade_confirm_packet(&[(1001, 3)], &[]);
+        // 32*(4+2) + 32*(1+2) = 192 + 96 = 288 bytes.
+        assert_eq!(p.len(), 288);
+        // Slot 0 buy: id 1001 (LE u32) + amount 3 (LE u16).
+        assert_eq!(&p[0..6], &[0xE9, 0x03, 0, 0, 3, 0]);
+        // Slot 1 buy: the -1 sentinel + 0.
+        assert_eq!(&p[6..12], &[0xFF, 0xFF, 0xFF, 0xFF, 0, 0]);
+        // First "mine" sell slot (offset 192): empty 0,0,0.
+        assert_eq!(&p[192..195], &[0, 0, 0]);
+    }
+
+    #[test]
+    fn trade_confirm_with_sell() {
+        let p = trade_confirm_packet(&[], &[(14, 5)]);
+        assert_eq!(p.len(), 288);
+        // Sell slot 0 at byte 192: backpack slot 14 + amount 5 (LE u16).
+        assert_eq!(&p[192..195], &[14, 5, 0]);
+    }
+
+    #[test]
+    fn trade_close_is_empty() {
+        assert!(trade_close_packet().is_empty());
+    }
 
     #[test]
     fn interact_packets_are_le_runtime_id() {

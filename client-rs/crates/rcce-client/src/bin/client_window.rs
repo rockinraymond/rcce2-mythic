@@ -643,6 +643,25 @@ impl ApplicationHandler for App {
                                 KeyCode::Digit8 => 7,
                                 _ => 8,
                             };
+                            // If a vendor window is open, the number keys buy
+                            // the Nth offer; otherwise they cast the Nth spell.
+                            let buy = self
+                                .net
+                                .as_ref()
+                                .and_then(|n| n.world.current_trade.as_ref())
+                                .and_then(|t| t.offers.get(idx))
+                                .map(|o| (o.server_trade_id, o.amount.max(1)));
+                            if let Some((trade_id, amount)) = buy {
+                                if let Some(net) = self.net.as_mut() {
+                                    net.transport.send(
+                                        net.peer,
+                                        rcce_net::packet_id::OPEN_TRADING,
+                                        &rcce_client::net::trade_confirm_packet(&[(trade_id, amount)], &[]),
+                                        true,
+                                    );
+                                }
+                                return;
+                            }
                             let cast = self
                                 .sheet
                                 .as_ref()
@@ -744,6 +763,12 @@ impl ApplicationHandler for App {
                                 self.set_mouse_look(false);
                             } else if trade_open {
                                 if let Some(net) = self.net.as_mut() {
+                                    net.transport.send(
+                                        net.peer,
+                                        rcce_net::packet_id::OPEN_TRADING,
+                                        &rcce_client::net::trade_close_packet(),
+                                        true,
+                                    );
                                     net.world.current_trade = None;
                                 }
                             } else {
@@ -1186,11 +1211,14 @@ impl App {
                 if trade.offers.is_empty() {
                     overlay.text(px + 10.0, y, 1.0, "(nothing for sale)", dimc);
                 } else {
-                    for off in &trade.offers {
+                    overlay.text(px + 10.0, y, 1.0, "Press 1-9 to buy:", dimc);
+                    y += 14.0;
+                    for (i, off) in trade.offers.iter().enumerate() {
                         if y > py + ph - 16.0 { break; }
                         let name = store.item_name(off.item_id);
                         let qty = if off.amount > 1 { format!(" x{}", off.amount) } else { String::new() };
-                        let line: String = format!("{name}{qty}").chars().take(30).collect();
+                        let num = if i < 9 { format!("{}. ", i + 1) } else { "   ".to_string() };
+                        let line: String = format!("{num}{name}{qty}").chars().take(30).collect();
                         overlay.text(px + 12.0, y, 1.0, &line, white);
                         // Price = the item's base value (Items.dat), right-aligned.
                         let price = format!("{}g", store.item_value(off.item_id).max(0));
