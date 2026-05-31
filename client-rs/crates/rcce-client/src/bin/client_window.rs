@@ -177,6 +177,12 @@ struct App {
     /// over Thunder1-3.ogg.
     next_thunder: f32,
     thunder_idx: usize,
+    /// Cached cloud textures (regular + storm) for the current zone, so the
+    /// cloud layer swaps to darker storm clouds when it's storming without a
+    /// per-frame disk reload. `cloud_is_storm` tracks which is uploaded.
+    cloud_regular_img: Option<rcce_data::texture::Image>,
+    cloud_storm_img: Option<rcce_data::texture::Image>,
+    cloud_is_storm: bool,
 }
 
 impl App {
@@ -229,6 +235,9 @@ impl App {
             last_inv_slot: None,
             next_thunder: 0.0,
             thunder_idx: 0,
+            cloud_regular_img: None,
+            cloud_storm_img: None,
+            cloud_is_storm: false,
         }
     }
 }
@@ -763,6 +772,15 @@ impl ApplicationHandler for App {
             self.fog_far = env.fog_far;
             self.ambient = env.ambient;
             self.light_dir = env.light_dir;
+            // Cache both cloud textures so storm weather can swap to darker
+            // storm clouds without a per-frame disk reload (load_zone_static
+            // already uploaded the regular cloud).
+            let load_img = |id: u16| -> Option<rcce_data::texture::Image> {
+                (id != 65535).then(|| store.texture_path(id).and_then(|p| rcce_data::texture::load(&p))).flatten()
+            };
+            self.cloud_regular_img = load_img(env.cloud_tex_id);
+            self.cloud_storm_img = load_img(env.storm_cloud_tex_id);
+            self.cloud_is_storm = false;
             // Zone music (looped), if this zone sets a LoadingMusicID and the
             // track resolves through Music.dat to a file on disk.
             if let Some(audio) = self.audio.as_mut() {
@@ -1467,6 +1485,21 @@ impl App {
                 .map(|n| rcce_client::weather::weather_from_byte(n.world.zone.weather))
                 .unwrap_or(rcce_client::weather::Weather::Clear);
             let storm = wx == rcce_client::weather::Weather::Storm;
+            // Storm-cloud swap: upload the darker storm clouds while storming,
+            // the regular clouds otherwise — only on a change (no per-frame
+            // reload). StormCloudTexID absent → keep the regular clouds.
+            let want_storm_clouds = storm && self.cloud_storm_img.is_some();
+            if want_storm_clouds != self.cloud_is_storm {
+                let img = if want_storm_clouds {
+                    self.cloud_storm_img.as_ref()
+                } else {
+                    self.cloud_regular_img.as_ref()
+                };
+                if let Some(img) = img {
+                    view.set_cloud_texture(&gfx.device, &gfx.queue, img.width, img.height, &img.rgba);
+                    self.cloud_is_storm = want_storm_clouds;
+                }
+            }
             let rain_p = wx.is_rainy().then(|| store.sound_path("Weather/Rain.ogg")).flatten();
             let wind_p = storm.then(|| store.sound_path("Weather/Wind.ogg")).flatten();
             let thunder_p = if storm && elapsed >= self.next_thunder {
