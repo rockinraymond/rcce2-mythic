@@ -183,6 +183,10 @@ struct App {
     cloud_regular_img: Option<rcce_data::texture::Image>,
     cloud_storm_img: Option<rcce_data::texture::Image>,
     cloud_is_storm: bool,
+    /// Project data root + the zone whose geometry/sky is currently loaded, so a
+    /// live area change (player warp) reloads the new zone's scenery + sky.
+    data_root: String,
+    loaded_zone: String,
 }
 
 impl App {
@@ -238,6 +242,8 @@ impl App {
             cloud_regular_img: None,
             cloud_storm_img: None,
             cloud_is_storm: false,
+            data_root: String::new(),
+            loaded_zone: String::new(),
         }
     }
 }
@@ -739,6 +745,30 @@ fn load_zone_static(store: &mut AssetStore, view: &mut WorldView, gfx: &Gfx, dat
     Some((center, span, min[1], scenery.env.clone()))
 }
 
+/// Result of loading a zone: camera framing + env + the decoded cloud textures
+/// (regular + storm) for the storm-cloud swap.
+struct ZoneLoad {
+    center: [f32; 3],
+    span: f32,
+    ground_y: f32,
+    env: rcce_data::AreaEnv,
+    cloud_regular: Option<rcce_data::texture::Image>,
+    cloud_storm: Option<rcce_data::texture::Image>,
+}
+
+/// Load a zone's scenery + sky/cloud/stars (via `load_zone_static`) and decode
+/// its cloud textures. The single primitive used by both the initial load and a
+/// live area-change reload.
+fn load_zone_full(store: &mut AssetStore, view: &mut WorldView, gfx: &Gfx, data_root: &str, zone: &str) -> Option<ZoneLoad> {
+    let (center, span, ground_y, env) = load_zone_static(store, view, gfx, data_root, zone)?;
+    let load_img = |id: u16| -> Option<rcce_data::texture::Image> {
+        (id != 65535).then(|| store.texture_path(id).and_then(|p| rcce_data::texture::load(&p))).flatten()
+    };
+    let cloud_regular = load_img(env.cloud_tex_id);
+    let cloud_storm = load_img(env.storm_cloud_tex_id);
+    Some(ZoneLoad { center, span, ground_y, env, cloud_regular, cloud_storm })
+}
+
 impl ApplicationHandler for App {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         if self.window.is_some() {
@@ -753,6 +783,7 @@ impl ApplicationHandler for App {
 
         let data_root = resolve_data_root();
         println!("[client-window] data root: {data_root}");
+        self.data_root = data_root.clone();
         let mut store = match AssetStore::load(&data_root) {
             Ok(s) => s,
             Err(e) => {
@@ -763,29 +794,22 @@ impl ApplicationHandler for App {
         };
 
         // Static scenery (always — also the fallback view).
-        if let Some((center, span, gy, env)) = load_zone_static(&mut store, &mut view, &gfx, &data_root, &self.zone) {
-            self.center = center;
-            self.span = span;
-            self.ground_y = gy;
-            self.fog_color = env.fog_color;
-            self.fog_near = env.fog_near;
-            self.fog_far = env.fog_far;
-            self.ambient = env.ambient;
-            self.light_dir = env.light_dir;
-            // Cache both cloud textures so storm weather can swap to darker
-            // storm clouds without a per-frame disk reload (load_zone_static
-            // already uploaded the regular cloud).
-            let load_img = |id: u16| -> Option<rcce_data::texture::Image> {
-                (id != 65535).then(|| store.texture_path(id).and_then(|p| rcce_data::texture::load(&p))).flatten()
-            };
-            self.cloud_regular_img = load_img(env.cloud_tex_id);
-            self.cloud_storm_img = load_img(env.storm_cloud_tex_id);
+        if let Some(z) = load_zone_full(&mut store, &mut view, &gfx, &data_root, &self.zone) {
+            self.center = z.center;
+            self.span = z.span;
+            self.ground_y = z.ground_y;
+            self.fog_color = z.env.fog_color;
+            self.fog_near = z.env.fog_near;
+            self.fog_far = z.env.fog_far;
+            self.ambient = z.env.ambient;
+            self.light_dir = z.env.light_dir;
+            self.cloud_regular_img = z.cloud_regular;
+            self.cloud_storm_img = z.cloud_storm;
             self.cloud_is_storm = false;
-            // Zone music (looped), if this zone sets a LoadingMusicID and the
-            // track resolves through Music.dat to a file on disk.
             if let Some(audio) = self.audio.as_mut() {
-                audio.set_music(env.music_id, 0.4, |id| store.music_path(id));
+                audio.set_music(z.env.music_id, 0.4, |id| store.music_path(id));
             }
+            self.loaded_zone = self.zone.clone();
         }
         // Resolve footstep sounds once (played as one-shots while moving).
         self.footstep_paths = store.footstep_sounds();
@@ -1415,6 +1439,32 @@ impl App {
             for m in net.transport.poll() {
                 net.updates += 1;
                 net.world.apply(&m);
+            }
+            // Live area change (player warp): reload the new zone's scenery +
+            // sky/clouds/stars + music. Gated by the zone name so it only fires
+            // on an actual change, not every frame.
+            if !net.world.zone.name.is_empty() && net.world.zone.name != self.loaded_zone {
+                let zone = net.world.zone.name.clone();
+                if let Some(z) = load_zone_full(store, view, gfx, &self.data_root, &zone) {
+                    self.center = z.center;
+                    self.span = z.span;
+                    self.ground_y = z.ground_y;
+                    self.fog_color = z.env.fog_color;
+                    self.fog_near = z.env.fog_near;
+                    self.fog_far = z.env.fog_far;
+                    self.ambient = z.env.ambient;
+                    self.light_dir = z.env.light_dir;
+                    self.cloud_regular_img = z.cloud_regular;
+                    self.cloud_storm_img = z.cloud_storm;
+                    self.cloud_is_storm = false;
+                    if let Some(audio) = self.audio.as_mut() {
+                        audio.set_music(z.env.music_id, 0.4, |id| store.music_path(id));
+                    }
+                    println!("[client-window] reloaded zone '{zone}'");
+                }
+                // Mark loaded even if the area file was missing, so we don't
+                // retry the reload (and its disk I/O) every frame.
+                self.loaded_zone = zone;
             }
             // Flush any replies the apply() logic queued (e.g. the "GY" accept
             // when the server gives us an item).
