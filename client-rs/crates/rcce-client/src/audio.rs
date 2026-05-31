@@ -36,11 +36,9 @@ pub struct Audio {
     /// Base volume of the current music track (pre-master), to re-derive the
     /// sink gain when master/mute change.
     music_base: f32,
-    /// Looped weather-ambient channel (rain) + the key of what's playing, so the
-    /// same loop isn't restarted every frame.
-    weather: Option<Sink>,
-    weather_key: Option<&'static str>,
-    weather_base: f32,
+    /// Looped weather-ambient layers keyed by name (e.g. "rain", "wind"), each
+    /// with its pre-master base volume. Lets storm play rain + wind together.
+    ambient: std::collections::HashMap<&'static str, (Sink, f32)>,
 }
 
 impl Audio {
@@ -56,9 +54,7 @@ impl Audio {
                 master_volume: 0.8,
                 muted: false,
                 music_base: 0.0,
-                weather: None,
-                weather_key: None,
-                weather_base: 0.0,
+                ambient: std::collections::HashMap::new(),
             }),
             Err(e) => {
                 eprintln!("[audio] no output device ({e}); running silent");
@@ -135,46 +131,52 @@ impl Audio {
         if let Some(s) = &self.music {
             s.set_volume(effective_gain(self.master_volume, self.music_base, self.muted));
         }
-        if let Some(s) = &self.weather {
-            s.set_volume(effective_gain(self.master_volume, self.weather_base, self.muted));
+        for (sink, base) in self.ambient.values() {
+            sink.set_volume(effective_gain(self.master_volume, *base, self.muted));
         }
     }
 
-    /// Start (or keep) a looping weather-ambient track under `key`. Re-calling
-    /// with the same key is a no-op so the loop isn't restarted each frame;
-    /// a different key replaces it. Open/decode failure leaves the channel off.
-    pub fn set_weather_loop(&mut self, key: &'static str, path: &Path, volume: f32) {
-        if self.weather_key == Some(key) {
+    /// Start (or keep) a looping ambient layer under `key` (e.g. "rain", "wind").
+    /// Re-calling with the same key is a no-op so the loop isn't restarted each
+    /// frame. Open/decode failure leaves the layer absent.
+    pub fn set_ambient_loop(&mut self, key: &'static str, path: &Path, volume: f32) {
+        if self.ambient.contains_key(key) {
             return;
         }
-        self.stop_weather();
         let Ok(file) = File::open(path) else {
-            eprintln!("[audio] weather open {}: missing", path.display());
+            eprintln!("[audio] ambient open {}: missing", path.display());
             return;
         };
         let Ok(decoder) = Decoder::new(BufReader::new(file)) else {
-            eprintln!("[audio] weather decode {}", path.display());
+            eprintln!("[audio] ambient decode {}", path.display());
             return;
         };
         let Ok(sink) = Sink::try_new(&self.handle) else { return };
-        self.weather_base = volume;
         sink.set_volume(effective_gain(self.master_volume, volume, self.muted));
         sink.append(decoder.buffered().repeat_infinite());
-        self.weather = Some(sink);
-        self.weather_key = Some(key);
+        self.ambient.insert(key, (sink, volume));
     }
 
-    /// Stop the weather-ambient loop, if any.
-    pub fn stop_weather(&mut self) {
-        if let Some(s) = self.weather.take() {
+    /// Stop a single ambient layer by key, if present.
+    pub fn stop_ambient(&mut self, key: &str) {
+        if let Some((s, _)) = self.ambient.remove(key) {
             s.stop();
         }
-        self.weather_key = None;
     }
 
-    /// The currently-playing weather loop key (None = silent), for tests / UI.
-    pub fn weather_key(&self) -> Option<&'static str> {
-        self.weather_key
+    /// Stop any ambient layer whose key isn't in `keep` (so weather changes drop
+    /// stale loops). Pass `&[]` to stop everything.
+    pub fn retain_ambient(&mut self, keep: &[&'static str]) {
+        let drop: Vec<&'static str> =
+            self.ambient.keys().copied().filter(|k| !keep.contains(k)).collect();
+        for k in drop {
+            self.stop_ambient(k);
+        }
+    }
+
+    /// Whether an ambient layer is currently playing (for tests / UI).
+    pub fn has_ambient(&self, key: &str) -> bool {
+        self.ambient.contains_key(key)
     }
 
     /// Play the zone's music by id if it differs from what's already playing.

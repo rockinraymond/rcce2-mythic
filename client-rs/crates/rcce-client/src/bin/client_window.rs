@@ -173,6 +173,10 @@ struct App {
     /// The inventory slot the cursor was last over (panel open) with an item, so
     /// the Drop / Eat buttons act on it even after the cursor moves onto them.
     last_inv_slot: Option<u8>,
+    /// Storm thunder scheduling: next play time (elapsed secs) + a rotating index
+    /// over Thunder1-3.ogg.
+    next_thunder: f32,
+    thunder_idx: usize,
 }
 
 impl App {
@@ -223,6 +227,8 @@ impl App {
             last_click: now,
             last_click_rid: None,
             last_inv_slot: None,
+            next_thunder: 0.0,
+            thunder_idx: 0,
         }
     }
 }
@@ -1416,27 +1422,47 @@ impl App {
             }
         }
 
-        // Weather ambient: loop Rain.ogg while it's raining (engine W_Rain),
-        // silence otherwise — mirrors Environment3D.bb SetWeather.
+        // Weather ambient: rain loops while it's raining; a storm adds a wind
+        // loop and periodic thunder one-shots — mirrors Environment3D.bb
+        // SetWeather (W_Rain plays Snd_Rain; W_Storm adds Snd_Wind + thunder).
         {
-            let raining = self
+            let wx = self
                 .net
                 .as_ref()
-                .map(|n| {
-                    matches!(
-                        rcce_client::weather::weather_from_byte(n.world.zone.weather),
-                        rcce_client::weather::Weather::Rain
-                    )
-                })
-                .unwrap_or(false);
+                .map(|n| rcce_client::weather::weather_from_byte(n.world.zone.weather))
+                .unwrap_or(rcce_client::weather::Weather::Clear);
+            let storm = wx == rcce_client::weather::Weather::Storm;
+            let rain_p = wx.is_rainy().then(|| store.sound_path("Weather/Rain.ogg")).flatten();
+            let wind_p = storm.then(|| store.sound_path("Weather/Wind.ogg")).flatten();
+            let thunder_p = if storm && elapsed >= self.next_thunder {
+                store.sound_path(&format!("Weather/Thunder{}.ogg", self.thunder_idx % 3 + 1))
+            } else {
+                None
+            };
             if let Some(audio) = self.audio.as_mut() {
-                if raining {
-                    if let Some(p) = store.sound_path("Weather/Rain.ogg") {
-                        audio.set_weather_loop("rain", &p, 0.5);
-                    }
-                } else {
-                    audio.stop_weather();
+                let mut keep: Vec<&'static str> = Vec::new();
+                if let Some(p) = &rain_p {
+                    audio.set_ambient_loop("rain", p, 0.5);
+                    keep.push("rain");
                 }
+                if let Some(p) = &wind_p {
+                    audio.set_ambient_loop("wind", p, 0.4);
+                    keep.push("wind");
+                }
+                audio.retain_ambient(&keep);
+                if let Some(p) = &thunder_p {
+                    audio.play_oneshot(p, 0.7);
+                }
+            }
+            // Advance thunder scheduling (independent of whether audio exists).
+            if storm {
+                if elapsed >= self.next_thunder {
+                    self.thunder_idx = self.thunder_idx.wrapping_add(1);
+                    // Deterministic 8–15s gap from the counter (no RNG).
+                    self.next_thunder = elapsed + 8.0 + (self.thunder_idx as f32 * 2.6) % 7.0;
+                }
+            } else {
+                self.next_thunder = elapsed + 6.0;
             }
         }
 
@@ -1527,9 +1553,15 @@ impl App {
             self.prev_elapsed = elapsed;
             self.weather.update(dt, sw, sh, wkind);
             match wkind {
-                rcce_client::weather::Weather::Rain => {
+                // Storm rains too, with a slightly heavier/greyer streak.
+                rcce_client::weather::Weather::Rain | rcce_client::weather::Weather::Storm => {
+                    let streak = if wkind == rcce_client::weather::Weather::Storm {
+                        (2.0, 11.0, [0.55, 0.6, 0.75, 0.6])
+                    } else {
+                        (1.5, 9.0, [0.6, 0.7, 0.9, 0.5])
+                    };
                     for p in self.weather.particles() {
-                        overlay.rect(p.x, p.y, 1.5, 9.0, [0.6, 0.7, 0.9, 0.5]);
+                        overlay.rect(p.x, p.y, streak.0, streak.1, streak.2);
                     }
                 }
                 rcce_client::weather::Weather::Snow => {

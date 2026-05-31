@@ -10,14 +10,24 @@ pub enum Weather {
     Clear,
     Rain,
     Snow,
+    /// Storm: rain particles + (in the client) wind loop and thunder one-shots.
+    Storm,
 }
 
 /// Map the wire weather byte to a particle mode.
 pub fn weather_from_byte(b: u8) -> Weather {
     match b {
-        1 | 4 => Weather::Rain, // Rain, Storm
+        1 => Weather::Rain,
+        4 => Weather::Storm,
         2 => Weather::Snow,
         _ => Weather::Clear, // Sun, Fog, Wind → no particles
+    }
+}
+
+impl Weather {
+    /// Whether this weather draws rain particles (Rain or Storm).
+    pub fn is_rainy(self) -> bool {
+        matches!(self, Weather::Rain | Weather::Storm)
     }
 }
 
@@ -80,6 +90,8 @@ impl WeatherSystem {
         // Vertical fall speed + horizontal drift per mode.
         let (vy, drift) = match kind {
             Weather::Rain => (900.0, 140.0),
+            // Storm rains harder with stronger wind-driven drift.
+            Weather::Storm => (1050.0, 240.0),
             Weather::Snow => (130.0, 0.0),
             Weather::Clear => (0.0, 0.0),
         };
@@ -87,7 +99,7 @@ impl WeatherSystem {
         for p in &mut self.particles {
             p.y += vy * dt;
             p.x += match kind {
-                Weather::Rain => drift * dt,
+                Weather::Rain | Weather::Storm => drift * dt,
                 // Snow sways side to side.
                 Weather::Snow => (t * 1.5 + p.phase).sin() * 22.0 * dt,
                 Weather::Clear => 0.0,
@@ -120,8 +132,27 @@ mod tests {
         assert_eq!(weather_from_byte(1), Weather::Rain);
         assert_eq!(weather_from_byte(2), Weather::Snow);
         assert_eq!(weather_from_byte(3), Weather::Clear); // Fog: handled by the fog shader
-        assert_eq!(weather_from_byte(4), Weather::Rain); // Storm
+        assert_eq!(weather_from_byte(4), Weather::Storm); // Storm
         assert_eq!(weather_from_byte(5), Weather::Clear); // Wind
+        assert!(Weather::Rain.is_rainy() && Weather::Storm.is_rainy());
+        assert!(!Weather::Snow.is_rainy() && !Weather::Clear.is_rainy());
+    }
+
+    #[test]
+    fn storm_rains_harder_than_rain() {
+        // Storm uses rain particles with a higher fall speed. Use a huge viewport
+        // so no particle wraps in one step, making the comparison exact.
+        let (w, h) = (100_000.0f32, 100_000.0f32);
+        let mut a = WeatherSystem::new(30);
+        let mut b = WeatherSystem::new(30);
+        a.update(0.0, w, h, Weather::Rain); // respread (same seed in both)
+        b.update(0.0, w, h, Weather::Storm);
+        let y0: f32 = a.particles().iter().map(|p| p.y).sum();
+        a.update(0.1, w, h, Weather::Rain);
+        b.update(0.1, w, h, Weather::Storm);
+        let da: f32 = a.particles().iter().map(|p| p.y).sum::<f32>() - y0;
+        let db: f32 = b.particles().iter().map(|p| p.y).sum::<f32>() - y0;
+        assert!(db > da, "storm should fall faster: storm {db} vs rain {da}");
     }
 
     #[test]
