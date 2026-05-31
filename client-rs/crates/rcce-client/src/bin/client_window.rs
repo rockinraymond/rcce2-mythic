@@ -1081,6 +1081,20 @@ impl App {
                     }
                 }
 
+                // Status-effect pills (buffs/debuffs) in a row below the minimap.
+                if !net.world.active_effects.is_empty() {
+                    let mut ex = 10.0;
+                    let ey = 152.0;
+                    for eff in &net.world.active_effects {
+                        let label: String = eff.name.chars().take(12).collect();
+                        let tw = rcce_render::font::text_width(&label, 1.0);
+                        let pillw = tw + 10.0;
+                        overlay.rect(ex, ey, pillw, 14.0, [0.32, 0.16, 0.36, 0.82]);
+                        overlay.text_shadow(ex + 5.0, ey + 2.0, 1.0, &label, [1.0, 0.85, 1.0, 1.0]);
+                        ex += pillw + 4.0;
+                    }
+                }
+
                 // Dropped-item loot markers: a gold pip + name/amount at the
                 // item's world position. "[E]" hint on the nearest in range.
                 if !net.world.dropped_items.is_empty() {

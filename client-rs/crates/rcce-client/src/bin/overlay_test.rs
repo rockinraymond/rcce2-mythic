@@ -147,6 +147,19 @@ fn main() {
         }
     }
 
+    // Status-effect pills mock (P_ActorEffect buffs/debuffs).
+    {
+        let mut ex = 10.0f32;
+        let ey = 152.0f32;
+        for name in ["Poison", "Blessed", "Haste"] {
+            let tw = rcce_render::font::text_width(name, 1.0);
+            let pillw = tw + 10.0;
+            overlay.rect(ex, ey, pillw, 14.0, [0.32, 0.16, 0.36, 0.82]);
+            overlay.text_shadow(ex + 5.0, ey + 2.0, 1.0, name, [1.0, 0.85, 1.0, 1.0]);
+            ex += pillw + 4.0;
+        }
+    }
+
     // Weather mock: rain streaks on the right half (run the sim a few frames
     // so particles spread out).
     {

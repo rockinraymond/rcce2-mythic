@@ -106,6 +106,17 @@ pub struct World {
     /// Outbound packets the apply() logic needs to send (e.g. the "GY" accept
     /// for a given item). The host drains this after each poll.
     pub pending_sends: Vec<(u8, Vec<u8>)>,
+    /// Active status effects (buffs/debuffs) on the local player, from
+    /// P_ActorEffect. Shown as a HUD icon row.
+    pub active_effects: Vec<ActiveEffect>,
+}
+
+/// A buff/debuff on the local player (P_ActorEffect "A").
+#[derive(Debug, Clone, PartialEq)]
+pub struct ActiveEffect {
+    pub id: u32,
+    pub texture_id: u16,
+    pub name: String,
 }
 
 /// An item lying on the ground, from `P_InventoryUpdate "D"`.
@@ -136,6 +147,7 @@ impl World {
             pk::ATTACK_ACTOR => self.on_attack_actor(&m.data),
             pk::NAME_CHANGE => self.on_name_change(&m.data),
             pk::INVENTORY_UPDATE => self.on_inventory_update(&m.data),
+            pk::ACTOR_EFFECT => self.on_actor_effect(&m.data),
             pk::WEATHER_CHANGE => self.on_weather_change(&m.data),
             pk::OPEN_TRADING => self.current_trade = crate::trade::TradeWindow::parse(&m.data),
             _ => {}
@@ -530,6 +542,45 @@ impl World {
         }
     }
 
+    /// `P_ActorEffect` (ClientNet.bb:493): the local player's status effects.
+    /// "A" adds an effect (id u32, texture u16, name), "E" applies an attribute
+    /// delta (att u8, amount i32), "R" removes an effect by id and undoes its
+    /// 40×i32 attribute deltas.
+    fn on_actor_effect(&mut self, d: &[u8]) {
+        match d.first() {
+            Some(b'A') => {
+                let mut r = MsgReader::new(&d[1..]);
+                let (Some(id), Some(texture_id)) = (r.u32(), r.u16()) else { return };
+                let name = String::from_utf8_lossy(r.rest()).into_owned();
+                self.active_effects.retain(|e| e.id != id);
+                self.active_effects.push(ActiveEffect { id, texture_id, name });
+            }
+            Some(b'E') => {
+                let mut r = MsgReader::new(&d[1..]);
+                let (Some(att), Some(amount)) = (r.u8(), r.i32()) else { return };
+                if att < 40 {
+                    let e = self.me_attributes.entry(att).or_default();
+                    e.0 = e.0.saturating_add(amount as i16);
+                }
+            }
+            Some(b'R') => {
+                let mut r = MsgReader::new(&d[1..]);
+                let Some(id) = r.u32() else { return };
+                self.active_effects.retain(|e| e.id != id);
+                // Optional 40×i32 attribute-restore block (subtract the deltas).
+                if d.len() >= 1 + 4 + 40 * 4 {
+                    for i in 0..40u8 {
+                        if let Some(amount) = r.i32() {
+                            let e = self.me_attributes.entry(i).or_default();
+                            e.0 = e.0.saturating_sub(amount as i16);
+                        }
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+
     /// `P_ChatMessage`: a leading control byte (channel, e.g. 253/254) then text.
     fn on_chat(&mut self, d: &[u8]) {
         let text: String = d
@@ -802,6 +853,29 @@ mod tests {
         w.apply(&msg(pk::INVENTORY_UPDATE, pkt(|p| { p.u8(b'R').u32(55).u8(20); })));
         assert!(w.dropped_items.is_empty());
         assert_eq!((w.me_inventory[&20].item_id, w.me_inventory[&20].amount, w.me_inventory[&20].health), (7, 4, 90));
+    }
+
+    #[test]
+    fn actor_effect_add_modify_remove() {
+        let mut w = World::default();
+        // "A" add: id u32, texture u16, name.
+        w.apply(&msg(pk::ACTOR_EFFECT, pkt(|p| { p.u8(b'A').u32(5).u16(10).raw(b"Poison"); })));
+        assert_eq!(w.active_effects.len(), 1);
+        assert_eq!(w.active_effects[0].name, "Poison");
+        assert_eq!((w.active_effects[0].id, w.active_effects[0].texture_id), (5, 10));
+
+        // "E" attribute delta: att 0, amount -30.
+        w.apply(&msg(pk::ACTOR_EFFECT, pkt(|p| { p.u8(b'E').u8(0).i32(-30); })));
+        assert_eq!(w.me_attributes[&0].0, -30);
+
+        // Re-adding the same id replaces, not duplicates.
+        w.apply(&msg(pk::ACTOR_EFFECT, pkt(|p| { p.u8(b'A').u32(5).u16(11).raw(b"Poison II"); })));
+        assert_eq!(w.active_effects.len(), 1);
+        assert_eq!(w.active_effects[0].name, "Poison II");
+
+        // "R" remove by id (no restore block).
+        w.apply(&msg(pk::ACTOR_EFFECT, pkt(|p| { p.u8(b'R').u32(5); })));
+        assert!(w.active_effects.is_empty());
     }
 
     #[test]
