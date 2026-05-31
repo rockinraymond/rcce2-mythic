@@ -1681,6 +1681,24 @@ impl App {
                         overlay.text_shadow(x + 3.0, by + bh * 0.5 - 4.0, 1.0, label, [0.85, 0.85, 0.7, 1.0]);
                     }
                 }
+
+                // XP bar along the very bottom. The server sends a 0..255 fill
+                // (P_XPUpdate "B"); Client.exe clips the Action Bar XP texture to
+                // that fraction (UpdateXPBar: ScaleEntity + VertexTexCoords), which
+                // maps to drawing image_uv over a dark backing.
+                let fill = self.net.as_ref().map(|n| n.world.me_xp_bar as f32 / 255.0).unwrap_or(0.0);
+                let xb_x = SLOT_X0 * sw;
+                let xb_w = (0.92 - SLOT_X0) * sw;
+                let xb_h = (sh * 0.012).max(5.0);
+                let xb_y = sh - xb_h - 2.0;
+                overlay.rect(xb_x, xb_y, xb_w, xb_h, [0.0, 0.0, 0.0, 0.7]);
+                if fill > 0.0 {
+                    if overlay.has_texture("gui:XP") {
+                        overlay.image_uv(xb_x, xb_y, xb_w * fill, xb_h, "gui:XP", [0.0, 0.0, fill, 1.0], [1.0, 1.0, 1.0, 1.0]);
+                    } else {
+                        overlay.rect(xb_x, xb_y, xb_w * fill, xb_h, [0.7, 0.55, 0.15, 0.95]);
+                    }
+                }
             }
 
             overlay.render(&gfx.device, &gfx.queue, &tview, sw, sh);
