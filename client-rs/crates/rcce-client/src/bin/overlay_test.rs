@@ -233,6 +233,13 @@ fn main() {
     let (qx, qy, qs) = (540.0f32, 20.0f32, 64.0f32);
     overlay.image(qx, qy, qs, qs, "test2x2", [1.0, 1.0, 1.0, 1.0]);
 
+    // Layer-order check (interleaved draw list): a coloured rect drawn AFTER a
+    // textured quad must sit ON TOP of it. Texture, then an opaque magenta rect
+    // over its centre — the overlap must read magenta, not the texture.
+    let (lx, ly, lsz) = (540.0f32, 100.0f32, 64.0f32);
+    overlay.image(lx, ly, lsz, lsz, "test2x2", [1.0, 1.0, 1.0, 1.0]);
+    overlay.rect(lx + 16.0, ly + 16.0, 32.0, 32.0, [1.0, 0.0, 1.0, 1.0]);
+
     overlay.render(&device, &queue, &view, w as f32, h as f32);
 
     // Readback → PNG.
@@ -303,4 +310,13 @@ fn main() {
     assert!(bl[2] > 150 && bl[2] > bl[0] && bl[2] > bl[1], "bottom-left should be blue, got {bl:?}");
     assert!(br[0] > 150 && br[1] > 150 && br[2] > 150, "bottom-right should be white, got {br:?}");
     println!("[overlay_test] textured-quad sampling OK");
+
+    // Layer order: the magenta rect drawn after the texture must be on top.
+    let centre = px(lx as u32 + 32, ly as u32 + 32);
+    println!("[overlay_test] layer-order overlap pixel: {centre:?}");
+    assert!(
+        centre[0] > 150 && centre[1] < 100 && centre[2] > 150,
+        "rect drawn after a texture must be on top (expected magenta), got {centre:?}"
+    );
+    println!("[overlay_test] interleaved layer-order OK");
 }

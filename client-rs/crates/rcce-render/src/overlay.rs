@@ -68,27 +68,26 @@ struct VsOut { @builtin(position) clip: vec4<f32>, @location(0) uv: vec2<f32>, @
 }
 "#;
 
-/// One queued textured quad: pixel rect, uv rect (0..1), tint, texture key.
-struct TexQuad {
-    x: f32,
-    y: f32,
-    w: f32,
-    h: f32,
-    uv: [f32; 4], // u0, v0, u1, v1
-    color: [f32; 4],
-    key: String,
+/// One queued draw command. Commands are emitted in submission order so z-order
+/// follows call order — a coloured rect drawn after a textured quad sits on top
+/// of it (lets slot numbers / cooldown shading layer over a slot texture).
+enum Cmd {
+    /// Filled rect: x, y, w, h, RGBA.
+    Rect(f32, f32, f32, f32, [f32; 4]),
+    /// Textured quad: x, y, w, h, uv (u0,v0,u1,v1), tint, texture key.
+    Tex(f32, f32, f32, f32, [f32; 4], [f32; 4], String),
 }
 
-/// Accumulates rectangles, then draws them over a target view in one pass.
+/// Accumulates draw commands, then emits them over a target view in one pass,
+/// interleaving coloured and textured runs in submission order.
 pub struct Overlay {
     pipeline: wgpu::RenderPipeline,
-    rects: Vec<(f32, f32, f32, f32, [f32; 4])>,
+    cmds: Vec<Cmd>,
     // Textured-quad layer (GUI icons, the XP bar, item icons).
     tex_pipeline: wgpu::RenderPipeline,
     tex_layout: wgpu::BindGroupLayout,
     sampler: wgpu::Sampler,
     textures: std::collections::HashMap<String, wgpu::BindGroup>,
-    quads: Vec<TexQuad>,
 }
 
 impl Overlay {
@@ -203,18 +202,16 @@ impl Overlay {
 
         Overlay {
             pipeline,
-            rects: Vec::new(),
+            cmds: Vec::new(),
             tex_pipeline,
             tex_layout,
             sampler,
             textures: std::collections::HashMap::new(),
-            quads: Vec::new(),
         }
     }
 
     pub fn clear(&mut self) {
-        self.rects.clear();
-        self.quads.clear();
+        self.cmds.clear();
     }
 
     /// Upload a decoded GUI image once under `key`, building its bind group.
@@ -274,20 +271,20 @@ impl Overlay {
     /// can fall back to a text label / coloured rect).
     pub fn image(&mut self, x: f32, y: f32, w: f32, h: f32, key: &str, tint: [f32; 4]) {
         if self.textures.contains_key(key) {
-            self.quads.push(TexQuad { x, y, w, h, uv: [0.0, 0.0, 1.0, 1.0], color: tint, key: key.to_string() });
+            self.cmds.push(Cmd::Tex(x, y, w, h, [0.0, 0.0, 1.0, 1.0], tint, key.to_string()));
         }
     }
 
     /// Queue a textured quad sampling a sub-rect (uv in 0..1) of the texture.
     pub fn image_uv(&mut self, x: f32, y: f32, w: f32, h: f32, key: &str, uv: [f32; 4], tint: [f32; 4]) {
         if self.textures.contains_key(key) {
-            self.quads.push(TexQuad { x, y, w, h, uv, color: tint, key: key.to_string() });
+            self.cmds.push(Cmd::Tex(x, y, w, h, uv, tint, key.to_string()));
         }
     }
 
     /// Queue a filled rectangle (top-left origin, pixels, RGBA 0..1).
     pub fn rect(&mut self, x: f32, y: f32, w: f32, h: f32, color: [f32; 4]) {
-        self.rects.push((x, y, w, h, color));
+        self.cmds.push(Cmd::Rect(x, y, w, h, color));
     }
 
     /// Draw `s` as 8×8 bitmap glyphs (one quad per lit pixel) at `scale` px per
@@ -327,8 +324,12 @@ impl Overlay {
         }
     }
 
-    /// Draw all queued rects over `view` (loads existing contents). Clears the
-    /// queue. No-op if nothing queued.
+    /// Draw all queued commands over `view` (loads existing contents), in
+    /// submission order so z-order follows call order. Coloured rects and
+    /// textured quads each accumulate into their own vertex buffer; a list of
+    /// runs records the order and the per-run vertex range, and the render pass
+    /// replays the runs. Consecutive same-kind (and same-texture) commands batch
+    /// into one run. Clears the queue. No-op if nothing queued.
     pub fn render(
         &mut self,
         device: &wgpu::Device,
@@ -337,61 +338,63 @@ impl Overlay {
         screen_w: f32,
         screen_h: f32,
     ) {
-        if self.rects.is_empty() && self.quads.is_empty() {
+        if self.cmds.is_empty() {
             return;
         }
         let (sw, sh) = (screen_w.max(1.0), screen_h.max(1.0));
         let to_ndc = |px: f32, py: f32| [px / sw * 2.0 - 1.0, 1.0 - py / sh * 2.0];
 
-        // Coloured rects.
-        let mut verts: Vec<V2> = Vec::with_capacity(self.rects.len() * 6);
-        for &(x, y, w, h, c) in &self.rects {
-            let tl = to_ndc(x, y);
-            let tr = to_ndc(x + w, y);
-            let br = to_ndc(x + w, y + h);
-            let bl = to_ndc(x, y + h);
-            for p in [tl, tr, br, tl, br, bl] {
-                verts.push(V2 { pos: p, color: c });
-            }
+        // A run is a contiguous range of vertices of one kind, drawn together.
+        enum Run {
+            Colored { start: u32, count: u32 },
+            Textured { key: String, start: u32, count: u32 },
         }
-        let n = verts.len() as u32;
-        let vbuf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("overlay-v"),
-            // Never hand wgpu a zero-length buffer.
-            contents: if verts.is_empty() { &[0u8; 4] } else { bytemuck::cast_slice(&verts) },
-            usage: wgpu::BufferUsages::VERTEX,
-        });
+        let mut cverts: Vec<V2> = Vec::new();
+        let mut tverts: Vec<TV> = Vec::new();
+        let mut runs: Vec<Run> = Vec::new();
 
-        // Textured quads, grouped into contiguous per-texture draw ranges so we
-        // bind each GUI texture once. Order preserves first-seen-key grouping.
-        let mut tverts: Vec<TV> = Vec::with_capacity(self.quads.len() * 6);
-        let mut ranges: Vec<(String, u32, u32)> = Vec::new(); // key, start, count
-        {
-            use std::collections::HashMap;
-            let mut buckets: HashMap<&str, Vec<&TexQuad>> = HashMap::new();
-            let mut order: Vec<&str> = Vec::new();
-            for q in &self.quads {
-                if !buckets.contains_key(q.key.as_str()) {
-                    order.push(q.key.as_str());
-                }
-                buckets.entry(q.key.as_str()).or_default().push(q);
-            }
-            for key in order {
-                let start = tverts.len() as u32;
-                for q in &buckets[key] {
-                    let [u0, v0, u1, v1] = q.uv;
-                    let tl = (to_ndc(q.x, q.y), [u0, v0]);
-                    let tr = (to_ndc(q.x + q.w, q.y), [u1, v0]);
-                    let br = (to_ndc(q.x + q.w, q.y + q.h), [u1, v1]);
-                    let bl = (to_ndc(q.x, q.y + q.h), [u0, v1]);
-                    for (p, uv) in [tl, tr, br, tl, br, bl] {
-                        tverts.push(TV { pos: p, uv, color: q.color });
+        for cmd in &self.cmds {
+            match cmd {
+                Cmd::Rect(x, y, w, h, c) => {
+                    // Extend the current run if it's also coloured, else open one.
+                    let start = cverts.len() as u32;
+                    let tl = to_ndc(*x, *y);
+                    let tr = to_ndc(*x + *w, *y);
+                    let br = to_ndc(*x + *w, *y + *h);
+                    let bl = to_ndc(*x, *y + *h);
+                    for p in [tl, tr, br, tl, br, bl] {
+                        cverts.push(V2 { pos: p, color: *c });
+                    }
+                    match runs.last_mut() {
+                        Some(Run::Colored { count, .. }) => *count += 6,
+                        _ => runs.push(Run::Colored { start, count: 6 }),
                     }
                 }
-                let count = tverts.len() as u32 - start;
-                ranges.push((key.to_string(), start, count));
+                Cmd::Tex(x, y, w, h, uv, c, key) => {
+                    let start = tverts.len() as u32;
+                    let [u0, v0, u1, v1] = *uv;
+                    let tl = (to_ndc(*x, *y), [u0, v0]);
+                    let tr = (to_ndc(*x + *w, *y), [u1, v0]);
+                    let br = (to_ndc(*x + *w, *y + *h), [u1, v1]);
+                    let bl = (to_ndc(*x, *y + *h), [u0, v1]);
+                    for (p, uv) in [tl, tr, br, tl, br, bl] {
+                        tverts.push(TV { pos: p, uv, color: *c });
+                    }
+                    // Batch only if the previous run is the SAME texture.
+                    match runs.last_mut() {
+                        Some(Run::Textured { key: k, count, .. }) if k == key => *count += 6,
+                        _ => runs.push(Run::Textured { key: key.clone(), start, count: 6 }),
+                    }
+                }
             }
         }
+
+        // Never hand wgpu a zero-length buffer.
+        let cvbuf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("overlay-v"),
+            contents: if cverts.is_empty() { &[0u8; 4] } else { bytemuck::cast_slice(&cverts) },
+            usage: wgpu::BufferUsages::VERTEX,
+        });
         let tvbuf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("overlay-tv"),
             contents: if tverts.is_empty() { &[0u8; 4] } else { bytemuck::cast_slice(&tverts) },
@@ -414,19 +417,21 @@ impl Overlay {
                 timestamp_writes: None,
                 occlusion_query_set: None,
             });
-            if n > 0 {
-                rp.set_pipeline(&self.pipeline);
-                rp.set_vertex_buffer(0, vbuf.slice(..));
-                rp.draw(0..n, 0..1);
-            }
-            // Textured quads on top (icons over their backing rects).
-            if !ranges.is_empty() {
-                rp.set_pipeline(&self.tex_pipeline);
-                rp.set_vertex_buffer(0, tvbuf.slice(..));
-                for (key, start, count) in &ranges {
-                    if let Some(bg) = self.textures.get(key) {
-                        rp.set_bind_group(0, bg, &[]);
+            // Replay runs in submission order — z-order follows call order.
+            for run in &runs {
+                match run {
+                    Run::Colored { start, count } => {
+                        rp.set_pipeline(&self.pipeline);
+                        rp.set_vertex_buffer(0, cvbuf.slice(..));
                         rp.draw(*start..(*start + *count), 0..1);
+                    }
+                    Run::Textured { key, start, count } => {
+                        if let Some(bg) = self.textures.get(key) {
+                            rp.set_pipeline(&self.tex_pipeline);
+                            rp.set_vertex_buffer(0, tvbuf.slice(..));
+                            rp.set_bind_group(0, bg, &[]);
+                            rp.draw(*start..(*start + *count), 0..1);
+                        }
                     }
                 }
             }
