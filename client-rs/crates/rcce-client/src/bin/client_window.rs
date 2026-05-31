@@ -193,6 +193,9 @@ struct App {
     /// live area change (player warp) reloads the new zone's scenery + sky.
     data_root: String,
     loaded_zone: String,
+    /// GPU linear-blend skinning for actor bodies (RCCE_GPUSKIN). Off by default
+    /// (the CPU posed-meshes path); attachments stay CPU either way.
+    gpu_skin: bool,
 }
 
 impl App {
@@ -253,6 +256,7 @@ impl App {
             cloud_is_storm: false,
             data_root: String::new(),
             loaded_zone: String::new(),
+            gpu_skin: std::env::var("RCCE_GPUSKIN").is_ok(),
         }
     }
 }
@@ -457,22 +461,44 @@ fn damage_color(dtype: u8, alpha: f32) -> [f32; 4] {
     [r, g, b, alpha]
 }
 
+/// A GPU-skinned actor body: the source model (with bones), its textures, the
+/// animation frame, the column-major instance transform, and tint. The body's
+/// static mesh is uploaded once by [`WorldView::set_skinned`]; only the pose
+/// uniform updates per frame.
+struct SkinnedActor {
+    key: String,
+    model: Rc<B3dModel>,
+    textures: Rc<Vec<Option<Image>>>,
+    frame: Option<f32>,
+    transform: [f32; 16],
+    color: [f32; 3],
+}
+
 fn build_actors(
     store: &mut AssetStore,
     world: &World,
     elapsed: f32,
     ground_y: f32,
-) -> (Vec<Rc<B3dModel>>, Vec<Rc<Vec<Option<Image>>>>, Vec<Placement>, Vec<String>) {
+    gpu_skin: bool,
+) -> (
+    Vec<Rc<B3dModel>>,
+    Vec<Rc<Vec<Option<Image>>>>,
+    Vec<Placement>,
+    Vec<String>,
+    Vec<SkinnedActor>,
+) {
     let mut models = Vec::new();
     let mut textures: Vec<Rc<Vec<Option<Image>>>> = Vec::new();
     let mut place = Vec::new();
     let mut keys: Vec<String> = Vec::new();
+    let mut skinned: Vec<SkinnedActor> = Vec::new();
 
     let mut push = |store: &mut AssetStore,
                     models: &mut Vec<Rc<B3dModel>>,
                     textures: &mut Vec<Rc<Vec<Option<Image>>>>,
                     place: &mut Vec<Placement>,
                     keys: &mut Vec<String>,
+                    skinned: &mut Vec<SkinnedActor>,
                     tmpl: u16,
                     gender: u8,
                     face: u8,
@@ -500,27 +526,47 @@ fn build_actors(
         let frame = store
             .actor_clip(tmpl, gender, names)
             .map(|c| clip_frame(c, fps, elapsed + rid as f32 * 0.13));
-        let posed = Rc::new(B3dModel {
-            meshes: src.posed_meshes(frame),
-            textures: src.textures.clone(),
-            brushes: src.brushes.clone(),
-            bones: src.bones.clone(),
-            anim: src.anim,
-        });
         let scale = store.actor_render_scale(tmpl, gender).unwrap_or(0.05);
         let tex = store.actor_textures_rc(tmpl, gender, face, body);
-        let (min, _) = posed.bounds();
-        // Joint positions for attachments — read before posed is moved.
-        let head = posed.joint_pos("Head").unwrap_or([0.0, 0.0, 0.0]);
-        let hand = posed.joint_pos("R_Hand");
-        let l_hand = posed.joint_pos("L_Hand");
-        let idx = models.len();
-        models.push(posed);
-        textures.push(tex);
-        keys.push(format!("{tmpl}:{gender}:{face}:{body}"));
+        // Joint positions + bounds come from the bind-pose source model
+        // (joint_pos returns the bind-pose joint, so attachments don't need the
+        // posed body — letting the body go to the GPU skinning path).
+        let (min, _) = src.bounds();
+        let head = src.joint_pos("Head").unwrap_or([0.0, 0.0, 0.0]);
+        let hand = src.joint_pos("R_Hand");
+        let l_hand = src.joint_pos("L_Hand");
         let trans = [pos[0], ground_y - min[1] * scale, pos[2]];
         let yaw_rad = yaw.to_radians();
-        place.push((idx, trans, [0.0, yaw_rad, 0.0], color, [scale, scale, scale]));
+        let key_body = format!("{tmpl}:{gender}:{face}:{body}");
+        let can_skin = !src.bones.is_empty() && src.bones.len() <= rcce_render::gpu::MAX_BONES;
+        if gpu_skin && can_skin {
+            // GPU-skinned body: the static mesh is posed in the vertex shader.
+            let m = glam::Mat4::from_translation(glam::Vec3::from(trans))
+                * glam::Mat4::from_rotation_y(yaw_rad)
+                * glam::Mat4::from_scale(glam::Vec3::splat(scale));
+            skinned.push(SkinnedActor {
+                key: key_body,
+                model: src.clone(),
+                textures: tex,
+                frame,
+                transform: m.to_cols_array(),
+                color,
+            });
+        } else {
+            // CPU-skinned body (default / fallback): pose on the CPU.
+            let posed = Rc::new(B3dModel {
+                meshes: src.posed_meshes(frame),
+                textures: src.textures.clone(),
+                brushes: src.brushes.clone(),
+                bones: src.bones.clone(),
+                anim: src.anim,
+            });
+            let idx = models.len();
+            models.push(posed);
+            textures.push(tex);
+            keys.push(key_body);
+            place.push((idx, trans, [0.0, yaw_rad, 0.0], color, [scale, scale, scale]));
+        }
 
         // Head attachments (hair, and beard for males) at the head joint.
         for att in store.actor_attachments(tmpl, gender, hair, beard) {
@@ -572,15 +618,15 @@ fn build_actors(
     // The local player's equipped weapon/shield are inventory slots 0/1.
     let me_weapon = world.me_inventory.get(&0).map(|it| it.item_id).unwrap_or(0xFFFF);
     let me_shield = world.me_inventory.get(&1).map(|it| it.item_id).unwrap_or(0xFFFF);
-    push(store, &mut models, &mut textures, &mut place, &mut keys, 0, world.me_gender, world.me_face_tex, world.me_body_tex, world.me_hair, world.me_beard, me_weapon, me_shield, weapon_override, world.my_runtime_id, false, false, [world.me_x, world.me_y, world.me_z], world.me_yaw, [0.85, 0.95, 0.85]);
+    push(store, &mut models, &mut textures, &mut place, &mut keys, &mut skinned, 0, world.me_gender, world.me_face_tex, world.me_body_tex, world.me_hair, world.me_beard, me_weapon, me_shield, weapon_override, world.my_runtime_id, false, false, [world.me_x, world.me_y, world.me_z], world.me_yaw, [0.85, 0.95, 0.85]);
     for a in world.actors.values() {
         let dx = a.dest_x - a.x;
         let dz = a.dest_z - a.z;
         let moving = (dx * dx + dz * dz) > 1.0;
         let color = if a.is_player { [0.85, 0.9, 1.0] } else { [1.0, 1.0, 1.0] };
-        push(store, &mut models, &mut textures, &mut place, &mut keys, a.template_id, a.gender, a.face_tex, a.body_tex, a.hair, a.beard, a.equipped[0], a.equipped[1], weapon_override, a.runtime_id, moving, a.is_running, [a.x, a.y, a.z], a.yaw, color);
+        push(store, &mut models, &mut textures, &mut place, &mut keys, &mut skinned, a.template_id, a.gender, a.face_tex, a.body_tex, a.hair, a.beard, a.equipped[0], a.equipped[1], weapon_override, a.runtime_id, moving, a.is_running, [a.x, a.y, a.z], a.yaw, color);
     }
-    (models, textures, place, keys)
+    (models, textures, place, keys, skinned)
 }
 
 /// Cheap fingerprint of everything that affects the actor drawables: a ~12 Hz
@@ -1500,8 +1546,9 @@ impl App {
 
             let hash = dyn_hash(&net.world, elapsed);
             if hash != self.last_dyn_hash {
-                let (models, textures, place, keys) =
-                    build_actors(store, &net.world, elapsed, self.ground_y);
+                let (models, textures, place, keys, skinned) =
+                    build_actors(store, &net.world, elapsed, self.ground_y, self.gpu_skin);
+                // CPU drawables: attachments (+ bodies when GPU skinning is off).
                 let instances: Vec<SceneInstance> = place
                     .iter()
                     .map(|&(idx, t, r, color, s)| SceneInstance {
@@ -1514,6 +1561,21 @@ impl App {
                     })
                     .collect();
                 view.set_dynamic(&gfx.device, &gfx.queue, &instances, &keys);
+                // GPU-skinned bodies (when enabled) — static mesh + pose uniform.
+                if self.gpu_skin {
+                    let sinst: Vec<rcce_render::SkinnedInstance> = skinned
+                        .iter()
+                        .map(|a| rcce_render::SkinnedInstance {
+                            key: &a.key,
+                            model: &a.model,
+                            textures: &a.textures[..],
+                            frame: a.frame,
+                            transform: a.transform,
+                            color: a.color,
+                        })
+                        .collect();
+                    view.set_skinned(&gfx.device, &gfx.queue, &sinst);
+                }
                 self.last_dyn_hash = hash;
             }
             cam_target = [net.world.me_x, net.world.me_y, net.world.me_z];
