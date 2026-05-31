@@ -56,6 +56,7 @@ pub mod packet_id {
     pub const XP_UPDATE: u8 = 32;
     pub const OPEN_TRADING: u8 = 35;
     pub const ACTOR_EFFECT: u8 = 36;
+    pub const EAT_ITEM: u8 = 44;
     pub const EXAMINE: u8 = 61;
 }
 

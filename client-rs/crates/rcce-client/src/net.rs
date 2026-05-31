@@ -116,6 +116,16 @@ pub fn inv_drop_packet(slot: u8, amount: u16) -> Vec<u8> {
     w.into_bytes()
 }
 
+/// Build a `P_EatItem` use request (`Interface3D.bb:4142` UseItem): inventory
+/// slot u8 + amount u16. The server consumes the food/ingredient in that slot
+/// and applies its effects. Sent reliable. (Server gates by item type, but the
+/// client should only send this for Potion/Ingredient items.)
+pub fn eat_item_packet(slot: u8, amount: u16) -> Vec<u8> {
+    let mut w = MsgWriter::new();
+    w.u8(slot).u16(amount);
+    w.into_bytes()
+}
+
 /// Build a `P_OpenTrading` close (`Interface3D.bb:2303`): an empty body tells
 /// the server the trade window was dismissed. Sent reliable.
 pub fn trade_close_packet() -> Vec<u8> {
@@ -157,6 +167,13 @@ mod tests {
         // "D" + slot 14 + amount 1 (LE u16).
         assert_eq!(inv_drop_packet(14, 1), vec![b'D', 14, 1, 0]);
         assert_eq!(inv_drop_packet(3, 0x0102), vec![b'D', 3, 0x02, 0x01]);
+    }
+
+    #[test]
+    fn eat_item_layout() {
+        // P_EatItem body: slot u8 + amount u16 (LE), no sub-type char.
+        assert_eq!(eat_item_packet(20, 1), vec![20, 1, 0]);
+        assert_eq!(eat_item_packet(45, 0x0102), vec![45, 0x02, 0x01]);
     }
 
     #[test]

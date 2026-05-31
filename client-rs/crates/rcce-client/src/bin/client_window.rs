@@ -170,6 +170,9 @@ struct App {
     /// detection (a double-click or Shift+click interacts with the target).
     last_click: Instant,
     last_click_rid: Option<u16>,
+    /// The inventory slot the cursor was last over (panel open) with an item, so
+    /// the Drop / Eat buttons act on it even after the cursor moves onto them.
+    last_inv_slot: Option<u8>,
 }
 
 impl App {
@@ -219,6 +222,7 @@ impl App {
             vp: [0.0; 16],
             last_click: now,
             last_click_rid: None,
+            last_inv_slot: None,
         }
     }
 }
@@ -299,6 +303,36 @@ fn wrap_text(s: &str, max_chars: usize) -> Vec<String> {
         out.push(cur);
     }
     out
+}
+
+/// The inventory action button (Drop / Eat) under `(cx, cy)`, given the
+/// InventoryWindow rect and the two window-relative button rects. Pure — shared
+/// by the draw and the click hit-test.
+#[derive(Clone, Copy, PartialEq, Debug)]
+enum InvAction {
+    Drop,
+    Eat,
+}
+fn inv_action_button_at(
+    cx: f32,
+    cy: f32,
+    iw: rcce_data::IComp,
+    drop: rcce_data::IComp,
+    eat: rcce_data::IComp,
+    sw: f32,
+    sh: f32,
+) -> Option<InvAction> {
+    let hit = |c: rcce_data::IComp| {
+        let (x, y, w, h) = ((iw.x + c.x * iw.w) * sw, (iw.y + c.y * iw.h) * sh, c.w * iw.w * sw, c.h * iw.h * sh);
+        w > 1.0 && h > 1.0 && cx >= x && cx < x + w && cy >= y && cy < y + h
+    };
+    if hit(drop) {
+        Some(InvAction::Drop)
+    } else if hit(eat) {
+        Some(InvAction::Eat)
+    } else {
+        None
+    }
 }
 
 /// Index of the action-bar spell slot (0..=11) whose rect contains `(cx, cy)`.
@@ -1130,6 +1164,57 @@ impl App {
             self.world_pick(sw, sh, cx, cy);
             return;
         }
+
+        // Drop / Eat buttons act on the last-hovered inventory slot.
+        let action_btn = self
+            .store
+            .as_ref()
+            .and_then(|s| s.interface())
+            .and_then(|i| inv_action_button_at(cx, cy, i.inventory_window, i.inventory_drop, i.inventory_eat, sw, sh));
+        if let Some(action) = action_btn {
+            if let Some(slot) = self.last_inv_slot {
+                let item = self
+                    .net
+                    .as_ref()
+                    .and_then(|n| n.world.me_inventory.values().find(|it| it.slot == slot))
+                    .map(|it| it.item_id);
+                if let Some(item_id) = item {
+                    match action {
+                        InvAction::Drop => {
+                            if let Some(net) = self.net.as_mut() {
+                                net.transport.send(
+                                    net.peer,
+                                    rcce_net::packet_id::INVENTORY_UPDATE,
+                                    &rcce_client::net::inv_drop_packet(slot, 1),
+                                    true,
+                                );
+                            }
+                        }
+                        InvAction::Eat => {
+                            // Only Potion (4) / Ingredient (5) are edible.
+                            let edible = self
+                                .store
+                                .as_ref()
+                                .and_then(|s| s.item_def(item_id))
+                                .map(|d| d.item_type == 4 || d.item_type == 5)
+                                .unwrap_or(false);
+                            if edible {
+                                if let Some(net) = self.net.as_mut() {
+                                    net.transport.send(
+                                        net.peer,
+                                        rcce_net::packet_id::EAT_ITEM,
+                                        &rcce_client::net::eat_item_packet(slot, 1),
+                                        true,
+                                    );
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            return;
+        }
+
         let Some(iface) = self.store.as_ref().and_then(|s| s.interface()) else { return };
         let clicked_slot = inventory_slot_at(cx, cy, iface.inventory_window, &iface.inventory_buttons, sw, sh)
             .map(|i| i as u8);
@@ -2065,6 +2150,9 @@ impl App {
                                 .as_ref()
                                 .and_then(|n| n.world.me_inventory.values().find(|it| it.slot == slot as u8))
                             {
+                                // Remember this slot so the Drop / Eat buttons can
+                                // act on it after the cursor moves onto them.
+                                self.last_inv_slot = Some(slot as u8);
                                 lines.push((store.item_name(it.item_id), white));
                                 if let Some(def) = store.item_def(it.item_id) {
                                     if let Some(sname) = rcce_data::equip_slot_name(slot as u8) {
@@ -2276,6 +2364,30 @@ mod tests {
         assert_eq!(inventory_slot_at(cx, cy, iw, &buttons, sw, sh), Some(1));
         // A point left of the whole window → no slot.
         assert_eq!(inventory_slot_at(0.0, cy, iw, &buttons, sw, sh), None);
+    }
+
+    #[test]
+    fn inv_action_button_hit_test() {
+        use rcce_data::IComp;
+        let (sw, sh) = (1280.0f32, 800.0f32);
+        let iw = IComp { x: 0.25, y: 0.2, w: 0.5, h: 0.55, alpha: 1.0, rgb: [0; 3] };
+        // Real inv_drop / inv_eat window-relative rects from Interface.dat.
+        let drop = IComp { x: 0.76, y: 0.93, w: 0.2, h: 0.045, alpha: 1.0, rgb: [0; 3] };
+        let eat = IComp { x: 0.5, y: 0.93, w: 0.2, h: 0.045, alpha: 1.0, rgb: [0; 3] };
+        let centre = |c: IComp| {
+            (
+                (iw.x + (c.x + c.w * 0.5) * iw.w) * sw,
+                (iw.y + (c.y + c.h * 0.5) * iw.h) * sh,
+            )
+        };
+        let (dx, dy) = centre(drop);
+        assert_eq!(inv_action_button_at(dx, dy, iw, drop, eat, sw, sh), Some(InvAction::Drop));
+        let (ex, ey) = centre(eat);
+        assert_eq!(inv_action_button_at(ex, ey, iw, drop, eat, sw, sh), Some(InvAction::Eat));
+        // Centre of the window (the slot grid) hits neither button.
+        let cx = (iw.x + 0.5 * iw.w) * sw;
+        let cy = (iw.y + 0.4 * iw.h) * sh;
+        assert_eq!(inv_action_button_at(cx, cy, iw, drop, eat, sw, sh), None);
     }
 
     #[test]
