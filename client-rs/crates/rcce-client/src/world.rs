@@ -79,6 +79,8 @@ pub struct World {
     pub me_gender: u8,
     pub me_face_tex: u8,
     pub me_body_tex: u8,
+    pub me_hair: u8,
+    pub me_beard: u8,
     pub me_health: i16,
     pub me_health_max: i16,
     /// Template gender mode (`Actors.dat` `Genders`) keyed by template id.
@@ -232,6 +234,8 @@ impl World {
             self.me_gender = gender;
             self.me_face_tex = face_tex;
             self.me_body_tex = body_tex;
+            self.me_hair = hair;
+            self.me_beard = beard;
             self.me_health = health;
             self.me_health_max = health_max;
             return; // don't list ourselves among "other actors"

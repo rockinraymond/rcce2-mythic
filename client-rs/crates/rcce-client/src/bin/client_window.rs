@@ -23,7 +23,7 @@ use winit::window::{CursorGrabMode, Window, WindowId};
 use rcce_client::net::movement_packet;
 
 use enet_sys::EnetTransport;
-use rcce_client::assets::{clip_frame, AssetStore};
+use rcce_client::assets::{attachment_placement, clip_frame, AssetStore};
 use rcce_client::login::{login, Credentials};
 use rcce_client::world::World;
 use rcce_data::{AreaScenery, B3dModel, Image};
@@ -262,6 +262,8 @@ fn build_actors(
                     gender: u8,
                     face: u8,
                     body: u8,
+                    hair: u8,
+                    beard: u8,
                     rid: u16,
                     moving: bool,
                     running: bool,
@@ -290,21 +292,34 @@ fn build_actors(
         let scale = store.actor_render_scale(tmpl, gender).unwrap_or(0.05);
         let tex = store.actor_textures_rc(tmpl, gender, face, body);
         let (min, _) = posed.bounds();
+        // Head joint (for hair/beard placement) — read before posed is moved.
+        let head = posed.joint_pos("Head").unwrap_or([0.0, 0.0, 0.0]);
         let idx = models.len();
         models.push(posed);
         textures.push(tex);
         keys.push(format!("{tmpl}:{gender}:{face}:{body}"));
         let trans = [pos[0], ground_y - min[1] * scale, pos[2]];
-        place.push((idx, trans, [0.0, yaw.to_radians(), 0.0], color, [scale, scale, scale]));
+        let yaw_rad = yaw.to_radians();
+        place.push((idx, trans, [0.0, yaw_rad, 0.0], color, [scale, scale, scale]));
+
+        // Head attachments (hair, and beard for males) at the head joint.
+        for att in store.actor_attachments(tmpl, gender, hair, beard) {
+            let (t, r, s) = attachment_placement(trans, yaw_rad, scale, head, &att);
+            let aidx = models.len();
+            keys.push(format!("att:{tmpl}:{gender}:{}", att.mesh_id));
+            models.push(att.model);
+            textures.push(Rc::new(att.textures));
+            place.push((aidx, t, r, color, s));
+        }
     };
 
-    push(store, &mut models, &mut textures, &mut place, &mut keys, 0, world.me_gender, world.me_face_tex, world.me_body_tex, world.my_runtime_id, false, false, [world.me_x, world.me_y, world.me_z], world.me_yaw, [0.85, 0.95, 0.85]);
+    push(store, &mut models, &mut textures, &mut place, &mut keys, 0, world.me_gender, world.me_face_tex, world.me_body_tex, world.me_hair, world.me_beard, world.my_runtime_id, false, false, [world.me_x, world.me_y, world.me_z], world.me_yaw, [0.85, 0.95, 0.85]);
     for a in world.actors.values() {
         let dx = a.dest_x - a.x;
         let dz = a.dest_z - a.z;
         let moving = (dx * dx + dz * dz) > 1.0;
         let color = if a.is_player { [0.85, 0.9, 1.0] } else { [1.0, 1.0, 1.0] };
-        push(store, &mut models, &mut textures, &mut place, &mut keys, a.template_id, a.gender, a.face_tex, a.body_tex, a.runtime_id, moving, a.is_running, [a.x, a.y, a.z], a.yaw, color);
+        push(store, &mut models, &mut textures, &mut place, &mut keys, a.template_id, a.gender, a.face_tex, a.body_tex, a.hair, a.beard, a.runtime_id, moving, a.is_running, [a.x, a.y, a.z], a.yaw, color);
     }
     (models, textures, place, keys)
 }
@@ -1380,8 +1395,9 @@ impl App {
                 .as_ref()
                 .map(|n| (n.world.actors.len(), n.updates, (n.world.me_x, n.world.me_z)))
                 .unwrap_or((0, 0, (0.0, 0.0)));
+            let draws = self.view.as_ref().map(|v| v.drawable_count()).unwrap_or(0);
             println!(
-                "[client-window] frame {} (~{fps:.0} fps), {actors} actor(s), {ups} packets, me=({:.1},{:.1})",
+                "[client-window] frame {} (~{fps:.0} fps), {actors} actor(s), {draws} drawables, {ups} packets, me=({:.1},{:.1})",
                 self.frames, pos.0, pos.1
             );
             self.last_log = Instant::now();
