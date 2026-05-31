@@ -163,6 +163,9 @@ struct App {
     /// Last cursor position in physical pixels (for HUD click hit-testing while
     /// mouse-look is off). Updated on CursorMoved.
     cursor: (f32, f32),
+    /// Last frame's view-projection matrix (row-major), so a world click can
+    /// project actors to screen and pick the nearest to the cursor.
+    vp: [f32; 16],
 }
 
 impl App {
@@ -209,6 +212,7 @@ impl App {
             prev_elapsed: 0.0,
             spell_cooldowns: std::collections::HashMap::new(),
             cursor: (0.0, 0.0),
+            vp: [0.0; 16],
         }
     }
 }
@@ -1044,7 +1048,10 @@ impl App {
         }
 
         // Inventory slot grid (only when the panel is open and we have positions).
+        // When the panel is closed, a non-HUD click is a world click → select the
+        // nearest actor under the cursor as the target.
         if !self.show_inventory {
+            self.world_pick(sw, sh, cx, cy);
             return;
         }
         let Some(iface) = self.store.as_ref().and_then(|s| s.interface()) else { return };
@@ -1106,6 +1113,33 @@ impl App {
                 &rcce_client::net::inv_drop_packet(slot, 1),
                 true,
             );
+        }
+    }
+
+    /// World click: select the living actor whose projected position is nearest
+    /// the cursor (within a pixel radius) as the target highlight. Uses the
+    /// cached view-projection from the last rendered frame. No-op without a
+    /// network world. The 'R'/'X' keys then interact with / examine the target.
+    fn world_pick(&mut self, sw: f32, sh: f32, cx: f32, cy: f32) {
+        const PICK_RADIUS: f32 = 48.0;
+        let pick = self.net.as_ref().and_then(|net| {
+            let mut best: Option<(u16, f32)> = None;
+            for a in net.world.actors.values() {
+                if !a.alive {
+                    continue;
+                }
+                // Aim at roughly chest height so the pick matches the body.
+                if let Some((px, py)) = rcce_render::project(&self.vp, [a.x, a.y + 3.0, a.z], sw, sh) {
+                    let d2 = (px - cx) * (px - cx) + (py - cy) * (py - cy);
+                    if d2 <= PICK_RADIUS * PICK_RADIUS && best.map(|(_, b)| d2 < b).unwrap_or(true) {
+                        best = Some((a.runtime_id, d2));
+                    }
+                }
+            }
+            best.map(|(rid, _)| rid)
+        });
+        if let Some(rid) = pick {
+            self.target = Some(rid);
         }
     }
 
@@ -1253,6 +1287,7 @@ impl App {
         };
         let aspect = gfx.config.width as f32 / gfx.config.height.max(1) as f32;
         let vp = rcce_render::view_proj(eye, target, aspect);
+        self.vp = vp; // cache for world-click picking
         // Day/night: a slow local cycle modulates fog/sky + ambient. Cycle
         // length is RCCE_DAYNIGHT_SECS (default 600s); RCCE_PHASE pins a fixed
         // phase for screenshots.
