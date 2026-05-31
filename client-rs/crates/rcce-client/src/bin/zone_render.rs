@@ -122,7 +122,15 @@ fn main() {
         })
         .collect();
 
-    match rcce_render::render_scene_png(&instances, eye, target, ground_y, env.fog_color, env.fog_near, env.fog_far, env.ambient, env.light_dir, 1600, 1000, &out) {
+    // Optional day/night phase (RCCE_PHASE 0=midnight, 0.5=noon) modulates the
+    // sky/fog + ambient, same as the live client.
+    let phase = std::env::var("RCCE_PHASE").ok().and_then(|s| s.parse::<f32>().ok()).unwrap_or(0.5);
+    let sky = rcce_client::daynight::daynight(phase);
+    let fog = rcce_client::daynight::modulate(env.fog_color, &sky);
+    let ambient = rcce_client::daynight::modulate(env.ambient, &sky);
+    println!("[zone_render] day/night phase {phase} → fog {fog:?}");
+
+    match rcce_render::render_scene_png(&instances, eye, target, ground_y, fog, env.fog_near, env.fog_far, ambient, env.light_dir, 1600, 1000, &out) {
         Ok(adapter) => println!(
             "[zone_render] rendered {} instances via {adapter} -> {out}",
             instances.len()

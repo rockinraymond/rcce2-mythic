@@ -952,21 +952,37 @@ impl App {
         };
         let aspect = gfx.config.width as f32 / gfx.config.height.max(1) as f32;
         let vp = rcce_render::view_proj(eye, target, aspect);
+        // Day/night: a slow local cycle modulates fog/sky + ambient. Cycle
+        // length is RCCE_DAYNIGHT_SECS (default 600s); RCCE_PHASE pins a fixed
+        // phase for screenshots.
+        let phase = std::env::var("RCCE_PHASE")
+            .ok()
+            .and_then(|s| s.parse::<f32>().ok())
+            .unwrap_or_else(|| {
+                let cycle = std::env::var("RCCE_DAYNIGHT_SECS")
+                    .ok()
+                    .and_then(|s| s.parse::<f32>().ok())
+                    .unwrap_or(600.0);
+                rcce_client::daynight::phase_at(elapsed, cycle)
+            });
+        let sky = rcce_client::daynight::daynight(phase);
+        let fog_dn = rcce_client::daynight::modulate(self.fog_color, &sky);
+        let ambient_dn = rcce_client::daynight::modulate(self.ambient, &sky);
         view.render(
             &gfx.device,
             &gfx.queue,
             &tview,
             vp,
             eye,
-            self.fog_color,
+            fog_dn,
             self.fog_near,
             self.fog_far,
-            self.ambient,
+            ambient_dn,
             self.light_dir,
             wgpu::Color {
-                r: self.fog_color[0] as f64,
-                g: self.fog_color[1] as f64,
-                b: self.fog_color[2] as f64,
+                r: fog_dn[0] as f64,
+                g: fog_dn[1] as f64,
+                b: fog_dn[2] as f64,
                 a: 1.0,
             },
         );

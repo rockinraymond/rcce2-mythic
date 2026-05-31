@@ -1,0 +1,98 @@
+//! Local day/night cycle. A purely cosmetic time-of-day phase modulates the
+//! zone's sky/fog/ambient colours (the engine has no time-of-day packet, so
+//! this is client-side only). Pure functions so the colour math is testable;
+//! the gradient sky derives its zenith from the modulated fog colour, so it
+//! darkens automatically.
+
+use std::f32::consts::TAU;
+
+/// Multiplicative sky modulation for a given phase: an overall `brightness`
+/// (night is dim, noon full) and an RGB `tint` (warm at dawn/dusk, blue at
+/// deep night, neutral at noon).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Sky {
+    pub brightness: f32,
+    pub tint: [f32; 3],
+}
+
+/// Compute the sky modulation for `phase` in [0,1): 0 = midnight, 0.25 = dawn,
+/// 0.5 = noon, 0.75 = dusk. Wraps, so values outside [0,1) are fine.
+pub fn daynight(phase: f32) -> Sky {
+    let sun = ((phase.rem_euclid(1.0) - 0.25) * TAU).sin(); // -1 midnight .. +1 noon
+    let day = (sun * 0.5 + 0.5).clamp(0.0, 1.0); // 0 night .. 1 day
+    let brightness = 0.22 + 0.78 * day; // keep a night floor
+    // Horizon glow (dawn/dusk) peaks as the sun crosses the horizon.
+    let glow = (1.0 - sun.abs() / 0.35).clamp(0.0, 1.0);
+    let night = (1.0 - day) * (1.0 - glow); // deep-night weight
+    let tint = [
+        (1.0 + 0.25 * glow - 0.30 * night).clamp(0.0, 2.0),
+        (1.0 - 0.05 * glow - 0.12 * night).clamp(0.0, 2.0),
+        (1.0 - 0.30 * glow + 0.28 * night).clamp(0.0, 2.0),
+    ];
+    Sky { brightness, tint }
+}
+
+/// Apply the sky modulation to a base colour (clamped to [0,1]).
+pub fn modulate(color: [f32; 3], sky: &Sky) -> [f32; 3] {
+    [
+        (color[0] * sky.brightness * sky.tint[0]).clamp(0.0, 1.0),
+        (color[1] * sky.brightness * sky.tint[1]).clamp(0.0, 1.0),
+        (color[2] * sky.brightness * sky.tint[2]).clamp(0.0, 1.0),
+    ]
+}
+
+/// Phase from elapsed seconds for a full cycle of `cycle_secs`.
+pub fn phase_at(elapsed_secs: f32, cycle_secs: f32) -> f32 {
+    (elapsed_secs / cycle_secs.max(1.0)).rem_euclid(1.0)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn noon_is_bright_and_neutral() {
+        let s = daynight(0.5);
+        assert!(s.brightness > 0.95, "noon brightness {}", s.brightness);
+        // ~neutral tint.
+        assert!(s.tint.iter().all(|c| (c - 1.0).abs() < 0.1), "tint {:?}", s.tint);
+    }
+
+    #[test]
+    fn midnight_is_dim_and_blue() {
+        let s = daynight(0.0);
+        assert!(s.brightness < 0.3, "midnight brightness {}", s.brightness);
+        // Blue dominates red at night.
+        assert!(s.tint[2] > s.tint[0], "should be blue: {:?}", s.tint);
+    }
+
+    #[test]
+    fn dawn_is_warm() {
+        let s = daynight(0.25);
+        // Warm: red boosted above blue.
+        assert!(s.tint[0] > s.tint[2], "dawn should be warm: {:?}", s.tint);
+        // Mid brightness — between night and noon.
+        assert!(s.brightness > 0.4 && s.brightness < 0.85, "dawn brightness {}", s.brightness);
+    }
+
+    #[test]
+    fn brightness_orders_night_dawn_noon() {
+        assert!(daynight(0.0).brightness < daynight(0.25).brightness);
+        assert!(daynight(0.25).brightness < daynight(0.5).brightness);
+    }
+
+    #[test]
+    fn modulate_darkens_at_night() {
+        let base = [0.5, 0.6, 0.8];
+        let night = modulate(base, &daynight(0.0));
+        let noon = modulate(base, &daynight(0.5));
+        assert!(night.iter().sum::<f32>() < noon.iter().sum::<f32>());
+    }
+
+    #[test]
+    fn phase_wraps() {
+        assert!((phase_at(0.0, 100.0) - 0.0).abs() < 1e-6);
+        assert!((phase_at(50.0, 100.0) - 0.5).abs() < 1e-6);
+        assert!((phase_at(150.0, 100.0) - 0.5).abs() < 1e-6); // wrapped
+    }
+}
