@@ -1165,10 +1165,17 @@ impl App {
                     }
                 }
 
-                // Minimap (top-left): forward-up radar of nearby actors + loot.
+                // Minimap/radar at the real Interface.dat Radar rect (right
+                // side), forward-up radar of nearby actors + loot.
                 {
-                    let r = 64.0f32;
-                    let (cx, cy) = (10.0 + r, 10.0 + r);
+                    let (cx, cy, r) = match store.interface() {
+                        Some(iface) => {
+                            let rd = iface.radar;
+                            let r = (rd.w * sw).min(rd.h * sh) * 0.5;
+                            ((rd.x + rd.w * 0.5) * sw, (rd.y + rd.h * 0.5) * sh, r)
+                        }
+                        None => (74.0, 74.0, 64.0),
+                    };
                     let yaw = self.cam_yaw;
                     let range = 140.0;
                     let (mx, mz) = (net.world.me_x, net.world.me_z);
@@ -1195,10 +1202,12 @@ impl App {
                     }
                 }
 
-                // Status-effect pills (buffs/debuffs) in a row below the minimap.
+                // Status-effect pills at the real Buffs rect (top-right).
                 if !net.world.active_effects.is_empty() {
-                    let mut ex = 10.0;
-                    let ey = 152.0;
+                    let (mut ex, ey) = match store.interface() {
+                        Some(iface) => (iface.buffs.x * sw, iface.buffs.y * sh),
+                        None => (10.0, 152.0),
+                    };
                     for eff in &net.world.active_effects {
                         let label: String = eff.name.chars().take(12).collect();
                         let tw = rcce_render::font::text_width(&label, 1.0);
@@ -1290,26 +1299,46 @@ impl App {
                     overlay.text_shadow(sw - tw - 12.0, 38.0, 1.0, &s, col);
                 }
 
-                // Chat log: the last few lines, just above the HUD.
-                let chat_base = if self.chat_input.is_some() { 84.0 } else { 70.0 };
-                for (i, line) in w.chat.iter().rev().take(5).enumerate() {
-                    let y = sh - chat_base - i as f32 * 12.0;
+                // Chat log at the real Chat rect (bottom-left), newest at the
+                // bottom of the box.
+                let (cx0, cy0, cw, chh) = match store.interface() {
+                    Some(iface) => iface.chat.px(sw, sh),
+                    None => (14.0, sh - 160.0, 388.0, 152.0),
+                };
+                overlay.rect(cx0, cy0, cw, chh, [0.0, 0.0, 0.0, 0.28]);
+                let max_lines = ((chh / 12.0) as usize).max(1);
+                let bottom = cy0 + chh - 13.0;
+                for (i, line) in w.chat.iter().rev().take(max_lines).enumerate() {
+                    let y = bottom - i as f32 * 12.0;
                     let s: String = line.chars().take(60).collect();
-                    overlay.text_shadow(14.0, y, 1.0, &s, [0.9, 0.9, 0.7, 1.0]);
+                    overlay.text_shadow(cx0 + 4.0, y, 1.0, &s, [0.9, 0.9, 0.7, 1.0]);
                 }
             }
-            // Chat input line (with a blinking-ish caret).
+            // Chat input line just under the chat box (real Chat rect bottom).
             if let Some(buf) = self.chat_input.as_ref() {
-                overlay.rect(10.0, sh - 80.0, sw - 20.0, 16.0, [0.0, 0.0, 0.0, 0.55]);
+                let (cx0, cy0, cw, chh) = match store.interface() {
+                    Some(iface) => iface.chat.px(sw, sh),
+                    None => (14.0, sh - 160.0, 388.0, 152.0),
+                };
+                overlay.rect(cx0, cy0 + chh, cw, 16.0, [0.0, 0.0, 0.0, 0.6]);
                 let caret = if (elapsed * 2.0) as i64 % 2 == 0 { "_" } else { " " };
-                overlay.text_shadow(14.0, sh - 78.0, 1.0, &format!("> {buf}{caret}"), [1.0, 1.0, 1.0, 1.0]);
+                overlay.text_shadow(cx0 + 4.0, cy0 + chh + 2.0, 1.0, &format!("> {buf}{caret}"), [1.0, 1.0, 1.0, 1.0]);
             }
 
             // Inventory / spellbook panel (toggle with I). Item names resolve
             // through Items.dat; spell names arrive over the wire.
             if self.show_inventory {
-                let (pw, ph) = (340.0, 384.0);
-                let (px, py) = (((sw - pw) * 0.5).round(), ((sh - ph) * 0.5).round());
+                // Match the real InventoryWindow rect (centred ~0.25,0.2,0.5,0.55).
+                let (px, py, pw, ph) = match store.interface() {
+                    Some(iface) => {
+                        let r = iface.inventory_window.px(sw, sh);
+                        (r.0.round(), r.1.round(), r.2.round(), r.3.round())
+                    }
+                    None => {
+                        let (pw, ph) = (340.0f32, 384.0f32);
+                        (((sw - pw) * 0.5).round(), ((sh - ph) * 0.5).round(), pw, ph)
+                    }
+                };
                 let dim = [0.6, 0.6, 0.6, 1.0];
                 overlay.rect(px, py, pw, ph, [0.05, 0.06, 0.10, 0.9]);
                 overlay.rect(px, py, pw, 22.0, [0.15, 0.18, 0.28, 0.96]);
