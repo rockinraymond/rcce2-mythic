@@ -130,7 +130,19 @@ fn main() {
     let ambient = rcce_client::daynight::modulate(env.ambient, &sky);
     println!("[zone_render] day/night phase {phase} → fog {fog:?}");
 
-    match rcce_render::render_scene_png(&instances, eye, target, ground_y, fog, env.fog_near, env.fog_far, ambient, env.light_dir, 1600, 1000, &out) {
+    // Resolve the area's sky texture for the textured skydome.
+    let sky_tex = if env.sky_tex_id != 65535 {
+        let t = store
+            .texture_path(env.sky_tex_id)
+            .and_then(|p| rcce_data::texture::load(&p))
+            .map(|img| (img.width, img.height, img.rgba));
+        println!("[zone_render] sky_tex_id {} -> {}", env.sky_tex_id, if t.is_some() { "loaded" } else { "unresolved" });
+        t
+    } else {
+        None
+    };
+
+    match rcce_render::render_scene_png(&instances, eye, target, ground_y, fog, env.fog_near, env.fog_far, ambient, env.light_dir, 1600, 1000, &out, sky_tex) {
         Ok(adapter) => println!(
             "[zone_render] rendered {} instances via {adapter} -> {out}",
             instances.len()

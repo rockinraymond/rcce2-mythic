@@ -345,6 +345,14 @@ mod tests {
                 area.sceneries.len(),
                 area.sceneries.first().map(|s| (s.mesh_id, s.pos))
             );
+            // Sky texture resolution (for the skydome port).
+            let sky = area.env.sky_tex_id;
+            let sky_file = std::fs::read(root.join("data/Game Data/Textures.dat"))
+                .ok()
+                .and_then(|b| catalog::TextureCatalog::parse(&b).ok())
+                .filter(|_| sky != 65535)
+                .and_then(|p| p.value.get(sky).map(|e| e.filename.clone()));
+            eprintln!("{zone}: sky_tex_id={sky} -> {sky_file:?}  fog={:?}", area.env.fog_color);
             // If there's scenery at all, most should resolve to real meshes.
             if !area.sceneries.is_empty() {
                 assert!(

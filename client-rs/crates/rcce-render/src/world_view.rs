@@ -112,6 +112,16 @@ impl WorldView {
     /// Draw the scene to `view` with the camera + atmosphere. `eye` is the
     /// camera position (for fog distance); `fog_*` define the distance fog.
     #[allow(clippy::too_many_arguments)]
+    /// Upload the area's sky texture (RGBA8) for the textured skydome; pass it on
+    /// zone load. Clearing reverts to the plain gradient.
+    pub fn set_sky_texture(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, width: u32, height: u32, rgba: &[u8]) {
+        self.sky.set_texture(device, queue, width, height, rgba);
+    }
+    pub fn clear_sky_texture(&mut self) {
+        self.sky.clear_texture();
+    }
+
+    #[allow(clippy::too_many_arguments)]
     pub fn render(
         &self,
         device: &wgpu::Device,
@@ -125,12 +135,14 @@ impl WorldView {
         ambient: [f32; 3],
         light_dir: [f32; 3],
         clear: wgpu::Color,
+        sky_yaw: f32,
     ) {
         let u = Uniforms::new(view_proj, eye, fog_color, fog_near, fog_far, ambient, light_dir);
         queue.write_buffer(&self.uniform_buf, 0, bytemuck::bytes_of(&u));
         // Sky gradient: horizon = fog colour (so the world fades into it),
-        // zenith bluer/darker.
+        // zenith bluer/darker. Then the per-frame yaw pans any sky texture.
         self.sky.set_colors(queue, gpu::sky_zenith(fog_color), fog_color);
+        self.sky.set_frame(queue, sky_yaw);
         let mut enc = device.create_command_encoder(&Default::default());
         {
             let mut rp = enc.begin_render_pass(&wgpu::RenderPassDescriptor {

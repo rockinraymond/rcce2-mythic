@@ -135,29 +135,47 @@ pub fn sky_zenith(horizon: [f32; 3]) -> [f32; 3] {
     ]
 }
 
-/// Fullscreen vertical gradient drawn at the far plane (no depth write) so the
-/// world's geometry renders over it — a cheap sky. Owns its own 2-colour
-/// uniform; call [`set_colors`](SkyPipeline::set_colors) then [`draw`].
+/// Fullscreen sky drawn at the far plane (no depth write) so the world's
+/// geometry renders over it. Falls back to a vertical fog gradient; when a sky
+/// texture is set (the area's `SkyTexID`) it's sampled by screen UV, panned
+/// horizontally with the camera yaw, and faded into the gradient at the horizon.
 pub struct SkyPipeline {
     pipeline: wgpu::RenderPipeline,
     buf: wgpu::Buffer,
     bind: wgpu::BindGroup,
+    tex_bgl: wgpu::BindGroupLayout,
+    sampler: wgpu::Sampler,
+    tex_bind: wgpu::BindGroup,
+    has_texture: bool,
 }
 
 const SKY_SHADER: &str = r#"
-struct SkyU { top: vec4<f32>, bottom: vec4<f32> };
+struct SkyU { top: vec4<f32>, bottom: vec4<f32>, params: vec4<f32> };
 @group(0) @binding(0) var<uniform> sky: SkyU;
-struct VO { @builtin(position) pos: vec4<f32>, @location(0) t: f32 };
+@group(1) @binding(0) var skytex: texture_2d<f32>;
+@group(1) @binding(1) var skysamp: sampler;
+struct VO { @builtin(position) pos: vec4<f32>, @location(0) t: f32, @location(1) uv: vec2<f32> };
 @vertex fn vs(@builtin(vertex_index) vi: u32) -> VO {
     var p = array<vec2<f32>, 3>(vec2<f32>(-1.0, -1.0), vec2<f32>(3.0, -1.0), vec2<f32>(-1.0, 3.0));
     var o: VO;
     let xy = p[vi];
     o.pos = vec4<f32>(xy, 1.0, 1.0); // z = 1 → far plane
     o.t = (xy.y + 1.0) * 0.5;        // 0 at screen bottom, 1 at top
+    o.uv = vec2<f32>((xy.x + 1.0) * 0.5, 1.0 - (xy.y + 1.0) * 0.5); // screen uv (y down)
     return o;
 }
 @fragment fn fs(i: VO) -> @location(0) vec4<f32> {
-    return vec4<f32>(mix(sky.bottom.rgb, sky.top.rgb, clamp(i.t, 0.0, 1.0)), 1.0);
+    let grad = mix(sky.bottom.rgb, sky.top.rgb, clamp(i.t, 0.0, 1.0));
+    if (sky.params.x < 0.5) {
+        return vec4<f32>(grad, 1.0);
+    }
+    // Pan horizontally with the camera yaw (wraps via Repeat sampler).
+    let uv = vec2<f32>(i.uv.x + sky.params.y, i.uv.y);
+    let tex = textureSample(skytex, skysamp, uv).rgb;
+    // Show the sky texture above the horizon, fading to the fog gradient at the
+    // bottom so it meets the terrain smoothly.
+    let h = smoothstep(0.0, 0.30, i.t);
+    return vec4<f32>(mix(grad, tex, h), 1.0);
 }
 "#;
 
@@ -178,7 +196,7 @@ impl SkyPipeline {
         });
         let buf = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("sky"),
-            size: 32, // two vec4
+            size: 48, // three vec4 (top, bottom, params)
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
@@ -187,13 +205,47 @@ impl SkyPipeline {
             layout: &bgl,
             entries: &[wgpu::BindGroupEntry { binding: 0, resource: buf.as_entire_binding() }],
         });
+        // Texture+sampler bind group (group 1). Starts as a 1×1 white default so
+        // the pipeline always has a valid binding; params.x gates its use.
+        let tex_bgl = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("sky-tex-bgl"),
+            entries: &[
+                wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Texture {
+                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                        view_dimension: wgpu::TextureViewDimension::D2,
+                        multisampled: false,
+                    },
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 1,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                    count: None,
+                },
+            ],
+        });
+        let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+            label: Some("sky-sampler"),
+            address_mode_u: wgpu::AddressMode::Repeat,
+            address_mode_v: wgpu::AddressMode::ClampToEdge,
+            address_mode_w: wgpu::AddressMode::ClampToEdge,
+            mag_filter: wgpu::FilterMode::Linear,
+            min_filter: wgpu::FilterMode::Linear,
+            ..Default::default()
+        });
+        // 1×1 default — never sampled (params.x = 0), so no upload needed.
+        let tex_bind = make_sky_tex_bind(device, None, &tex_bgl, &sampler, 1, 1, None);
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("sky"),
             source: wgpu::ShaderSource::Wgsl(SKY_SHADER.into()),
         });
         let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: None,
-            bind_group_layouts: &[&bgl],
+            bind_group_layouts: &[&bgl, &tex_bgl],
             push_constant_ranges: &[],
         });
         let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
@@ -225,7 +277,7 @@ impl SkyPipeline {
             multiview: None,
             cache: None,
         });
-        SkyPipeline { pipeline, buf, bind }
+        SkyPipeline { pipeline, buf, bind, tex_bgl, sampler, tex_bind, has_texture: false }
     }
 
     pub fn set_colors(&self, queue: &wgpu::Queue, top: [f32; 3], bottom: [f32; 3]) {
@@ -233,11 +285,84 @@ impl SkyPipeline {
         queue.write_buffer(&self.buf, 0, bytemuck::cast_slice(&data));
     }
 
+    /// Per-frame params: `yaw` (radians) pans the sky texture horizontally. The
+    /// has-texture flag is taken from whether a real sky texture is set.
+    pub fn set_frame(&self, queue: &wgpu::Queue, yaw: f32) {
+        use std::f32::consts::PI;
+        let has = if self.has_texture { 1.0 } else { 0.0 };
+        // Map yaw to a 0..1 horizontal offset (a full turn pans the texture once).
+        let off = yaw / (2.0 * PI);
+        let params: [f32; 4] = [has, off, 0.0, 0.0];
+        queue.write_buffer(&self.buf, 32, bytemuck::cast_slice(&params));
+    }
+
+    /// Upload the area's sky texture (RGBA8). Replaces any previous one and
+    /// enables textured-sky rendering.
+    pub fn set_texture(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, width: u32, height: u32, rgba: &[u8]) {
+        if width == 0 || height == 0 || rgba.len() < (width * height * 4) as usize {
+            return;
+        }
+        self.tex_bind = make_sky_tex_bind(device, Some(queue), &self.tex_bgl, &self.sampler, width, height, Some(rgba));
+        self.has_texture = true;
+    }
+
+    /// Clear the sky texture (revert to the plain gradient).
+    pub fn clear_texture(&mut self) {
+        self.has_texture = false;
+    }
+
     pub fn draw<'a>(&'a self, rp: &mut wgpu::RenderPass<'a>) {
         rp.set_pipeline(&self.pipeline);
         rp.set_bind_group(0, &self.bind, &[]);
+        rp.set_bind_group(1, &self.tex_bind, &[]);
         rp.draw(0..3, 0..1);
     }
+}
+
+/// Build a sky texture bind group; uploads `rgba` when a queue + pixels are
+/// given (the 1×1 default passes `None`/`None` and is never sampled). The bind
+/// group retains the texture via its view, so the handle can be dropped here.
+fn make_sky_tex_bind(
+    device: &wgpu::Device,
+    queue: Option<&wgpu::Queue>,
+    bgl: &wgpu::BindGroupLayout,
+    sampler: &wgpu::Sampler,
+    width: u32,
+    height: u32,
+    rgba: Option<&[u8]>,
+) -> wgpu::BindGroup {
+    let tex = device.create_texture(&wgpu::TextureDescriptor {
+        label: Some("sky-tex"),
+        size: wgpu::Extent3d { width, height, depth_or_array_layers: 1 },
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format: wgpu::TextureFormat::Rgba8Unorm,
+        usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+        view_formats: &[],
+    });
+    if let (Some(queue), Some(rgba)) = (queue, rgba) {
+        queue.write_texture(
+            wgpu::ImageCopyTexture {
+                texture: &tex,
+                mip_level: 0,
+                origin: wgpu::Origin3d::ZERO,
+                aspect: wgpu::TextureAspect::All,
+            },
+            rgba,
+            wgpu::ImageDataLayout { offset: 0, bytes_per_row: Some(width * 4), rows_per_image: Some(height) },
+            wgpu::Extent3d { width, height, depth_or_array_layers: 1 },
+        );
+    }
+    let view = tex.create_view(&Default::default());
+    device.create_bind_group(&wgpu::BindGroupDescriptor {
+        label: Some("sky-tex-bind"),
+        layout: bgl,
+        entries: &[
+            wgpu::BindGroupEntry { binding: 0, resource: wgpu::BindingResource::TextureView(&view) },
+            wgpu::BindGroupEntry { binding: 1, resource: wgpu::BindingResource::Sampler(sampler) },
+        ],
+    })
 }
 
 /// Per-mesh normals (model space), computed from faces if absent.
