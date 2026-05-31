@@ -266,6 +266,22 @@ fn inventory_slot_at(cx: f32, cy: f32, iw: rcce_data::IComp, buttons: &[rcce_dat
     None
 }
 
+/// Runtime id of the actor nearest the cursor within `radius` px, projecting
+/// each `(rid, [x,y,z])` through the view-projection `vp`. Pure — shared by the
+/// world-click pick and the hover tooltip.
+fn actor_at(cx: f32, cy: f32, actors: &[(u16, [f32; 3])], vp: &[f32; 16], sw: f32, sh: f32, radius: f32) -> Option<u16> {
+    let mut best: Option<(u16, f32)> = None;
+    for &(rid, pos) in actors {
+        if let Some((px, py)) = rcce_render::project(vp, pos, sw, sh) {
+            let d2 = (px - cx) * (px - cx) + (py - cy) * (py - cy);
+            if d2 <= radius * radius && best.map(|(_, b)| d2 < b).unwrap_or(true) {
+                best = Some((rid, d2));
+            }
+        }
+    }
+    best.map(|(rid, _)| rid)
+}
+
 /// Greedy word-wrap into lines of at most `max_chars` (for tooltip bodies).
 fn wrap_text(s: &str, max_chars: usize) -> Vec<String> {
     let mut out = Vec::new();
@@ -1173,20 +1189,15 @@ impl App {
     fn world_pick(&mut self, sw: f32, sh: f32, cx: f32, cy: f32) {
         const PICK_RADIUS: f32 = 48.0;
         let pick = self.net.as_ref().and_then(|net| {
-            let mut best: Option<(u16, f32)> = None;
-            for a in net.world.actors.values() {
-                if !a.alive {
-                    continue;
-                }
-                // Aim at roughly chest height so the pick matches the body.
-                if let Some((px, py)) = rcce_render::project(&self.vp, [a.x, a.y + 3.0, a.z], sw, sh) {
-                    let d2 = (px - cx) * (px - cx) + (py - cy) * (py - cy);
-                    if d2 <= PICK_RADIUS * PICK_RADIUS && best.map(|(_, b)| d2 < b).unwrap_or(true) {
-                        best = Some((a.runtime_id, d2));
-                    }
-                }
-            }
-            best.map(|(rid, _)| rid)
+            // Aim at roughly chest height so the pick matches the body.
+            let actors: Vec<(u16, [f32; 3])> = net
+                .world
+                .actors
+                .values()
+                .filter(|a| a.alive)
+                .map(|a| (a.runtime_id, [a.x, a.y + 3.0, a.z]))
+                .collect();
+            actor_at(cx, cy, &actors, &self.vp, sw, sh, PICK_RADIUS)
         });
         if let Some(rid) = pick {
             // A double-click on the same actor (or Shift+click) interacts; a
@@ -1960,6 +1971,32 @@ impl App {
                         }
                     }
                 }
+                // Hovered-actor world tooltip — only with the panel closed and
+                // clear of the function-button row, so it doesn't fight the HUD.
+                if lines.is_empty()
+                    && !self.show_inventory
+                    && function_button_at(cx, cy, sw, sh).is_none()
+                {
+                    if let Some(net) = self.net.as_ref() {
+                        let actors: Vec<(u16, [f32; 3])> = net
+                            .world
+                            .actors
+                            .values()
+                            .filter(|a| a.alive)
+                            .map(|a| (a.runtime_id, [a.x, a.y + 3.0, a.z]))
+                            .collect();
+                        if let Some(rid) = actor_at(cx, cy, &actors, &self.vp, sw, sh, 32.0) {
+                            if let Some(a) = net.world.actors.get(&rid) {
+                                let nm = if a.name.is_empty() { format!("Actor {rid}") } else { a.name.clone() };
+                                let col = if a.is_player { [0.5, 0.8, 1.0, 1.0] } else { [1.0, 0.7, 0.6, 1.0] };
+                                lines.push((nm, col));
+                                if a.health_max > 0 {
+                                    lines.push((format!("HP {} / {}", a.health.max(0), a.health_max), accent));
+                                }
+                            }
+                        }
+                    }
+                }
                 if !lines.is_empty() {
                     let (pad, lh) = (5.0f32, 12.0f32);
                     let tw = lines
@@ -2106,5 +2143,25 @@ mod tests {
         assert_eq!(inventory_slot_at(cx, cy, iw, &buttons, sw, sh), Some(1));
         // A point left of the whole window → no slot.
         assert_eq!(inventory_slot_at(0.0, cy, iw, &buttons, sw, sh), None);
+    }
+
+    #[test]
+    fn actor_pick_nearest() {
+        // Identity view-proj: project maps world (x,y,_) → screen
+        // ((x*0.5+0.5)*sw, (1-(y*0.5+0.5))*sh), so points are placeable by hand.
+        let vp = [
+            1.0, 0.0, 0.0, 0.0,
+            0.0, 1.0, 0.0, 0.0,
+            0.0, 0.0, 1.0, 0.0,
+            0.0, 0.0, 0.0, 1.0,
+        ];
+        let (sw, sh) = (1000.0f32, 1000.0f32);
+        // A at world 0,0,0 → screen centre (500,500); B at 0.5,0,0 → x=750.
+        let actors = [(10u16, [0.0, 0.0, 0.0]), (20u16, [0.5, 0.0, 0.0])];
+        assert_eq!(actor_at(505.0, 500.0, &actors, &vp, sw, sh, 32.0), Some(10));
+        assert_eq!(actor_at(745.0, 500.0, &actors, &vp, sw, sh, 32.0), Some(20));
+        // Equidistant-ish but closer to B; and a far point → None.
+        assert_eq!(actor_at(700.0, 500.0, &actors, &vp, sw, sh, 60.0), Some(20));
+        assert_eq!(actor_at(500.0, 100.0, &actors, &vp, sw, sh, 32.0), None);
     }
 }
