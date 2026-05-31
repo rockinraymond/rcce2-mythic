@@ -15,7 +15,7 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use winit::application::ApplicationHandler;
-use winit::event::{DeviceEvent, DeviceId, ElementState, WindowEvent};
+use winit::event::{DeviceEvent, DeviceId, ElementState, MouseButton, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
 use winit::keyboard::{KeyCode, PhysicalKey};
 use winit::window::{CursorGrabMode, Window, WindowId};
@@ -160,6 +160,9 @@ struct App {
     prev_elapsed: f32,
     /// Per-spell-id cooldown end time (elapsed seconds) for the action bar.
     spell_cooldowns: std::collections::HashMap<u16, f32>,
+    /// Last cursor position in physical pixels (for HUD click hit-testing while
+    /// mouse-look is off). Updated on CursorMoved.
+    cursor: (f32, f32),
 }
 
 impl App {
@@ -205,8 +208,44 @@ impl App {
             weather: rcce_client::weather::WeatherSystem::new(240),
             prev_elapsed: 0.0,
             spell_cooldowns: std::collections::HashMap::new(),
+            cursor: (0.0, 0.0),
         }
     }
+}
+
+/// One bottom function button: a HUD action, its real Client.exe x-fraction
+/// (Interface3D.bb 4:3 branch), GUI-icon key, and text-label fallback.
+#[derive(Clone, Copy, PartialEq)]
+enum HudAction { Chat, Map, Inventory, Spells, Character, Quests, Party, Menu }
+
+const FUNCTION_BUTTONS: [(HudAction, f32, &str, &str); 8] = [
+    (HudAction::Chat, 0.631906250, "gui:Chat", "Cht"),
+    (HudAction::Map, 0.669015625, "gui:Map", "Map"),
+    (HudAction::Inventory, 0.705148437, "gui:Inventory", "Inv"),
+    (HudAction::Spells, 0.742257812, "gui:Abilities", "Spl"),
+    (HudAction::Character, 0.780343750, "gui:Character", "Chr"),
+    (HudAction::Quests, 0.816476562, "gui:Quests", "Qst"),
+    (HudAction::Party, 0.853585937, "gui:Party", "Pty"),
+    (HudAction::Menu, 0.893000000, "gui:Menu", "Mnu"),
+];
+/// Function-button baseline + size (fractions of screen) — the real GY button
+/// geometry from CreateActionBarButton (4:3 branch).
+const FBTN_Y: f32 = 0.9415;
+const FBTN_W: f32 = 0.033203125 - 0.006;
+const FBTN_H: f32 = 0.044270833 - 0.008;
+
+/// Which function button (if any) contains screen-pixel point `(cx, cy)` for a
+/// `(sw, sh)` viewport. Pure geometry shared by the draw + click paths.
+fn function_button_at(cx: f32, cy: f32, sw: f32, sh: f32) -> Option<HudAction> {
+    let by = FBTN_Y * sh;
+    let (bw, bh) = (FBTN_W * sw, FBTN_H * sh);
+    for (action, fx, _, _) in FUNCTION_BUTTONS {
+        let bx = fx * sw;
+        if cx >= bx && cx < bx + bw && cy >= by && cy < by + bh {
+            return Some(action);
+        }
+    }
+    None
 }
 
 /// Build animated actor instances (the local player + tracked actors) for the
@@ -906,6 +945,19 @@ impl ApplicationHandler for App {
                     }
                 }
             }
+            WindowEvent::CursorMoved { position, .. } => {
+                self.cursor = (position.x as f32, position.y as f32);
+            }
+            WindowEvent::MouseInput { state, button, .. } => {
+                // Left-click on the HUD acts only while mouse-look is off (cursor
+                // free). Right-button toggles mouse-look on press for quick camera
+                // grab, off on release.
+                if button == MouseButton::Left && state == ElementState::Pressed && !self.mouse_look {
+                    self.hud_click();
+                } else if button == MouseButton::Right {
+                    self.set_mouse_look(state == ElementState::Pressed);
+                }
+            }
             WindowEvent::RedrawRequested => {
                 self.render();
                 if let Some(w) = &self.window {
@@ -930,6 +982,102 @@ impl ApplicationHandler for App {
 }
 
 impl App {
+    /// Handle a left-click on the HUD (mouse-look off). Hit-tests the bottom
+    /// function-button row, then the inventory slot grid when the panel is open.
+    /// Positions mirror the draw code exactly (shared FUNCTION_BUTTONS / the
+    /// Interface.dat inv_buttons).
+    fn hud_click(&mut self) {
+        let Some(gfx) = self.gfx.as_ref() else { return };
+        let (sw, sh) = (gfx.config.width as f32, gfx.config.height as f32);
+        let (cx, cy) = self.cursor;
+        let hit = |x: f32, y: f32, w: f32, h: f32| cx >= x && cx < x + w && cy >= y && cy < y + h;
+
+        // Function-button row.
+        if let Some(action) = function_button_at(cx, cy, sw, sh) {
+            match action {
+                HudAction::Chat => {
+                    if self.chat_input.is_none() {
+                        self.chat_input = Some(String::new());
+                    }
+                }
+                // The character panel shows gear + backpack + spells, so the
+                // Inventory / Character / Spells icons all toggle it.
+                HudAction::Inventory | HudAction::Character | HudAction::Spells => {
+                    self.show_inventory = !self.show_inventory;
+                }
+                HudAction::Map | HudAction::Quests | HudAction::Party | HudAction::Menu => {
+                    println!("[client-window] HUD button not yet implemented");
+                }
+            }
+            return;
+        }
+
+        // Inventory slot grid (only when the panel is open and we have positions).
+        if !self.show_inventory {
+            return;
+        }
+        let Some(iface) = self.store.as_ref().and_then(|s| s.interface()) else { return };
+        let iw = iface.inventory_window;
+        let mut clicked_slot: Option<u8> = None;
+        for (i, b) in iface.inventory_buttons.iter().enumerate() {
+            let bx = (iw.x + b.x * iw.w) * sw;
+            let bgy = (iw.y + b.y * iw.h) * sh;
+            let bwid = (b.w * iw.w * sw).max(8.0);
+            let bhei = (b.h * iw.h * sh).max(8.0);
+            if hit(bx, bgy, bwid, bhei) {
+                clicked_slot = Some(i as u8);
+                break;
+            }
+        }
+        let Some(slot) = clicked_slot else { return };
+        // Resolve the item in the clicked slot from the live inventory.
+        let item = self
+            .net
+            .as_ref()
+            .and_then(|n| n.world.me_inventory.values().find(|it| it.slot == slot))
+            .map(|it| (it.slot, it.item_id));
+        let Some((slot, item_id)) = item else { return };
+        let shift = self.run;
+        if slot < 14 {
+            // Equipment slot click → unequip to the first free backpack slot.
+            let occupied: std::collections::HashSet<u8> = self
+                .net
+                .as_ref()
+                .map(|n| n.world.me_inventory.values().map(|it| it.slot).collect())
+                .unwrap_or_default();
+            let dest = (14u8..=45).find(|s| !occupied.contains(s));
+            if let (Some(dest), Some(net)) = (dest, self.net.as_mut()) {
+                let rid = net.world.my_runtime_id;
+                net.transport.send(
+                    net.peer,
+                    rcce_net::packet_id::INVENTORY_UPDATE,
+                    &rcce_client::net::inv_move_packet(rid, slot, dest, 0, true),
+                    true,
+                );
+            }
+        } else if shift {
+            // Shift-click a backpack item → equip into its gear slot.
+            let dest = self.store.as_ref().and_then(|s| s.item_equip_slot(item_id));
+            if let (Some(dest), Some(net)) = (dest, self.net.as_mut()) {
+                let rid = net.world.my_runtime_id;
+                net.transport.send(
+                    net.peer,
+                    rcce_net::packet_id::INVENTORY_UPDATE,
+                    &rcce_client::net::inv_move_packet(rid, slot, dest, 0, true),
+                    true,
+                );
+            }
+        } else if let Some(net) = self.net.as_mut() {
+            // Plain click a backpack item → drop one.
+            net.transport.send(
+                net.peer,
+                rcce_net::packet_id::INVENTORY_UPDATE,
+                &rcce_client::net::inv_drop_packet(slot, 1),
+                true,
+            );
+        }
+    }
+
     /// Enable/disable mouse-look: grab + hide the cursor (Locked, falling back to
     /// Confined) when on; release it when off.
     fn set_mouse_look(&mut self, on: bool) {
@@ -1519,19 +1667,11 @@ impl App {
                 }
                 // Function buttons (right cluster), drawn with the real GUI .bmp
                 // icons when registered; text labels are the fallback. The active
-                // panel (inventory) is highlighted.
-                let fbtns: [(f32, &str, &str, bool); 8] = [
-                    (0.631906250, "gui:Chat", "Cht", false),
-                    (0.669015625, "gui:Map", "Map", false),
-                    (0.705148437, "gui:Inventory", "Inv", self.show_inventory),
-                    (0.742257812, "gui:Abilities", "Spl", false),
-                    (0.780343750, "gui:Character", "Chr", false),
-                    (0.816476562, "gui:Quests", "Qst", false),
-                    (0.853585937, "gui:Party", "Pty", false),
-                    (0.893000000, "gui:Menu", "Mnu", false),
-                ];
-                for (fx, key, label, active) in fbtns {
+                // panel (inventory) is highlighted. Positions come from the shared
+                // FUNCTION_BUTTONS table so hit-testing matches exactly.
+                for (action, fx, key, label) in FUNCTION_BUTTONS {
                     let x = fx * sw;
+                    let active = action == HudAction::Inventory && self.show_inventory;
                     if overlay.has_texture(key) {
                         let tint = if active { [1.0, 1.0, 0.6, 1.0] } else { [1.0, 1.0, 1.0, 1.0] };
                         overlay.image(x, by, bw, bh, key, tint);
@@ -1575,4 +1715,37 @@ fn main() {
     event_loop.set_control_flow(ControlFlow::Poll);
     let mut app = App::new(host, port, zone);
     event_loop.run_app(&mut app).expect("run app");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // The function-button row hit-test must agree with the draw geometry: a
+    // click at each button's centre returns that button's action, and the gaps
+    // / outside the row return None.
+    #[test]
+    fn function_button_hit_test() {
+        let (sw, sh) = (1280.0f32, 800.0f32);
+        let by = FBTN_Y * sh;
+        let (bw, bh) = (FBTN_W * sw, FBTN_H * sh);
+        let cy = by + bh * 0.5;
+        // Centre of each button maps back to its own action, in order.
+        let expect = [
+            HudAction::Chat, HudAction::Map, HudAction::Inventory, HudAction::Spells,
+            HudAction::Character, HudAction::Quests, HudAction::Party, HudAction::Menu,
+        ];
+        for (idx, (action, fx, _, _)) in FUNCTION_BUTTONS.iter().enumerate() {
+            let cx = fx * sw + bw * 0.5;
+            let got = function_button_at(cx, cy, sw, sh).expect("button hit");
+            assert!(got == *action && got == expect[idx], "button {idx} mismatch");
+        }
+        // Above the row (well clear of the baseline) → nothing.
+        assert!(function_button_at(0.7 * sw, by - bh, sw, sh).is_none());
+        // Far left of the cluster (the spell-slot area) → no function button.
+        assert!(function_button_at(0.1 * sw, cy, sw, sh).is_none());
+        // Just past the last button's right edge → nothing.
+        let last_x = FUNCTION_BUTTONS[7].1 * sw + bw + 2.0;
+        assert!(function_button_at(last_x, cy, sw, sh).is_none());
+    }
 }
