@@ -1722,6 +1722,7 @@ Function UpdateInterface()
 					EndIf
 				EndIf
 			EndIf
+			EndIf
 		Next
 	EndIf
 	; Right clicking while a spell is in the mouse slot removes it

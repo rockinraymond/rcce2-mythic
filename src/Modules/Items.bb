@@ -131,7 +131,7 @@ Function ItemInstanceFromString.ItemInstance(Pa$)
 		; math stays in sync (matches the existing Null-fallback
 		; branch below).
 		Offset = 3
-		For j = 0 To 39
+		For j = 0 To 49
 			RCE_IntFromStr(Mid$(Pa$, Offset, 2))
 			Offset = Offset + 2
 		Next
@@ -212,8 +212,8 @@ Function ReadItemInstance.ItemInstance(Stream)
 		; time so EOF stops us rather than the SeekFile silently moving
 		; the cursor past the end of the file (which would then surface
 		; on the next ReadShort as a silent zero).
-		Local k
-		For k = 0 To 39
+		Local l
+		For l = 0 To 49
 			If Eof(Stream) Then Exit
 			ReadShort(Stream)
 		Next
@@ -286,7 +286,7 @@ Function DuplicateItemTemplate(srcID)
 
 	Dst\Name$           = Src\Name$ + " (copy)"
 	Dst\ExclusiveRace$  = Src\ExclusiveRace$
-	Dst\ExclusiveClass$ = Src\ExclusiveClass$
+	Dst\ExclusiveSkill$ = Src\ExclusiveSkill$
 	Dst\Script$         = Src\Script$
 	Dst\SMethod$        = Src\SMethod$
 	Dst\ItemType        = Src\ItemType

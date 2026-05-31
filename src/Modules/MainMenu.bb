@@ -1934,7 +1934,8 @@ Function CharSelect()
 									; 40 attribute pairs would Field-OOB the
 									; client. Stop walking once full.
 									If AttributesDone < 0 Or AttributesDone > 49 Then Exit
-									Me\Attributes\Value[AttributesDone] = RCE_IntFromStr(Mid$(M\MessageData$, Offset, 2))
+									If AttributesDone < 50
+										Me\Attributes\Value[AttributesDone] = RCE_IntFromStr(Mid$(M\MessageData$, Offset, 2))
 										Me\Attributes\Maximum[AttributesDone] = RCE_IntFromStr(Mid$(M\MessageData$, Offset + 2, 2))
 										Me\Attributes\Xp[AttributesDone] = RCE_IntFromStr(Mid$(M\MessageData$, Offset + 4, 2))
 										Me\Attributes\XpMax[AttributesDone] = RCE_IntFromStr(Mid$(M\MessageData$, Offset + 6, 2))

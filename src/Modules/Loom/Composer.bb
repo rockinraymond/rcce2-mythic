@@ -1302,7 +1302,7 @@ Type Composer
             If fieldId = "script"         Then I\Script$ = value       : Return
             If fieldId = "smethod"        Then I\SMethod$ = value      : Return
             If fieldId = "race"           Then I\ExclusiveRace$ = value  : Return
-            If fieldId = "class"          Then I\ExclusiveClass$ = value : Return
+            If fieldId = "class"          Then I\ExclusiveSkill$ = value : Return
             If fieldId = "stackable"      Then I\Stackable   = (value = "1") : Return
             If fieldId = "breakable"      Then I\TakesDamage = (value = "1") : Return
             If fieldId = "weapon_dmg_type" Then I\WeaponDamageType = Composer::parseIntClamped(self, value, I\WeaponDamageType, 0, 19) : Return
@@ -3506,7 +3506,7 @@ Type Composer
         // a restriction is added in the first place).
         y = Composer::sectionHeader(self, panelX, panelW, y, "Restricted to")
         y = Composer::editableRow(self, panelX, panelW, y, "Race",  "item", It\ID, "race",  It\ExclusiveRace$,  mx, my, clicked)
-        y = Composer::editableRow(self, panelX, panelW, y, "Class", "item", It\ID, "class", It\ExclusiveClass$, mx, my, clicked)
+        y = Composer::editableRow(self, panelX, panelW, y, "Class", "item", It\ID, "class", It\ExclusiveSkill$, mx, my, clicked)
 
         // Script -- always editable
         y = Composer::sectionHeader(self, panelX, panelW, y, "Script")
