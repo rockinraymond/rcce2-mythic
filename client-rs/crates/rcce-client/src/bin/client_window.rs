@@ -264,6 +264,8 @@ fn build_actors(
                     body: u8,
                     hair: u8,
                     beard: u8,
+                    weapon_item: u16,
+                    weapon_override: Option<u16>,
                     rid: u16,
                     moving: bool,
                     running: bool,
@@ -292,8 +294,9 @@ fn build_actors(
         let scale = store.actor_render_scale(tmpl, gender).unwrap_or(0.05);
         let tex = store.actor_textures_rc(tmpl, gender, face, body);
         let (min, _) = posed.bounds();
-        // Head joint (for hair/beard placement) — read before posed is moved.
+        // Joint positions for attachments — read before posed is moved.
         let head = posed.joint_pos("Head").unwrap_or([0.0, 0.0, 0.0]);
+        let hand = posed.joint_pos("R_Hand");
         let idx = models.len();
         models.push(posed);
         textures.push(tex);
@@ -311,15 +314,37 @@ fn build_actors(
             textures.push(Rc::new(att.textures));
             place.push((aidx, t, r, color, s));
         }
+
+        // Equipped weapon at the R_Hand joint (same mechanism). The override
+        // forces a mesh for verification, since shipped items have no world
+        // mesh (mmesh = 65535).
+        let weapon_att = match weapon_override {
+            Some(mesh) => store.gear_attachment_mesh(mesh),
+            None if weapon_item != 0xFFFF => store.gear_attachment(weapon_item),
+            None => None,
+        };
+        if let (Some(att), Some(hand)) = (weapon_att, hand) {
+            let (t, r, s) = attachment_placement(trans, yaw_rad, scale, hand, &att);
+            let widx = models.len();
+            keys.push(format!("wpn:{}", att.mesh_id));
+            models.push(att.model);
+            textures.push(Rc::new(att.textures));
+            place.push((widx, t, r, color, s));
+        }
     };
 
-    push(store, &mut models, &mut textures, &mut place, &mut keys, 0, world.me_gender, world.me_face_tex, world.me_body_tex, world.me_hair, world.me_beard, world.my_runtime_id, false, false, [world.me_x, world.me_y, world.me_z], world.me_yaw, [0.85, 0.95, 0.85]);
+    // Debug override: force a weapon mesh on every actor (verifies the R_Hand
+    // attach path; shipped items carry no world mesh).
+    let weapon_override = std::env::var("RCCE_WEAPON_MESH").ok().and_then(|s| s.parse::<u16>().ok());
+    // The local player's equipped weapon is inventory slot 0.
+    let me_weapon = world.me_inventory.get(&0).map(|it| it.item_id).unwrap_or(0xFFFF);
+    push(store, &mut models, &mut textures, &mut place, &mut keys, 0, world.me_gender, world.me_face_tex, world.me_body_tex, world.me_hair, world.me_beard, me_weapon, weapon_override, world.my_runtime_id, false, false, [world.me_x, world.me_y, world.me_z], world.me_yaw, [0.85, 0.95, 0.85]);
     for a in world.actors.values() {
         let dx = a.dest_x - a.x;
         let dz = a.dest_z - a.z;
         let moving = (dx * dx + dz * dz) > 1.0;
         let color = if a.is_player { [0.85, 0.9, 1.0] } else { [1.0, 1.0, 1.0] };
-        push(store, &mut models, &mut textures, &mut place, &mut keys, a.template_id, a.gender, a.face_tex, a.body_tex, a.hair, a.beard, a.runtime_id, moving, a.is_running, [a.x, a.y, a.z], a.yaw, color);
+        push(store, &mut models, &mut textures, &mut place, &mut keys, a.template_id, a.gender, a.face_tex, a.body_tex, a.hair, a.beard, a.equipped[0], weapon_override, a.runtime_id, moving, a.is_running, [a.x, a.y, a.z], a.yaw, color);
     }
     (models, textures, place, keys)
 }
