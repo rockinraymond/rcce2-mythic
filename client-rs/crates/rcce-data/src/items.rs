@@ -157,6 +157,24 @@ pub fn equip_slot(item_type: u8, slot_type: i16) -> Option<u8> {
     }
 }
 
+/// Display name of an equipment slot index (0..13), or `None` for a backpack
+/// slot (14..45). Mirrors the `SlotI_*` layout in `Inventories.bb`.
+pub fn equip_slot_name(slot: u8) -> Option<&'static str> {
+    Some(match slot {
+        0 => "Weapon",
+        1 => "Shield",
+        2 => "Hat",
+        3 => "Chest",
+        4 => "Hand",
+        5 => "Belt",
+        6 => "Legs",
+        7 => "Feet",
+        8..=11 => "Ring",
+        12 | 13 => "Amulet",
+        _ => return None,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -251,6 +269,17 @@ mod tests {
         assert_eq!(cat.get(5).unwrap().name, "Sword");
         assert_eq!(cat.get(5).unwrap().item_type, 1);
         assert_eq!(cat.get(6).unwrap().name, "Apple");
+    }
+
+    #[test]
+    fn slot_names() {
+        assert_eq!(equip_slot_name(0), Some("Weapon"));
+        assert_eq!(equip_slot_name(7), Some("Feet"));
+        assert_eq!(equip_slot_name(8), Some("Ring"));
+        assert_eq!(equip_slot_name(11), Some("Ring"));
+        assert_eq!(equip_slot_name(12), Some("Amulet"));
+        assert_eq!(equip_slot_name(14), None); // backpack
+        assert_eq!(equip_slot_name(45), None);
     }
 
     #[test]

@@ -24,7 +24,7 @@ pub use catalog::{
     MeshCatalog, MeshEntry, MusicCatalog, MusicEntry, ParsedCatalog, TextureCatalog, TextureEntry,
     CATALOG_SLOTS,
 };
-pub use items::{equip_slot, ItemCatalog, ItemDef};
+pub use items::{equip_slot, equip_slot_name, ItemCatalog, ItemDef};
 pub use reader::{BlitzReader, ReadError};
 
 #[cfg(test)]

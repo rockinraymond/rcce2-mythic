@@ -655,7 +655,7 @@ impl ApplicationHandler for App {
                                 let item = self
                                     .net
                                     .as_ref()
-                                    .and_then(|n| n.world.me_inventory.values().nth(idx))
+                                    .and_then(|n| n.world.me_inventory.values().filter(|it| it.slot >= 14).nth(idx))
                                     .map(|it| (it.slot, it.item_id));
                                 if let Some((slot, item_id)) = item {
                                     if self.run {
@@ -1233,15 +1233,42 @@ impl App {
                 if let Some(s) = &self.sheet {
                     overlay.text_shadow(px + 10.0, y, 1.0, &format!("Lv {}   {} gold   {} xp", s.level, s.gold, s.xp), [1.0, 0.88, 0.4, 1.0]);
                     y += 18.0;
-                    let inv_count = me_inv.map(|m| m.len()).unwrap_or(0);
-                    let inv_hdr = if inv_count > 0 { format!("Inventory ({inv_count})   1-9 drop, Shift equip") } else { format!("Inventory ({inv_count})") };
-                    overlay.text_shadow(px + 10.0, y, 1.0, &inv_hdr, [0.7, 0.85, 1.0, 1.0]);
+                    // Equipped gear (slots 0..13): show each worn item by its
+                    // slot name.
+                    let equipped: Vec<_> = me_inv
+                        .map(|m| m.values().filter(|it| it.slot < 14).collect())
+                        .unwrap_or_default();
+                    overlay.text_shadow(px + 10.0, y, 1.0, &format!("Equipped ({})", equipped.len()), [0.7, 1.0, 0.8, 1.0]);
                     y += 14.0;
-                    if inv_count == 0 {
+                    if equipped.is_empty() {
+                        overlay.text(px + 18.0, y, 1.0, "(nothing equipped)", dim);
+                        y += 13.0;
+                    } else {
+                        for it in &equipped {
+                            if y > limit - 110.0 { break; }
+                            let slot = rcce_data::equip_slot_name(it.slot).unwrap_or("?");
+                            let line: String = format!("{slot}: {}", store.item_name(it.item_id)).chars().take(40).collect();
+                            overlay.text(px + 18.0, y, 1.0, &line, white);
+                            y += 12.0;
+                        }
+                    }
+                    y += 6.0;
+                    // Backpack (slots 14..45): number-keyed for drop / Shift-equip.
+                    let backpack: Vec<_> = me_inv
+                        .map(|m| m.values().filter(|it| it.slot >= 14).collect())
+                        .unwrap_or_default();
+                    let bp_hdr = if backpack.is_empty() {
+                        "Backpack (0)".to_string()
+                    } else {
+                        format!("Backpack ({})   1-9 drop, Shift equip", backpack.len())
+                    };
+                    overlay.text_shadow(px + 10.0, y, 1.0, &bp_hdr, [0.7, 0.85, 1.0, 1.0]);
+                    y += 14.0;
+                    if backpack.is_empty() {
                         overlay.text(px + 18.0, y, 1.0, "(empty)", dim);
                         y += 13.0;
-                    } else if let Some(inv) = me_inv {
-                        for (i, it) in inv.values().enumerate() {
+                    } else {
+                        for (i, it) in backpack.iter().enumerate() {
                             if y > limit - 80.0 { break; }
                             let name = store.item_name(it.item_id);
                             let num = if i < 9 { format!("{}. ", i + 1) } else { "   ".to_string() };

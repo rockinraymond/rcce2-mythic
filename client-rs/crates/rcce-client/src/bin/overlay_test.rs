@@ -93,7 +93,7 @@ fn main() {
     {
         let white = [1.0, 1.0, 1.0, 1.0];
         let dim = [0.6, 0.6, 0.6, 1.0];
-        let (pw, ph) = (300.0, 200.0);
+        let (pw, ph) = (300.0, 250.0);
         let (px, py) = (320.0, 40.0);
         overlay.rect(px, py, pw, ph, [0.05, 0.06, 0.10, 0.9]);
         overlay.rect(px, py, pw, 22.0, [0.15, 0.18, 0.28, 0.96]);
@@ -102,9 +102,16 @@ fn main() {
         let mut y = py + 30.0;
         overlay.text_shadow(px + 10.0, y, 1.0, "Lv 7   1240 gold   3200 xp", [1.0, 0.88, 0.4, 1.0]);
         y += 18.0;
-        overlay.text_shadow(px + 10.0, y, 1.0, "Inventory (3)", [0.7, 0.85, 1.0, 1.0]);
+        overlay.text_shadow(px + 10.0, y, 1.0, "Equipped (2)", [0.7, 1.0, 0.8, 1.0]);
         y += 14.0;
-        for line in ["Sword", "Shield", "Health Potion  x5"] {
+        for line in ["Weapon: Sword", "Chest: Iron Mail"] {
+            overlay.text(px + 18.0, y, 1.0, line, white);
+            y += 12.0;
+        }
+        y += 6.0;
+        overlay.text_shadow(px + 10.0, y, 1.0, "Backpack (2)   1-9 drop, Shift equip", [0.7, 0.85, 1.0, 1.0]);
+        y += 14.0;
+        for line in ["1. Shield", "2. Health Potion  x5"] {
             overlay.text(px + 18.0, y, 1.0, line, white);
             y += 12.0;
         }
