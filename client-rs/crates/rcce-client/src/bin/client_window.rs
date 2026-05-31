@@ -1454,29 +1454,60 @@ impl App {
                 }
             }
 
-            // Action bar: memorised spells (number-keyed 1-9) with cooldown
-            // shading that drains as the spell recharges.
-            if let Some(sheet) = &self.sheet {
-                let mem: Vec<_> = sheet.spells.iter().filter(|s| s.memorised).take(9).collect();
-                if !mem.is_empty() {
-                    let (slot, gap) = (30.0f32, 4.0f32);
-                    let total = mem.len() as f32 * (slot + gap) - gap;
-                    let x0 = ((sw - total) * 0.5).round();
-                    let y0 = sh - slot - 64.0;
-                    for (i, sp) in mem.iter().enumerate() {
-                        let x = x0 + i as f32 * (slot + gap);
-                        overlay.rect(x, y0, slot, slot, [0.1, 0.1, 0.16, 0.82]);
+            // Bottom action bar + function buttons, placed at the real
+            // Client.exe fractional coordinates (Interface3D.bb:3511-3534 /
+            // CreateActionBarButton). The row sits on the Y=0.9415 baseline.
+            // 4:3 layout: 12 spell slots left-anchored at 0.089867187 + i*pitch,
+            // function buttons right-anchored at fixed X positions.
+            {
+                const BAR_Y: f32 = 0.9415;
+                const SLOT_W: f32 = 0.033203125 - 0.006; // GY button w
+                const SLOT_H: f32 = 0.044270833 - 0.008; // GY button h
+                const SLOT_PITCH: f32 = 0.036132812;
+                const SLOT_X0: f32 = 0.089867187;
+                let (sw_, sh_, bw, bh) = (SLOT_W * sw, SLOT_H * sh, SLOT_W * sw, SLOT_H * sh);
+                let by = BAR_Y * sh;
+                // 12 spell slots; memorised spells fill the first N in order.
+                let mem: Vec<_> = self
+                    .sheet
+                    .as_ref()
+                    .map(|s| s.spells.iter().filter(|sp| sp.memorised).take(12).collect::<Vec<_>>())
+                    .unwrap_or_default();
+                for i in 0..12usize {
+                    let x = (SLOT_X0 + i as f32 * SLOT_PITCH) * sw;
+                    overlay.rect(x, by, sw_, sh_, [0.08, 0.08, 0.13, 0.78]);
+                    if let Some(sp) = mem.get(i) {
                         let ready = self.spell_cooldowns.get(&sp.id).copied().unwrap_or(0.0);
                         let remaining = (ready - elapsed).max(0.0);
                         if remaining > 0.0 {
                             let span = (sp.recharge as f32 / 1000.0).max(0.1);
                             let frac = (remaining / span).clamp(0.0, 1.0);
-                            overlay.rect(x, y0, slot, slot * frac, [0.0, 0.0, 0.0, 0.6]);
+                            overlay.rect(x, by, sw_, sh_ * frac, [0.0, 0.0, 0.0, 0.6]);
                         }
-                        overlay.text_shadow(x + 2.0, y0 + 1.0, 1.0, &format!("{}", i + 1), [1.0, 1.0, 0.6, 1.0]);
+                        if i < 9 {
+                            overlay.text_shadow(x + 2.0, by + 1.0, 1.0, &format!("{}", i + 1), [1.0, 1.0, 0.6, 1.0]);
+                        }
                         let abbr: String = sp.name.chars().take(4).collect();
-                        overlay.text(x + 2.0, y0 + slot - 9.0, 1.0, &abbr, white);
+                        overlay.text(x + 2.0, by + sh_ - 9.0, 1.0, &abbr, white);
                     }
+                }
+                // Function buttons (right cluster). Labels stand in for the GUI
+                // icon textures; the active panel (inventory) is highlighted.
+                let fbtns: [(f32, &str, bool); 8] = [
+                    (0.631906250, "Cht", false),
+                    (0.669015625, "Map", false),
+                    (0.705148437, "Inv", self.show_inventory),
+                    (0.742257812, "Spl", false),
+                    (0.780343750, "Chr", false),
+                    (0.816476562, "Qst", false),
+                    (0.853585937, "Pty", false),
+                    (0.893000000, "Mnu", false),
+                ];
+                for (fx, label, active) in fbtns {
+                    let x = fx * sw;
+                    let bg = if active { [0.32, 0.30, 0.12, 0.9] } else { [0.12, 0.12, 0.18, 0.82] };
+                    overlay.rect(x, by, bw, bh, bg);
+                    overlay.text_shadow(x + 3.0, by + bh * 0.5 - 4.0, 1.0, label, [0.85, 0.85, 0.7, 1.0]);
                 }
             }
 
