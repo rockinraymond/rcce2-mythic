@@ -1670,10 +1670,26 @@ impl App {
                             }
                         }
                         if let Some(&(item_id, amount)) = by_slot.get(&(i as u8)) {
-                            let name = store.item_name(item_id);
-                            let maxc = ((bw / 6.0) as usize).max(2);
-                            let abbr: String = name.chars().take(maxc).collect();
-                            overlay.text_shadow(bx + 2.0, bgy + 2.0, 1.0, &abbr, white);
+                            // Draw the real item thumbnail (lazily registered from
+                            // the item's ThumbnailTexID on first sight) over the
+                            // slot frame; fall back to the name abbreviation.
+                            let key = format!("item:{item_id}");
+                            if !overlay.has_texture(&key) {
+                                if let Some(img) =
+                                    store.item_icon_path(item_id).and_then(|p| rcce_data::texture::load(&p))
+                                {
+                                    overlay.register_texture(&gfx.device, &gfx.queue, &key, img.width, img.height, &img.rgba);
+                                }
+                            }
+                            if overlay.has_texture(&key) {
+                                let pad = (bw * 0.1).min(3.0);
+                                overlay.image(bx + pad, bgy + pad, bw - pad * 2.0, bh - pad * 2.0, &key, [1.0, 1.0, 1.0, 1.0]);
+                            } else {
+                                let name = store.item_name(item_id);
+                                let maxc = ((bw / 6.0) as usize).max(2);
+                                let abbr: String = name.chars().take(maxc).collect();
+                                overlay.text_shadow(bx + 2.0, bgy + 2.0, 1.0, &abbr, white);
+                            }
                             if amount > 1 {
                                 overlay.text(bx + 2.0, bgy + bh - 9.0, 1.0, &format!("x{amount}"), [0.8, 1.0, 0.8, 1.0]);
                             }

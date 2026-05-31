@@ -133,6 +133,17 @@ impl AssetStore {
         self.items.name_or_id(id)
     }
 
+    /// On-disk path to an item's inventory thumbnail icon (its `ThumbnailTexID`
+    /// resolved through the texture catalog), if the item and the texture file
+    /// exist. Used to draw real per-item icons in inventory slots.
+    pub fn item_icon_path(&self, item_id: u16) -> Option<PathBuf> {
+        let tex = self.items.get(item_id)?.thumbnail_tex_id;
+        if tex < 0 {
+            return None;
+        }
+        self.skin_path(tex as u16)
+    }
+
     /// The in-game HUD layout from Interface.dat (fractional positions), if
     /// present — used to place the HUD exactly where Client.exe does.
     pub fn interface(&self) -> Option<&InterfaceLayout> {

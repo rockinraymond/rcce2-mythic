@@ -129,9 +129,24 @@ mod tests {
         let cat = items::ItemCatalog::parse(&bytes);
         eprintln!("Items.dat: {} items", cat.items.len());
         assert!(!cat.items.is_empty(), "Items.dat parsed zero items");
+        // Resolve each item's inventory thumbnail through the texture catalog so
+        // we know whether the Rust client can draw real per-item slot icons.
+        let texcat = std::fs::read(repo_root().join("data/Game Data/Textures.dat"))
+            .ok()
+            .and_then(|b| catalog::TextureCatalog::parse(&b).ok())
+            .map(|p| p.value);
         for it in &cat.items {
             assert!(!it.name.is_empty(), "item #{} has empty name", it.id);
-            eprintln!("  #{:<4} {:<20} type {} value {}", it.id, it.name, it.item_type, it.value);
+            let thumb = it.thumbnail_tex_id;
+            let resolved = texcat
+                .as_ref()
+                .filter(|_| thumb >= 0)
+                .and_then(|tc| tc.get(thumb as u16))
+                .map(|e| e.filename.clone());
+            eprintln!(
+                "  #{:<4} {:<20} type {} value {} thumb={} -> {:?}",
+                it.id, it.name, it.item_type, it.value, thumb, resolved
+            );
         }
     }
 
