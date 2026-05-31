@@ -111,6 +111,41 @@ fn main() {
         place.push((idx, t, r, s));
     }
 
+    println!("[actor_render] R_Hand joint: {:?}", body.joint_pos("R_Hand"));
+    // Optional equipped weapon: RCCE_WEAPON_ITEM=<item id> hangs the item's
+    // mmesh at the R_Hand joint (the engine's weapon-attach point). RCCE_WEAPON_
+    // MESH=<mesh id> attaches a mesh directly (to verify the mechanism when no
+    // shipped item carries a world mesh).
+    if let Some(mesh_id) = std::env::var("RCCE_WEAPON_MESH").ok().and_then(|s| s.parse::<u16>().ok()) {
+        if let Some(att) = store.gear_attachment_mesh(mesh_id) {
+            let hand = body.joint_pos("R_Hand").unwrap_or(head);
+            let (t, r, s) = attachment_placement(body_trans, 0.0, scale, hand, &att);
+            let idx = models.len();
+            println!("[actor_render]   direct weapon mesh {mesh_id} at R_Hand {hand:?}");
+            models.push(att.model);
+            textures.push(att.textures);
+            place.push((idx, t, r, s));
+        }
+    }
+    if let Some(item_id) = std::env::var("RCCE_WEAPON_ITEM").ok().and_then(|s| s.parse::<u16>().ok()) {
+        match store.gear_attachment(item_id) {
+            Some(att) => {
+                let hand = body.joint_pos("R_Hand").unwrap_or(head);
+                let (t, r, s) = attachment_placement(body_trans, 0.0, scale, hand, &att);
+                let idx = models.len();
+                println!(
+                    "[actor_render]   weapon item {item_id} → mesh {} ({} sub-meshes) at R_Hand {hand:?}",
+                    att.mesh_id,
+                    att.model.meshes.len()
+                );
+                models.push(att.model);
+                textures.push(att.textures);
+                place.push((idx, t, r, s));
+            }
+            None => println!("[actor_render]   weapon item {item_id}: no mmesh/mesh"),
+        }
+    }
+
     let instances: Vec<rcce_render::SceneInstance> = place
         .iter()
         .map(|&(idx, t, r, s)| rcce_render::SceneInstance {

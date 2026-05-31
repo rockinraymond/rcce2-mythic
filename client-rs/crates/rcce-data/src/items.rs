@@ -25,6 +25,11 @@ pub struct ItemDef {
     /// Equipment slot type (`Inventories.bb`: 1 Weapon, 2 Shield, 3 Hat,
     /// 4 Chest, 5 Hand, 6 Belt, 7 Legs, 8 Feet, 9 Ring, 10 Amulet, 11 Backpack).
     pub slot_type: i16,
+    /// Mesh catalog ids for the equipped/world model (male `mmesh`, female
+    /// `fmesh`). 65535 = none. The weapon's `mmesh` attaches at the `R_Hand`
+    /// joint.
+    pub mmesh: u16,
+    pub fmesh: u16,
     pub value: i32,
     pub thumbnail_tex_id: i16,
     pub stackable: bool,
@@ -72,8 +77,8 @@ impl ItemCatalog {
         for _ in 0..6 {
             r.read_short()?; // Gubbins[0..5]
         }
-        let _mmesh = r.read_short()?;
-        let _fmesh = r.read_short()?;
+        let mmesh = r.read_short()?;
+        let fmesh = r.read_short()?;
         let slot_type = r.read_short()?;
         let stackable = r.read_byte()? != 0;
         for _ in 0..40 {
@@ -107,6 +112,8 @@ impl ItemCatalog {
             name,
             item_type,
             slot_type,
+            mmesh: mmesh as u16,
+            fmesh: fmesh as u16,
             value,
             thumbnail_tex_id,
             stackable,
@@ -247,9 +254,9 @@ mod tests {
         for _ in 0..6 {
             o.extend_from_slice(&0i16.to_le_bytes());
         }
-        o.extend_from_slice(&0i16.to_le_bytes());
-        o.extend_from_slice(&0i16.to_le_bytes());
-        o.extend_from_slice(&0i16.to_le_bytes());
+        o.extend_from_slice(&77i16.to_le_bytes()); // mmesh
+        o.extend_from_slice(&0i16.to_le_bytes()); // fmesh
+        o.extend_from_slice(&1i16.to_le_bytes()); // slottype (Weapon)
         o.push(0);
         for _ in 0..40 {
             o.extend_from_slice(&5000i16.to_le_bytes());
@@ -268,6 +275,8 @@ mod tests {
         assert_eq!(cat.items.len(), 2);
         assert_eq!(cat.get(5).unwrap().name, "Sword");
         assert_eq!(cat.get(5).unwrap().item_type, 1);
+        assert_eq!(cat.get(5).unwrap().mmesh, 77); // weapon mesh id parsed
+        assert_eq!(cat.get(5).unwrap().slot_type, 1);
         assert_eq!(cat.get(6).unwrap().name, "Apple");
     }
 

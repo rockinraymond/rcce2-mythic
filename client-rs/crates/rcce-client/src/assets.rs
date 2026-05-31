@@ -396,6 +396,20 @@ impl AssetStore {
         out
     }
 
+    /// An [`Attachment`] for an item's equipped/world mesh (its `mmesh`) — e.g.
+    /// a weapon to hang at the actor's `R_Hand` joint. `None` if the item or its
+    /// mesh is missing.
+    pub fn gear_attachment(&mut self, item_id: u16) -> Option<Attachment> {
+        let mesh_id = self.items.get(item_id).map(|i| i.mmesh)?;
+        self.mesh_attachment(mesh_id)
+    }
+
+    /// Attachment for a mesh-catalog id directly (bypassing the item table) —
+    /// for tools verifying the gear-attach mechanism.
+    pub fn gear_attachment_mesh(&mut self, mesh_id: u16) -> Option<Attachment> {
+        self.mesh_attachment(mesh_id)
+    }
+
     /// Build an [`Attachment`] for a mesh-catalog id (its model + textures +
     /// catalog offset/scale). `None` for the 65535 "none" slot or a miss.
     fn mesh_attachment(&mut self, mesh_id: u16) -> Option<Attachment> {
