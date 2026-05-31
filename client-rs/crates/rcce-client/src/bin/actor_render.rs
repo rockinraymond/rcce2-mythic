@@ -163,6 +163,24 @@ fn main() {
     let eye = [h * 1.4, ground_y + h * 0.75, h * 2.4];
     let target = [0.0, ground_y + h * 0.55, 0.0];
 
+    // GPU-skinning path (RCCE_GPUSKIN): render the BODY via the hardware LBS
+    // pipeline (static mesh + per-frame bone palette in the shader) and compare
+    // the pose to the CPU render. Attachments are omitted here (body verifies the
+    // skinning).
+    if std::env::var("RCCE_GPUSKIN").is_ok() {
+        match rcce_render::render_skinned_png(
+            &src, &textures[0], frame, body_trans, [0.0, 0.0, 0.0], [scale, scale, scale],
+            [1.0, 1.0, 1.0], eye, target, [0.45, 0.62, 0.82], 1.0e6, 2.0e6,
+            [0.4, 0.4, 0.4], [0.4, 0.85, 0.35], 900, 1200, &out,
+        ) {
+            Ok(a) => {
+                println!("[actor_render] GPU-SKINNED body via {a} -> {out}");
+                return;
+            }
+            Err(e) => eprintln!("[actor_render] GPU skin failed ({e}); falling back to CPU"),
+        }
+    }
+
     // No fog for a close-up actor render (far plane way beyond the model).
     match rcce_render::render_scene_png(&instances, eye, target, ground_y, [0.45, 0.62, 0.82], 1.0e6, 2.0e6, [0.4, 0.4, 0.4], [0.4, 0.85, 0.35], 900, 1200, &out, None, None, None, 0.0) {
         Ok(adapter) => println!(

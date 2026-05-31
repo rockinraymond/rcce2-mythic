@@ -620,6 +620,251 @@ impl Pipeline {
     }
 }
 
+// ── GPU skinning ───────────────────────────────────────────────────────────
+// Upload each actor template mesh's STATIC vbuf once (bind-pose verts + per-
+// vertex bone ids/weights); per frame write only the actor uniform (the bone
+// matrix palette + model transform + colour). The vertex shader does linear-
+// blend skinning, so no CPU re-skin / vertex re-upload per frame.
+
+/// Max bones in the per-actor uniform palette. 64 mat4x4 = 4 KB (well under the
+/// 64 KB uniform limit); actor skeletons are far smaller.
+pub const MAX_BONES: usize = 64;
+
+/// A skinned mesh vertex: bind-pose position/normal/uv + up to 4 bone indices
+/// and weights (from [`rcce_data::B3dModel::skin_attributes`]).
+#[repr(C)]
+#[derive(Clone, Copy, Pod, Zeroable)]
+pub struct SkinnedVertex {
+    pub pos: [f32; 3],
+    pub normal: [f32; 3],
+    pub uv: [f32; 2],
+    pub bones: [u32; 4],
+    pub weights: [f32; 4],
+}
+
+/// Per-actor skinning uniform: the column-major bone palette
+/// ([`rcce_data::B3dModel::bone_palette`]), the instance model matrix
+/// (column-major), and the actor tint. Matches the WGSL `Actor` block.
+#[repr(C)]
+#[derive(Clone, Copy, Pod, Zeroable)]
+pub struct ActorSkin {
+    pub bones: [[f32; 16]; MAX_BONES],
+    pub model: [f32; 16],
+    pub color: [f32; 4],
+}
+
+impl ActorSkin {
+    /// Build from a column-major bone palette (truncated/padded to MAX_BONES),
+    /// a column-major model matrix, and a colour.
+    pub fn new(palette: &[[f32; 16]], model: [f32; 16], color: [f32; 3]) -> ActorSkin {
+        let mut bones = [IDENTITY16; MAX_BONES];
+        for (i, m) in palette.iter().take(MAX_BONES).enumerate() {
+            bones[i] = *m;
+        }
+        ActorSkin { bones, model, color: [color[0], color[1], color[2], 1.0] }
+    }
+}
+
+/// Column-major 4×4 identity (for the default bone palette).
+const IDENTITY16: [f32; 16] = [
+    1.0, 0.0, 0.0, 0.0, //
+    0.0, 1.0, 0.0, 0.0, //
+    0.0, 0.0, 1.0, 0.0, //
+    0.0, 0.0, 0.0, 1.0,
+];
+
+const SKIN_SHADER: &str = r#"
+struct U {
+    mvp: mat4x4<f32>,
+    eye: vec3<f32>,
+    fog_near: f32,
+    fog_color: vec3<f32>,
+    fog_far: f32,
+    ambient: vec3<f32>,
+    light_intensity: f32,
+    light_dir: vec3<f32>,
+    _pad: f32,
+};
+@group(0) @binding(0) var<uniform> u: U;
+@group(1) @binding(0) var tex: texture_2d<f32>;
+@group(1) @binding(1) var samp: sampler;
+struct Actor {
+    bones: array<mat4x4<f32>, 64>,
+    model: mat4x4<f32>,
+    color: vec4<f32>,
+};
+@group(2) @binding(0) var<uniform> a: Actor;
+struct VsOut {
+    @builtin(position) clip: vec4<f32>,
+    @location(0) normal: vec3<f32>,
+    @location(1) uv: vec2<f32>,
+    @location(2) color: vec3<f32>,
+    @location(3) world: vec3<f32>,
+};
+@vertex fn vs(
+    @location(0) pos: vec3<f32>,
+    @location(1) normal: vec3<f32>,
+    @location(2) uv: vec2<f32>,
+    @location(3) bones: vec4<u32>,
+    @location(4) weights: vec4<f32>,
+) -> VsOut {
+    let wsum = weights.x + weights.y + weights.z + weights.w;
+    var sp = vec3<f32>(0.0);
+    var sn = vec3<f32>(0.0);
+    if (wsum > 0.0001) {
+        for (var i = 0u; i < 4u; i = i + 1u) {
+            let w = weights[i];
+            if (w > 0.0) {
+                let m = a.bones[bones[i]];
+                sp = sp + w * (m * vec4<f32>(pos, 1.0)).xyz;
+                sn = sn + w * (m * vec4<f32>(normal, 0.0)).xyz;
+            }
+        }
+    } else {
+        sp = pos;
+        sn = normal;
+    }
+    let world = a.model * vec4<f32>(sp, 1.0);
+    var o: VsOut;
+    o.clip = u.mvp * world;
+    o.normal = (a.model * vec4<f32>(sn, 0.0)).xyz;
+    o.uv = uv;
+    o.color = a.color.rgb;
+    o.world = world.xyz;
+    return o;
+}
+@fragment fn fs(in: VsOut) -> @location(0) vec4<f32> {
+    let c = textureSample(tex, samp, in.uv);
+    if (c.a < 0.5) { discard; }
+    let N = normalize(in.normal);
+    let L = normalize(u.light_dir);
+    let diff = abs(dot(N, L)) * u.light_intensity;
+    let shade = u.ambient + vec3<f32>(diff);
+    let lit = c.rgb * in.color * shade;
+    let dist = distance(in.world, u.eye);
+    let f = clamp((dist - u.fog_near) / max(u.fog_far - u.fog_near, 1.0), 0.0, 1.0);
+    return vec4<f32>(mix(lit, u.fog_color, f), 1.0);
+}
+"#;
+
+/// GPU linear-blend-skinning pipeline. Reuses the camera (group 0) and texture
+/// (group 1) layouts from the base [`Pipeline`]; adds the per-actor skinning
+/// uniform (group 2).
+pub struct SkinPipeline {
+    pub pipeline: wgpu::RenderPipeline,
+    pub bgl_actor: wgpu::BindGroupLayout,
+}
+
+impl SkinPipeline {
+    pub fn new(device: &wgpu::Device, color_format: wgpu::TextureFormat, base: &Pipeline) -> SkinPipeline {
+        let bgl_actor = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("actor-skin"),
+            entries: &[wgpu::BindGroupLayoutEntry {
+                binding: 0,
+                visibility: wgpu::ShaderStages::VERTEX,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Uniform,
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+                count: None,
+            }],
+        });
+        let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("skin"),
+            source: wgpu::ShaderSource::Wgsl(SKIN_SHADER.into()),
+        });
+        let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("skin"),
+            bind_group_layouts: &[&base.bgl_uniform, &base.bgl_texture, &bgl_actor],
+            push_constant_ranges: &[],
+        });
+        let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("skin"),
+            layout: Some(&layout),
+            vertex: wgpu::VertexState {
+                module: &shader,
+                entry_point: "vs",
+                compilation_options: Default::default(),
+                buffers: &[wgpu::VertexBufferLayout {
+                    array_stride: std::mem::size_of::<SkinnedVertex>() as u64,
+                    step_mode: wgpu::VertexStepMode::Vertex,
+                    attributes: &wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32x3, 2 => Float32x2, 3 => Uint32x4, 4 => Float32x4],
+                }],
+            },
+            fragment: Some(wgpu::FragmentState {
+                module: &shader,
+                entry_point: "fs",
+                compilation_options: Default::default(),
+                targets: &[Some(color_format.into())],
+            }),
+            primitive: wgpu::PrimitiveState { cull_mode: None, ..Default::default() },
+            depth_stencil: Some(wgpu::DepthStencilState {
+                format: DEPTH_FORMAT,
+                depth_write_enabled: true,
+                depth_compare: wgpu::CompareFunction::Less,
+                stencil: Default::default(),
+                bias: Default::default(),
+            }),
+            multisample: wgpu::MultisampleState::default(),
+            multiview: None,
+            cache: None,
+        });
+        SkinPipeline { pipeline, bgl_actor }
+    }
+
+    /// Create the per-actor uniform buffer + bind group (group 2). Update it each
+    /// frame with [`update_actor`](Self::update_actor).
+    pub fn make_actor(&self, device: &wgpu::Device) -> (wgpu::Buffer, wgpu::BindGroup) {
+        let buf = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("actor-skin"),
+            size: std::mem::size_of::<ActorSkin>() as u64,
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+        let bind = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("actor-skin"),
+            layout: &self.bgl_actor,
+            entries: &[wgpu::BindGroupEntry { binding: 0, resource: buf.as_entire_binding() }],
+        });
+        (buf, bind)
+    }
+
+    pub fn update_actor(&self, queue: &wgpu::Queue, buf: &wgpu::Buffer, skin: &ActorSkin) {
+        queue.write_buffer(buf, 0, bytemuck::bytes_of(skin));
+    }
+}
+
+/// Build the static skinned vertex buffer for `mesh` (bind-pose pos/normal/uv +
+/// the per-vertex bone ids/weights). Uploaded once; the pose comes from the
+/// per-frame bone palette in the shader.
+pub fn build_skinned_vbuf(
+    device: &wgpu::Device,
+    mesh: &B3dMesh,
+    bone_ids: &[[u32; 4]],
+    weights: &[[f32; 4]],
+) -> wgpu::Buffer {
+    let normals = mesh_normals(mesh);
+    let has_uv = mesh.uvs.len() == mesh.positions.len();
+    let verts: Vec<SkinnedVertex> = mesh
+        .positions
+        .iter()
+        .enumerate()
+        .map(|(i, p)| SkinnedVertex {
+            pos: *p,
+            normal: normals[i].into(),
+            uv: if has_uv { mesh.uvs[i] } else { [0.0, 0.0] },
+            bones: bone_ids.get(i).copied().unwrap_or([0; 4]),
+            weights: weights.get(i).copied().unwrap_or([0.0; 4]),
+        })
+        .collect();
+    device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+        label: Some("skin-v"),
+        contents: bytemuck::cast_slice(&verts),
+        usage: wgpu::BufferUsages::VERTEX,
+    })
+}
+
 /// A single uploaded mesh ready to draw. `tex_bind` and `ibuf` are
 /// reference-counted so dynamic rebuilds can share cached uploads — the index
 /// (topology) buffer is constant across animation frames, so it's cached and
