@@ -88,6 +88,20 @@ fn xform_point(m: &Mat4, p: [f32; 3]) -> [f32; 3] {
     ]
 }
 
+/// Transpose a row-major [`Mat4`] to column-major layout. WGSL reads a uniform/
+/// storage `mat4x4` column-major, but these matrices are stored row-major (see
+/// [`xform_point`]); transposing makes a shader `M * vec4(p,1)` equal the CPU
+/// `xform_point(M, p)`.
+fn transpose16(m: &Mat4) -> [f32; 16] {
+    let mut t = [0.0f32; 16];
+    for r in 0..4 {
+        for c in 0..4 {
+            t[c * 4 + r] = m[r * 4 + c];
+        }
+    }
+    t
+}
+
 /// Transform a direction (rotation + scale, no translation) — for normals.
 fn xform_dir(m: &Mat4, v: [f32; 3]) -> [f32; 3] {
     [
@@ -336,6 +350,16 @@ impl B3dModel {
             skin[i] = mat_mul(&world[i], &b.inverse_bind);
         }
         skin
+    }
+
+    /// The GPU bone-matrix palette for `frame`: each skinning matrix transposed
+    /// to column-major [f32;16] for upload to a WGSL `mat4x4` storage/uniform
+    /// buffer, so a shader doing `bone * vec4(pos,1)` matches the CPU
+    /// [`posed_meshes`](Self::posed_meshes) / `xform_point` result. Pairs with
+    /// [`skin_attributes`](Self::skin_attributes) for hardware linear-blend
+    /// skinning.
+    pub fn bone_palette(&self, frame: Option<f32>) -> Vec<[f32; 16]> {
+        self.skinning_matrices(frame).iter().map(transpose16).collect()
     }
 
     /// Deformed copy of the meshes for a pose (linear-blend skinning). `frame =
@@ -789,6 +813,30 @@ mod mat_tests {
     fn identity_is_neutral() {
         let p = xform_point(&IDENTITY, [3.0, -2.0, 5.0]);
         assert_eq!(p, [3.0, -2.0, 5.0]);
+    }
+
+    #[test]
+    fn bone_palette_transpose_matches_cpu() {
+        // transpose16 must make a WGSL column-major `M * vec4(p,1)` equal the CPU
+        // row-major xform_point(M, p) — the keystone for correct GPU skinning.
+        let s = std::f32::consts::FRAC_1_SQRT_2;
+        let m = trs([10.0, 5.0, -3.0], [s, 0.0, s, 0.0], [2.0, 1.0, 0.5]);
+        let t = transpose16(&m);
+        // Replicate WGSL: result[r] = sum_c col[c][r]*v[c]; col[c][r] = buf[c*4+r].
+        let col_mul = |buf: &[f32; 16], v: [f32; 3]| -> [f32; 3] {
+            let mut out = [0.0f32; 3];
+            for r in 0..3 {
+                out[r] = buf[r] * v[0] + buf[4 + r] * v[1] + buf[8 + r] * v[2] + buf[12 + r];
+            }
+            out
+        };
+        for p in [[1.5, -2.0, 4.0], [0.0, 0.0, 0.0], [-3.0, 7.0, 1.0]] {
+            let gpu = col_mul(&t, p);
+            let cpu = xform_point(&m, p);
+            for k in 0..3 {
+                assert!((gpu[k] - cpu[k]).abs() < 1e-4, "p{p:?} k{k}: gpu {} cpu {}", gpu[k], cpu[k]);
+            }
+        }
     }
 
     #[test]
