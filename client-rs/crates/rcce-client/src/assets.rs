@@ -133,6 +133,13 @@ impl AssetStore {
         self.items.name_or_id(id)
     }
 
+    /// On-disk path for a texture-catalog id under `data/Textures/` (the same
+    /// resolution actor skins use), if the file exists. Public so the HUD can
+    /// draw item / spell thumbnail icons.
+    pub fn texture_path(&self, tex_id: u16) -> Option<PathBuf> {
+        self.skin_path(tex_id)
+    }
+
     /// On-disk path to an item's inventory thumbnail icon (its `ThumbnailTexID`
     /// resolved through the texture catalog), if the item and the texture file
     /// exist. Used to draw real per-item icons in inventory slots.

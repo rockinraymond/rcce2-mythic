@@ -1802,6 +1802,22 @@ impl App {
                         overlay.rect(x, by, sw_, sh_, [0.08, 0.08, 0.13, 0.78]);
                     }
                     if let Some(sp) = mem.get(i) {
+                        // Real spell icon (Spell.ThumbnailTexID → Textures.dat),
+                        // lazily registered, drawn over the slot frame; cooldown
+                        // shade + number + name layer on top.
+                        let key = format!("spell:{}", sp.id);
+                        if !overlay.has_texture(&key) {
+                            if let Some(img) =
+                                store.texture_path(sp.thumb_tex).and_then(|p| rcce_data::texture::load(&p))
+                            {
+                                overlay.register_texture(&gfx.device, &gfx.queue, &key, img.width, img.height, &img.rgba);
+                            }
+                        }
+                        let has_icon = overlay.has_texture(&key);
+                        if has_icon {
+                            let pad = (sw_ * 0.08).min(2.0);
+                            overlay.image(x + pad, by + pad, sw_ - pad * 2.0, sh_ - pad * 2.0, &key, [1.0, 1.0, 1.0, 1.0]);
+                        }
                         let ready = self.spell_cooldowns.get(&sp.id).copied().unwrap_or(0.0);
                         let remaining = (ready - elapsed).max(0.0);
                         if remaining > 0.0 {
@@ -1812,8 +1828,10 @@ impl App {
                         if i < 9 {
                             overlay.text_shadow(x + 2.0, by + 1.0, 1.0, &format!("{}", i + 1), [1.0, 1.0, 0.6, 1.0]);
                         }
-                        let abbr: String = sp.name.chars().take(4).collect();
-                        overlay.text(x + 2.0, by + sh_ - 9.0, 1.0, &abbr, white);
+                        if !has_icon {
+                            let abbr: String = sp.name.chars().take(4).collect();
+                            overlay.text(x + 2.0, by + sh_ - 9.0, 1.0, &abbr, white);
+                        }
                     }
                 }
                 // Function buttons (right cluster), drawn with the real GUI .bmp
