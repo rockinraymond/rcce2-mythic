@@ -128,7 +128,7 @@ fn main() {
 
     // --- Actors (the local player + every tracked actor) ---------------------
     #[allow(clippy::too_many_arguments)]
-    let mut add_actor = |store: &mut rcce_client::assets::AssetStore,
+    let add_actor = |store: &mut rcce_client::assets::AssetStore,
                          models: &mut Vec<std::rc::Rc<rcce_data::B3dModel>>,
                          textures: &mut Vec<Vec<Option<rcce_data::Image>>>,
                          dedup: &mut std::collections::HashMap<String, usize>,
