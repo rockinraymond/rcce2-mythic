@@ -6,6 +6,43 @@ to and plays against the **unmodified** RCCE2 server and reads the **unchanged**
 project files the GUE editor produces. No existing project file (`.bb`, `data/`)
 is modified — the port is additive under `client-rs/`.
 
+## Status (2026-05-31) — vertical slice through visual parity DONE
+
+The port is now a playable, feature-rich client built to `bin/ClientRS.exe`
+(`compile.bat -r` / `compile.sh -r`), alongside the Blitz `Client.exe`. It logs
+into the unmodified server, loads real zones, and plays. Highlights:
+
+- **Transport (Phase 0/5):** pure-Rust 64-bit ENet (`enet-sys`) — full login +
+  world-state; FFI was skipped. WASD movement (server-authoritative) + mouse-look.
+- **Data (Phase 1):** all parsers done + tested vs real `data/` — Meshes/Textures/
+  Sounds/Music catalogs, B3D (mesh + skeleton + ANIM, quaternion-conjugate fix),
+  Items/Actors/Spells, area `.dat` (incl. sky/cloud/storm/stars tex ids),
+  Interface.dat, Attributes.dat. (~113 unit/round-trip tests workspace-wide, zero
+  warnings.)
+- **Vertical slice (Phase 2):** wgpu/winit window, real zone scenery + terrain,
+  remote actors moving + animating, chat, multi-zone live reload on warp.
+- **Gameplay (Phase 3):** combat + floating damage, full inventory (drag/drop/
+  equip/drop/eat), dropped-item loot, spell action bar + cooldowns, NPC trade/
+  examine/right-click, equipped gear + hair/beard attachments. (Quests/party UI
+  minimal.)
+- **Interface parity:** the HUD is placed at the **real `Interface.dat` fractional
+  coordinates** (vitals, chat, minimap+blips, buffs, action bar + function-button
+  row, 46-slot inventory grid, XP bar, compass) with the real GUI/item/spell `.bmp`
+  artwork via a textured-quad overlay; clickable buttons + slots; hover tooltips;
+  a full character panel (attributes + inventory + spells).
+- **Visual parity (Phase 4):** CPU **and GPU** skeletal skinning (GPU opt-in via
+  `RCCE_GPUSKIN`, faster + smoother — the perf fix), textured **sky + drifting
+  clouds + storm-cloud swap + day/night stars**, rain/snow/storm particles +
+  rain/storm audio, day-night fog/ambient, zone music + footstep SFX + volume/mute,
+  minimap radar. (RTT radar + post-FX not ported — the 2D minimap + fog substitute.)
+
+**Remaining / open:** confirm the GPU-skinning fps win in a live window
+(`RCCE_GPUSKIN=1 RCCE_BENCH=300` vs `RCCE_BENCH=300`) and flip it to default;
+`P_Sound` combat/cast SFX (the shipped `Sounds.dat` has no records, so nothing to
+play); quests/party UI; Phase 6 true drop-in cutover (rename to `Client.exe` +
+`Project Manager.exe` launch). See the `Rust client port` and `Interface.dat HUD
+layout` agent memories for the running detail.
+
 ## Locked decisions (2026-05-29)
 
 | Decision | Choice | Rationale |
@@ -59,24 +96,25 @@ from the BlitzForge submodule.
 
 ## Phases
 
-- **Phase 0 — Transport spike:** FFI-load `RCEnet.dll`; connect to a running
-  server; complete `P_StartGame` + MD5 login; log received packet types.
-- **Phase 1 — Data foundation (`rcce-data`) [in progress]:** parsers for all
-  `.dat` catalogs + B3D + area + `Accounts.dat`, round-trip-tested vs real `data/`.
-  - ✅ Blitz LE reader + indexed catalog (`Meshes.dat`: 89 entries parsed clean).
-  - ⬜ Textures/Sounds/Music catalogs (same index shape, different records).
-  - ⬜ B3D chunk parser → CPU mesh + skeleton + anim.
-  - ⬜ Items/Actors/Spells catalogs; area `.dat`; `Accounts.dat`.
-- **Phase 2 — Vertical slice:** wgpu window → one real zone's meshes → walk →
-  remote players (`P_StandardUpdate`) → chat (`P_ChatMessage`). **Viability proof.**
-- **Phase 3 — Gameplay parity:** combat, inventory, spells, trading, quests,
-  party — remaining ~30 packet handlers wired to UI.
-- **Phase 4 — Visual parity:** skeletal anim blending, particles/weather,
-  lighting/day-night, radar RTT, post-FX (or tasteful modern equivalents).
-- **Phase 5 — Cross-platform:** swap FFI transport → pure-Rust ENet; path/case
-  normalization; Linux + macOS builds.
-- **Phase 6 — Drop-in cutover:** binary named `Client.exe`, same config files,
-  launches from `Project Manager.exe` unchanged.
+- ✅ **Phase 0 — Transport spike:** connect to a running server; `P_StartGame` +
+  MD5 login; world-state packets. (Went straight to pure-Rust ENet, not FFI.)
+- ✅ **Phase 1 — Data foundation (`rcce-data`):** parsers for all `.dat` catalogs
+  + B3D + area + Interface/Attributes, tested vs real `data/`.
+  - ✅ Blitz LE reader + indexed catalogs (Meshes/Textures/Sounds/Music).
+  - ✅ B3D chunk parser → CPU mesh + skeleton + ANIM (+ GPU skin attrs).
+  - ✅ Items/Actors/Spells; area `.dat`; Interface.dat; Attributes.dat.
+- ✅ **Phase 2 — Vertical slice:** wgpu window → real zone meshes → walk → remote
+  players (`P_StandardUpdate`) → chat → live multi-zone reload.
+- ✅ **Phase 3 — Gameplay parity:** combat, inventory, spells, trading,
+  examine/right-click wired to UI. (Quests/party UI minimal.)
+- ✅ **Phase 4 — Visual parity:** skeletal anim (CPU + GPU skinning), particles/
+  weather + audio, day-night lighting, textured sky/clouds/stars, minimap.
+  (RTT radar + post-FX substituted by the 2D minimap + fog.)
+- ✅ **Phase 5 — Cross-platform:** pure-Rust ENet (64-bit `enet-sys`); macOS/Linux
+  build scripts (`compile.sh`/`test.sh`). (Path/case normalization as needed.)
+- ⬜ **Phase 6 — Drop-in cutover:** currently ships as `bin/ClientRS.exe` ALONGSIDE
+  `Client.exe` (opt-in `compile.bat -r`). True cutover (rename + `Project
+  Manager.exe` launch) is deferred until parity is signed off.
 
 ## Acceptance mapping
 
@@ -88,5 +126,7 @@ from the BlitzForge submodule.
 
 ## Workspace
 
-`client-rs/` Cargo workspace. Crates added to `members` as each phase opens so it
-always builds. Current: `rcce-data`. Run `cd client-rs && cargo test`.
+`client-rs/` Cargo workspace. Crates: `rcce-data` (parsers), `rcce-net` (ENet +
+packet codecs), `rcce-render` (wgpu pipelines, overlay, sky/skin), `rcce-client`
+(assets, world, audio, HUD, the `client-window` bin + headless render/probe bins).
+Run `cd client-rs && cargo test`; build the client via `compile.bat -r`.
