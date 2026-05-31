@@ -92,7 +92,7 @@ fn parse_record(r: &mut BlitzReader) -> Result<ActorTemplate, ReadError> {
 
     // Appearance id arrays (order per LoadActors): Beard(5), MaleHair(5),
     // FemHair(5), MaleFace(5), FemFace(5), MaleBody(5), FemBody(5).
-    let mut read5 = |r: &mut BlitzReader| -> Result<[u16; 5], ReadError> {
+    let read5 = |r: &mut BlitzReader| -> Result<[u16; 5], ReadError> {
         let mut a = [0u16; 5];
         for slot in &mut a {
             *slot = r.read_short_u()?;

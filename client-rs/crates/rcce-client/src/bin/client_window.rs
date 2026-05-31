@@ -493,7 +493,7 @@ fn build_actors(
     let mut keys: Vec<String> = Vec::new();
     let mut skinned: Vec<SkinnedActor> = Vec::new();
 
-    let mut push = |store: &mut AssetStore,
+    let push = |store: &mut AssetStore,
                     models: &mut Vec<Rc<B3dModel>>,
                     textures: &mut Vec<Rc<Vec<Option<Image>>>>,
                     place: &mut Vec<Placement>,
@@ -1544,8 +1544,12 @@ impl App {
                 net.transport.send(net.peer, rcce_net::packet_id::STANDARD_UPDATE, &p, false);
             }
 
+            // GPU skinning makes the per-actor pose update cheap (just the
+            // bone-palette uniform; the static body mesh is cached), so rebuild
+            // every frame for smooth animation. The CPU path stays throttled to
+            // ~12 Hz by dyn_hash (each rebuild re-skins + re-uploads vertices).
             let hash = dyn_hash(&net.world, elapsed);
-            if hash != self.last_dyn_hash {
+            if self.gpu_skin || hash != self.last_dyn_hash {
                 let (models, textures, place, keys, skinned) =
                     build_actors(store, &net.world, elapsed, self.ground_y, self.gpu_skin);
                 // CPU drawables: attachments (+ bodies when GPU skinning is off).
