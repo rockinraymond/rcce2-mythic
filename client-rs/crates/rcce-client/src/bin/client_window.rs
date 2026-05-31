@@ -166,6 +166,10 @@ struct App {
     /// Last frame's view-projection matrix (row-major), so a world click can
     /// project actors to screen and pick the nearest to the cursor.
     vp: [f32; 16],
+    /// Time of the last world-pick click and the actor it hit, for double-click
+    /// detection (a double-click or Shift+click interacts with the target).
+    last_click: Instant,
+    last_click_rid: Option<u16>,
 }
 
 impl App {
@@ -213,6 +217,8 @@ impl App {
             spell_cooldowns: std::collections::HashMap::new(),
             cursor: (0.0, 0.0),
             vp: [0.0; 16],
+            last_click: now,
+            last_click_rid: None,
         }
     }
 }
@@ -1139,7 +1145,24 @@ impl App {
             best.map(|(rid, _)| rid)
         });
         if let Some(rid) = pick {
+            // A double-click on the same actor (or Shift+click) interacts; a
+            // plain single click only selects the target.
+            let now = Instant::now();
+            let double = self.last_click_rid == Some(rid)
+                && now.duration_since(self.last_click).as_millis() < 400;
+            self.last_click = now;
+            self.last_click_rid = Some(rid);
             self.target = Some(rid);
+            if double || self.run {
+                if let Some(net) = self.net.as_mut() {
+                    net.transport.send(
+                        net.peer,
+                        rcce_net::packet_id::RIGHT_CLICK,
+                        &rcce_client::net::right_click_packet(rid),
+                        true,
+                    );
+                }
+            }
         }
     }
 
