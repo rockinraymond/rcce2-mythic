@@ -1731,6 +1731,48 @@ impl App {
                     }
                 }
 
+                // Spells column to the right of the inventory window: all known
+                // spells (icon + name + level), memorised ones highlighted.
+                if let Some(sheet) = &self.sheet {
+                    if !sheet.spells.is_empty() {
+                        let cw2 = 174.0f32;
+                        let sx = (px + pw + 6.0).min((sw - cw2 - 4.0).max(0.0));
+                        let rowh = 16.0f32;
+                        let cap = (((ph - 24.0) / rowh) as usize).max(1);
+                        let total = sheet.spells.len();
+                        let shown = if total > cap { cap - 1 } else { total };
+                        let rows_drawn = shown + if total > cap { 1 } else { 0 };
+                        let boxh = 24.0 + rows_drawn as f32 * rowh + 4.0;
+                        overlay.rect(sx, py, cw2, boxh, [0.05, 0.06, 0.10, 0.92]);
+                        overlay.rect(sx, py, cw2, 20.0, [0.15, 0.18, 0.28, 0.96]);
+                        overlay.text_shadow(sx + 8.0, py + 5.0, 1.0, &format!("Spells ({total})"), white);
+                        let mut sy = py + 24.0;
+                        for sp in sheet.spells.iter().take(shown) {
+                            let key = format!("spell:{}", sp.id);
+                            if !overlay.has_texture(&key) {
+                                if let Some(img) =
+                                    store.texture_path(sp.thumb_tex).and_then(|p| rcce_data::texture::load(&p))
+                                {
+                                    overlay.register_texture(&gfx.device, &gfx.queue, &key, img.width, img.height, &img.rgba);
+                                }
+                            }
+                            if overlay.has_texture(&key) {
+                                overlay.image(sx + 4.0, sy, 13.0, 13.0, &key, [1.0, 1.0, 1.0, 1.0]);
+                            } else {
+                                overlay.rect(sx + 4.0, sy, 13.0, 13.0, [0.1, 0.1, 0.16, 0.9]);
+                            }
+                            let col = if sp.memorised { [1.0, 0.9, 0.5, 1.0] } else { [0.85, 0.85, 0.9, 1.0] };
+                            let star = if sp.memorised { "*" } else { "" };
+                            let nm: String = format!("{}{} (L{})", star, sp.name, sp.level).chars().take(24).collect();
+                            overlay.text(sx + 20.0, sy + 3.0, 1.0, &nm, col);
+                            sy += rowh;
+                        }
+                        if total > cap {
+                            overlay.text(sx + 8.0, sy + 3.0, 1.0, &format!("+{} more", total - shown), dim);
+                        }
+                    }
+                }
+
                 // Slot index -> item, from the live inventory.
                 let me_inv = self.net.as_ref().map(|n| &n.world.me_inventory);
                 let mut by_slot: std::collections::HashMap<u8, (u16, u16)> = std::collections::HashMap::new();
