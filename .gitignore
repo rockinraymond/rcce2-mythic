@@ -81,6 +81,8 @@ data/Server Data/Accounts.dat
 
 data/Server Data/Environment.dat
 
+data/Server Data/MySQL.dat
+
 .vscode/settings.json
 
 Game/
@@ -96,3 +98,22 @@ bin/tools/FontGen/Title.bmp
 bin/tools/FontGen/Title.dat
 
 data/Last Username.dat
+bin/ReShade.log
+
+bin/ReShade.log1
+
+bin/ReShade.log2
+
+bin/ReShade.ini
+
+compiler/BlitzPlus/
+
+# Claude Code session ephemera. Track .claude/skills/ and the
+# .claude/INTENT.md north-star doc; ignore everything else (per-session
+# state, locks, local config the runtime drops here).
+.claude/*
+!.claude/skills/
+!.claude/INTENT.md
+.claude/settings.local.json
+
+scripts/msbuild_blitzrcplus.bat

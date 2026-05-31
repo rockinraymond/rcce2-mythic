@@ -11,6 +11,7 @@ RCCE picks up where the original RealmCrafter left off — modernized, cross-pla
 
 ---
 
+[![CI](https://github.com/RydeTec/rcce2/actions/workflows/ci.yml/badge.svg?branch=develop)](https://github.com/RydeTec/rcce2/actions/workflows/ci.yml?query=branch%3Adevelop)
 [![Latest Release](https://img.shields.io/github/v/release/RydeTec/rcce2?display_name=tag&sort=semver&color=2ea44f)](https://github.com/RydeTec/rcce2/releases/latest)
 [![Downloads](https://img.shields.io/github/downloads/RydeTec/rcce2/total?color=blue)](https://github.com/RydeTec/rcce2/releases)
 [![Stars](https://img.shields.io/github/stars/RydeTec/rcce2?style=flat&color=yellow)](https://github.com/RydeTec/rcce2/stargazers)
@@ -166,6 +167,8 @@ We welcome contributors at every level — players reporting bugs, scripters pol
 2. Make focused changes (small first PRs are encouraged).
 3. Run `test.bat` — tests run automatically on commit; they must pass.
 4. Open a PR targeting `develop`. Releases are PRs from `develop` → `master`.
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the full guidelines — build flags, the code conventions reviewers look for (soft-fail / atomic-write / Null discipline / privilege gating), Blitz3D / BlitzForge gotchas, the test-runner flake-retry recipe, and where to ask questions.
 
 To get push access, request to join the [**RCCE Contributors team**](https://github.com/orgs/RydeTec/teams/rcce-contributors).
 

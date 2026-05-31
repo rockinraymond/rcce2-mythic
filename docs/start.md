@@ -1,22 +1,16 @@
-<!-- body { color:black background-color:white } a:link{ color:#0070FF } a:visited{ color:#0070FF } --> RealmCrafter: Community Edition Documentation
-
 # Getting Started
 
-This page is the contributor-oriented quick start for the current RCCE source tree. It assumes you already have some familiarity with the Blitz language family and want to build, test, or inspect the engine source itself.
+RealmCrafter: Community Edition no longer uses the old Blitz3D / BlitzPlus
+workflow described in earlier docs. The live repository builds through the
+vendored [`BlitzForge`](../compiler/BlitzForge) toolchain and the root-level
+build scripts in this repo.
 
-## Current architecture
+If you only want to try RCCE, download a packaged release from GitHub. This
+page is for contributors and source builders working from the repository.
 
-RCCE is no longer built as a split Blitz3D/BlitzPlus project. The repository now builds through the vendored [BlitzForge](../compiler/BlitzForge) toolchain:
+## Clone The Repository
 
-*   `src/Client.bb` builds the game client
-*   `src/Server.bb` builds the game server
-*   `src/GUE.bb` builds the Game Unified Editor
-*   `src/Project Manager.bb` builds the launcher used to open and run projects
-*   `src/Modules/` contains the shared include files used by those entry points
-
-The default sample game content lives under [`data/`](../data), and the compiled outputs are written to [`bin/`](../bin) plus the root-level `Project Manager` executable.
-
-## Clone the repository
+Clone with submodules so the BlitzForge compiler and bundled extras are present:
 
 ```bash
 git clone --recurse-submodules https://github.com/RydeTec/rcce2.git
@@ -29,51 +23,99 @@ If you already cloned without submodules:
 git submodule update --init --recursive
 ```
 
-## Build from source
+## Know The Source Tree
+
+The main source entrypoints live under `src/`:
+
+- `src/Client.bb` - game client
+- `src/Server.bb` - game server
+- `src/GUE.bb` - Game Unified Editor
+- `src/Project Manager.bb` - launcher and packaging entrypoint
+- `src/Modules/` - shared engine and editor modules
+- `src/Tests/` - Blitz test sources compiled by the test runners
+
+Game content, scripts, and sample project data live under [`data/`](../data),
+including `data/Server Data/Scripts/` for gameplay scripting. Compiled outputs
+land in [`bin/`](../bin) plus the root-level `Project Manager` executable.
+
+## Build From Source
 
 ### Windows
 
-Use the repository entrypoint scripts from the repo root:
+Use the batch scripts from the repository root:
 
 ```bat
-compile.bat            :: build engine + tools
-compile.bat -b         :: also rebuild BlitzForge first
-publish.bat            :: produce a redistributable release
+compile.bat
+compile.bat -b
+publish.bat
+test.bat
 ```
 
-`compile.bat` invokes BlitzForge to build `Server.exe`, `Client.exe`, `GUE.exe`, `Project Manager.exe`, and every tool source under `src\Tools`.
+### macOS / Linux
 
-### macOS (Apple Silicon) / Linux
-
-Use the shell-script equivalents from the repo root:
+Use the shell scripts from the repository root:
 
 ```bash
-./scripts/bootstrap_macos.sh    # one-time setup on macOS
-./compile.sh                    # build engine + tools
-./compile.sh -b                 # also rebuild BlitzForge first
-./publish.sh                    # produce a redistributable release
+./scripts/bootstrap_macos.sh
+./compile.sh
+./compile.sh -b
+./publish.sh
+./test.sh
 ```
 
-macOS support is currently alpha because the underlying BlitzForge runtime is still incomplete there. Treat the macOS path as a development and feedback surface, not a production release target.
+`bootstrap_macos.sh` is required on macOS before the first source build. The
+script name is historical; it prepares the Unix-side toolchain used by the
+current shell workflow.
 
-## Run tests
+macOS support is currently alpha because the underlying BlitzForge runtime is
+still incomplete there. Treat the macOS path as a development and feedback
+surface, not a production release target.
 
-The tracked tests live under [`src/Tests`](../src/Tests).
+### Useful Build Flags
 
-*   Windows: `test.bat`
-*   macOS / Linux: `./test.sh`
+The build scripts share the same intent:
 
-Both runners compile each `*.bb` file in `src/Tests` with BlitzForge test mode. They are the expected pre-commit validation surface for focused source changes.
+- `-b` / `--blitz` rebuild BlitzForge itself
+- `-e` / `--skip-engine` skip the main RCCE engine build
+- `-t` / `--skip-tools` skip the editor/tool builds
 
-## Launch the tools
+## Run What You Built
 
-After a successful build:
+Successful builds produce the main applications from the repo root:
 
-*   Open `Project Manager.exe` on Windows or `Project Manager` on macOS to launch the sample project, run the server, or run the client.
-*   The main editor and support tools are emitted under [`bin/`](../bin) and [`bin/tools/`](../bin/tools).
+- `Project Manager.exe` on Windows, or `Project Manager` on macOS
+- `bin/Client(.exe)`
+- `bin/Server(.exe)`
+- `bin/GUE(.exe)`
 
-## Useful orientation notes
+Use Project Manager when you want the normal launcher flow. Use the binaries in
+`bin/` when you want to run the client, server, or editor directly.
 
-*   Running the client in debug mode uses a windowed display, which makes multi-client local testing easier.
-*   Server-side gameplay code often refers to abilities as spells and zones as areas.
-*   If you are inspecting gameplay or content behavior, look in `data/Server Data/Scripts` alongside the engine sources in `src/`.
+## Run Tests
+
+`test.bat` and `./test.sh` compile each `.bb` file under `src/Tests/` with
+BlitzForge test mode. Run the test script from the repo root before opening a
+pull request.
+
+## Typical Contributor Flow
+
+1. Clone with submodules.
+2. Build with `compile.bat` or `./compile.sh`.
+3. Run `test.bat` or `./test.sh`.
+4. Launch `Project Manager` or the relevant binary in `bin/`.
+5. Make focused changes in `src/`, `data/`, or `docs/`.
+
+## Useful Orientation Notes
+
+- Running the client in debug mode uses a windowed display, which makes
+  multi-client local testing easier.
+- Server-side gameplay code often refers to abilities as spells and zones as
+  areas.
+- If you are tracing gameplay or content behavior, inspect
+  `data/Server Data/Scripts/` alongside the engine sources in `src/`.
+
+## Where To Go Next
+
+- See [`index.md`](index.md) for the docs landing page.
+- See [`reference.md`](reference.md) for module-level documentation.
+- See [`formats.md`](formats.md) for on-disk data format notes.
