@@ -23,6 +23,7 @@ pub struct AssetStore {
     /// In-game HUD layout (Interface.dat) — fractional element positions that
     /// match the real Client.exe. `None` if the file is absent.
     interface: Option<InterfaceLayout>,
+    attribute_names: Option<rcce_data::AttributeNames>,
     cache: HashMap<u16, Option<Rc<B3dModel>>>,
     /// Memoised decoded actor skins, keyed by appearance, so per-frame actor
     /// rebuilds don't re-read + re-decode the skin files from disk.
@@ -114,6 +115,10 @@ impl AssetStore {
         let interface = std::fs::read(data_root.join("Game Data/Interface.dat"))
             .ok()
             .and_then(|b| InterfaceLayout::parse(&b).ok());
+        // Attribute slot names (Health/Mana/Strength/…) for the character panel.
+        let attribute_names = std::fs::read(data_root.join("Server Data/Attributes.dat"))
+            .ok()
+            .and_then(|b| rcce_data::AttributeNames::parse(&b).ok());
         Ok(Self {
             data_root,
             actors,
@@ -123,9 +128,20 @@ impl AssetStore {
             music,
             items,
             interface,
+            attribute_names,
             cache: HashMap::new(),
             actor_tex_cache: HashMap::new(),
         })
+    }
+
+    /// Display name for attribute slot `i` (Health, Mana, Strength, …), or
+    /// `None` if unnamed / hidden / out of range.
+    pub fn attribute_name(&self, i: usize) -> Option<&str> {
+        let a = self.attribute_names.as_ref()?;
+        if a.hidden(i) {
+            return None;
+        }
+        a.name(i)
     }
 
     /// Display name for an item id (`#<id>` if unknown).

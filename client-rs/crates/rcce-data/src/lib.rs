@@ -9,6 +9,7 @@
 pub mod actors;
 pub mod anim;
 pub mod area;
+pub mod attributes;
 pub mod b3d;
 pub mod catalog;
 pub mod interface;
@@ -25,6 +26,7 @@ pub use catalog::{
     MeshCatalog, MeshEntry, MusicCatalog, MusicEntry, ParsedCatalog, TextureCatalog, TextureEntry,
     CATALOG_SLOTS,
 };
+pub use attributes::{AttributeDef, AttributeNames};
 pub use items::{equip_slot, equip_slot_name, ItemCatalog, ItemDef};
 pub use interface::{IComp, InterfaceLayout};
 pub use reader::{BlitzReader, ReadError};
@@ -148,6 +150,27 @@ mod tests {
                 it.id, it.name, it.item_type, it.value, it.mass, it.weapon_damage, it.armour_level, thumb, resolved
             );
         }
+    }
+
+    /// Ground-truth test: parse the real `Attributes.dat` and dump the named
+    /// (non-empty) attribute slots so the character panel can label them.
+    #[test]
+    fn parse_real_attributes_dat() {
+        let path = repo_root().join("data/Server Data/Attributes.dat");
+        let Ok(bytes) = std::fs::read(&path) else {
+            eprintln!("skipping: {} not present", path.display());
+            return;
+        };
+        let a = attributes::AttributeNames::parse(&bytes).expect("Attributes.dat parse");
+        assert_eq!(a.attrs.len(), 40);
+        eprintln!("Attributes.dat ({} bytes), assignment {}:", bytes.len(), a.assignment);
+        for (i, d) in a.attrs.iter().enumerate() {
+            if !d.name.is_empty() {
+                eprintln!("  [{i:>2}] {:<16} skill={} hidden={}", d.name, d.is_skill, d.hidden);
+            }
+        }
+        // Index 0 is Health by engine convention.
+        assert!(a.name(0).is_some(), "slot 0 (Health) should be named");
     }
 
     /// Ground-truth test: parse the real `Meshes.dat` shipped in `data/`.

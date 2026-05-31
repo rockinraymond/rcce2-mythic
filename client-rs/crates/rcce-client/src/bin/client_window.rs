@@ -1695,6 +1695,42 @@ impl App {
                 overlay.text_shadow(px + 10.0, py + 6.0, 1.5, "Character", white);
                 overlay.text(px + pw - 78.0, py + 7.0, 1.0, "[I] close", dim);
 
+                // Attributes column to the left of the inventory window: the
+                // named, non-hidden attribute slots (Attributes.dat) with live
+                // values from the character sheet.
+                if let Some(sheet) = &self.sheet {
+                    let mut rows: Vec<(String, [f32; 4])> = Vec::new();
+                    for i in 0..sheet.attributes.len().min(rcce_data::AttributeNames::COUNT) {
+                        if let Some(name) = store.attribute_name(i) {
+                            let (val, mx) = sheet.attributes[i];
+                            let line = if i <= 1 && mx > 0 {
+                                format!("{name}: {val}/{mx}")
+                            } else {
+                                format!("{name}: {val}")
+                            };
+                            let col = match i {
+                                0 => [1.0, 0.55, 0.5, 1.0],
+                                1 => [0.55, 0.7, 1.0, 1.0],
+                                _ => white,
+                            };
+                            rows.push((line, col));
+                        }
+                    }
+                    if !rows.is_empty() {
+                        let aw = 152.0f32;
+                        let ax = (px - aw - 6.0).max(4.0);
+                        let boxh = 24.0 + rows.len() as f32 * 13.0 + 6.0;
+                        overlay.rect(ax, py, aw, boxh, [0.05, 0.06, 0.10, 0.92]);
+                        overlay.rect(ax, py, aw, 20.0, [0.15, 0.18, 0.28, 0.96]);
+                        overlay.text_shadow(ax + 8.0, py + 5.0, 1.0, "Attributes", white);
+                        let mut ay = py + 24.0;
+                        for (line, col) in &rows {
+                            overlay.text(ax + 8.0, ay, 1.0, line, *col);
+                            ay += 13.0;
+                        }
+                    }
+                }
+
                 // Slot index -> item, from the live inventory.
                 let me_inv = self.net.as_ref().map(|n| &n.world.me_inventory);
                 let mut by_slot: std::collections::HashMap<u8, (u16, u16)> = std::collections::HashMap::new();
