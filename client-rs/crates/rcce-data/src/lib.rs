@@ -103,6 +103,12 @@ mod tests {
         for i in [0usize, 1, 2] {
             eprintln!("  attr[{i}] {:?}", l.attributes[i]);
         }
+        eprintln!("  inv_drop {:?}", l.inventory_drop);
+        eprintln!("  inv_eat  {:?}", l.inventory_eat);
+        eprintln!("  inv_gold {:?}", l.inventory_gold);
+        for (i, b) in l.inventory_buttons.iter().enumerate() {
+            eprintln!("  inv_btn[{i:>2}] x={:.4} y={:.4} w={:.4} h={:.4}", b.x, b.y, b.w, b.h);
+        }
         // Sanity: fractional coords in [0,1].
         for a in &l.attributes {
             assert!((0.0..=1.0).contains(&a.x) && (0.0..=1.0).contains(&a.y), "attr off-screen: {a:?}");

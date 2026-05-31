@@ -1328,10 +1328,15 @@ impl App {
             // Inventory / spellbook panel (toggle with I). Item names resolve
             // through Items.dat; spell names arrive over the wire.
             if self.show_inventory {
-                // Match the real InventoryWindow rect (centred ~0.25,0.2,0.5,0.55).
-                let (px, py, pw, ph) = match store.interface() {
-                    Some(iface) => {
-                        let r = iface.inventory_window.px(sw, sh);
+                // Match the real InventoryWindow rect (centred ~0.25,0.2,0.5,0.55)
+                // and draw the 46-slot grid at the real window-relative button
+                // positions (Interface.dat inv_buttons): rows 0-1 are the 14
+                // equipment slots, rows 2-5 the 32 backpack slots.
+                let dim = [0.6, 0.6, 0.6, 1.0];
+                let iface = store.interface();
+                let (px, py, pw, ph) = match iface {
+                    Some(i) => {
+                        let r = i.inventory_window.px(sw, sh);
                         (r.0.round(), r.1.round(), r.2.round(), r.3.round())
                     }
                     None => {
@@ -1339,80 +1344,71 @@ impl App {
                         (((sw - pw) * 0.5).round(), ((sh - ph) * 0.5).round(), pw, ph)
                     }
                 };
-                let dim = [0.6, 0.6, 0.6, 1.0];
-                overlay.rect(px, py, pw, ph, [0.05, 0.06, 0.10, 0.9]);
+                overlay.rect(px, py, pw, ph, [0.05, 0.06, 0.10, 0.92]);
                 overlay.rect(px, py, pw, 22.0, [0.15, 0.18, 0.28, 0.96]);
                 overlay.text_shadow(px + 10.0, py + 6.0, 1.5, "Character", white);
                 overlay.text(px + pw - 78.0, py + 7.0, 1.0, "[I] close", dim);
-                let mut y = py + 30.0;
-                let limit = py + ph - 14.0;
-                // Live inventory (kept current by P_InventoryUpdate); falls back
-                // to empty if not logged in.
+
+                // Slot index -> item, from the live inventory.
                 let me_inv = self.net.as_ref().map(|n| &n.world.me_inventory);
-                if let Some(s) = &self.sheet {
-                    overlay.text_shadow(px + 10.0, y, 1.0, &format!("Lv {}   {} gold   {} xp", s.level, s.gold, s.xp), [1.0, 0.88, 0.4, 1.0]);
-                    y += 18.0;
-                    // Equipped gear (slots 0..13): show each worn item by its
-                    // slot name.
-                    let equipped: Vec<_> = me_inv
-                        .map(|m| m.values().filter(|it| it.slot < 14).collect())
-                        .unwrap_or_default();
-                    overlay.text_shadow(px + 10.0, y, 1.0, &format!("Equipped ({})", equipped.len()), [0.7, 1.0, 0.8, 1.0]);
-                    y += 14.0;
-                    if equipped.is_empty() {
-                        overlay.text(px + 18.0, y, 1.0, "(nothing equipped)", dim);
-                        y += 13.0;
-                    } else {
-                        for it in &equipped {
-                            if y > limit - 110.0 { break; }
-                            let slot = rcce_data::equip_slot_name(it.slot).unwrap_or("?");
-                            let line: String = format!("{slot}: {}", store.item_name(it.item_id)).chars().take(40).collect();
-                            overlay.text(px + 18.0, y, 1.0, &line, white);
-                            y += 12.0;
+                let mut by_slot: std::collections::HashMap<u8, (u16, u16)> = std::collections::HashMap::new();
+                if let Some(m) = me_inv {
+                    for it in m.values() {
+                        by_slot.insert(it.slot, (it.item_id, it.amount));
+                    }
+                }
+
+                if let Some(iface) = iface {
+                    let iw = &iface.inventory_window;
+                    // Header line: level / gold / xp.
+                    if let Some(s) = &self.sheet {
+                        overlay.text_shadow(px + 10.0, py + 26.0, 1.0, &format!("Lv {}   {} gold   {} xp", s.level, s.gold, s.xp), [1.0, 0.88, 0.4, 1.0]);
+                    }
+                    for (i, b) in iface.inventory_buttons.iter().enumerate() {
+                        // Window-relative fraction -> screen pixels.
+                        let bx = (iw.x + b.x * iw.w) * sw;
+                        let bgy = (iw.y + b.y * iw.h) * sh;
+                        let bw = (b.w * iw.w * sw).max(8.0);
+                        let bh = (b.h * iw.h * sh).max(8.0);
+                        let equip = i < 14;
+                        let occupied = by_slot.contains_key(&(i as u8));
+                        let bg = match (equip, occupied) {
+                            (true, true) => [0.20, 0.26, 0.18, 0.95],
+                            (true, false) => [0.12, 0.14, 0.12, 0.85],
+                            (false, true) => [0.16, 0.18, 0.26, 0.95],
+                            (false, false) => [0.09, 0.10, 0.14, 0.82],
+                        };
+                        overlay.rect(bx, bgy, bw, bh, bg);
+                        // Equipment slots show their slot-name when empty.
+                        if equip && !occupied {
+                            if let Some(name) = rcce_data::equip_slot_name(i as u8) {
+                                let abbr: String = name.chars().take(((bw / 6.0) as usize).max(2)).collect();
+                                overlay.text(bx + 2.0, bgy + bh * 0.5 - 4.0, 1.0, &abbr, [0.45, 0.45, 0.5, 1.0]);
+                            }
+                        }
+                        if let Some(&(item_id, amount)) = by_slot.get(&(i as u8)) {
+                            let name = store.item_name(item_id);
+                            let maxc = ((bw / 6.0) as usize).max(2);
+                            let abbr: String = name.chars().take(maxc).collect();
+                            overlay.text_shadow(bx + 2.0, bgy + 2.0, 1.0, &abbr, white);
+                            if amount > 1 {
+                                overlay.text(bx + 2.0, bgy + bh - 9.0, 1.0, &format!("x{amount}"), [0.8, 1.0, 0.8, 1.0]);
+                            }
+                        }
+                        // Backpack 1-9 keybind hint in the slot corner.
+                        if !equip {
+                            let bp_idx = i - 14;
+                            if bp_idx < 9 {
+                                overlay.text(bx + bw - 7.0, bgy + 1.0, 1.0, &format!("{}", bp_idx + 1), [1.0, 1.0, 0.5, 0.9]);
+                            }
                         }
                     }
-                    y += 6.0;
-                    // Backpack (slots 14..45): number-keyed for drop / Shift-equip.
-                    let backpack: Vec<_> = me_inv
-                        .map(|m| m.values().filter(|it| it.slot >= 14).collect())
-                        .unwrap_or_default();
-                    let bp_hdr = if backpack.is_empty() {
-                        "Backpack (0)".to_string()
-                    } else {
-                        format!("Backpack ({})   1-9 drop, Shift equip", backpack.len())
-                    };
-                    overlay.text_shadow(px + 10.0, y, 1.0, &bp_hdr, [0.7, 0.85, 1.0, 1.0]);
-                    y += 14.0;
-                    if backpack.is_empty() {
-                        overlay.text(px + 18.0, y, 1.0, "(empty)", dim);
-                        y += 13.0;
-                    } else {
-                        for (i, it) in backpack.iter().enumerate() {
-                            if y > limit - 80.0 { break; }
-                            let name = store.item_name(it.item_id);
-                            let num = if i < 9 { format!("{}. ", i + 1) } else { "   ".to_string() };
-                            let line = if it.amount > 1 { format!("{num}{name}  x{}", it.amount) } else { format!("{num}{name}") };
-                            let line: String = line.chars().take(40).collect();
-                            overlay.text(px + 18.0, y, 1.0, &line, white);
-                            y += 12.0;
-                        }
-                    }
-                    y += 8.0;
-                    overlay.text_shadow(px + 10.0, y, 1.0, &format!("Spells ({})", s.spells.len()), [0.85, 0.7, 1.0, 1.0]);
-                    y += 14.0;
-                    if s.spells.is_empty() {
-                        overlay.text(px + 18.0, y, 1.0, "(none)", dim);
-                    } else {
-                        for sp in &s.spells {
-                            if y > limit { break; }
-                            let mem = if sp.memorised { " *" } else { "" };
-                            let line: String = format!("{} (L{}){mem}", sp.name, sp.level).chars().take(40).collect();
-                            overlay.text(px + 18.0, y, 1.0, &line, white);
-                            y += 12.0;
-                        }
-                    }
+                    overlay.text(px + 10.0, py + ph - 13.0, 1.0, "1-9 drop  ·  Shift+1-9 equip", dim);
+                } else if let Some(s) = &self.sheet {
+                    // Fallback text list when Interface.dat is absent.
+                    overlay.text_shadow(px + 10.0, py + 30.0, 1.0, &format!("Lv {}   {} gold", s.level, s.gold), [1.0, 0.88, 0.4, 1.0]);
                 } else {
-                    overlay.text(px + 10.0, y, 1.0, "(no character data)", dim);
+                    overlay.text(px + 10.0, py + 30.0, 1.0, "(no character data)", dim);
                 }
             }
 
