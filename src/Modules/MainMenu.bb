@@ -2354,34 +2354,6 @@ Function CreateChar()
 		EndIf
 	Next
 
-	; Skill assignment list
-	If SkillAssignment > 0
-		SkillPointsToSpend = SkillAssignment
-		SkillRemainingLabel = GY_CreateLabel(WSkill, 0.5, 0.015, "Skill Points: " + SkillPointsToSpend, 255, 50, 50, Justify_Centre)
-	EndIf
-	;Y# = 0.2675
-	Y# = 0.03 / SkillWindowHeight#
-
-	;Y2# = 0.284
-
-	SkillCount = 0
-	For i = 0 to 49
-		If AttributeNames$(i) <> "" And AttributeIsSkill(i) = True And AttributeHidden(i) = False
-			
-			GY_CreateLabel(WSkill, 0.02, Y#, AttributeNames$(i) + ":")
-			SkillLabels(SkillCount) = GY_CreateLabel(WSkill, 0.8, Y#, "00000", 255, 255, 255, Justify_Centre)
-						
-			GY_DropGadget(SkillLabels(SkillCount))
-			GY_SetGadgetData(SkillLabels(SkillCount), i)
-			If SkillAssignment > 0
-				SkillDecrease(SkillCount) = GY_CreateCustomButton(WSkill, 0.64, Y#, 0.08, 0.025 / SkillWindowHeight#, LoadButtonU("SmallLeft"), LoadButtonD("SmallLeft"), LoadButtonH("SmallLeft"))
-				SkillIncrease(SkillCount) = GY_CreateCustomButton(WSkill, 0.90, Y#, 0.08, 0.025 / SkillWindowHeight#, LoadButtonU("SmallRight"), LoadButtonD("SmallRight"), LoadButtonH("SmallRight"))
-			EndIf
-			Y# = Y# + (0.03 / SkillWindowHeight#)
-			SkillCount = SkillCount + 1
-		EndIf
-	Next
-
 	; Set preview to first playable actor whose mesh loads. Walk the
 	; Actor list looking for a candidate; if a race's mesh fails to
 	; load (corrupt mesh file, missing asset, hostile content update),
