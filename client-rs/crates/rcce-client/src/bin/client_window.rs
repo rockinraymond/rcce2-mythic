@@ -1331,6 +1331,30 @@ impl App {
             }
         }
 
+        // Weather ambient: loop Rain.ogg while it's raining (engine W_Rain),
+        // silence otherwise — mirrors Environment3D.bb SetWeather.
+        {
+            let raining = self
+                .net
+                .as_ref()
+                .map(|n| {
+                    matches!(
+                        rcce_client::weather::weather_from_byte(n.world.zone.weather),
+                        rcce_client::weather::Weather::Rain
+                    )
+                })
+                .unwrap_or(false);
+            if let Some(audio) = self.audio.as_mut() {
+                if raining {
+                    if let Some(p) = store.sound_path("Weather/Rain.ogg") {
+                        audio.set_weather_loop("rain", &p, 0.5);
+                    }
+                } else {
+                    audio.stop_weather();
+                }
+            }
+        }
+
         let frame = match gfx.surface.get_current_texture() {
             Ok(f) => f,
             Err(_) => {

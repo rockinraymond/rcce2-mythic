@@ -36,6 +36,11 @@ pub struct Audio {
     /// Base volume of the current music track (pre-master), to re-derive the
     /// sink gain when master/mute change.
     music_base: f32,
+    /// Looped weather-ambient channel (rain) + the key of what's playing, so the
+    /// same loop isn't restarted every frame.
+    weather: Option<Sink>,
+    weather_key: Option<&'static str>,
+    weather_base: f32,
 }
 
 impl Audio {
@@ -51,6 +56,9 @@ impl Audio {
                 master_volume: 0.8,
                 muted: false,
                 music_base: 0.0,
+                weather: None,
+                weather_key: None,
+                weather_base: 0.0,
             }),
             Err(e) => {
                 eprintln!("[audio] no output device ({e}); running silent");
@@ -127,6 +135,46 @@ impl Audio {
         if let Some(s) = &self.music {
             s.set_volume(effective_gain(self.master_volume, self.music_base, self.muted));
         }
+        if let Some(s) = &self.weather {
+            s.set_volume(effective_gain(self.master_volume, self.weather_base, self.muted));
+        }
+    }
+
+    /// Start (or keep) a looping weather-ambient track under `key`. Re-calling
+    /// with the same key is a no-op so the loop isn't restarted each frame;
+    /// a different key replaces it. Open/decode failure leaves the channel off.
+    pub fn set_weather_loop(&mut self, key: &'static str, path: &Path, volume: f32) {
+        if self.weather_key == Some(key) {
+            return;
+        }
+        self.stop_weather();
+        let Ok(file) = File::open(path) else {
+            eprintln!("[audio] weather open {}: missing", path.display());
+            return;
+        };
+        let Ok(decoder) = Decoder::new(BufReader::new(file)) else {
+            eprintln!("[audio] weather decode {}", path.display());
+            return;
+        };
+        let Ok(sink) = Sink::try_new(&self.handle) else { return };
+        self.weather_base = volume;
+        sink.set_volume(effective_gain(self.master_volume, volume, self.muted));
+        sink.append(decoder.buffered().repeat_infinite());
+        self.weather = Some(sink);
+        self.weather_key = Some(key);
+    }
+
+    /// Stop the weather-ambient loop, if any.
+    pub fn stop_weather(&mut self) {
+        if let Some(s) = self.weather.take() {
+            s.stop();
+        }
+        self.weather_key = None;
+    }
+
+    /// The currently-playing weather loop key (None = silent), for tests / UI.
+    pub fn weather_key(&self) -> Option<&'static str> {
+        self.weather_key
     }
 
     /// Play the zone's music by id if it differs from what's already playing.

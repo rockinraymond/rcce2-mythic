@@ -188,6 +188,13 @@ impl AssetStore {
         self.items.equip_slot(id)
     }
 
+    /// Path to a sound file under `Data/Sounds/<rel>` if it exists (e.g.
+    /// `Weather/Rain.ogg`).
+    pub fn sound_path(&self, rel: &str) -> Option<PathBuf> {
+        let p = self.data_root.join("Sounds").join(rel);
+        p.exists().then_some(p)
+    }
+
     /// Footstep `.ogg` files under `Data/Sounds/Footsteps/`, sorted. Empty if
     /// the folder is absent.
     pub fn footstep_sounds(&self) -> Vec<PathBuf> {
