@@ -51,6 +51,10 @@ pub struct Actor {
     /// Sparse — only attributes the server has sent. Health/Energy/etc. indices
     /// come from Fixed Attributes.dat (the caller maps them).
     pub attributes: HashMap<u8, (i16, i16)>,
+    /// Equipped gear item ids from P_InventoryUpdate "O": [weapon, shield,
+    /// chest, hat]. 65535 = nothing in that slot. The foundation for attaching
+    /// gear meshes; for now the weapon name shows on the nameplate.
+    pub equipped: [u16; 4],
 }
 
 /// Current zone metadata (from `P_ChangeArea`).
@@ -254,6 +258,7 @@ impl World {
                 beard,
                 health,
                 health_max,
+                equipped: [0xFFFF; 4], // nothing equipped until an "O" update
                 ..Default::default()
             },
         );
@@ -488,6 +493,19 @@ impl World {
                     if it.amount == 0 {
                         self.me_inventory.remove(&slot);
                     }
+                }
+            }
+            // Equipped-gear update for an actor: rid u16 + weapon/shield/chest/
+            // hat item ids (u16 each, 65535 = none) + 6 gubbin bytes (ignored).
+            Some(b'O') => {
+                let mut r = MsgReader::new(&d[1..]);
+                let (Some(rid), Some(weapon), Some(shield), Some(chest), Some(hat)) =
+                    (r.u16(), r.u16(), r.u16(), r.u16(), r.u16())
+                else {
+                    return;
+                };
+                if let Some(a) = self.actors.get_mut(&rid) {
+                    a.equipped = [weapon, shield, chest, hat];
                 }
             }
             // An item's health (durability) changed: slot u8 + health u8.
@@ -853,6 +871,25 @@ mod tests {
         w.apply(&msg(pk::INVENTORY_UPDATE, pkt(|p| { p.u8(b'R').u32(55).u8(20); })));
         assert!(w.dropped_items.is_empty());
         assert_eq!((w.me_inventory[&20].item_id, w.me_inventory[&20].amount, w.me_inventory[&20].health), (7, 4, 90));
+    }
+
+    #[test]
+    fn equipped_update_sets_actor_gear() {
+        let mut w = World::default();
+        // Spawn an actor (rid 50).
+        let mut p = MsgWriter::new();
+        p.u32(7).u16(50).u16(1).u32(0).u16(3);
+        p.f32(0.0).f32(0.0).f32(0.0).f32(0.0);
+        p.u8(0).str8("Guard");
+        w.apply(&msg(pk::NEW_ACTOR, p.into_bytes()));
+        assert_eq!(w.actors[&50].equipped, [0xFFFF; 4]); // nothing yet
+
+        // "O": rid 50, weapon 42, shield 65535, chest 7, hat 65535, + 6 gubbins.
+        w.apply(&msg(pk::INVENTORY_UPDATE, pkt(|p| {
+            p.u8(b'O').u16(50).u16(42).u16(0xFFFF).u16(7).u16(0xFFFF);
+            p.raw(&[0u8; 6]);
+        })));
+        assert_eq!(w.actors[&50].equipped, [42, 0xFFFF, 7, 0xFFFF]);
     }
 
     #[test]

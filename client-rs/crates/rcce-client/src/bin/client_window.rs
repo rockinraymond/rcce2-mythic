@@ -1080,6 +1080,12 @@ impl App {
                             let nc = if is_target { col } else { white };
                             overlay.text_shadow(px - tw * 0.5, py - 26.0, 1.0, &a.name, nc);
                         }
+                        // Equipped weapon (from P_InventoryUpdate "O") under the name.
+                        if a.equipped[0] != 0xFFFF {
+                            let wname = store.item_name(a.equipped[0]);
+                            let tw = rcce_render::font::text_width(&wname, 1.0);
+                            overlay.text_shadow(px - tw * 0.5, py - 38.0, 1.0, &wname, [0.85, 0.85, 0.7, 1.0]);
+                        }
                     }
                 }
 
