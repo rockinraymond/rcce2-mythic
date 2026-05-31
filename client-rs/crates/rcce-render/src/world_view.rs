@@ -4,13 +4,45 @@
 //! view-projection. Shares the textured pipeline with the offscreen PNG path
 //! via [`crate::gpu`], so both look identical.
 
+use std::collections::HashMap;
+use std::rc::Rc;
+
 use wgpu::util::DeviceExt;
 
-use crate::gpu::{self, Drawable, IndexCache, Pipeline, SkyPipeline, TexCache, Uniforms};
+use rcce_data::{B3dModel, Image};
+
+use crate::gpu::{self, ActorSkin, Drawable, IndexCache, Pipeline, SkinPipeline, SkyPipeline, TexCache, Uniforms};
 use crate::scene::SceneInstance;
+
+/// A skinned actor instance for the GPU linear-blend-skinning path. The static
+/// mesh is uploaded once (keyed by `key`); the pose comes from `frame`.
+pub struct SkinnedInstance<'a> {
+    /// Appearance key (e.g. `tmpl:gender`) — keys the cached static geometry.
+    pub key: &'a str,
+    /// The actor template model (with bones + skin weights).
+    pub model: &'a B3dModel,
+    /// Per-mesh textures (aligns to `model.meshes`).
+    pub textures: &'a [Option<Image>],
+    /// Animation frame (None = bind pose).
+    pub frame: Option<f32>,
+    /// Column-major instance model matrix (world transform).
+    pub transform: [f32; 16],
+    /// Tint colour (multiplied with the texture).
+    pub color: [f32; 3],
+}
+
+/// One skinned mesh draw: shared static geometry + the per-actor uniform slot.
+struct SkinnedDrawable {
+    vbuf: Rc<wgpu::Buffer>,
+    ibuf: Rc<wgpu::Buffer>,
+    n_idx: u32,
+    tex: Rc<wgpu::BindGroup>,
+    actor: usize, // index into actor_pool
+}
 
 pub struct WorldView {
     pipeline: Pipeline,
+    skin: SkinPipeline,
     sky: SkyPipeline,
     uniform_buf: wgpu::Buffer,
     bind0: wgpu::BindGroup,
@@ -25,6 +57,13 @@ pub struct WorldView {
     /// Cached constant index buffers (keyed like the textures) so per-frame
     /// rebuilds don't recreate the topology buffer each tick.
     idx_cache: IndexCache,
+    /// Static skinned geometry per `key:mesh` (vbuf + ibuf + n_idx + texture),
+    /// uploaded ONCE — the GPU skinning path poses it via the per-actor uniform.
+    skin_static: HashMap<String, (Rc<wgpu::Buffer>, Rc<wgpu::Buffer>, u32, Rc<wgpu::BindGroup>)>,
+    /// Reusable per-actor skinning uniform buffers + binds (grown as needed).
+    actor_pool: Vec<(wgpu::Buffer, wgpu::BindGroup)>,
+    /// This frame's skinned draws.
+    skinned: Vec<SkinnedDrawable>,
 }
 
 fn make_depth(device: &wgpu::Device, w: u32, h: u32) -> wgpu::TextureView {
@@ -45,6 +84,7 @@ fn make_depth(device: &wgpu::Device, w: u32, h: u32) -> wgpu::TextureView {
 impl WorldView {
     pub fn new(device: &wgpu::Device, color_format: wgpu::TextureFormat, w: u32, h: u32) -> WorldView {
         let pipeline = Pipeline::new(device, color_format);
+        let skin = SkinPipeline::new(device, color_format, &pipeline);
         let sky = SkyPipeline::new(device, color_format);
         let uniform_buf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("u"),
@@ -63,6 +103,7 @@ impl WorldView {
         });
         WorldView {
             pipeline,
+            skin,
             sky,
             uniform_buf,
             bind0,
@@ -71,6 +112,57 @@ impl WorldView {
             dynamics: Vec::new(),
             tex_cache: TexCache::new(),
             idx_cache: IndexCache::new(),
+            skin_static: HashMap::new(),
+            actor_pool: Vec::new(),
+            skinned: Vec::new(),
+        }
+    }
+
+    /// Replace the per-frame SKINNED actors (GPU linear-blend skinning). The
+    /// static mesh for each appearance is built once and cached; per frame only
+    /// each actor's small bone-palette uniform is written — no CPU re-skin or
+    /// vertex re-upload. Pair with [`set_dynamic`](Self::set_dynamic) for the
+    /// unskinned attachments (hair/gear).
+    pub fn set_skinned(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, instances: &[SkinnedInstance]) {
+        self.skinned.clear();
+        // Ensure a reusable uniform buffer/bind per actor instance.
+        while self.actor_pool.len() < instances.len() {
+            self.actor_pool.push(self.skin.make_actor(device));
+        }
+        for (ai, inst) in instances.iter().enumerate() {
+            // Build + cache this appearance's static skinned meshes once.
+            let first_key = format!("{}:0", inst.key);
+            if !self.skin_static.contains_key(&first_key) {
+                let (ids, wts) = inst.model.skin_attributes();
+                for (mi, mesh) in inst.model.meshes.iter().enumerate() {
+                    if mesh.positions.is_empty() || mesh.indices.is_empty() {
+                        continue;
+                    }
+                    let vbuf = Rc::new(gpu::build_skinned_vbuf(device, mesh, &ids, &wts));
+                    let ibuf = Rc::new(device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                        label: Some("skin-i"),
+                        contents: bytemuck::cast_slice(&mesh.indices),
+                        usage: wgpu::BufferUsages::INDEX,
+                    }));
+                    let tex = Rc::new(self.pipeline.texture_bind(device, queue, inst.textures.get(mi).and_then(|t| t.as_ref())));
+                    self.skin_static.insert(format!("{}:{}", inst.key, mi), (vbuf, ibuf, mesh.indices.len() as u32, tex));
+                }
+            }
+            // Update this actor's pose uniform (palette + model + colour).
+            let skin = ActorSkin::new(&inst.model.bone_palette(inst.frame), inst.transform, inst.color);
+            self.skin.update_actor(queue, &self.actor_pool[ai].0, &skin);
+            // Queue a draw per mesh, sharing the actor's uniform slot.
+            for mi in 0..inst.model.meshes.len() {
+                if let Some((vbuf, ibuf, n_idx, tex)) = self.skin_static.get(&format!("{}:{}", inst.key, mi)) {
+                    self.skinned.push(SkinnedDrawable {
+                        vbuf: vbuf.clone(),
+                        ibuf: ibuf.clone(),
+                        n_idx: *n_idx,
+                        tex: tex.clone(),
+                        actor: ai,
+                    });
+                }
+            }
         }
     }
 
@@ -107,7 +199,7 @@ impl WorldView {
     }
 
     pub fn drawable_count(&self) -> usize {
-        self.statics.len() + self.dynamics.len()
+        self.statics.len() + self.dynamics.len() + self.skinned.len()
     }
 
     pub fn resize(&mut self, device: &wgpu::Device, w: u32, h: u32) {
@@ -194,6 +286,19 @@ impl WorldView {
                 rp.set_vertex_buffer(0, d.vbuf.slice(..));
                 rp.set_index_buffer(d.ibuf.slice(..), wgpu::IndexFormat::Uint32);
                 rp.draw_indexed(0..d.n_idx, 0, 0..1);
+            }
+            // GPU-skinned actors: same camera uniform (group 0), per-actor pose
+            // uniform (group 2). The vertex shader skins the static mesh.
+            if !self.skinned.is_empty() {
+                rp.set_pipeline(&self.skin.pipeline);
+                rp.set_bind_group(0, &self.bind0, &[]);
+                for sd in &self.skinned {
+                    rp.set_bind_group(1, &sd.tex, &[]);
+                    rp.set_bind_group(2, &self.actor_pool[sd.actor].1, &[]);
+                    rp.set_vertex_buffer(0, sd.vbuf.slice(..));
+                    rp.set_index_buffer(sd.ibuf.slice(..), wgpu::IndexFormat::Uint32);
+                    rp.draw_indexed(0..sd.n_idx, 0, 0..1);
+                }
             }
         }
         queue.submit(Some(enc.finish()));
