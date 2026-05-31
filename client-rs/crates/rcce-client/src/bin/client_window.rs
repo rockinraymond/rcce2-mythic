@@ -122,6 +122,12 @@ struct App {
     start: Instant,
     frames: u64,
     last_log: Instant,
+    /// Benchmark mode (RCCE_BENCH=N): after a warmup, time N frames, print the
+    /// average fps, and exit — so GPU/skinning perf is measurable. `bench_t0` /
+    /// `bench_f0` mark the measurement window start.
+    bench_target: Option<u64>,
+    bench_t0: Option<Instant>,
+    bench_f0: u64,
     /// Hash of the last dynamic-actor build (anim tick + actor states); the
     /// expensive re-skin/re-upload is skipped while it's unchanged.
     last_dyn_hash: u64,
@@ -212,6 +218,9 @@ impl App {
             light_dir: [0.0, 0.5, -0.866],
             start: now,
             frames: 0,
+            bench_target: std::env::var("RCCE_BENCH").ok().and_then(|s| s.parse::<u64>().ok()).filter(|&n| n > 0),
+            bench_t0: None,
+            bench_f0: 0,
             last_log: now,
             last_dyn_hash: u64::MAX,
             keys_wasd: [false; 4],
@@ -2401,6 +2410,30 @@ impl App {
         frame.present();
 
         self.frames += 1;
+
+        // Benchmark mode: after a short warmup, time the next N frames and report
+        // the average fps, then exit. Lets perf changes be measured headlessly-ish.
+        if let Some(n) = self.bench_target {
+            const WARMUP: u64 = 120;
+            if self.bench_t0.is_none() && self.frames >= WARMUP {
+                self.bench_t0 = Some(Instant::now());
+                self.bench_f0 = self.frames;
+            }
+            if let Some(t0) = self.bench_t0 {
+                let measured = self.frames - self.bench_f0;
+                if measured >= n {
+                    let secs = t0.elapsed().as_secs_f32().max(1e-4);
+                    let draws = self.view.as_ref().map(|v| v.drawable_count()).unwrap_or(0);
+                    let actors = self.net.as_ref().map(|nn| nn.world.actors.len()).unwrap_or(0);
+                    println!(
+                        "[bench] avg fps over {measured} frames: {:.1} ({secs:.2}s, {actors} actors, {draws} drawables)",
+                        measured as f32 / secs
+                    );
+                    std::process::exit(0);
+                }
+            }
+        }
+
         if self.last_log.elapsed().as_secs_f32() >= 2.0 {
             let fps = self.frames as f32 / elapsed.max(0.001);
             let (actors, ups, pos) = self
