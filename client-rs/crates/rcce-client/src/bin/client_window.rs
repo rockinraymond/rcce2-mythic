@@ -1640,13 +1640,28 @@ impl App {
                         let bh = (b.h * iw.h * sh).max(8.0);
                         let equip = i < 14;
                         let occupied = by_slot.contains_key(&(i as u8));
-                        let bg = match (equip, occupied) {
-                            (true, true) => [0.20, 0.26, 0.18, 0.95],
-                            (true, false) => [0.12, 0.14, 0.12, 0.85],
-                            (false, true) => [0.16, 0.18, 0.26, 0.95],
-                            (false, false) => [0.09, 0.10, 0.14, 0.82],
-                        };
-                        overlay.rect(bx, bgy, bw, bh, bg);
+                        // Real EmptySlot.bmp frame, with a translucent state tint
+                        // layered on top (interleaved draw list); the rect is the
+                        // opaque fallback when the texture is missing.
+                        if overlay.has_texture("gui:EmptySlot") {
+                            overlay.image(bx, bgy, bw, bh, "gui:EmptySlot", [1.0, 1.0, 1.0, 1.0]);
+                            let tint = match (equip, occupied) {
+                                (true, true) => [0.30, 0.45, 0.25, 0.35],
+                                (false, true) => [0.30, 0.35, 0.55, 0.35],
+                                _ => [0.0, 0.0, 0.0, 0.0],
+                            };
+                            if tint[3] > 0.0 {
+                                overlay.rect(bx, bgy, bw, bh, tint);
+                            }
+                        } else {
+                            let bg = match (equip, occupied) {
+                                (true, true) => [0.20, 0.26, 0.18, 0.95],
+                                (true, false) => [0.12, 0.14, 0.12, 0.85],
+                                (false, true) => [0.16, 0.18, 0.26, 0.95],
+                                (false, false) => [0.09, 0.10, 0.14, 0.82],
+                            };
+                            overlay.rect(bx, bgy, bw, bh, bg);
+                        }
                         // Equipment slots show their slot-name when empty.
                         if equip && !occupied {
                             if let Some(name) = rcce_data::equip_slot_name(i as u8) {
@@ -1739,7 +1754,14 @@ impl App {
                     .unwrap_or_default();
                 for i in 0..12usize {
                     let x = (SLOT_X0 + i as f32 * SLOT_PITCH) * sw;
-                    overlay.rect(x, by, sw_, sh_, [0.08, 0.08, 0.13, 0.78]);
+                    // Real EmptySlot.bmp frame under each slot (interleaved draw
+                    // list lets the shading + number layer on top); coloured-rect
+                    // fallback when the texture is missing.
+                    if overlay.has_texture("gui:EmptySlot") {
+                        overlay.image(x, by, sw_, sh_, "gui:EmptySlot", [1.0, 1.0, 1.0, 1.0]);
+                    } else {
+                        overlay.rect(x, by, sw_, sh_, [0.08, 0.08, 0.13, 0.78]);
+                    }
                     if let Some(sp) = mem.get(i) {
                         let ready = self.spell_cooldowns.get(&sp.id).copied().unwrap_or(0.0);
                         let remaining = (ready - elapsed).max(0.0);
