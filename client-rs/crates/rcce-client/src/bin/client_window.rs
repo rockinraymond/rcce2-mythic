@@ -1858,6 +1858,23 @@ impl App {
                             }
                         }
                     }
+                    // Real inv_gold display + Drop / Eat buttons at their
+                    // window-relative Interface.dat positions.
+                    let iw = iface.inventory_window;
+                    let to_scr = |c: rcce_data::IComp| -> (f32, f32, f32, f32) {
+                        ((iw.x + c.x * iw.w) * sw, (iw.y + c.y * iw.h) * sh, c.w * iw.w * sw, c.h * iw.h * sh)
+                    };
+                    let gold = self.sheet.as_ref().map(|s| s.gold).unwrap_or(0);
+                    let (gx, gy, _, _) = to_scr(iface.inventory_gold);
+                    overlay.text_shadow(gx, gy, 1.0, &format!("Gold: {gold}"), [1.0, 0.88, 0.4, 1.0]);
+                    for (comp, label) in [(iface.inventory_drop, "Drop"), (iface.inventory_eat, "Eat")] {
+                        let (dx, dy, dw, dh) = to_scr(comp);
+                        if dw > 1.0 && dh > 1.0 {
+                            overlay.rect(dx, dy, dw, dh, [0.20, 0.16, 0.12, 0.9]);
+                            let tw = rcce_render::font::text_width(label, 1.0);
+                            overlay.text_shadow(dx + (dw - tw) * 0.5, dy + dh * 0.5 - 4.0, 1.0, label, white);
+                        }
+                    }
                     overlay.text(px + 10.0, py + ph - 13.0, 1.0, "1-9 drop  ·  Shift+1-9 equip", dim);
                 } else if let Some(s) = &self.sheet {
                     // Fallback text list when Interface.dat is absent.
