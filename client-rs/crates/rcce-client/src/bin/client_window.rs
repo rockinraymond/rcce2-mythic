@@ -213,6 +213,20 @@ impl App {
 /// current frame. Returns owned models/textures (the instances borrow them) and
 /// placement tuples (idx, translation, rot, color, scale).
 type Placement = (usize, [f32; 3], [f32; 3], [f32; 3], [f32; 3]);
+/// RuntimeID of the nearest living actor to (mx, mz), if any.
+fn nearest_living_actor(world: &rcce_client::world::World, mx: f32, mz: f32) -> Option<u16> {
+    world
+        .actors
+        .values()
+        .filter(|a| a.alive)
+        .min_by(|a, b| {
+            let da = (a.x - mx).powi(2) + (a.z - mz).powi(2);
+            let db = (b.x - mx).powi(2) + (b.z - mz).powi(2);
+            da.total_cmp(&db)
+        })
+        .map(|a| a.runtime_id)
+}
+
 /// Colour a damage number by its damage-type index (defaults to red). The
 /// indices loosely follow the engine's Damage.dat ordering; exact names aren't
 /// loaded yet, so this is a stable palette for visual variety.
@@ -668,6 +682,41 @@ impl ApplicationHandler for App {
                         }
                         // Toggle the inventory / spellbook panel.
                         KeyCode::KeyI if pressed => self.show_inventory = !self.show_inventory,
+                        // Interact (right-click) the target/nearest NPC — a
+                        // vendor replies with P_OpenTrading → the vendor panel.
+                        KeyCode::KeyR if pressed => {
+                            if let Some(net) = self.net.as_mut() {
+                                let rid = self
+                                    .target
+                                    .or_else(|| nearest_living_actor(&net.world, net.world.me_x, net.world.me_z));
+                                if let Some(rid) = rid {
+                                    self.target = Some(rid);
+                                    net.transport.send(
+                                        net.peer,
+                                        rcce_net::packet_id::RIGHT_CLICK,
+                                        &rcce_client::net::right_click_packet(rid),
+                                        true,
+                                    );
+                                }
+                            }
+                        }
+                        // Examine the target/nearest NPC — reply arrives as chat.
+                        KeyCode::KeyX if pressed => {
+                            if let Some(net) = self.net.as_mut() {
+                                let rid = self
+                                    .target
+                                    .or_else(|| nearest_living_actor(&net.world, net.world.me_x, net.world.me_z));
+                                if let Some(rid) = rid {
+                                    self.target = Some(rid);
+                                    net.transport.send(
+                                        net.peer,
+                                        rcce_net::packet_id::EXAMINE,
+                                        &rcce_client::net::examine_packet(rid),
+                                        true,
+                                    );
+                                }
+                            }
+                        }
                         // Audio: M mutes, [ / ] lower / raise master volume.
                         KeyCode::KeyM if pressed => {
                             if let Some(a) = self.audio.as_mut() {

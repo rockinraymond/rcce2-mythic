@@ -48,6 +48,7 @@ pub mod packet_id {
     pub const WEATHER_CHANGE: u8 = 17;
     pub const ATTACK_ACTOR: u8 = 18;
     pub const ACTOR_DEAD: u8 = 19;
+    pub const RIGHT_CLICK: u8 = 20;
     pub const STAT_UPDATE: u8 = 22;
     pub const GOLD_CHANGE: u8 = 24;
     pub const NAME_CHANGE: u8 = 25;
@@ -55,6 +56,7 @@ pub mod packet_id {
     pub const XP_UPDATE: u8 = 32;
     pub const OPEN_TRADING: u8 = 35;
     pub const ACTOR_EFFECT: u8 = 36;
+    pub const EXAMINE: u8 = 61;
 }
 
 /// Type 0: the empty reliable packet the client sends on connect.

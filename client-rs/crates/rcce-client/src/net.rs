@@ -50,9 +50,29 @@ pub fn pickup_packet(handle: u32, slot: u8) -> Vec<u8> {
     w.into_bytes()
 }
 
+/// `P_RightClick` (`Interface3D.bb:668`): the target actor's RuntimeID (u16).
+/// Triggers the NPC's RightClick script server-side — a vendor replies with
+/// `P_OpenTrading`, a dialog NPC with chat output. Sent reliable.
+pub fn right_click_packet(runtime_id: u16) -> Vec<u8> {
+    runtime_id.to_le_bytes().to_vec()
+}
+
+/// `P_Examine` (`Interface3D.bb:694`): the target actor's RuntimeID (u16).
+/// Runs the NPC's Examine script; the reply comes back as chat/output text.
+/// Sent reliable.
+pub fn examine_packet(runtime_id: u16) -> Vec<u8> {
+    runtime_id.to_le_bytes().to_vec()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn interact_packets_are_le_runtime_id() {
+        assert_eq!(right_click_packet(7), vec![7, 0]);
+        assert_eq!(examine_packet(0x0102), vec![0x02, 0x01]);
+    }
 
     #[test]
     fn cast_without_target_omits_rid() {

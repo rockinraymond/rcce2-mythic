@@ -62,3 +62,7 @@ path = "src/bin/sound_test.rs"
 [[bin]]
 name = "fetch-test"
 path = "src/bin/fetch_test.rs"
+
+[[bin]]
+name = "interact-test"
+path = "src/bin/interact_test.rs"
