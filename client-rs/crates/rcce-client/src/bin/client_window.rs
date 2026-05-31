@@ -488,6 +488,11 @@ impl ApplicationHandler for App {
                         "[client-window] sheet: gold={} level={} {} item(s) {} spell(s)",
                         s.gold, s.level, s.inventory.len(), s.spells.len()
                     );
+                    // Seed the live inventory from the fetched sheet; from here
+                    // P_InventoryUpdate G/T/H/R keeps world.me_inventory current.
+                    for it in &s.inventory {
+                        world.me_inventory.insert(it.slot, *it);
+                    }
                 }
                 self.sheet = outcome.sheet;
                 self.net = Some(Net { transport, world, peer: outcome.peer, updates: 0 });
@@ -854,6 +859,11 @@ impl App {
                 net.updates += 1;
                 net.world.apply(&m);
             }
+            // Flush any replies the apply() logic queued (e.g. the "GY" accept
+            // when the server gives us an item).
+            for (ptype, data) in net.world.pending_sends.drain(..) {
+                net.transport.send(net.peer, ptype, &data, true);
+            }
             // Spawn floating damage numbers for any new combat hits, expire old.
             self.floaters.ingest(&net.world.combat_events, elapsed);
             self.floaters.tick(elapsed);
@@ -1154,16 +1164,20 @@ impl App {
                 overlay.text(px + pw - 78.0, py + 7.0, 1.0, "[I] close", dim);
                 let mut y = py + 30.0;
                 let limit = py + ph - 14.0;
+                // Live inventory (kept current by P_InventoryUpdate); falls back
+                // to empty if not logged in.
+                let me_inv = self.net.as_ref().map(|n| &n.world.me_inventory);
                 if let Some(s) = &self.sheet {
                     overlay.text_shadow(px + 10.0, y, 1.0, &format!("Lv {}   {} gold   {} xp", s.level, s.gold, s.xp), [1.0, 0.88, 0.4, 1.0]);
                     y += 18.0;
-                    overlay.text_shadow(px + 10.0, y, 1.0, &format!("Inventory ({})", s.inventory.len()), [0.7, 0.85, 1.0, 1.0]);
+                    let inv_count = me_inv.map(|m| m.len()).unwrap_or(0);
+                    overlay.text_shadow(px + 10.0, y, 1.0, &format!("Inventory ({inv_count})"), [0.7, 0.85, 1.0, 1.0]);
                     y += 14.0;
-                    if s.inventory.is_empty() {
+                    if inv_count == 0 {
                         overlay.text(px + 18.0, y, 1.0, "(empty)", dim);
                         y += 13.0;
-                    } else {
-                        for it in &s.inventory {
+                    } else if let Some(inv) = me_inv {
+                        for it in inv.values() {
                             if y > limit - 80.0 { break; }
                             let name = store.item_name(it.item_id);
                             let line = if it.amount > 1 { format!("{name}  x{}", it.amount) } else { name };

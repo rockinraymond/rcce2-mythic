@@ -99,6 +99,13 @@ pub struct World {
     pub dropped_items: HashMap<u32, DroppedItem>,
     /// The open vendor/trade window, if any (P_OpenTrading).
     pub current_trade: Option<crate::trade::TradeWindow>,
+    /// The local player's inventory, keyed by slot (0..13 equipment, 14..45
+    /// backpack). Seeded from the P_FetchCharacter sheet, then kept live by
+    /// P_InventoryUpdate G/T/H/R. BTreeMap so the panel iterates in slot order.
+    pub me_inventory: std::collections::BTreeMap<u8, crate::fetch::InvItem>,
+    /// Outbound packets the apply() logic needs to send (e.g. the "GY" accept
+    /// for a given item). The host drains this after each poll.
+    pub pending_sends: Vec<(u8, Vec<u8>)>,
 }
 
 /// An item lying on the ground, from `P_InventoryUpdate "D"`.
@@ -107,6 +114,7 @@ pub struct DroppedItem {
     pub handle: u32,
     pub item_id: u16,
     pub amount: u16,
+    pub health: u8,
     pub x: f32,
     pub y: f32,
     pub z: f32,
@@ -396,13 +404,13 @@ impl World {
         }
     }
 
-    /// `P_InventoryUpdate` (ClientNet.bb:1277): a sub-typed family. We track the
-    /// world-loot subset — "D" spawns a dropped item, "P"/"R" remove it. (Per-
-    /// slot inventory edits flow through the P_FetchCharacter sheet panel.)
+    /// `P_InventoryUpdate` (ClientNet.bb:1277): a sub-typed family covering both
+    /// world loot ("D"/"P") and the local player's own inventory ("R" received,
+    /// "G" given, "T" taken, "H" health), keeping `me_inventory` live.
     fn on_inventory_update(&mut self, d: &[u8]) {
         match d.first() {
-            // Item dropped: amount u16, x/y/z f32, handle u32, then the 83-byte
-            // ItemInstance (its id is the first 2 bytes).
+            // Item dropped in the world: amount u16, x/y/z f32, handle u32, then
+            // the 83-byte ItemInstance (id = first u16, health = last byte).
             Some(b'D') => {
                 let mut r = MsgReader::new(&d[1..]);
                 let (Some(amount), Some(x), Some(y), Some(z), Some(handle)) =
@@ -410,22 +418,104 @@ impl World {
                 else {
                     return;
                 };
-                let item_id = r.u16().unwrap_or(0xFFFF);
+                let Some(item) = r.bytes(83) else { return };
+                let item_id = u16::from_le_bytes([item[0], item[1]]);
                 if item_id == 0xFFFF {
                     return; // no-item sentinel
                 }
+                let health = item[82];
                 self.dropped_items
-                    .insert(handle, DroppedItem { handle, item_id, amount, x, y, z });
+                    .insert(handle, DroppedItem { handle, item_id, amount, health, x, y, z });
             }
-            // Gone: "P" (someone else took it) / "R" (I did) both lead with the
-            // 4-byte handle. Drop it from the world either way.
-            Some(b'P') | Some(b'R') => {
+            // Someone else picked up a dropped item (handle u32) — remove it.
+            Some(b'P') => {
                 if let Some(h) = MsgReader::new(&d[1..]).u32() {
                     self.dropped_items.remove(&h);
                 }
             }
+            // I received a dropped item: handle u32 + slot u8. Move it from the
+            // world into my inventory.
+            Some(b'R') => {
+                let mut r = MsgReader::new(&d[1..]);
+                let (Some(handle), Some(slot)) = (r.u32(), r.u8()) else { return };
+                if let Some(di) = self.dropped_items.remove(&handle) {
+                    self.inv_add(slot, di.item_id, di.amount, di.health);
+                }
+            }
+            // Given an item: handle u32 + ItemID u16 + Amount u16. Place it in a
+            // free/stackable slot and ACK with "GY" + handle + slot (or "GN").
+            Some(b'G') => {
+                let mut r = MsgReader::new(&d[1..]);
+                let (Some(handle), Some(item_id), Some(amount)) = (r.u32(), r.u16(), r.u16()) else {
+                    return;
+                };
+                if item_id == 0xFFFF {
+                    return;
+                }
+                match self.inv_free_slot(item_id) {
+                    Some(slot) => {
+                        self.inv_add(slot, item_id, amount, 100);
+                        let mut reply = b"GY".to_vec();
+                        reply.extend_from_slice(&handle.to_le_bytes());
+                        reply.push(slot);
+                        self.pending_sends.push((pk::INVENTORY_UPDATE, reply));
+                    }
+                    None => {
+                        let mut reply = b"GN".to_vec();
+                        reply.extend_from_slice(&handle.to_le_bytes());
+                        self.pending_sends.push((pk::INVENTORY_UPDATE, reply));
+                    }
+                }
+            }
+            // An item was taken from my inventory: slot u8 + amount u16.
+            Some(b'T') => {
+                let mut r = MsgReader::new(&d[1..]);
+                let (Some(slot), Some(amount)) = (r.u8(), r.u16()) else { return };
+                if let Some(it) = self.me_inventory.get_mut(&slot) {
+                    it.amount = it.amount.saturating_sub(amount);
+                    if it.amount == 0 {
+                        self.me_inventory.remove(&slot);
+                    }
+                }
+            }
+            // An item's health (durability) changed: slot u8 + health u8.
+            Some(b'H') => {
+                let mut r = MsgReader::new(&d[1..]);
+                let (Some(slot), Some(health)) = (r.u8(), r.u8()) else { return };
+                if let Some(it) = self.me_inventory.get_mut(&slot) {
+                    it.health = health;
+                }
+            }
             _ => {}
         }
+    }
+
+    /// Add `amount` of `item_id` to inventory slot `slot`, stacking if the slot
+    /// already holds the same item.
+    fn inv_add(&mut self, slot: u8, item_id: u16, amount: u16, health: u8) {
+        let e = self
+            .me_inventory
+            .entry(slot)
+            .or_insert(crate::fetch::InvItem { slot, item_id, amount: 0, health });
+        if e.item_id == item_id {
+            e.amount = e.amount.saturating_add(amount);
+            e.health = health;
+        } else {
+            *e = crate::fetch::InvItem { slot, item_id, amount, health };
+        }
+    }
+
+    /// Pick a slot for an incoming item: an existing backpack slot holding the
+    /// same item (to stack), else the first empty backpack slot (14..=45).
+    fn inv_free_slot(&self, item_id: u16) -> Option<u8> {
+        if let Some((&slot, _)) = self
+            .me_inventory
+            .iter()
+            .find(|(&s, it)| s >= 14 && it.item_id == item_id)
+        {
+            return Some(slot);
+        }
+        (14u8..=45).find(|s| !self.me_inventory.contains_key(s))
     }
 
     /// `P_WeatherChange` (ClientNet.bb:1272): areaId u32 + weather u8. Applies
@@ -664,6 +754,54 @@ mod tests {
         });
         w.apply(&msg(pk::INVENTORY_UPDATE, bad));
         assert!(w.dropped_items.is_empty());
+    }
+
+    #[test]
+    fn inventory_give_take_health_sync() {
+        let mut w = World::default();
+        // "G" give: handle u32, item u16, amount u16 → free backpack slot + GY.
+        w.apply(&msg(pk::INVENTORY_UPDATE, pkt(|p| { p.u8(b'G').u32(99).u16(10).u16(2); })));
+        assert_eq!(w.me_inventory.len(), 1);
+        let (&slot, it) = w.me_inventory.iter().next().unwrap();
+        assert_eq!(slot, 14); // first free backpack slot
+        assert_eq!((it.item_id, it.amount), (10, 2));
+        // Acked with "GY" + handle(LE) + slot.
+        assert_eq!(w.pending_sends.len(), 1);
+        assert_eq!(w.pending_sends[0].1, vec![b'G', b'Y', 99, 0, 0, 0, 14]);
+
+        // Another give of the same item stacks into the same slot.
+        w.apply(&msg(pk::INVENTORY_UPDATE, pkt(|p| { p.u8(b'G').u32(1).u16(10).u16(3); })));
+        assert_eq!(w.me_inventory.len(), 1);
+        assert_eq!(w.me_inventory[&14].amount, 5);
+
+        // "H" durability change on slot 14.
+        w.apply(&msg(pk::INVENTORY_UPDATE, pkt(|p| { p.u8(b'H').u8(14).u8(60); })));
+        assert_eq!(w.me_inventory[&14].health, 60);
+
+        // "T" take 2 → amount 3; take 3 more → slot removed.
+        w.apply(&msg(pk::INVENTORY_UPDATE, pkt(|p| { p.u8(b'T').u8(14).u16(2); })));
+        assert_eq!(w.me_inventory[&14].amount, 3);
+        w.apply(&msg(pk::INVENTORY_UPDATE, pkt(|p| { p.u8(b'T').u8(14).u16(3); })));
+        assert!(w.me_inventory.is_empty());
+    }
+
+    #[test]
+    fn inventory_receive_from_dropped() {
+        let mut w = World::default();
+        // Drop an item in the world, then receive it into a slot.
+        let drop = pkt(|p| {
+            p.u8(b'D').u16(4).f32(0.0).f32(0.0).f32(0.0).u32(55);
+            p.u16(7); // item id
+            p.raw(&[0u8; 80]);
+            p.u8(90); // ItemInstance health byte (offset 82)
+        });
+        w.apply(&msg(pk::INVENTORY_UPDATE, drop));
+        assert_eq!(w.dropped_items.len(), 1);
+        assert_eq!(w.dropped_items[&55].health, 90);
+
+        w.apply(&msg(pk::INVENTORY_UPDATE, pkt(|p| { p.u8(b'R').u32(55).u8(20); })));
+        assert!(w.dropped_items.is_empty());
+        assert_eq!((w.me_inventory[&20].item_id, w.me_inventory[&20].amount, w.me_inventory[&20].health), (7, 4, 90));
     }
 
     #[test]
