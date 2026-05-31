@@ -46,6 +46,14 @@ pub fn phase_at(elapsed_secs: f32, cycle_secs: f32) -> f32 {
     (elapsed_secs / cycle_secs.max(1.0)).rem_euclid(1.0)
 }
 
+/// How visible the night-sky stars are at `phase` (0 by day, 1 at deep night).
+/// Stars fade in only once it's fairly dark and peak at midnight.
+pub fn night_factor(phase: f32) -> f32 {
+    let sun = ((phase.rem_euclid(1.0) - 0.25) * TAU).sin();
+    let day = (sun * 0.5 + 0.5).clamp(0.0, 1.0); // 0 night .. 1 day
+    ((0.45 - day) / 0.45).clamp(0.0, 1.0)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -87,6 +95,15 @@ mod tests {
         let night = modulate(base, &daynight(0.0));
         let noon = modulate(base, &daynight(0.5));
         assert!(night.iter().sum::<f32>() < noon.iter().sum::<f32>());
+    }
+
+    #[test]
+    fn stars_only_at_night() {
+        assert!(night_factor(0.0) > 0.9, "midnight should be starry: {}", night_factor(0.0));
+        assert_eq!(night_factor(0.5), 0.0, "no stars at noon");
+        assert_eq!(night_factor(0.25), 0.0, "no stars at dawn");
+        // Monotonic into deep night.
+        assert!(night_factor(0.05) < night_factor(0.0));
     }
 
     #[test]

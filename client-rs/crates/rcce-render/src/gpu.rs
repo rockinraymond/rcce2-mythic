@@ -149,15 +149,19 @@ pub struct SkyPipeline {
     has_texture: bool,
     cloud_bind: wgpu::BindGroup,
     has_clouds: bool,
+    stars_bind: wgpu::BindGroup,
+    has_stars: bool,
 }
 
 const SKY_SHADER: &str = r#"
-struct SkyU { top: vec4<f32>, bottom: vec4<f32>, params: vec4<f32> };
+struct SkyU { top: vec4<f32>, bottom: vec4<f32>, params: vec4<f32>, params2: vec4<f32> };
 @group(0) @binding(0) var<uniform> sky: SkyU;
 @group(1) @binding(0) var skytex: texture_2d<f32>;
 @group(1) @binding(1) var skysamp: sampler;
 @group(2) @binding(0) var cloudtex: texture_2d<f32>;
 @group(2) @binding(1) var cloudsamp: sampler;
+@group(3) @binding(0) var starstex: texture_2d<f32>;
+@group(3) @binding(1) var starssamp: sampler;
 struct VO { @builtin(position) pos: vec4<f32>, @location(0) t: f32, @location(1) uv: vec2<f32> };
 @vertex fn vs(@builtin(vertex_index) vi: u32) -> VO {
     var p = array<vec2<f32>, 3>(vec2<f32>(-1.0, -1.0), vec2<f32>(3.0, -1.0), vec2<f32>(-1.0, 3.0));
@@ -178,6 +182,14 @@ struct VO { @builtin(position) pos: vec4<f32>, @location(0) t: f32, @location(1)
         let tex = textureSample(skytex, skysamp, uv).rgb;
         let h = smoothstep(0.0, 0.30, i.t);
         col = mix(grad, tex, h);
+    }
+    if (sky.params2.x >= 0.5 && sky.params2.y > 0.01) {
+        // Stars (behind clouds): additive so a black background adds nothing and
+        // white stars add light. Gated by the night factor (params2.y).
+        let suv = vec2<f32>(i.uv.x + sky.params2.z, i.uv.y);
+        let s = textureSample(starstex, starssamp, suv).rgb;
+        let sfade = smoothstep(0.05, 0.40, i.t);
+        col = col + s * sky.params2.y * sfade;
     }
     if (sky.params.z >= 0.5) {
         // Cloud overlay: pans faster than the sky, alpha-composited, and only
@@ -208,7 +220,7 @@ impl SkyPipeline {
         });
         let buf = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("sky"),
-            size: 48, // three vec4 (top, bottom, params)
+            size: 64, // four vec4 (top, bottom, params, params2)
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
@@ -249,16 +261,17 @@ impl SkyPipeline {
             min_filter: wgpu::FilterMode::Linear,
             ..Default::default()
         });
-        // 1×1 defaults — never sampled (params.x/.z = 0), so no upload needed.
+        // 1×1 defaults — never sampled (params gates each), so no upload needed.
         let tex_bind = make_sky_tex_bind(device, None, &tex_bgl, &sampler, 1, 1, None);
         let cloud_bind = make_sky_tex_bind(device, None, &tex_bgl, &sampler, 1, 1, None);
+        let stars_bind = make_sky_tex_bind(device, None, &tex_bgl, &sampler, 1, 1, None);
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("sky"),
             source: wgpu::ShaderSource::Wgsl(SKY_SHADER.into()),
         });
         let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: None,
-            bind_group_layouts: &[&bgl, &tex_bgl, &tex_bgl], // group2 (clouds) shares the layout
+            bind_group_layouts: &[&bgl, &tex_bgl, &tex_bgl, &tex_bgl], // groups 1-3 share the tex layout
             push_constant_ranges: &[],
         });
         let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
@@ -300,6 +313,8 @@ impl SkyPipeline {
             has_texture: false,
             cloud_bind,
             has_clouds: false,
+            stars_bind,
+            has_stars: false,
         }
     }
 
@@ -311,13 +326,19 @@ impl SkyPipeline {
     /// Per-frame params: `yaw` (radians) pans the sky texture; clouds pan faster
     /// (1.6×) plus a slow time drift so they move even when standing still. The
     /// has-sky / has-clouds flags come from whether those textures are set.
-    pub fn set_frame(&self, queue: &wgpu::Queue, yaw: f32, time: f32) {
+    pub fn set_frame(&self, queue: &wgpu::Queue, yaw: f32, time: f32, night: f32) {
         use std::f32::consts::PI;
         let has_sky = if self.has_texture { 1.0 } else { 0.0 };
         let has_clouds = if self.has_clouds { 1.0 } else { 0.0 };
+        let has_stars = if self.has_stars { 1.0 } else { 0.0 };
         let off = yaw / (2.0 * PI);
         let cloud_off = off * 1.6 + time * 0.004;
-        let params: [f32; 4] = [has_sky, off, has_clouds, cloud_off];
+        // params = [has_sky, sky_off, has_clouds, cloud_off];
+        // params2 = [has_stars, night, star_off, _]. Stars pan with the sky.
+        let params: [f32; 8] = [
+            has_sky, off, has_clouds, cloud_off,
+            has_stars, night.clamp(0.0, 1.0), off, 0.0,
+        ];
         queue.write_buffer(&self.buf, 32, bytemuck::cast_slice(&params));
     }
 
@@ -351,11 +372,27 @@ impl SkyPipeline {
         self.has_clouds = false;
     }
 
+    /// Upload the area's night-stars texture (RGBA8). Shown additively, gated by
+    /// the night factor passed to [`set_frame`].
+    pub fn set_stars_texture(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, width: u32, height: u32, rgba: &[u8]) {
+        if width == 0 || height == 0 || rgba.len() < (width * height * 4) as usize {
+            return;
+        }
+        self.stars_bind = make_sky_tex_bind(device, Some(queue), &self.tex_bgl, &self.sampler, width, height, Some(rgba));
+        self.has_stars = true;
+    }
+
+    /// Clear the stars overlay.
+    pub fn clear_stars(&mut self) {
+        self.has_stars = false;
+    }
+
     pub fn draw<'a>(&'a self, rp: &mut wgpu::RenderPass<'a>) {
         rp.set_pipeline(&self.pipeline);
         rp.set_bind_group(0, &self.bind, &[]);
         rp.set_bind_group(1, &self.tex_bind, &[]);
         rp.set_bind_group(2, &self.cloud_bind, &[]);
+        rp.set_bind_group(3, &self.stars_bind, &[]);
         rp.draw(0..3, 0..1);
     }
 }

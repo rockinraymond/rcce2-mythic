@@ -151,8 +151,20 @@ fn main() {
     } else {
         None
     };
+    let stars_tex = if env.stars_tex_id != 65535 {
+        let t = store
+            .texture_path(env.stars_tex_id)
+            .and_then(|p| rcce_data::texture::load(&p))
+            .map(|img| (img.width, img.height, img.rgba));
+        println!("[zone_render] stars_tex_id {} -> {}", env.stars_tex_id, if t.is_some() { "loaded" } else { "unresolved" });
+        t
+    } else {
+        None
+    };
+    let night = rcce_client::daynight::night_factor(phase);
+    println!("[zone_render] night factor {night:.2}");
 
-    match rcce_render::render_scene_png(&instances, eye, target, ground_y, fog, env.fog_near, env.fog_far, ambient, env.light_dir, 1600, 1000, &out, sky_tex, cloud_tex) {
+    match rcce_render::render_scene_png(&instances, eye, target, ground_y, fog, env.fog_near, env.fog_far, ambient, env.light_dir, 1600, 1000, &out, sky_tex, cloud_tex, stars_tex, night) {
         Ok(adapter) => println!(
             "[zone_render] rendered {} instances via {adapter} -> {out}",
             instances.len()
