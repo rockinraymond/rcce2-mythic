@@ -343,18 +343,13 @@ impl B3dModel {
     /// sanity check for the pipeline. Mesh count/order is preserved so existing
     /// per-mesh textures still align. Unweighted vertices keep their bind
     /// position. Unskinned models (no bones) are returned unchanged.
-    pub fn posed_meshes(&self, frame: Option<f32>) -> Vec<B3dMesh> {
-        if self.bones.is_empty() || self.weight_count() == 0 {
-            return self.meshes.clone();
-        }
-        let skin = self.skinning_matrices(frame);
-        // Per-vertex influences (vertex id is shared across the split meshes).
-        let maxv = self
-            .meshes
-            .iter()
-            .map(|m| m.positions.len())
-            .max()
-            .unwrap_or(0);
+    /// Per-vertex bone influences `(bone_index, normalized_weight)`. The vertex
+    /// id space is shared across the split meshes; an empty inner vec means the
+    /// vertex is unweighted (keeps its bind position). Shared by the CPU
+    /// [`posed_meshes`](Self::posed_meshes) path and the GPU
+    /// [`skin_attributes`](Self::skin_attributes) export.
+    pub fn vertex_influences(&self) -> Vec<Vec<(usize, f32)>> {
+        let maxv = self.meshes.iter().map(|m| m.positions.len()).max().unwrap_or(0);
         let mut infl: Vec<Vec<(usize, f32)>> = vec![Vec::new(); maxv];
         for (bi, b) in self.bones.iter().enumerate() {
             for &(vid, w) in &b.weights {
@@ -372,6 +367,41 @@ impl B3dModel {
                 }
             }
         }
+        infl
+    }
+
+    /// Per-vertex GPU skinning attributes: for each vertex (0..max mesh vertex
+    /// count), the up-to-4 strongest bone indices + their renormalized weights,
+    /// for hardware linear-blend skinning. Unweighted vertices get all-zero
+    /// weights (no deformation, falls back to the bind position). The bone
+    /// indices match [`skinning_matrices`](Self::skinning_matrices) palette order.
+    pub fn skin_attributes(&self) -> (Vec<[u32; 4]>, Vec<[f32; 4]>) {
+        let infl = self.vertex_influences();
+        let mut ids = Vec::with_capacity(infl.len());
+        let mut wts = Vec::with_capacity(infl.len());
+        for list in &infl {
+            let mut v = list.clone();
+            v.sort_by(|a, b| b.1.total_cmp(&a.1)); // strongest first
+            v.truncate(4);
+            let sum: f32 = v.iter().map(|x| x.1).sum();
+            let mut id = [0u32; 4];
+            let mut wt = [0.0f32; 4];
+            for (k, &(bi, w)) in v.iter().enumerate() {
+                id[k] = bi as u32;
+                wt[k] = if sum > 0.0 { w / sum } else { 0.0 };
+            }
+            ids.push(id);
+            wts.push(wt);
+        }
+        (ids, wts)
+    }
+
+    pub fn posed_meshes(&self, frame: Option<f32>) -> Vec<B3dMesh> {
+        if self.bones.is_empty() || self.weight_count() == 0 {
+            return self.meshes.clone();
+        }
+        let skin = self.skinning_matrices(frame);
+        let infl = self.vertex_influences();
 
         self.meshes
             .iter()
@@ -759,6 +789,42 @@ mod mat_tests {
     fn identity_is_neutral() {
         let p = xform_point(&IDENTITY, [3.0, -2.0, 5.0]);
         assert_eq!(p, [3.0, -2.0, 5.0]);
+    }
+
+    #[test]
+    fn skin_attributes_invert_and_normalize() {
+        // One mesh, 2 vertices; two bones weighting them.
+        let bone = |weights: Vec<(u32, f32)>| B3dBone {
+            name: String::new(),
+            parent: None,
+            local_bind: IDENTITY,
+            local_t: [0.0; 3],
+            local_r: [1.0, 0.0, 0.0, 0.0],
+            local_s: [1.0; 3],
+            bind_world: IDENTITY,
+            inverse_bind: IDENTITY,
+            weights,
+            keys: Vec::new(),
+        };
+        let mut mesh = B3dMesh::default();
+        mesh.positions = vec![[0.0; 3], [0.0; 3]];
+        let model = B3dModel {
+            meshes: vec![mesh],
+            // bone 0 weights v0 by 3; bone 1 weights v0 by 1 and v1 by 1.
+            bones: vec![bone(vec![(0, 3.0)]), bone(vec![(0, 1.0), (1, 1.0)])],
+            ..Default::default()
+        };
+        let (ids, wts) = model.skin_attributes();
+        assert_eq!(ids.len(), 2);
+        // v0: bone 0 strongest (3/4), bone 1 (1/4); renormalized, sum ~1.
+        assert_eq!(ids[0][0], 0);
+        assert!((wts[0][0] - 0.75).abs() < 1e-5, "w {:?}", wts[0]);
+        assert!((wts[0][1] - 0.25).abs() < 1e-5);
+        assert!((wts[0].iter().sum::<f32>() - 1.0).abs() < 1e-5);
+        // v1: only bone 1.
+        assert_eq!(ids[1][0], 1);
+        assert!((wts[1][0] - 1.0).abs() < 1e-5);
+        assert!(wts[1][1..].iter().all(|&w| w == 0.0));
     }
 
     #[test]
