@@ -141,8 +141,18 @@ fn main() {
     } else {
         None
     };
+    let cloud_tex = if env.cloud_tex_id != 65535 {
+        let t = store
+            .texture_path(env.cloud_tex_id)
+            .and_then(|p| rcce_data::texture::load(&p))
+            .map(|img| (img.width, img.height, img.rgba));
+        println!("[zone_render] cloud_tex_id {} -> {}", env.cloud_tex_id, if t.is_some() { "loaded" } else { "unresolved" });
+        t
+    } else {
+        None
+    };
 
-    match rcce_render::render_scene_png(&instances, eye, target, ground_y, fog, env.fog_near, env.fog_far, ambient, env.light_dir, 1600, 1000, &out, sky_tex) {
+    match rcce_render::render_scene_png(&instances, eye, target, ground_y, fog, env.fog_near, env.fog_far, ambient, env.light_dir, 1600, 1000, &out, sky_tex, cloud_tex) {
         Ok(adapter) => println!(
             "[zone_render] rendered {} instances via {adapter} -> {out}",
             instances.len()

@@ -353,6 +353,18 @@ mod tests {
                 .filter(|_| sky != 65535)
                 .and_then(|p| p.value.get(sky).map(|e| e.filename.clone()));
             eprintln!("{zone}: sky_tex_id={sky} -> {sky_file:?}  fog={:?}", area.env.fog_color);
+            let resolve = |id: u16| -> Option<String> {
+                std::fs::read(root.join("data/Game Data/Textures.dat"))
+                    .ok()
+                    .and_then(|b| catalog::TextureCatalog::parse(&b).ok())
+                    .filter(|_| id != 65535)
+                    .and_then(|p| p.value.get(id).map(|e| e.filename.clone()))
+            };
+            eprintln!(
+                "{zone}: cloud={} -> {:?}  stars={} -> {:?}",
+                area.env.cloud_tex_id, resolve(area.env.cloud_tex_id),
+                area.env.stars_tex_id, resolve(area.env.stars_tex_id)
+            );
             // If there's scenery at all, most should resolve to real meshes.
             if !area.sceneries.is_empty() {
                 assert!(

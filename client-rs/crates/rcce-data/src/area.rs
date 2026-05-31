@@ -32,6 +32,11 @@ pub struct SceneryPlacement {
 #[derive(Debug, Clone)]
 pub struct AreaEnv {
     pub sky_tex_id: u16,
+    /// Cloud / storm-cloud / night-stars texture ids (Textures.dat; 65535 = none).
+    /// Drawn as slowly-drifting sky overlays (`Environment3D.bb` CloudEN/StarsEN).
+    pub cloud_tex_id: u16,
+    pub storm_cloud_tex_id: u16,
+    pub stars_tex_id: u16,
     /// `LoadingMusicID` — indexes `Music.dat` for the zone's looping track
     /// (65535 = none).
     pub music_id: u16,
@@ -60,6 +65,9 @@ impl Default for AreaEnv {
     fn default() -> Self {
         AreaEnv {
             sky_tex_id: 65535,
+            cloud_tex_id: 65535,
+            storm_cloud_tex_id: 65535,
+            stars_tex_id: 65535,
             music_id: 65535,
             fog_color: [0.45, 0.62, 0.82],
             fog_near: 1000.0,
@@ -88,8 +96,10 @@ impl AreaScenery {
         let env = (|| -> Result<AreaEnv, ReadError> {
             r.seek(2)?; // skip LoadingTexID (i16@0)
             let music_id = r.read_short_u()?; // LoadingMusicID (i16@2)
-            let sky_tex_id = r.read_short_u()?;
-            r.seek(12)?; // to FogRGB
+            let sky_tex_id = r.read_short_u()?; // @4
+            let cloud_tex_id = r.read_short_u()?; // @6
+            let storm_cloud_tex_id = r.read_short_u()?; // @8
+            let stars_tex_id = r.read_short_u()?; // @10 (now at @12 = FogRGB)
             let fog_color = [
                 r.read_byte()? as f32 / 255.0,
                 r.read_byte()? as f32 / 255.0,
@@ -110,6 +120,9 @@ impl AreaScenery {
             let light_dir = light_dir_from_pitch_yaw(light_pitch, light_yaw);
             Ok(AreaEnv {
                 sky_tex_id,
+                cloud_tex_id,
+                storm_cloud_tex_id,
+                stars_tex_id,
                 music_id,
                 fog_color,
                 fog_near,

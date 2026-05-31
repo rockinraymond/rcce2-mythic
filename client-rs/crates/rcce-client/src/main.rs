@@ -276,7 +276,7 @@ fn main() {
     let target = [p_pos[0], ground_y + player_h * 0.55, p_pos[2]];
 
     let out = "rcce_world3d.png";
-    match rcce_render::render_scene_png(&instances, eye, target, ground_y, [0.45, 0.62, 0.82], 1.0e6, 2.0e6, [0.4, 0.4, 0.4], [0.4, 0.85, 0.35], 1200, 900, out, None) {
+    match rcce_render::render_scene_png(&instances, eye, target, ground_y, [0.45, 0.62, 0.82], 1.0e6, 2.0e6, [0.4, 0.4, 0.4], [0.4, 0.85, 0.35], 1200, 900, out, None, None) {
         Ok(adapter) => println!(
             "[client] rendered 3D world ({} instances) via {adapter} -> {out}",
             instances.len()

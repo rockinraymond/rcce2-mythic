@@ -147,6 +147,8 @@ pub struct SkyPipeline {
     sampler: wgpu::Sampler,
     tex_bind: wgpu::BindGroup,
     has_texture: bool,
+    cloud_bind: wgpu::BindGroup,
+    has_clouds: bool,
 }
 
 const SKY_SHADER: &str = r#"
@@ -154,6 +156,8 @@ struct SkyU { top: vec4<f32>, bottom: vec4<f32>, params: vec4<f32> };
 @group(0) @binding(0) var<uniform> sky: SkyU;
 @group(1) @binding(0) var skytex: texture_2d<f32>;
 @group(1) @binding(1) var skysamp: sampler;
+@group(2) @binding(0) var cloudtex: texture_2d<f32>;
+@group(2) @binding(1) var cloudsamp: sampler;
 struct VO { @builtin(position) pos: vec4<f32>, @location(0) t: f32, @location(1) uv: vec2<f32> };
 @vertex fn vs(@builtin(vertex_index) vi: u32) -> VO {
     var p = array<vec2<f32>, 3>(vec2<f32>(-1.0, -1.0), vec2<f32>(3.0, -1.0), vec2<f32>(-1.0, 3.0));
@@ -166,16 +170,24 @@ struct VO { @builtin(position) pos: vec4<f32>, @location(0) t: f32, @location(1)
 }
 @fragment fn fs(i: VO) -> @location(0) vec4<f32> {
     let grad = mix(sky.bottom.rgb, sky.top.rgb, clamp(i.t, 0.0, 1.0));
-    if (sky.params.x < 0.5) {
-        return vec4<f32>(grad, 1.0);
+    var col = grad;
+    if (sky.params.x >= 0.5) {
+        // Sky texture: pan horizontally with the camera yaw (Repeat sampler);
+        // fade into the fog gradient at the horizon so it meets the terrain.
+        let uv = vec2<f32>(i.uv.x + sky.params.y, i.uv.y);
+        let tex = textureSample(skytex, skysamp, uv).rgb;
+        let h = smoothstep(0.0, 0.30, i.t);
+        col = mix(grad, tex, h);
     }
-    // Pan horizontally with the camera yaw (wraps via Repeat sampler).
-    let uv = vec2<f32>(i.uv.x + sky.params.y, i.uv.y);
-    let tex = textureSample(skytex, skysamp, uv).rgb;
-    // Show the sky texture above the horizon, fading to the fog gradient at the
-    // bottom so it meets the terrain smoothly.
-    let h = smoothstep(0.0, 0.30, i.t);
-    return vec4<f32>(mix(grad, tex, h), 1.0);
+    if (sky.params.z >= 0.5) {
+        // Cloud overlay: pans faster than the sky, alpha-composited, and only
+        // well above the horizon (so it doesn't smear into the terrain).
+        let cuv = vec2<f32>(i.uv.x + sky.params.w, i.uv.y);
+        let c = textureSample(cloudtex, cloudsamp, cuv);
+        let fade = smoothstep(0.12, 0.45, i.t);
+        col = mix(col, c.rgb, c.a * fade);
+    }
+    return vec4<f32>(col, 1.0);
 }
 "#;
 
@@ -237,15 +249,16 @@ impl SkyPipeline {
             min_filter: wgpu::FilterMode::Linear,
             ..Default::default()
         });
-        // 1×1 default — never sampled (params.x = 0), so no upload needed.
+        // 1×1 defaults — never sampled (params.x/.z = 0), so no upload needed.
         let tex_bind = make_sky_tex_bind(device, None, &tex_bgl, &sampler, 1, 1, None);
+        let cloud_bind = make_sky_tex_bind(device, None, &tex_bgl, &sampler, 1, 1, None);
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("sky"),
             source: wgpu::ShaderSource::Wgsl(SKY_SHADER.into()),
         });
         let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: None,
-            bind_group_layouts: &[&bgl, &tex_bgl],
+            bind_group_layouts: &[&bgl, &tex_bgl, &tex_bgl], // group2 (clouds) shares the layout
             push_constant_ranges: &[],
         });
         let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
@@ -277,7 +290,17 @@ impl SkyPipeline {
             multiview: None,
             cache: None,
         });
-        SkyPipeline { pipeline, buf, bind, tex_bgl, sampler, tex_bind, has_texture: false }
+        SkyPipeline {
+            pipeline,
+            buf,
+            bind,
+            tex_bgl,
+            sampler,
+            tex_bind,
+            has_texture: false,
+            cloud_bind,
+            has_clouds: false,
+        }
     }
 
     pub fn set_colors(&self, queue: &wgpu::Queue, top: [f32; 3], bottom: [f32; 3]) {
@@ -285,14 +308,16 @@ impl SkyPipeline {
         queue.write_buffer(&self.buf, 0, bytemuck::cast_slice(&data));
     }
 
-    /// Per-frame params: `yaw` (radians) pans the sky texture horizontally. The
-    /// has-texture flag is taken from whether a real sky texture is set.
-    pub fn set_frame(&self, queue: &wgpu::Queue, yaw: f32) {
+    /// Per-frame params: `yaw` (radians) pans the sky texture; clouds pan faster
+    /// (1.6×) plus a slow time drift so they move even when standing still. The
+    /// has-sky / has-clouds flags come from whether those textures are set.
+    pub fn set_frame(&self, queue: &wgpu::Queue, yaw: f32, time: f32) {
         use std::f32::consts::PI;
-        let has = if self.has_texture { 1.0 } else { 0.0 };
-        // Map yaw to a 0..1 horizontal offset (a full turn pans the texture once).
+        let has_sky = if self.has_texture { 1.0 } else { 0.0 };
+        let has_clouds = if self.has_clouds { 1.0 } else { 0.0 };
         let off = yaw / (2.0 * PI);
-        let params: [f32; 4] = [has, off, 0.0, 0.0];
+        let cloud_off = off * 1.6 + time * 0.004;
+        let params: [f32; 4] = [has_sky, off, has_clouds, cloud_off];
         queue.write_buffer(&self.buf, 32, bytemuck::cast_slice(&params));
     }
 
@@ -311,10 +336,26 @@ impl SkyPipeline {
         self.has_texture = false;
     }
 
+    /// Upload the area's cloud texture (RGBA8 with alpha) for the drifting cloud
+    /// overlay. Replaces any previous one and enables clouds.
+    pub fn set_cloud_texture(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, width: u32, height: u32, rgba: &[u8]) {
+        if width == 0 || height == 0 || rgba.len() < (width * height * 4) as usize {
+            return;
+        }
+        self.cloud_bind = make_sky_tex_bind(device, Some(queue), &self.tex_bgl, &self.sampler, width, height, Some(rgba));
+        self.has_clouds = true;
+    }
+
+    /// Clear the cloud overlay.
+    pub fn clear_clouds(&mut self) {
+        self.has_clouds = false;
+    }
+
     pub fn draw<'a>(&'a self, rp: &mut wgpu::RenderPass<'a>) {
         rp.set_pipeline(&self.pipeline);
         rp.set_bind_group(0, &self.bind, &[]);
         rp.set_bind_group(1, &self.tex_bind, &[]);
+        rp.set_bind_group(2, &self.cloud_bind, &[]);
         rp.draw(0..3, 0..1);
     }
 }

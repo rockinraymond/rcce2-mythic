@@ -702,6 +702,17 @@ fn load_zone_static(store: &mut AssetStore, view: &mut WorldView, gfx: &Gfx, dat
     } else {
         view.clear_sky_texture();
     }
+    // Cloud overlay (CloudTexID → drifting alpha-blended clouds).
+    let cloud = scenery.env.cloud_tex_id;
+    if cloud != 65535 {
+        if let Some(img) = store.texture_path(cloud).and_then(|p| rcce_data::texture::load(&p)) {
+            view.set_cloud_texture(&gfx.device, &gfx.queue, img.width, img.height, &img.rgba);
+        } else {
+            view.clear_cloud_texture();
+        }
+    } else {
+        view.clear_cloud_texture();
+    }
     let center = [(min[0] + max[0]) * 0.5, (min[1] + max[1]) * 0.5, (min[2] + max[2]) * 0.5];
     let span = ((max[0] - min[0]).powi(2) + (max[2] - min[2]).powi(2)).sqrt().max(50.0);
     println!("[client-window] zone '{zone}': {} objects, {} meshes, span {span:.0}", place.len(), models.len());
@@ -1548,6 +1559,7 @@ impl App {
                 a: 1.0,
             },
             self.cam_yaw,
+            elapsed,
         );
 
         // 2D overlay: nameplates + health bars over actors, and a player HUD.

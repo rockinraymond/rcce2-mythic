@@ -47,6 +47,8 @@ pub fn render_scene_png(
     // Optional sky texture (w, h, RGBA8) for the textured skydome; None keeps
     // the plain gradient.
     sky_tex: Option<(u32, u32, Vec<u8>)>,
+    // Optional cloud texture (w, h, RGBA8 with alpha) for the cloud overlay.
+    cloud_tex: Option<(u32, u32, Vec<u8>)>,
 ) -> Result<String, String> {
     let aspect = width as f32 / height as f32;
     let proj = Mat4::perspective_rh(50f32.to_radians(), aspect, 1.0, 100_000.0);
@@ -111,7 +113,10 @@ pub fn render_scene_png(
     if let Some((w, h, rgba)) = &sky_tex {
         sky.set_texture(&device, &queue, *w, *h, rgba);
     }
-    sky.set_frame(&queue, 0.0); // still image → no yaw pan
+    if let Some((w, h, rgba)) = &cloud_tex {
+        sky.set_cloud_texture(&device, &queue, *w, *h, rgba);
+    }
+    sky.set_frame(&queue, 0.0, 0.0); // still image → no yaw pan / drift
     let ubuf = device.create_buffer_init_uniform(&uniforms);
     let bind0 = device.create_bind_group(&wgpu::BindGroupDescriptor {
         label: None,

@@ -120,6 +120,12 @@ impl WorldView {
     pub fn clear_sky_texture(&mut self) {
         self.sky.clear_texture();
     }
+    pub fn set_cloud_texture(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, width: u32, height: u32, rgba: &[u8]) {
+        self.sky.set_cloud_texture(device, queue, width, height, rgba);
+    }
+    pub fn clear_cloud_texture(&mut self) {
+        self.sky.clear_clouds();
+    }
 
     #[allow(clippy::too_many_arguments)]
     pub fn render(
@@ -136,13 +142,15 @@ impl WorldView {
         light_dir: [f32; 3],
         clear: wgpu::Color,
         sky_yaw: f32,
+        sky_time: f32,
     ) {
         let u = Uniforms::new(view_proj, eye, fog_color, fog_near, fog_far, ambient, light_dir);
         queue.write_buffer(&self.uniform_buf, 0, bytemuck::bytes_of(&u));
         // Sky gradient: horizon = fog colour (so the world fades into it),
-        // zenith bluer/darker. Then the per-frame yaw pans any sky texture.
+        // zenith bluer/darker. Then the per-frame yaw pans the sky texture and
+        // drives the cloud drift.
         self.sky.set_colors(queue, gpu::sky_zenith(fog_color), fog_color);
-        self.sky.set_frame(queue, sky_yaw);
+        self.sky.set_frame(queue, sky_yaw, sky_time);
         let mut enc = device.create_command_encoder(&Default::default());
         {
             let mut rp = enc.begin_render_pass(&wgpu::RenderPassDescriptor {
