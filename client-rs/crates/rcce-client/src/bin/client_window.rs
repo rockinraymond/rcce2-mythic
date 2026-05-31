@@ -244,6 +244,61 @@ const FBTN_Y: f32 = 0.9415;
 const FBTN_W: f32 = 0.033203125 - 0.006;
 const FBTN_H: f32 = 0.044270833 - 0.008;
 
+/// Spell action-bar slot grid (shared by the draw + hover-tooltip paths). The
+/// 12 slots are left-anchored on the FBTN_Y baseline at FBTN_W×FBTN_H each.
+const SPELLBAR_X0: f32 = 0.089867187;
+const SPELLBAR_PITCH: f32 = 0.036132812;
+
+/// Index of the inventory slot (0..=45) whose rect contains `(cx, cy)`, given the
+/// InventoryWindow rect `iw` and the window-relative `buttons` (Interface.dat
+/// inv_buttons), for an `(sw, sh)` viewport. Pure — shared by the click hit-test
+/// and the hover tooltip.
+fn inventory_slot_at(cx: f32, cy: f32, iw: rcce_data::IComp, buttons: &[rcce_data::IComp], sw: f32, sh: f32) -> Option<usize> {
+    for (i, b) in buttons.iter().enumerate() {
+        let bx = (iw.x + b.x * iw.w) * sw;
+        let by = (iw.y + b.y * iw.h) * sh;
+        let bw = (b.w * iw.w * sw).max(8.0);
+        let bh = (b.h * iw.h * sh).max(8.0);
+        if cx >= bx && cx < bx + bw && cy >= by && cy < by + bh {
+            return Some(i);
+        }
+    }
+    None
+}
+
+/// Greedy word-wrap into lines of at most `max_chars` (for tooltip bodies).
+fn wrap_text(s: &str, max_chars: usize) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut cur = String::new();
+    for word in s.split_whitespace() {
+        if !cur.is_empty() && cur.len() + 1 + word.len() > max_chars {
+            out.push(std::mem::take(&mut cur));
+        }
+        if !cur.is_empty() {
+            cur.push(' ');
+        }
+        cur.push_str(word);
+    }
+    if !cur.is_empty() {
+        out.push(cur);
+    }
+    out
+}
+
+/// Index of the action-bar spell slot (0..=11) whose rect contains `(cx, cy)`.
+/// Pure — uses the same geometry the spell-bar draw loop does.
+fn spell_slot_at(cx: f32, cy: f32, sw: f32, sh: f32) -> Option<usize> {
+    let by = FBTN_Y * sh;
+    let (sw_, sh_) = (FBTN_W * sw, FBTN_H * sh);
+    for i in 0..12usize {
+        let x = (SPELLBAR_X0 + i as f32 * SPELLBAR_PITCH) * sw;
+        if cx >= x && cx < x + sw_ && cy >= by && cy < by + sh_ {
+            return Some(i);
+        }
+    }
+    None
+}
+
 /// Compass strip marks: for a `heading` (radians, the way the player faces) and
 /// a horizontal field-of-view `fov` (radians), return the visible compass points
 /// as `(offset, label)` where offset ∈ [-0.5, 0.5] is the position across the
@@ -1031,7 +1086,6 @@ impl App {
         let Some(gfx) = self.gfx.as_ref() else { return };
         let (sw, sh) = (gfx.config.width as f32, gfx.config.height as f32);
         let (cx, cy) = self.cursor;
-        let hit = |x: f32, y: f32, w: f32, h: f32| cx >= x && cx < x + w && cy >= y && cy < y + h;
 
         // Function-button row.
         if let Some(action) = function_button_at(cx, cy, sw, sh) {
@@ -1061,18 +1115,8 @@ impl App {
             return;
         }
         let Some(iface) = self.store.as_ref().and_then(|s| s.interface()) else { return };
-        let iw = iface.inventory_window;
-        let mut clicked_slot: Option<u8> = None;
-        for (i, b) in iface.inventory_buttons.iter().enumerate() {
-            let bx = (iw.x + b.x * iw.w) * sw;
-            let bgy = (iw.y + b.y * iw.h) * sh;
-            let bwid = (b.w * iw.w * sw).max(8.0);
-            let bhei = (b.h * iw.h * sh).max(8.0);
-            if hit(bx, bgy, bwid, bhei) {
-                clicked_slot = Some(i as u8);
-                break;
-            }
-        }
+        let clicked_slot = inventory_slot_at(cx, cy, iface.inventory_window, &iface.inventory_buttons, sw, sh)
+            .map(|i| i as u8);
         let Some(slot) = clicked_slot else { return };
         // Resolve the item in the clicked slot from the live inventory.
         let item = self
@@ -1778,11 +1822,13 @@ impl App {
             // 4:3 layout: 12 spell slots left-anchored at 0.089867187 + i*pitch,
             // function buttons right-anchored at fixed X positions.
             {
-                const BAR_Y: f32 = 0.9415;
-                const SLOT_W: f32 = 0.033203125 - 0.006; // GY button w
-                const SLOT_H: f32 = 0.044270833 - 0.008; // GY button h
-                const SLOT_PITCH: f32 = 0.036132812;
-                const SLOT_X0: f32 = 0.089867187;
+                // Bound to the shared module consts so the draw geometry and the
+                // hover/click hit-tests (spell_slot_at) can't drift apart.
+                const BAR_Y: f32 = FBTN_Y;
+                const SLOT_W: f32 = FBTN_W;
+                const SLOT_H: f32 = FBTN_H;
+                const SLOT_PITCH: f32 = SPELLBAR_PITCH;
+                const SLOT_X0: f32 = SPELLBAR_X0;
                 let (sw_, sh_, bw, bh) = (SLOT_W * sw, SLOT_H * sh, SLOT_W * sw, SLOT_H * sh);
                 let by = BAR_Y * sh;
                 // 12 spell slots; memorised spells fill the first N in order.
@@ -1866,6 +1912,74 @@ impl App {
                         overlay.image_uv(xb_x, xb_y, xb_w * fill, xb_h, "gui:XP", [0.0, 0.0, fill, 1.0], [1.0, 1.0, 1.0, 1.0]);
                     } else {
                         overlay.rect(xb_x, xb_y, xb_w * fill, xb_h, [0.7, 0.55, 0.15, 0.95]);
+                    }
+                }
+            }
+
+            // Hover tooltip (topmost): an inventory slot while the panel is open,
+            // else a spell-bar slot. Shows the item/spell name + stats near the
+            // cursor, clamped to stay on screen.
+            {
+                let (cx, cy) = self.cursor;
+                let white = [1.0, 1.0, 1.0, 1.0];
+                let gold = [1.0, 0.88, 0.4, 1.0];
+                let accent = [0.8, 0.85, 1.0, 1.0];
+                let mut lines: Vec<(String, [f32; 4])> = Vec::new();
+                if self.show_inventory {
+                    if let Some(iface) = store.interface() {
+                        if let Some(slot) =
+                            inventory_slot_at(cx, cy, iface.inventory_window, &iface.inventory_buttons, sw, sh)
+                        {
+                            if let Some(it) = self
+                                .net
+                                .as_ref()
+                                .and_then(|n| n.world.me_inventory.values().find(|it| it.slot == slot as u8))
+                            {
+                                lines.push((store.item_name(it.item_id), white));
+                                lines.push((format!("Value: {}g", store.item_value(it.item_id)), gold));
+                                if it.amount > 1 {
+                                    lines.push((format!("Quantity: {}", it.amount), accent));
+                                }
+                            }
+                        }
+                    }
+                }
+                if lines.is_empty() {
+                    if let Some(slot) = spell_slot_at(cx, cy, sw, sh) {
+                        let mem: Vec<_> = self
+                            .sheet
+                            .as_ref()
+                            .map(|s| s.spells.iter().filter(|sp| sp.memorised).take(12).collect::<Vec<_>>())
+                            .unwrap_or_default();
+                        if let Some(sp) = mem.get(slot) {
+                            lines.push((sp.name.clone(), white));
+                            lines.push((format!("Level {} · Recharge {:.1}s", sp.level, sp.recharge as f32 / 1000.0), accent));
+                            for chunk in wrap_text(&sp.description, 44).into_iter().take(6) {
+                                lines.push((chunk, [0.78, 0.78, 0.78, 1.0]));
+                            }
+                        }
+                    }
+                }
+                if !lines.is_empty() {
+                    let (pad, lh) = (5.0f32, 12.0f32);
+                    let tw = lines
+                        .iter()
+                        .map(|(s, _)| rcce_render::font::text_width(s, 1.0))
+                        .fold(0.0f32, f32::max);
+                    let boxw = tw + pad * 2.0;
+                    let boxh = lines.len() as f32 * lh + pad * 2.0;
+                    let mut tx = cx + 14.0;
+                    let mut ty = cy + 14.0;
+                    if tx + boxw > sw {
+                        tx = (cx - boxw - 6.0).max(0.0);
+                    }
+                    if ty + boxh > sh {
+                        ty = (sh - boxh).max(0.0);
+                    }
+                    overlay.rect(tx, ty, boxw, boxh, [0.04, 0.05, 0.09, 0.95]);
+                    overlay.rect(tx, ty, boxw, 1.5, [0.4, 0.45, 0.6, 0.9]);
+                    for (i, (s, c)) in lines.iter().enumerate() {
+                        overlay.text_shadow(tx + pad, ty + pad + i as f32 * lh, 1.0, s, *c);
                     }
                 }
             }
@@ -1957,5 +2071,40 @@ mod tests {
         assert!(e.0.abs() < 1e-4, "E centred facing E, got {}", e.0);
         let n = m.iter().find(|(_, l)| *l == "N").expect("N visible");
         assert!((n.0 + 0.5).abs() < 1e-4, "N at left edge, got {}", n.0);
+    }
+
+    #[test]
+    fn spell_slot_hit_test() {
+        let (sw, sh) = (1280.0f32, 800.0f32);
+        let by = FBTN_Y * sh;
+        let (sw_, sh_) = (FBTN_W * sw, FBTN_H * sh);
+        let cy = by + sh_ * 0.5;
+        // Centre of each of the 12 slots maps back to its index.
+        for i in 0..12usize {
+            let cx = (SPELLBAR_X0 + i as f32 * SPELLBAR_PITCH) * sw + sw_ * 0.5;
+            assert_eq!(spell_slot_at(cx, cy, sw, sh), Some(i), "slot {i}");
+        }
+        // Above the bar → none; far right (past slot 11) → none.
+        assert_eq!(spell_slot_at(0.2 * sw, by - sh_, sw, sh), None);
+        let past = (SPELLBAR_X0 + 12.0 * SPELLBAR_PITCH) * sw + 4.0;
+        assert_eq!(spell_slot_at(past, cy, sw, sh), None);
+    }
+
+    #[test]
+    fn inventory_slot_hit_test() {
+        use rcce_data::IComp;
+        let (sw, sh) = (1280.0f32, 800.0f32);
+        // Mirror the real InventoryWindow + a 2-slot row at the documented
+        // window-relative positions (button 0 at 0.035, button 1 at 0.155).
+        let iw = IComp { x: 0.25, y: 0.2, w: 0.5, h: 0.55, alpha: 1.0, rgb: [0; 3] };
+        let mk = |x: f32, y: f32| IComp { x, y, w: 0.09, h: 0.11, alpha: 1.0, rgb: [0; 3] };
+        let buttons = [mk(0.035, 0.02), mk(0.155, 0.02)];
+        // Centre of button 1 resolves to index 1.
+        let b = &buttons[1];
+        let cx = (iw.x + (b.x + b.w * 0.5) * iw.w) * sw;
+        let cy = (iw.y + (b.y + b.h * 0.5) * iw.h) * sh;
+        assert_eq!(inventory_slot_at(cx, cy, iw, &buttons, sw, sh), Some(1));
+        // A point left of the whole window → no slot.
+        assert_eq!(inventory_slot_at(0.0, cy, iw, &buttons, sw, sh), None);
     }
 }
