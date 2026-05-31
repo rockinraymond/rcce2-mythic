@@ -144,8 +144,8 @@ mod tests {
                 .and_then(|tc| tc.get(thumb as u16))
                 .map(|e| e.filename.clone());
             eprintln!(
-                "  #{:<4} {:<20} type {} value {} thumb={} -> {:?}",
-                it.id, it.name, it.item_type, it.value, thumb, resolved
+                "  #{:<4} {:<20} type {} value {} mass {} dmg {} armour {} thumb={} -> {:?}",
+                it.id, it.name, it.item_type, it.value, it.mass, it.weapon_damage, it.armour_level, thumb, resolved
             );
         }
     }

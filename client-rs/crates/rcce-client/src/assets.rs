@@ -133,6 +133,11 @@ impl AssetStore {
         self.items.name_or_id(id)
     }
 
+    /// Full item record (for tooltip stats: mass, weapon damage, armour level).
+    pub fn item_def(&self, id: u16) -> Option<&rcce_data::ItemDef> {
+        self.items.get(id)
+    }
+
     /// On-disk path for a texture-catalog id under `data/Textures/` (the same
     /// resolution actor skins use), if the file exists. Public so the HUD can
     /// draw item / spell thumbnail icons.

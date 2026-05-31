@@ -33,6 +33,12 @@ pub struct ItemDef {
     pub value: i32,
     pub thumbnail_tex_id: i16,
     pub stackable: bool,
+    /// Item weight (`Mass`), for the inventory tooltip.
+    pub mass: i16,
+    /// Base melee/ranged damage for weapons (item_type 1), else 0.
+    pub weapon_damage: i16,
+    /// Armour level for armour (item_type 2), else 0.
+    pub armour_level: i16,
 }
 
 /// All item definitions from `Items.dat`, in file order.
@@ -71,7 +77,7 @@ impl ItemCatalog {
         let _smethod = r.read_string(1024)?;
         let item_type = r.read_byte()?;
         let value = r.read_int()?;
-        let _mass = r.read_short()?;
+        let mass = r.read_short()?;
         let _takes_damage = r.read_byte()?;
         let thumbnail_tex_id = r.read_short()?;
         for _ in 0..6 {
@@ -85,18 +91,21 @@ impl ItemCatalog {
             r.read_short()?; // Attributes\Value[0..39]
         }
         // ItemType-conditional tail (Items.bb:378-404).
+        let mut weapon_damage = 0i16;
+        let mut armour_level = 0i16;
         match item_type {
             1 => {
                 // Weapon: damage, dtype, wtype, rangedProjectile (4×i16),
                 // range f32, rangedAnimation string.
-                for _ in 0..4 {
+                weapon_damage = r.read_short()?;
+                for _ in 0..3 {
                     r.read_short()?;
                 }
                 r.read_float()?;
                 r.read_string(256)?;
             }
             2 => {
-                r.read_short()?; // ArmourLevel
+                armour_level = r.read_short()?; // ArmourLevel
             }
             4 | 5 => {
                 r.read_short()?; // EatEffectsLength (Potion / Ingredient)
@@ -117,6 +126,9 @@ impl ItemCatalog {
             value,
             thumbnail_tex_id,
             stackable,
+            mass,
+            weapon_damage,
+            armour_level,
         })
     }
 

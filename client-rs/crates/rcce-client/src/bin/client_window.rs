@@ -1947,6 +1947,20 @@ impl App {
                                 .and_then(|n| n.world.me_inventory.values().find(|it| it.slot == slot as u8))
                             {
                                 lines.push((store.item_name(it.item_id), white));
+                                if let Some(def) = store.item_def(it.item_id) {
+                                    if let Some(sname) = rcce_data::equip_slot_name(slot as u8) {
+                                        lines.push((sname.to_string(), [0.7, 1.0, 0.8, 1.0]));
+                                    }
+                                    if def.weapon_damage > 0 {
+                                        lines.push((format!("Damage: {}", def.weapon_damage), [1.0, 0.7, 0.6, 1.0]));
+                                    }
+                                    if def.armour_level > 0 {
+                                        lines.push((format!("Armour: {}", def.armour_level), [0.7, 0.85, 1.0, 1.0]));
+                                    }
+                                    if def.mass > 0 {
+                                        lines.push((format!("Mass: {}", def.mass), [0.7, 0.7, 0.7, 1.0]));
+                                    }
+                                }
                                 lines.push((format!("Value: {}g", store.item_value(it.item_id)), gold));
                                 if it.amount > 1 {
                                     lines.push((format!("Quantity: {}", it.amount), accent));
