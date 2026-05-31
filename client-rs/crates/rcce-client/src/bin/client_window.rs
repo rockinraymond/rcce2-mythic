@@ -1241,11 +1241,36 @@ impl App {
                     1.0
                 };
                 let fps = self.frames as f32 / elapsed.max(0.001);
-                overlay.rect(10.0, sh - 56.0, 270.0, 48.0, [0.0, 0.0, 0.0, 0.45]);
-                overlay.text_shadow(18.0, sh - 50.0, 2.0, &w.zone.name, white);
-                overlay.bar(18.0, sh - 28.0, 200.0, 12.0, hpf, [0.2, 0.8, 0.25, 1.0]);
-                let hp = format!("{}/{}", w.me_health.max(0), w.me_health_max.max(0));
-                overlay.text(224.0, sh - 28.0, 1.0, &hp, white);
+                // Vitals bars at the real Interface.dat fractional positions
+                // (Health top-left red, Energy below it blue, …), matching
+                // Client.exe instead of an invented bottom HUD.
+                if let Some(iface) = store.interface() {
+                    for (i, a) in iface.attributes.iter().enumerate() {
+                        if a.w <= 0.001 || a.h <= 0.001 {
+                            continue;
+                        }
+                        let (val, max) = if i == 0 {
+                            (w.me_health.max(0) as f32, w.me_health_max.max(1) as f32)
+                        } else if let Some(&(v, m)) = w.me_attributes.get(&(i as u8)) {
+                            (v.max(0) as f32, m.max(1) as f32)
+                        } else {
+                            continue;
+                        };
+                        let (vx, vy, vw, vh) = a.px(sw, sh);
+                        let frac = (val / max).clamp(0.0, 1.0);
+                        let col = [a.rgb[0] as f32 / 255.0, a.rgb[1] as f32 / 255.0, a.rgb[2] as f32 / 255.0, 1.0];
+                        overlay.rect(vx - 1.0, vy - 1.0, vw + 2.0, vh + 2.0, [0.0, 0.0, 0.0, 0.6]);
+                        overlay.bar(vx, vy, vw, vh, frac, col);
+                        if i == 0 {
+                            let s = format!("{}/{}", val as i32, max as i32);
+                            overlay.text_shadow(vx + 3.0, vy + vh * 0.5 - 4.0, 1.0, &s, white);
+                        }
+                    }
+                } else {
+                    overlay.rect(10.0, sh - 56.0, 270.0, 48.0, [0.0, 0.0, 0.0, 0.45]);
+                    overlay.bar(18.0, sh - 28.0, 200.0, 12.0, hpf, [0.2, 0.8, 0.25, 1.0]);
+                }
+                overlay.text_shadow(8.0, sh - 16.0, 1.0, &w.zone.name, [0.8, 0.85, 0.9, 1.0]);
                 overlay.text(sw - 84.0, 10.0, 1.0, &format!("{fps:.0} fps"), [0.8, 1.0, 0.8, 1.0]);
                 // Character sheet readout (level + gold) from P_FetchCharacter.
                 if let Some(sheet) = &self.sheet {

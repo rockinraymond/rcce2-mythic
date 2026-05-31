@@ -11,6 +11,7 @@ pub mod anim;
 pub mod area;
 pub mod b3d;
 pub mod catalog;
+pub mod interface;
 pub mod items;
 pub mod reader;
 pub mod texture;
@@ -25,6 +26,7 @@ pub use catalog::{
     CATALOG_SLOTS,
 };
 pub use items::{equip_slot, equip_slot_name, ItemCatalog, ItemDef};
+pub use interface::{IComp, InterfaceLayout};
 pub use reader::{BlitzReader, ReadError};
 
 #[cfg(test)]
@@ -80,6 +82,30 @@ mod tests {
             let buf = len.to_le_bytes();
             let mut r = BlitzReader::new(&buf);
             assert_eq!(r.read_string(260).unwrap(), "");
+        }
+    }
+
+    /// Ground-truth test: parse the real `Interface.dat` and dump the key HUD
+    /// positions so the Rust client can match them.
+    #[test]
+    fn parse_real_interface_dat() {
+        let path = repo_root().join("data/Game Data/Interface.dat");
+        let Ok(bytes) = std::fs::read(&path) else {
+            eprintln!("skipping: {} not present", path.display());
+            return;
+        };
+        let l = interface::InterfaceLayout::parse(&bytes).expect("Interface.dat parse");
+        eprintln!("Interface.dat ({} bytes):", bytes.len());
+        eprintln!("  chat   {:?}", l.chat);
+        eprintln!("  radar  {:?}", l.radar);
+        eprintln!("  buffs  {:?}", l.buffs);
+        eprintln!("  inv_window {:?}", l.inventory_window);
+        for i in [0usize, 1, 2] {
+            eprintln!("  attr[{i}] {:?}", l.attributes[i]);
+        }
+        // Sanity: fractional coords in [0,1].
+        for a in &l.attributes {
+            assert!((0.0..=1.0).contains(&a.x) && (0.0..=1.0).contains(&a.y), "attr off-screen: {a:?}");
         }
     }
 

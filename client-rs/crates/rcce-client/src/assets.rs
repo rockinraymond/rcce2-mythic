@@ -8,8 +8,8 @@ use std::path::PathBuf;
 use std::rc::Rc;
 
 use rcce_data::{
-    texture, ActorCatalog, AnimClip, AnimSetCatalog, B3dModel, Image, ItemCatalog, MeshCatalog,
-    MusicCatalog, TextureCatalog,
+    texture, ActorCatalog, AnimClip, AnimSetCatalog, B3dModel, Image, InterfaceLayout, ItemCatalog,
+    MeshCatalog, MusicCatalog, TextureCatalog,
 };
 
 pub struct AssetStore {
@@ -20,6 +20,9 @@ pub struct AssetStore {
     anims: AnimSetCatalog,
     music: MusicCatalog,
     items: ItemCatalog,
+    /// In-game HUD layout (Interface.dat) — fractional element positions that
+    /// match the real Client.exe. `None` if the file is absent.
+    interface: Option<InterfaceLayout>,
     cache: HashMap<u16, Option<Rc<B3dModel>>>,
     /// Memoised decoded actor skins, keyed by appearance, so per-frame actor
     /// rebuilds don't re-read + re-decode the skin files from disk.
@@ -107,6 +110,10 @@ impl AssetStore {
         let items = std::fs::read(data_root.join("Server Data/Items.dat"))
             .map(|b| ItemCatalog::parse(&b))
             .unwrap_or_default();
+        // In-game HUD layout (fractional positions matching Client.exe).
+        let interface = std::fs::read(data_root.join("Game Data/Interface.dat"))
+            .ok()
+            .and_then(|b| InterfaceLayout::parse(&b).ok());
         Ok(Self {
             data_root,
             actors,
@@ -115,6 +122,7 @@ impl AssetStore {
             anims,
             music,
             items,
+            interface,
             cache: HashMap::new(),
             actor_tex_cache: HashMap::new(),
         })
@@ -123,6 +131,12 @@ impl AssetStore {
     /// Display name for an item id (`#<id>` if unknown).
     pub fn item_name(&self, id: u16) -> String {
         self.items.name_or_id(id)
+    }
+
+    /// The in-game HUD layout from Interface.dat (fractional positions), if
+    /// present — used to place the HUD exactly where Client.exe does.
+    pub fn interface(&self) -> Option<&InterfaceLayout> {
+        self.interface.as_ref()
     }
 
     /// Base value (gold) for an item id, 0 if unknown.
