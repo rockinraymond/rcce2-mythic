@@ -648,6 +648,24 @@ impl ApplicationHandler for App {
                                 KeyCode::Digit8 => 7,
                                 _ => 8,
                             };
+                            // If the inventory panel is open, number keys drop
+                            // one of the Nth item (slot-ordered).
+                            if self.show_inventory {
+                                let slot = self
+                                    .net
+                                    .as_ref()
+                                    .and_then(|n| n.world.me_inventory.values().nth(idx))
+                                    .map(|it| it.slot);
+                                if let (Some(slot), Some(net)) = (slot, self.net.as_mut()) {
+                                    net.transport.send(
+                                        net.peer,
+                                        rcce_net::packet_id::INVENTORY_UPDATE,
+                                        &rcce_client::net::inv_drop_packet(slot, 1),
+                                        true,
+                                    );
+                                }
+                                return;
+                            }
                             // If a vendor window is open, the number keys buy
                             // the Nth offer; otherwise they cast the Nth spell.
                             let buy = self
@@ -1201,16 +1219,18 @@ impl App {
                     overlay.text_shadow(px + 10.0, y, 1.0, &format!("Lv {}   {} gold   {} xp", s.level, s.gold, s.xp), [1.0, 0.88, 0.4, 1.0]);
                     y += 18.0;
                     let inv_count = me_inv.map(|m| m.len()).unwrap_or(0);
-                    overlay.text_shadow(px + 10.0, y, 1.0, &format!("Inventory ({inv_count})"), [0.7, 0.85, 1.0, 1.0]);
+                    let inv_hdr = if inv_count > 0 { format!("Inventory ({inv_count})   1-9 drop") } else { format!("Inventory ({inv_count})") };
+                    overlay.text_shadow(px + 10.0, y, 1.0, &inv_hdr, [0.7, 0.85, 1.0, 1.0]);
                     y += 14.0;
                     if inv_count == 0 {
                         overlay.text(px + 18.0, y, 1.0, "(empty)", dim);
                         y += 13.0;
                     } else if let Some(inv) = me_inv {
-                        for it in inv.values() {
+                        for (i, it) in inv.values().enumerate() {
                             if y > limit - 80.0 { break; }
                             let name = store.item_name(it.item_id);
-                            let line = if it.amount > 1 { format!("{name}  x{}", it.amount) } else { name };
+                            let num = if i < 9 { format!("{}. ", i + 1) } else { "   ".to_string() };
+                            let line = if it.amount > 1 { format!("{num}{name}  x{}", it.amount) } else { format!("{num}{name}") };
                             let line: String = line.chars().take(40).collect();
                             overlay.text(px + 18.0, y, 1.0, &line, white);
                             y += 12.0;
