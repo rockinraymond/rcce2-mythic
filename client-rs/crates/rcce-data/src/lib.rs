@@ -98,6 +98,7 @@ mod tests {
         eprintln!("Interface.dat ({} bytes):", bytes.len());
         eprintln!("  chat   {:?}", l.chat);
         eprintln!("  radar  {:?}", l.radar);
+        eprintln!("  compass {:?}", l.compass);
         eprintln!("  buffs  {:?}", l.buffs);
         eprintln!("  inv_window {:?}", l.inventory_window);
         for i in [0usize, 1, 2] {

@@ -234,6 +234,37 @@ const FBTN_Y: f32 = 0.9415;
 const FBTN_W: f32 = 0.033203125 - 0.006;
 const FBTN_H: f32 = 0.044270833 - 0.008;
 
+/// Compass strip marks: for a `heading` (radians, the way the player faces) and
+/// a horizontal field-of-view `fov` (radians), return the visible compass points
+/// as `(offset, label)` where offset ∈ [-0.5, 0.5] is the position across the
+/// band (0 = centre = dead ahead) and an empty label is an intercardinal tick.
+/// Pure so the live HUD and a unit test share one definition.
+fn compass_marks(heading: f32, fov: f32) -> Vec<(f32, &'static str)> {
+    use std::f32::consts::PI;
+    let pts: [(f32, &str); 8] = [
+        (0.0, "N"), (PI * 0.25, ""), (PI * 0.5, "E"), (PI * 0.75, ""),
+        (PI, "S"), (PI * 1.25, ""), (PI * 1.5, "W"), (PI * 1.75, ""),
+    ];
+    let mut out = Vec::new();
+    for (a, label) in pts {
+        // Shortest signed angular difference into [-PI, PI].
+        let mut d = a - heading;
+        while d > PI {
+            d -= 2.0 * PI;
+        }
+        while d < -PI {
+            d += 2.0 * PI;
+        }
+        let off = d / fov;
+        // Small epsilon so a mark sitting exactly on the edge (off = ±0.5, e.g. E
+        // and W at fov = PI) isn't dropped by float rounding.
+        if off.abs() <= 0.5 + 1e-3 {
+            out.push((off, label));
+        }
+    }
+    out
+}
+
 /// Which function button (if any) contains screen-pixel point `(cx, cy)` for a
 /// `(sw, sh)` viewport. Pure geometry shared by the draw + click paths.
 fn function_button_at(cx: f32, cy: f32, sw: f32, sh: f32) -> Option<HudAction> {
@@ -1287,6 +1318,30 @@ impl App {
                 rcce_client::weather::Weather::Clear => {}
             }
 
+            // Compass strip (top-centre) at the real Interface.dat `compass` rect,
+            // scrolling with the camera heading. Always on (uses cam_yaw), like
+            // Client.exe's compass.
+            if let Some(comp) = store.interface().map(|i| i.compass) {
+                if comp.w > 0.0 && comp.h > 0.0 {
+                    let (cx0, cy0, cw, chh) = comp.px(sw, sh);
+                    let center = cx0 + cw * 0.5;
+                    overlay.rect(cx0, cy0, cw, chh, [0.0, 0.25, 0.0, 0.4]);
+                    // Centre reference tick (dead ahead).
+                    overlay.rect(center - 0.5, cy0, 1.5, chh, [0.7, 1.0, 0.7, 0.9]);
+                    use std::f32::consts::PI;
+                    for (off, label) in compass_marks(self.cam_yaw, PI) {
+                        let mx = center + off * cw;
+                        if label.is_empty() {
+                            // Intercardinal tick.
+                            overlay.rect(mx - 0.5, cy0 + chh * 0.5, 1.0, chh * 0.5, [0.4, 0.8, 0.4, 0.8]);
+                        } else {
+                            let tw = rcce_render::font::text_width(label, 1.0);
+                            overlay.text_shadow(mx - tw * 0.5, cy0 + 1.0, 1.0, label, [0.7, 1.0, 0.7, 1.0]);
+                        }
+                    }
+                }
+            }
+
             if let Some(net) = self.net.as_ref() {
                 for a in net.world.actors.values() {
                     if !a.alive {
@@ -1765,5 +1820,28 @@ mod tests {
         // Just past the last button's right edge → nothing.
         let last_x = FUNCTION_BUTTONS[7].1 * sw + bw + 2.0;
         assert!(function_button_at(last_x, cy, sw, sh).is_none());
+    }
+
+    #[test]
+    fn compass_strip_marks() {
+        use std::f32::consts::PI;
+        // Facing N (heading 0): N is dead-centre; E to the right edge, W to the
+        // left edge (fov = PI), S is just out of view.
+        let m = compass_marks(0.0, PI);
+        let n = m.iter().find(|(_, l)| *l == "N").expect("N visible");
+        assert!(n.0.abs() < 1e-4, "N should be centred, got {}", n.0);
+        let e = m.iter().find(|(_, l)| *l == "E").expect("E visible");
+        assert!((e.0 - 0.5).abs() < 1e-4, "E at right edge, got {}", e.0);
+        let w = m.iter().find(|(_, l)| *l == "W").expect("W visible");
+        assert!((w.0 + 0.5).abs() < 1e-4, "W at left edge, got {}", w.0);
+        assert!(m.iter().all(|(_, l)| *l != "S"), "S should be hidden facing N");
+
+        // Turning right (heading +PI/2 = facing E): E becomes centred, N moves to
+        // the left edge — the strip scrolls left as you turn right.
+        let m = compass_marks(PI * 0.5, PI);
+        let e = m.iter().find(|(_, l)| *l == "E").expect("E visible");
+        assert!(e.0.abs() < 1e-4, "E centred facing E, got {}", e.0);
+        let n = m.iter().find(|(_, l)| *l == "N").expect("N visible");
+        assert!((n.0 + 0.5).abs() < 1e-4, "N at left edge, got {}", n.0);
     }
 }
