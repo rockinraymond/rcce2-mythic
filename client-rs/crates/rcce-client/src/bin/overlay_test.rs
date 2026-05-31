@@ -222,6 +222,17 @@ fn main() {
         }
     }
 
+    // Textured-quad verification: a 2x2 RGBA texture (R G / B W) stretched to a
+    // 64x64 quad. Confirms the textured pipeline samples + UV-maps correctly
+    // (the GUI-icon path the live HUD uses). Self-contained — no data/ needed.
+    let tex2x2: [u8; 16] = [
+        255, 0, 0, 255, 0, 255, 0, 255, // row 0: red, green
+        0, 0, 255, 255, 255, 255, 255, 255, // row 1: blue, white
+    ];
+    overlay.register_texture(&device, &queue, "test2x2", 2, 2, &tex2x2);
+    let (qx, qy, qs) = (540.0f32, 20.0f32, 64.0f32);
+    overlay.image(qx, qy, qs, qs, "test2x2", [1.0, 1.0, 1.0, 1.0]);
+
     overlay.render(&device, &queue, &view, w as f32, h as f32);
 
     // Readback → PNG.
@@ -274,4 +285,22 @@ fn main() {
     enc.set_depth(png::BitDepth::Eight);
     enc.write_header().unwrap().write_image_data(&rgba).unwrap();
     println!("[overlay_test] wrote {out}");
+
+    // Verify the textured quad's four quadrants sampled the right texels (a few
+    // px inside each corner; ClampToEdge keeps corners near the pure texel).
+    let px = |x: u32, y: u32| -> [u8; 3] {
+        let i = ((y * w + x) * 4) as usize;
+        [rgba[i], rgba[i + 1], rgba[i + 2]]
+    };
+    let (ix, iy, is) = (qx as u32, qy as u32, qs as u32);
+    let tl = px(ix + 6, iy + 6);
+    let tr = px(ix + is - 6, iy + 6);
+    let bl = px(ix + 6, iy + is - 6);
+    let br = px(ix + is - 6, iy + is - 6);
+    println!("[overlay_test] textured quad corners: TL={tl:?} TR={tr:?} BL={bl:?} BR={br:?}");
+    assert!(tl[0] > 150 && tl[0] > tl[1] && tl[0] > tl[2], "top-left should be red, got {tl:?}");
+    assert!(tr[1] > 150 && tr[1] > tr[0] && tr[1] > tr[2], "top-right should be green, got {tr:?}");
+    assert!(bl[2] > 150 && bl[2] > bl[0] && bl[2] > bl[1], "bottom-left should be blue, got {bl:?}");
+    assert!(br[0] > 150 && br[1] > 150 && br[2] > 150, "bottom-right should be white, got {br:?}");
+    println!("[overlay_test] textured-quad sampling OK");
 }

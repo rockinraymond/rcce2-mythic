@@ -425,6 +425,34 @@ fn resolve_data_root() -> String {
     "data".to_string()
 }
 
+/// Load the GUI .bmp textures the HUD draws (function-button icons, the XP bar,
+/// the empty action-bar slot) and register them with the overlay under stable
+/// `gui:<Name>` keys. Missing files are skipped — the HUD falls back to text
+/// labels / coloured rects when a key isn't registered.
+fn register_gui_textures(overlay: &mut rcce_render::Overlay, device: &wgpu::Device, queue: &wgpu::Queue, data_root: &str) {
+    let gui = std::path::Path::new(data_root).join("Textures").join("GUI");
+    let files = [
+        ("gui:Chat", "Chat.bmp"),
+        ("gui:Map", "Map.bmp"),
+        ("gui:Inventory", "Inventory.bmp"),
+        ("gui:Abilities", "Abilities.bmp"),
+        ("gui:Character", "Character.bmp"),
+        ("gui:Quests", "Quests.bmp"),
+        ("gui:Party", "Party.bmp"),
+        ("gui:Menu", "Menu.bmp"),
+        ("gui:EmptySlot", "EmptySlot.bmp"),
+        ("gui:XP", "Action Bar XP.bmp"),
+    ];
+    let mut ok = 0;
+    for (key, name) in files {
+        if let Some(img) = rcce_data::texture::load(&gui.join(name)) {
+            overlay.register_texture(device, queue, key, img.width, img.height, &img.rgba);
+            ok += 1;
+        }
+    }
+    println!("[client-window] registered {ok}/{} GUI textures from {}", files.len(), gui.display());
+}
+
 fn load_zone_static(store: &mut AssetStore, view: &mut WorldView, gfx: &Gfx, data_root: &str, zone: &str) -> Option<([f32; 3], f32, f32, rcce_data::AreaEnv)> {
     let path = std::path::Path::new(data_root).join("Areas").join(format!("{zone}.dat"));
     let bytes = std::fs::read(&path).map_err(|e| eprintln!("[client-window] {}: {e}", path.display())).ok()?;
@@ -559,7 +587,9 @@ impl ApplicationHandler for App {
             Err(e) => eprintln!("[client-window] login failed ({e}); zone-only spectator view"),
         }
 
-        self.overlay = Some(rcce_render::Overlay::new(&gfx.device, format));
+        let mut overlay = rcce_render::Overlay::new(&gfx.device, format);
+        register_gui_textures(&mut overlay, &gfx.device, &gfx.queue, &data_root);
+        self.overlay = Some(overlay);
         self.store = Some(store);
         self.gfx = Some(gfx);
         self.view = Some(view);
@@ -1487,23 +1517,29 @@ impl App {
                         overlay.text(x + 2.0, by + sh_ - 9.0, 1.0, &abbr, white);
                     }
                 }
-                // Function buttons (right cluster). Labels stand in for the GUI
-                // icon textures; the active panel (inventory) is highlighted.
-                let fbtns: [(f32, &str, bool); 8] = [
-                    (0.631906250, "Cht", false),
-                    (0.669015625, "Map", false),
-                    (0.705148437, "Inv", self.show_inventory),
-                    (0.742257812, "Spl", false),
-                    (0.780343750, "Chr", false),
-                    (0.816476562, "Qst", false),
-                    (0.853585937, "Pty", false),
-                    (0.893000000, "Mnu", false),
+                // Function buttons (right cluster), drawn with the real GUI .bmp
+                // icons when registered; text labels are the fallback. The active
+                // panel (inventory) is highlighted.
+                let fbtns: [(f32, &str, &str, bool); 8] = [
+                    (0.631906250, "gui:Chat", "Cht", false),
+                    (0.669015625, "gui:Map", "Map", false),
+                    (0.705148437, "gui:Inventory", "Inv", self.show_inventory),
+                    (0.742257812, "gui:Abilities", "Spl", false),
+                    (0.780343750, "gui:Character", "Chr", false),
+                    (0.816476562, "gui:Quests", "Qst", false),
+                    (0.853585937, "gui:Party", "Pty", false),
+                    (0.893000000, "gui:Menu", "Mnu", false),
                 ];
-                for (fx, label, active) in fbtns {
+                for (fx, key, label, active) in fbtns {
                     let x = fx * sw;
-                    let bg = if active { [0.32, 0.30, 0.12, 0.9] } else { [0.12, 0.12, 0.18, 0.82] };
-                    overlay.rect(x, by, bw, bh, bg);
-                    overlay.text_shadow(x + 3.0, by + bh * 0.5 - 4.0, 1.0, label, [0.85, 0.85, 0.7, 1.0]);
+                    if overlay.has_texture(key) {
+                        let tint = if active { [1.0, 1.0, 0.6, 1.0] } else { [1.0, 1.0, 1.0, 1.0] };
+                        overlay.image(x, by, bw, bh, key, tint);
+                    } else {
+                        let bg = if active { [0.32, 0.30, 0.12, 0.9] } else { [0.12, 0.12, 0.18, 0.82] };
+                        overlay.rect(x, by, bw, bh, bg);
+                        overlay.text_shadow(x + 3.0, by + bh * 0.5 - 4.0, 1.0, label, [0.85, 0.85, 0.7, 1.0]);
+                    }
                 }
             }
 
