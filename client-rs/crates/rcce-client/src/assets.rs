@@ -130,6 +130,11 @@ impl AssetStore {
         self.items.get(id).map(|i| i.value).unwrap_or(0)
     }
 
+    /// Equipment slot index an item equips into, or `None` if not wearable.
+    pub fn item_equip_slot(&self, id: u16) -> Option<u8> {
+        self.items.equip_slot(id)
+    }
+
     /// Footstep `.ogg` files under `Data/Sounds/Footsteps/`, sorted. Empty if
     /// the folder is absent.
     pub fn footstep_sounds(&self) -> Vec<PathBuf> {

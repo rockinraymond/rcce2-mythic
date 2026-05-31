@@ -22,6 +22,9 @@ pub struct ItemDef {
     pub name: String,
     /// 1=Weapon 2=Armour 3=Ring 4=Potion 5=Ingredient 6=Image 7=Other.
     pub item_type: u8,
+    /// Equipment slot type (`Inventories.bb`: 1 Weapon, 2 Shield, 3 Hat,
+    /// 4 Chest, 5 Hand, 6 Belt, 7 Legs, 8 Feet, 9 Ring, 10 Amulet, 11 Backpack).
+    pub slot_type: i16,
     pub value: i32,
     pub thumbnail_tex_id: i16,
     pub stackable: bool,
@@ -71,7 +74,7 @@ impl ItemCatalog {
         }
         let _mmesh = r.read_short()?;
         let _fmesh = r.read_short()?;
-        let _slot_type = r.read_short()?;
+        let slot_type = r.read_short()?;
         let stackable = r.read_byte()? != 0;
         for _ in 0..40 {
             r.read_short()?; // Attributes\Value[0..39]
@@ -103,6 +106,7 @@ impl ItemCatalog {
             id: id as u16,
             name,
             item_type,
+            slot_type,
             value,
             thumbnail_tex_id,
             stackable,
@@ -114,9 +118,42 @@ impl ItemCatalog {
         self.items.iter().find(|i| i.id == id)
     }
 
+    /// The equipment slot index this item equips into, or `None` if it can't be
+    /// equipped. See [`equip_slot`].
+    pub fn equip_slot(&self, id: u16) -> Option<u8> {
+        self.get(id).and_then(|i| equip_slot(i.item_type, i.slot_type))
+    }
+
     /// The item's display name, or a `#<id>` placeholder if unknown.
     pub fn name_or_id(&self, id: u16) -> String {
         self.get(id).map(|i| i.name.clone()).unwrap_or_else(|| format!("#{id}"))
+    }
+}
+
+/// Map an item's (item_type, slot_type) to the equipment slot index it equips
+/// into (`Inventories.bb` `SlotsMatch` / `SlotI_*`), or `None` if it can't be
+/// worn. Returns the *first* slot of multi-slot types (ring → 8, amulet → 12);
+/// the server's swap moves any currently-equipped item back to the backpack.
+pub fn equip_slot(item_type: u8, slot_type: i16) -> Option<u8> {
+    match item_type {
+        1 => Some(0), // Weapon → SlotI_Weapon
+        2 => match slot_type {
+            // Armour, by slot type → Shield/Hat/Chest/Hand/Belt/Legs/Feet.
+            2 => Some(1),
+            3 => Some(2),
+            4 => Some(3),
+            5 => Some(4),
+            6 => Some(5),
+            7 => Some(6),
+            8 => Some(7),
+            _ => None,
+        },
+        3 => match slot_type {
+            9 => Some(8),   // Ring → first ring slot (SlotI_Ring1)
+            10 => Some(12), // Amulet → first amulet slot (SlotI_Amulet1)
+            _ => None,
+        },
+        _ => None, // Potion / Ingredient / Image / Other
     }
 }
 
@@ -214,5 +251,19 @@ mod tests {
         assert_eq!(cat.get(5).unwrap().name, "Sword");
         assert_eq!(cat.get(5).unwrap().item_type, 1);
         assert_eq!(cat.get(6).unwrap().name, "Apple");
+    }
+
+    #[test]
+    fn equip_slot_mapping() {
+        assert_eq!(equip_slot(1, 1), Some(0)); // Weapon → slot 0
+        assert_eq!(equip_slot(2, 2), Some(1)); // Shield armour → slot 1
+        assert_eq!(equip_slot(2, 4), Some(3)); // Chest armour → slot 3
+        assert_eq!(equip_slot(2, 8), Some(7)); // Feet armour → slot 7
+        assert_eq!(equip_slot(3, 9), Some(8)); // Ring → first ring slot 8
+        assert_eq!(equip_slot(3, 10), Some(12)); // Amulet → first amulet slot 12
+        // Non-equippable types.
+        assert_eq!(equip_slot(4, 0), None); // Potion
+        assert_eq!(equip_slot(7, 0), None); // Other
+        assert_eq!(equip_slot(2, 99), None); // armour with an unknown slot type
     }
 }

@@ -96,6 +96,17 @@ pub fn trade_confirm_packet(buys: &[(u32, u16)], sells: &[(u8, u16)]) -> Vec<u8>
     w.into_bytes()
 }
 
+/// Build a `P_InventoryUpdate` move/swap request (`ServerNet.bb:1740`): `"S"`
+/// (swap) or `"A"` (add/merge) + the player's RuntimeID u16 + source slot u8 +
+/// dest slot u8 + amount u16 (0 = whole stack). Equipping is a swap from a
+/// backpack slot to the matching equipment slot. Sent reliable.
+pub fn inv_move_packet(runtime_id: u16, from_slot: u8, to_slot: u8, amount: u16, swap: bool) -> Vec<u8> {
+    let mut w = MsgWriter::new();
+    w.u8(if swap { b'S' } else { b'A' });
+    w.u16(runtime_id).u8(from_slot).u8(to_slot).u16(amount);
+    w.into_bytes()
+}
+
 /// Build a `P_InventoryUpdate` drop request (`ServerNet.bb:1671`): `"D"` +
 /// inventory slot u8 + amount u16. The server drops the item to the floor (a
 /// world DroppedItem) and "T"-takes it from our inventory. Sent reliable.
@@ -146,6 +157,14 @@ mod tests {
         // "D" + slot 14 + amount 1 (LE u16).
         assert_eq!(inv_drop_packet(14, 1), vec![b'D', 14, 1, 0]);
         assert_eq!(inv_drop_packet(3, 0x0102), vec![b'D', 3, 0x02, 0x01]);
+    }
+
+    #[test]
+    fn inv_move_layout() {
+        // Swap: "S" + rid 7 (LE) + from 14 + to 0 + amount 0 (LE).
+        assert_eq!(inv_move_packet(7, 14, 0, 0, true), vec![b'S', 7, 0, 14, 0, 0, 0]);
+        // Add: "A" + rid 7 + from 14 + to 20 + amount 5.
+        assert_eq!(inv_move_packet(7, 14, 20, 5, false), vec![b'A', 7, 0, 14, 20, 5, 0]);
     }
 
     #[test]

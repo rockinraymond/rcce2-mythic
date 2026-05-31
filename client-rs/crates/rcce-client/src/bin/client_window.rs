@@ -648,21 +648,36 @@ impl ApplicationHandler for App {
                                 KeyCode::Digit8 => 7,
                                 _ => 8,
                             };
-                            // If the inventory panel is open, number keys drop
-                            // one of the Nth item (slot-ordered).
+                            // Inventory panel open: number keys act on the Nth
+                            // item — Shift = equip (move to its gear slot), plain
+                            // = drop one.
                             if self.show_inventory {
-                                let slot = self
+                                let item = self
                                     .net
                                     .as_ref()
                                     .and_then(|n| n.world.me_inventory.values().nth(idx))
-                                    .map(|it| it.slot);
-                                if let (Some(slot), Some(net)) = (slot, self.net.as_mut()) {
-                                    net.transport.send(
-                                        net.peer,
-                                        rcce_net::packet_id::INVENTORY_UPDATE,
-                                        &rcce_client::net::inv_drop_packet(slot, 1),
-                                        true,
-                                    );
+                                    .map(|it| (it.slot, it.item_id));
+                                if let Some((slot, item_id)) = item {
+                                    if self.run {
+                                        // Equip: swap into the matching gear slot.
+                                        let dest = self.store.as_ref().and_then(|s| s.item_equip_slot(item_id));
+                                        if let (Some(dest), Some(net)) = (dest, self.net.as_mut()) {
+                                            let rid = net.world.my_runtime_id;
+                                            net.transport.send(
+                                                net.peer,
+                                                rcce_net::packet_id::INVENTORY_UPDATE,
+                                                &rcce_client::net::inv_move_packet(rid, slot, dest, 0, true),
+                                                true,
+                                            );
+                                        }
+                                    } else if let Some(net) = self.net.as_mut() {
+                                        net.transport.send(
+                                            net.peer,
+                                            rcce_net::packet_id::INVENTORY_UPDATE,
+                                            &rcce_client::net::inv_drop_packet(slot, 1),
+                                            true,
+                                        );
+                                    }
                                 }
                                 return;
                             }
@@ -1219,7 +1234,7 @@ impl App {
                     overlay.text_shadow(px + 10.0, y, 1.0, &format!("Lv {}   {} gold   {} xp", s.level, s.gold, s.xp), [1.0, 0.88, 0.4, 1.0]);
                     y += 18.0;
                     let inv_count = me_inv.map(|m| m.len()).unwrap_or(0);
-                    let inv_hdr = if inv_count > 0 { format!("Inventory ({inv_count})   1-9 drop") } else { format!("Inventory ({inv_count})") };
+                    let inv_hdr = if inv_count > 0 { format!("Inventory ({inv_count})   1-9 drop, Shift equip") } else { format!("Inventory ({inv_count})") };
                     overlay.text_shadow(px + 10.0, y, 1.0, &inv_hdr, [0.7, 0.85, 1.0, 1.0]);
                     y += 14.0;
                     if inv_count == 0 {
