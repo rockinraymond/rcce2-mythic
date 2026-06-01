@@ -64,6 +64,15 @@ pub fn examine_packet(runtime_id: u16) -> Vec<u8> {
     runtime_id.to_le_bytes().to_vec()
 }
 
+/// `P_Dialog` option selection (`Interface3D.bb:1581`): `"O"` + the dialog's
+/// script handle (u32) + the chosen option index (u8). Tells the NPC's paused
+/// `Main` script which branch the player picked. Sent reliable.
+pub fn dialog_option_packet(script_handle: u32, opt: u8) -> Vec<u8> {
+    let mut w = MsgWriter::new();
+    w.u8(b'O').u32(script_handle).u8(opt);
+    w.into_bytes()
+}
+
 /// Number of vendor/inventory slots in a trade basket (client `Dim(31)`).
 const TRADE_SLOTS: usize = 32;
 

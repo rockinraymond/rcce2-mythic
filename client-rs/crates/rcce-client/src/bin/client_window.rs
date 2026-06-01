@@ -173,6 +173,9 @@ struct App {
     target: Option<u16>,
     /// Open "Actions" context menu over the selected actor (TGT-3), if any.
     context_menu: Option<ContextMenu>,
+    /// Screen rects (x,y,w,h) of the current NPC-dialog option lines, rebuilt
+    /// each frame as the dialog draws, so hud_click can hit-test them (TGT-5).
+    dialog_hitboxes: Vec<(f32, f32, f32, f32)>,
     /// Floating combat-damage numbers (drained from world.combat_events).
     floaters: rcce_client::floaters::Floaters,
     /// Audio output (zone music). `None` when there's no audio device.
@@ -291,6 +294,7 @@ impl App {
             chat_input: None,
             target: None,
             context_menu: None,
+            dialog_hitboxes: Vec::new(),
             floaters: rcce_client::floaters::Floaters::new(),
             audio: rcce_client::audio::Audio::new(),
             sheet: None,
@@ -1715,6 +1719,31 @@ impl App {
     /// Positions mirror the draw code exactly (shared FUNCTION_BUTTONS / the
     /// Interface.dat inv_buttons).
     fn hud_click(&mut self) {
+        // An open NPC dialog is modal (TGT-5): a click either selects an option
+        // or is swallowed (no move/select while talking).
+        if self.net.as_ref().map(|n| n.world.dialog.is_some()).unwrap_or(false) {
+            let (cx, cy) = self.cursor;
+            let opt = self
+                .dialog_hitboxes
+                .iter()
+                .position(|&(x, y, w, h)| cx >= x && cx <= x + w && cy >= y && cy <= y + h);
+            if let (Some(opt), Some(net)) = (opt, self.net.as_mut()) {
+                if let Some(dl) = net.world.dialog.as_ref() {
+                    let sh = dl.script_handle;
+                    net.transport.send(
+                        net.peer,
+                        rcce_net::packet_id::DIALOG,
+                        &rcce_client::net::dialog_option_packet(sh, opt as u8),
+                        true,
+                    );
+                }
+                // Clear options after choosing; the server sends the next text.
+                if let Some(dl) = net.world.dialog.as_mut() {
+                    dl.options.clear();
+                }
+            }
+            return;
+        }
         // The Actions context menu takes priority: a click either picks an
         // action or dismisses the menu, and is consumed either way (TGT-3).
         if let Some(menu) = self.context_menu.take() {
@@ -2521,6 +2550,52 @@ impl App {
                 }
             }
         }
+        // Headless interact self-test (TGT-5): fire RIGHT_CLICK at the selected
+        // target (runs the NPC Main script → server may push P_Dialog). No-op
+        // unless RCCE_INTERACT=<frame> is set.
+        if let Ok(iv) = std::env::var("RCCE_INTERACT") {
+            if let Ok(at) = iv.parse::<u64>() {
+                if self.frames == at {
+                    if let Some(rid) = self.target {
+                        if let Some(net) = self.net.as_mut() {
+                            net.transport.send(
+                                net.peer,
+                                rcce_net::packet_id::RIGHT_CLICK,
+                                &rcce_client::net::right_click_packet(rid),
+                                true,
+                            );
+                            println!("[interact] frame {} -> RIGHT_CLICK rid={rid}", self.frames);
+                        }
+                    }
+                }
+            }
+        }
+        // Headless dialog-render self-test (TGT-5): inject a synthetic dialog so
+        // the window rendering is verifiable without a scripted NPC. No-op unless
+        // RCCE_DIALOGTEST=<frame> is set.
+        if let Ok(dv) = std::env::var("RCCE_DIALOGTEST") {
+            if let Ok(at) = dv.parse::<u64>() {
+                if self.frames == at {
+                    if let Some(net) = self.net.as_mut() {
+                        net.world.dialog = Some(rcce_client::world::Dialog {
+                            script_handle: 1,
+                            runtime_id: self.target.unwrap_or(0),
+                            title: "Greetings, traveler".to_string(),
+                            lines: vec![(
+                                "Welcome to the realm. The roads have been dangerous of late."
+                                    .to_string(),
+                                [1.0, 1.0, 1.0, 1.0],
+                            )],
+                            options: vec![
+                                "Tell me about this place".to_string(),
+                                "I seek work".to_string(),
+                                "Farewell".to_string(),
+                            ],
+                        });
+                    }
+                }
+            }
+        }
         // Day/night: a slow local cycle modulates fog/sky + ambient. Cycle
         // length is RCCE_DAYNIGHT_SECS (default 600s); RCCE_PHASE pins a fixed
         // phase for screenshots.
@@ -2705,6 +2780,37 @@ impl App {
                         let hp = format!("{} / {}", t.health.max(0), t.health_max.max(0));
                         let tw = rcce_render::font::text_width(&hp, 1.0);
                         overlay.text_shadow(px0 + pw * 0.5 - tw * 0.5, py0 + 29.0, 1.0, &hp, [1.0, 1.0, 1.0, 1.0]);
+                    }
+                }
+
+                // NPC dialog window (TGT-5): title + wrapped text + green
+                // clickable option lines, left-anchored like Client.exe's
+                // CreateDialog (0.02,0.15,0.32,0.5). Option hitboxes are saved
+                // for hud_click; cleared every frame so they never go stale.
+                self.dialog_hitboxes.clear();
+                if let Some(dl) = &net.world.dialog {
+                    let (dx, dy) = (0.02 * sw, 0.15 * sh);
+                    let (dw, dh) = (0.34 * sw, 0.5 * sh);
+                    overlay.rect(dx - 2.0, dy - 2.0, dw + 4.0, dh + 4.0, [0.6, 0.5, 0.2, 0.95]);
+                    overlay.rect(dx, dy, dw, dh, [0.04, 0.04, 0.07, 0.93]);
+                    overlay.text_shadow(dx + 8.0, dy + 6.0, 1.3, &dl.title, [1.0, 0.92, 0.6, 1.0]);
+                    let max_chars = (((dw - 18.0) / 6.5) as usize).max(8);
+                    let mut ty = dy + 30.0;
+                    for (text, col) in &dl.lines {
+                        for wl in wrap_text(text, max_chars) {
+                            overlay.text_shadow(dx + 8.0, ty, 1.0, &wl, *col);
+                            ty += 14.0;
+                        }
+                    }
+                    ty += 10.0;
+                    let (mcx, mcy) = self.cursor;
+                    for (i, opt) in dl.options.iter().enumerate() {
+                        let oh = 18.0;
+                        let hovered = mcx >= dx && mcx <= dx + dw && mcy >= ty && mcy < ty + oh;
+                        let oc = if hovered { [0.5, 1.0, 0.65, 1.0] } else { [0.2, 0.9, 0.4, 1.0] };
+                        overlay.text_shadow(dx + 12.0, ty + 3.0, 1.0, &format!("{}. {}", i + 1, opt), oc);
+                        self.dialog_hitboxes.push((dx, ty, dw, oh));
+                        ty += oh;
                     }
                 }
 

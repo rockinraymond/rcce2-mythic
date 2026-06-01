@@ -6,8 +6,21 @@
 
 use std::collections::HashMap;
 
-use rcce_net::codec::MsgReader;
+use rcce_net::codec::{MsgReader, MsgWriter};
 use rcce_net::{packet_id as pk, RecvMessage};
+
+/// An open NPC dialog window (`P_Dialog` "N"/"T"/"O"/"C"). Server-driven: the
+/// NPC's `Main` script pushes a title, text lines, and option lines; the client
+/// echoes "N"/"T" acks (via `pending_sends`) so the script advances. One active
+/// dialog at a time (matches typical play). ref ClientNet.bb:1027-1068.
+#[derive(Debug, Clone, Default)]
+pub struct Dialog {
+    pub script_handle: u32,
+    pub runtime_id: u16,
+    pub title: String,
+    pub lines: Vec<(String, [f32; 4])>,
+    pub options: Vec<String>,
+}
 
 /// One actor instance in the current zone (player or NPC).
 /// A combat hit reported by `P_AttackActor`.
@@ -105,6 +118,8 @@ pub struct World {
     pub dropped_items: HashMap<u32, DroppedItem>,
     /// The open vendor/trade window, if any (P_OpenTrading).
     pub current_trade: Option<crate::trade::TradeWindow>,
+    /// The open NPC dialog window, if any (P_Dialog). See [`Dialog`].
+    pub dialog: Option<Dialog>,
     /// The local player's inventory, keyed by slot (0..13 equipment, 14..45
     /// backpack). Seeded from the P_FetchCharacter sheet, then kept live by
     /// P_InventoryUpdate G/T/H/R. BTreeMap so the panel iterates in slot order.
@@ -156,6 +171,7 @@ impl World {
             pk::ACTOR_EFFECT => self.on_actor_effect(&m.data),
             pk::WEATHER_CHANGE => self.on_weather_change(&m.data),
             pk::OPEN_TRADING => self.current_trade = crate::trade::TradeWindow::parse(&m.data),
+            pk::DIALOG => self.on_dialog(&m.data),
             _ => {}
         }
     }
@@ -614,6 +630,67 @@ impl World {
             self.chat.push(text);
         }
     }
+
+    /// Handle an inbound `P_Dialog` (NPC dialog). Builds/updates `self.dialog`
+    /// and queues the "N"/"T" acks the NPC `Main` script waits on. Soft-fails on
+    /// a short/garbage payload. ref ClientNet.bb:1027-1068.
+    fn on_dialog(&mut self, d: &[u8]) {
+        let mut r = MsgReader::new(d);
+        match r.u8() {
+            // New: [4]scriptHandle [2]runtimeID [2]bgTexID [n]title.
+            Some(b'N') => {
+                let (Some(script), Some(rid), Some(_bg)) = (r.u32(), r.u16(), r.u16()) else {
+                    return;
+                };
+                let title = String::from_utf8_lossy(r.rest()).into_owned();
+                self.dialog = Some(Dialog {
+                    script_handle: script,
+                    runtime_id: rid,
+                    title,
+                    lines: Vec::new(),
+                    options: Vec::new(),
+                });
+                // Reply "N" + scriptHandle + our dialog handle (we reuse the
+                // scriptHandle as the handle) so the server maps its script here.
+                let mut w = MsgWriter::new();
+                w.u8(b'N').u32(script).u32(script);
+                self.pending_sends.push((pk::DIALOG, w.into_bytes()));
+            }
+            // Text: [1]R [1]G [1]B [4]dialogHandle [n]text.
+            Some(b'T') => {
+                let (Some(red), Some(green), Some(blue), Some(_dh)) =
+                    (r.u8(), r.u8(), r.u8(), r.u32())
+                else {
+                    return;
+                };
+                let text = String::from_utf8_lossy(r.rest()).into_owned();
+                if let Some(dl) = self.dialog.as_mut() {
+                    let col = [red as f32 / 255.0, green as f32 / 255.0, blue as f32 / 255.0, 1.0];
+                    dl.lines.push((text, col));
+                    let mut w = MsgWriter::new();
+                    w.u8(b'T').u32(dl.script_handle);
+                    self.pending_sends.push((pk::DIALOG, w.into_bytes()));
+                }
+            }
+            // Options: [4]dialogHandle then repeated [1]len [len]optionText.
+            Some(b'O') => {
+                if r.u32().is_none() {
+                    return;
+                }
+                if let Some(dl) = self.dialog.as_mut() {
+                    dl.options.clear();
+                    loop {
+                        let Some(n) = r.u8() else { break };
+                        let Some(b) = r.bytes(n as usize) else { break };
+                        dl.options.push(String::from_utf8_lossy(b).into_owned());
+                    }
+                }
+            }
+            // Close: [4]dialogHandle.
+            Some(b'C') => self.dialog = None,
+            _ => {}
+        }
+    }
 }
 
 #[cfg(test)]
@@ -627,6 +704,43 @@ mod tests {
             connection: 0,
             data: payload,
         }
+    }
+
+    #[test]
+    fn dialog_new_text_options_close() {
+        let mut w = World::default();
+        // "N": scriptHandle, runtimeID, bgTexID, title.
+        let mut p = MsgWriter::new();
+        p.u8(b'N').u32(0x1122_3344).u16(5).u16(0).raw(b"Hail");
+        w.apply(&msg(pk::DIALOG, p.into_bytes()));
+        let dl = w.dialog.as_ref().expect("dialog created");
+        assert_eq!((dl.script_handle, dl.runtime_id, dl.title.as_str()), (0x1122_3344, 5, "Hail"));
+        // Reply "N" + scriptHandle + dialogHandle (== scriptHandle).
+        let mut exp = MsgWriter::new();
+        exp.u8(b'N').u32(0x1122_3344).u32(0x1122_3344);
+        assert_eq!(w.pending_sends, vec![(pk::DIALOG, exp.into_bytes())]);
+        w.pending_sends.clear();
+
+        // "T": green text line + a "T" ack.
+        let mut t = MsgWriter::new();
+        t.u8(b'T').u8(0).u8(255).u8(0).u32(0x1122_3344).raw(b"Hello there");
+        w.apply(&msg(pk::DIALOG, t.into_bytes()));
+        assert_eq!(w.dialog.as_ref().unwrap().lines[0].0, "Hello there");
+        let mut expt = MsgWriter::new();
+        expt.u8(b'T').u32(0x1122_3344);
+        assert_eq!(w.pending_sends.last().unwrap(), &(pk::DIALOG, expt.into_bytes()));
+
+        // "O": two options.
+        let mut o = MsgWriter::new();
+        o.u8(b'O').u32(0x1122_3344).u8(3).raw(b"Yes").u8(2).raw(b"No");
+        w.apply(&msg(pk::DIALOG, o.into_bytes()));
+        assert_eq!(w.dialog.as_ref().unwrap().options, vec!["Yes".to_string(), "No".to_string()]);
+
+        // "C": close.
+        let mut c = MsgWriter::new();
+        c.u8(b'C').u32(0x1122_3344);
+        w.apply(&msg(pk::DIALOG, c.into_bytes()));
+        assert!(w.dialog.is_none());
     }
 
     #[test]
