@@ -176,6 +176,11 @@ struct App {
     /// Screen rects (x,y,w,h) of the current NPC-dialog option lines, rebuilt
     /// each frame as the dialog draws, so hud_click can hit-test them (TGT-5).
     dialog_hitboxes: Vec<(f32, f32, f32, f32)>,
+    /// Auto-attacking the current target (CBT-1): the per-frame combat loop
+    /// chases to melee range then swings on `last_attack` cooldown. Set by the
+    /// Attack menu/key, cleared on target death/vanish or manual movement.
+    attacking: bool,
+    last_attack: Instant,
     /// Floating combat-damage numbers (drained from world.combat_events).
     floaters: rcce_client::floaters::Floaters,
     /// Audio output (zone music). `None` when there's no audio device.
@@ -295,6 +300,8 @@ impl App {
             target: None,
             context_menu: None,
             dialog_hitboxes: Vec::new(),
+            attacking: false,
+            last_attack: now,
             floaters: rcce_client::floaters::Floaters::new(),
             audio: rcce_client::audio::Audio::new(),
             sheet: None,
@@ -565,6 +572,32 @@ fn nearest_living_actor(world: &rcce_client::world::World, mx: f32, mz: f32) -> 
             da.total_cmp(&db)
         })
         .map(|a| a.runtime_id)
+}
+
+/// Per-frame combat decision for the auto-attack loop (CBT-1): chase if out of
+/// melee range, swing if in range and the cooldown is ready, else wait.
+#[derive(Clone, Copy, PartialEq, Debug)]
+enum CombatStep {
+    Swing,
+    Chase,
+    Wait,
+}
+
+/// Melee reach (world units) — Client.exe's `MaxRange# = 4.0` (ClientCombat.bb:37)
+/// plus a small radius pad.
+const MELEE_RANGE: f32 = 4.5;
+/// Client-side swing cadence (ms). The server enforces the authoritative
+/// `CombatDelay`; this just paces our `P_AttackActor` sends.
+const COMBAT_DELAY_MS: u64 = 1500;
+
+fn combat_step(dist: f32, cooldown_ready: bool) -> CombatStep {
+    if dist > MELEE_RANGE {
+        CombatStep::Chase
+    } else if cooldown_ready {
+        CombatStep::Swing
+    } else {
+        CombatStep::Wait
+    }
 }
 
 /// Colour a damage number by its damage-type index (defaults to red). The
@@ -1215,13 +1248,10 @@ impl ApplicationHandler for App {
                                     })
                                     .map(|a| a.runtime_id);
                                 if let Some(rid) = target {
+                                    // Engage auto-attack; the per-frame combat
+                                    // loop chases + swings on cooldown (CBT-1).
                                     self.target = Some(rid);
-                                    net.transport.send(
-                                        net.peer,
-                                        rcce_net::packet_id::ATTACK_ACTOR,
-                                        &rid.to_le_bytes(),
-                                        true,
-                                    );
+                                    self.attacking = true;
                                 }
                             }
                         }
@@ -1887,21 +1917,22 @@ impl App {
         }
     }
 
-    /// Execute a chosen context-menu action against `rid` by sending the
-    /// matching packet (TGT-3). Interact→P_RightClick (runs the NPC Main
-    /// script), Examine→P_Examine, Trade→P_Trade, Attack→target + P_AttackActor.
+    /// Execute a chosen context-menu action against `rid` (TGT-3). Interact→
+    /// P_RightClick (runs the NPC Main script), Examine→P_Examine, Trade→P_Trade,
+    /// Attack→engage the auto-attack loop (CBT-1, no one-shot send).
     fn exec_menu_action(&mut self, action: MenuAction, rid: u16) {
         use rcce_net::packet_id;
         if action == MenuAction::Attack {
             self.target = Some(rid);
+            self.attacking = true;
+            return;
         }
         let Some(net) = self.net.as_mut() else { return };
-        let rid_bytes = rcce_client::net::right_click_packet(rid); // 2-byte runtime id
         let (ptype, payload) = match action {
-            MenuAction::Interact => (packet_id::RIGHT_CLICK, rid_bytes),
+            MenuAction::Interact => (packet_id::RIGHT_CLICK, rcce_client::net::right_click_packet(rid)),
             MenuAction::Examine => (packet_id::EXAMINE, rcce_client::net::examine_packet(rid)),
             MenuAction::Trade => (packet_id::TRADE, rcce_client::net::examine_packet(rid)),
-            MenuAction::Attack => (packet_id::ATTACK_ACTOR, rid_bytes),
+            MenuAction::Attack => return, // engaged above
         };
         net.transport.send(net.peer, ptype, &payload, true);
     }
@@ -1947,6 +1978,8 @@ impl App {
         } else {
             // No actor under the cursor → click-to-move: walk to the ground
             // point the camera ray hits at the player's feet height (MOVE-5).
+            // A manual move also breaks off any auto-attack.
+            self.attacking = false;
             let plane_y = self.net.as_ref().map(|n| n.world.me_y).unwrap_or(self.ground_y);
             if let Some(g) = rcce_render::unproject_ground(&self.vp, sw, sh, cx, cy, plane_y) {
                 self.move_target = Some([g[0], g[2]]);
@@ -2260,6 +2293,46 @@ impl App {
         };
         let elapsed = self.start.elapsed().as_secs_f32();
 
+        // Auto-combat (CBT-1): while attacking a live target, chase to melee
+        // range then send P_AttackActor on the CombatDelay cooldown. Chasing
+        // reuses move_target; `attacking` clears when the target dies/vanishes.
+        if self.attacking {
+            let tgt = self.target;
+            let info = self.net.as_ref().and_then(|n| {
+                tgt.and_then(|rid| {
+                    n.world
+                        .actors
+                        .get(&rid)
+                        .filter(|a| a.alive)
+                        .map(|a| (rid, a.x, a.z, n.world.me_x, n.world.me_z))
+                })
+            });
+            match info {
+                None => self.attacking = false,
+                Some((rid, tx, tz, mx, mz)) => {
+                    let dist = ((tx - mx).powi(2) + (tz - mz).powi(2)).sqrt();
+                    let ready = self.last_attack.elapsed().as_millis() as u64 >= COMBAT_DELAY_MS;
+                    match combat_step(dist, ready) {
+                        CombatStep::Chase => self.move_target = Some([tx, tz]),
+                        CombatStep::Wait => self.move_target = None,
+                        CombatStep::Swing => {
+                            self.move_target = None;
+                            if let Some(net) = self.net.as_mut() {
+                                net.transport.send(
+                                    net.peer,
+                                    rcce_net::packet_id::ATTACK_ACTOR,
+                                    &rid.to_le_bytes(),
+                                    true,
+                                );
+                            }
+                            self.last_attack = Instant::now();
+                            println!("[combat] swing -> rid={rid} (dist {dist:.1})");
+                        }
+                    }
+                }
+            }
+        }
+
         // Movement intent from WASD relative to the camera yaw (computed before
         // borrowing `net`). Camera-space basis: forward = into-screen, right.
         let (sy, cy) = self.cam_yaw.sin_cos();
@@ -2279,7 +2352,9 @@ impl App {
         // WASD/auto input cancels the click destination (manual override wins).
         let manual = (dir[0] * dir[0] + dir[1] * dir[1]).sqrt() > 0.01;
         if manual {
+            // Manual WASD/auto input cancels click-to-move AND auto-combat.
             self.move_target = None;
+            self.attacking = false;
         } else if let Some(tgt) = self.move_target {
             if let Some(p) = self.net.as_ref().map(|n| [n.world.me_x, n.world.me_z]) {
                 let (tdx, tdz) = (tgt[0] - p[0], tgt[1] - p[1]);
@@ -2592,6 +2667,22 @@ impl App {
                                 "Farewell".to_string(),
                             ],
                         });
+                    }
+                }
+            }
+        }
+        // Headless attack self-test (CBT-1): select the nearest living actor and
+        // engage auto-attack so the combat loop is exercisable without a mouse.
+        // No-op unless RCCE_ATTACK=<frame> is set.
+        if let Ok(av) = std::env::var("RCCE_ATTACK") {
+            if let Ok(at) = av.parse::<u64>() {
+                if self.frames == at {
+                    if let Some(net) = self.net.as_ref() {
+                        if let Some(rid) = nearest_living_actor(&net.world, net.world.me_x, net.world.me_z) {
+                            self.target = Some(rid);
+                            self.attacking = true;
+                            println!("[attack] frame {} engage rid={rid}", self.frames);
+                        }
                     }
                 }
             }
@@ -3586,6 +3677,17 @@ mod tests {
         // Off-screen clamp keeps the whole menu visible.
         let edge = ContextMenu::build(9, false, 1279.0, 799.0, 1280.0, 800.0);
         assert!(edge.x + CTX_W <= 1280.0 && edge.y + CTX_ROW * 4.0 <= 800.0);
+    }
+
+    // The auto-combat decision (CBT-1): chase when out of melee range, swing in
+    // range when the cooldown is ready, else wait for the cooldown.
+    #[test]
+    fn combat_step_decisions() {
+        assert_eq!(combat_step(10.0, true), CombatStep::Chase);
+        assert_eq!(combat_step(10.0, false), CombatStep::Chase);
+        assert_eq!(combat_step(3.0, true), CombatStep::Swing);
+        assert_eq!(combat_step(3.0, false), CombatStep::Wait);
+        assert_eq!(combat_step(MELEE_RANGE, true), CombatStep::Swing);
     }
 
     #[test]

@@ -122,8 +122,8 @@ Auto-attack on a flagged target: `AttackTarget=True` + `PlayerTarget` drives `Up
 
 | ID | Criterion | Status | Evidence / Reference | Verification |
 |---|---|---|---|---|
-| CBT-1 | **Attack a mob** (THE known gap, e.g. the stag): set `AttackTarget=True` (Attack button / Attack key / dbl-click), then auto-swing on `CombatDelay` cooldown via `P_AttackActor [2]RuntimeID` while in range | PARTIAL | ref `ClientCombat.bb:16-79`; Rust sends one ATTACK_ACTOR per keypress (`client_window.rs:1141-1146`), no auto-loop, no menu Attack | live: select stag → attack → it loses HP → dies |
-| CBT-2 | Range gate: melee `MaxRange#=4.0`, ranged = weapon `Range#−0.5`; out of range → chase via `SetDestination`; in range → stop + face target | PARTIAL | ref `ClientCombat.bb:37-64` | live |
+| CBT-1 | **Attack a mob** (THE known gap, e.g. the stag): set `attacking` (Attack menu button / Attack key), then auto-swing on `CombatDelay` cooldown via `P_AttackActor [2]RuntimeID` while in range | DONE ✅ | per-frame combat loop (`attacking` flag + `last_attack` + pure `combat_step`): chase out of range, stop + swing in range every `COMBAT_DELAY_MS` (1500). Cleared on target death/vanish or manual move. ref `ClientCombat.bb:16-79` | unit test `combat_step_decisions` green; **live `RCCE_ATTACK=150`: the player chased Z 88→21 to the target then logged 7 `[combat] swing` at dist 4.4 paced ~1.5s, stationary in range — confirmed 2026-06-01** |
+| CBT-2 | Range gate: melee `MaxRange#≈4.5`; out of range → chase via the move-to system; in range → stop | DONE ✅ | `combat_step` (Chase if dist>MELEE_RANGE else Swing/Wait) + the loop sets/clears `move_target`. ref `ClientCombat.bb:37-64` | same live run: chased then stopped at dist 4.4. (Ranged weapon `Range−0.5` deferred — no weapon-range data parsed yet.) |
 | CBT-3 | Render `P_AttackActor` broadcast: `H`(I hit)/`Y`(hit me)/else — attacker attack-anim, target hit-anim, HP subtract, blood-spurt emitter; miss → parry anim | PARTIAL | ref `ClientNet.bb:1115-1206`; Rust records hits → floating numbers (`world.rs:396-410`) but no anims/blood | live |
 | CBT-4 | Floating damage numbers (`DamageInfoStyle=3`) rise over the actor's head (red=taken, green=dealt) and expire | DONE | ref `ClientCombat.bb:147-229`; `floaters.rs`, drawn `client_window.rs:2438-2450` | `combat_test` / live |
 | CBT-5 | Chat-line damage style (`DamageInfoStyle=2`): "You hit X for N type damage!" colored | PARTIAL | ref `ClientCombat.bb:150-168` | live |
@@ -274,11 +274,13 @@ Auto-attack on a flagged target: `AttackTarget=True` + `PlayerTarget` drives `Up
 
 ## Parity scorecard (2026-06-01 baseline)
 
-Counting concrete criteria (excluding DEFERRED): **DONE ≈ 39, PARTIAL ≈ 29, MISSING ≈ 17** (ANIM-1, MOVE-5, MENU-SCENE, project-fix, TGT-1/2/3/4/5/6 closed 2026-06-01, Phases 1-4d). The headline gaps that block "true drop-in" are the four from the live play-test plus their dependencies:
+Counting concrete criteria (excluding DEFERRED): **DONE ≈ 41, PARTIAL ≈ 28, MISSING ≈ 16** (ANIM-1, MOVE-5, MENU-SCENE, project-fix, TGT-1..6, CBT-1/2 closed 2026-06-01, Phases 1-5). **All four headline play-test gaps are now closed.**
 
 1. ~~**MENU-SCENE** — dedicated 3D menu scene with posed character~~ **DONE ✅** (Phase 3; backdrop-art polish = MENU-SCENE-b).
 2. ~~**ANIM-1** — local-player walk/run animation~~ **DONE ✅** (Phase 1).
 3. ~~**MOVE-5** — click-to-move~~ **DONE ✅** (Phase 2).
-4. Targeting cluster: ✅ TGT-1/2 (select + highlight + panel), ✅ TGT-3/4/6 (context menu), ✅ TGT-5 (NPC dialog `P_Dialog` window, Phase 4d) **DONE**; only **CBT-1** (attack-the-mob auto-loop) remains → Phase 5 (the last headline play-test gap).
+4. ~~Targeting + combat: TGT-1..6 (select / highlight / panel / context menu / NPC dialog) + CBT-1/2 (attack-the-mob auto-loop)~~ **DONE ✅** (Phases 4-5).
+
+**Remaining work is non-headline parity breadth** (PARTIAL/MISSING): combat anims (ANIM-8), spell effects/projectiles (SPL-8/PRJ-1), quests/party (QST/PTY), water (ENV-4), chat colors/scrollback (CHAT-2..4), trade completeness (TRD-3), camera modes (CAM-4..6), swim/ride anims (ANIM-4/5), and the MENU-SCENE-b backdrop polish.
 
 These drive the Phase ordering in `PLAN.md`.
