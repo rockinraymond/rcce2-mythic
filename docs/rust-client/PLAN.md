@@ -1,157 +1,97 @@
-# Rust Client Port — Plan
+# Rust Client Port — Parity Plan
 
-Goal: a **drop-in replacement for `bin/Client.exe`** written in Rust on a modern
-graphics pipeline (**wgpu**), cross-platform (Windows/Linux/macOS), that connects
-to and plays against the **unmodified** RCCE2 server and reads the **unchanged**
-project files the GUE editor produces. No existing project file (`.bb`, `data/`)
-is modified — the port is additive under `client-rs/`.
+Goal: a **true drop-in replacement for `bin/Client.exe`** in Rust on wgpu/winit, connecting to the **unmodified** RCCE2 server and reading the **unchanged** project files. The port is additive under `client-rs/`; no `.bb` or `data/` file is modified.
 
-## Status (2026-06-01) — login flow + live-render bug fixes
+This plan is **parity-driven**. The acceptance spec — [`ACCEPTANCE.md`](ACCEPTANCE.md) — is the contract; every phase below maps to a set of acceptance criterion IDs and states how each is verified. "Parity reached" = every non-`DEFERRED` criterion is `DONE` (PNG/test/live evidence).
 
-Round of fixes after the first live play-test (all verified via the new
-`RCCE_SHOT` headless capture or unit tests):
+## Status (2026-06-01) — Phase 0 complete, parity gaps catalogued
 
-- **Login / character-select screen** — the client no longer auto-logs in. It
-  boots into a login screen (account + password fields, typed input, masked
-  password) over an orbiting zone backdrop, then a character-select screen
-  (roster with race/gender, create with a race picker, delete, enter world).
-  `login.rs` was split into `account_login` / `create_char` / `delete_char` /
-  `enter_world` steps. `RCCE_AUTOLOGIN` (implied by `RCCE_BENCH`/`RCCE_AUTOWALK`)
-  keeps the straight-to-world path for headless runs.
-- **Masked-texture transparency** — foliage/grass/tree-leaf billboards rendered
-  as opaque **black squares**: the b3d `TEXS` mask flag (Blitz `&4`) was parsed
-  then discarded. Now threaded through (`B3dMesh.texture_flag`) and black is
-  color-keyed transparent on masked textures (`texture::load_with_flags`).
-- **Actor placement** — actors rendered ~16 units below their nameplates and the
-  camera (every actor was pinned to one flat zone `ground_y` instead of its own
-  authoritative spawn Y). Now each actor stands on `pos[1]`.
-- **Third-person camera collision** — the boom marches out and stops before
-  entering a building occluder (per-zone bounding spheres of building-sized,
-  non-foliage props), so the camera no longer clips into / through walls.
-- **Headless screenshot** — `RCCE_SHOT=<path>` (`RCCE_SHOT_FRAME=N`) captures the
-  live world OR menu to a PNG and exits; `save_texture_png` in `rcce-render`.
+The earlier vertical-slice port (login → live zone → walk → remote players → chat → inventory/HUD → environment/audio) is functional and shipping as `bin/ClientRS.exe` (`compile.bat -r`). But a live play-test exposed that it is **not yet a drop-in**: the menu orbits the gameplay zone instead of loading the real menu scene, the local player doesn't animate while moving, there's no click-to-move, and you can't context-menu / dialog / attack actors.
 
-## Status (2026-05-31) — vertical slice through visual parity DONE
+Phase 0 (this iteration) replaced the optimistic "all phases DONE" framing with an evidence-based audit: see the parity scorecard at the foot of `ACCEPTANCE.md` (~30 DONE / ~33 PARTIAL / ~22 MISSING). The phases below attack the gaps in dependency + user-value order.
 
-The port is now a playable, feature-rich client built to `bin/ClientRS.exe`
-(`compile.bat -r` / `compile.sh -r`), alongside the Blitz `Client.exe`. It logs
-into the unmodified server, loads real zones, and plays. Highlights:
+### What is already DONE (foundation — do not regress)
+Transport (NET-1..3), data parsers + ~113 tests (NET-2), the login/char-select *flow* and dataset streaming (MENU-1,3,4,5,7,8), third-person camera (CAM-1), remote-actor animation (ANIM-2), inventory/equipment (INV-1,2,4,6,8), spell casting + cooldowns (SPL-2,3), chat send/receive (CHAT-1), HUD at real Interface.dat coords (HUD-1,2,5,6,7), day/night + weather + sky + audio + radar (ENV-1,2,3, AUD-1,3,5, RAD-1), zone warp (ZON-1), headless tooling (TOOL-1,2,3). These are the platform the parity work builds on.
 
-- **Transport (Phase 0/5):** pure-Rust 64-bit ENet (`enet-sys`) — full login +
-  world-state; FFI was skipped. WASD movement (server-authoritative) + mouse-look.
-- **Data (Phase 1):** all parsers done + tested vs real `data/` — Meshes/Textures/
-  Sounds/Music catalogs, B3D (mesh + skeleton + ANIM, quaternion-conjugate fix),
-  Items/Actors/Spells, area `.dat` (incl. sky/cloud/storm/stars tex ids),
-  Interface.dat, Attributes.dat. (~113 unit/round-trip tests workspace-wide, zero
-  warnings.)
-- **Vertical slice (Phase 2):** wgpu/winit window, real zone scenery + terrain,
-  remote actors moving + animating, chat, multi-zone live reload on warp.
-- **Gameplay (Phase 3):** combat + floating damage, full inventory (drag/drop/
-  equip/drop/eat), dropped-item loot, spell action bar + cooldowns, NPC trade/
-  examine/right-click, equipped gear + hair/beard attachments. (Quests/party UI
-  minimal.)
-- **Interface parity:** the HUD is placed at the **real `Interface.dat` fractional
-  coordinates** (vitals, chat, minimap+blips, buffs, action bar + function-button
-  row, 46-slot inventory grid, XP bar, compass) with the real GUI/item/spell `.bmp`
-  artwork via a textured-quad overlay; clickable buttons + slots; hover tooltips;
-  a full character panel (attributes + inventory + spells).
-- **Visual parity (Phase 4):** CPU **and GPU** skeletal skinning (GPU opt-in via
-  `RCCE_GPUSKIN`, faster + smoother — the perf fix), textured **sky + drifting
-  clouds + storm-cloud swap + day/night stars**, rain/snow/storm particles +
-  rain/storm audio, day-night fog/ambient, zone music + footstep SFX + volume/mute,
-  minimap radar. (RTT radar + post-FX not ported — the 2D minimap + fog substitute.)
+---
 
-**Remaining / open:** confirm the GPU-skinning fps win in a live window
-(`RCCE_GPUSKIN=1 RCCE_BENCH=300` vs `RCCE_BENCH=300`) and flip it to default;
-`P_Sound` combat/cast SFX (the shipped `Sounds.dat` has no records, so nothing to
-play); quests/party UI; Phase 6 true drop-in cutover (rename to `Client.exe` +
-`Project Manager.exe` launch). See the `Rust client port` and `Interface.dat HUD
-layout` agent memories for the running detail.
-
-## Locked decisions (2026-05-29)
+## Locked decisions
 
 | Decision | Choice | Rationale |
 |---|---|---|
-| Graphics/windowing | **wgpu + winit** | Maps 1:1 onto Blitz3D's explicit entity/camera/RenderWorld model; true cross-platform; WGSL. |
-| v1 sequencing | **Vertical slice first** | Login → load one real zone → walk → see other players move → chat. Proves protocol + renderer + data path end-to-end before broadening. |
-| Network transport | **FFI `RCEnet.dll` first, swap to pure-Rust ENet later** | Proves all 38 packet codecs against the real server immediately (Windows); cross-platform transport becomes a contained swap behind one trait (Phase 5). |
+| Graphics/windowing | **wgpu + winit** | 1:1 onto Blitz3D's entity/camera/RenderWorld model; cross-platform; WGSL. |
+| Transport | **pure-Rust 64-bit ENet** (`enet-sys`) | FFI skipped; full login + world-state verified live (PR #462). |
+| Byte order | **wire big-endian ints / LE floats; file LE; wire str 1-byte-len, file str 4-byte-len** | The single highest-risk correctness invariant; encoded in `rcce-net`/`rcce-data`. |
+| Movement model | **destination-based** (`DestX/DestZ` + dist>2.0 walk threshold), shared by local + remote | Matches `Client.bb:546-728`; the local player must use the same path the remote actors already use. |
+| Cooldowns | **keyed by spell ID 0-999** | Server decrements by spell ID; any other key desyncs (`Interface3D.bb:386`). |
 
-## Discovery: reusable vs. ground-up
-
-**Reusable as *spec* (reproduce exactly, no code reuse):**
-- **Wire protocol** — 38 live packet types (57 defined). Big-endian Bank encoding,
-  1-byte-length-prefixed strings, MD5-hashed password. Ref: `docs/protocol/`,
-  `src/Modules/{RCEnet,Packets,ClientNet}.bb`.
-- **On-disk formats** — B3D meshes (BB3D/NODE/MESH/BONE/ANIM), indexed `.dat`
-  catalogs (Meshes/Textures/Sounds/Music — 65535-slot i32 index + records),
-  Items/Actors/Spells records, area `.dat`, `Accounts.dat` saves. Ref:
-  `src/Modules/{Media,Items,Actors,Spells,ClientAreas,b3dfile}.bb`.
-- **Asset codecs** — textures PNG/BMP/JPG (`image`), audio OGG Vorbis
-  (`rodio`/`kira`), bzip2 (`bzip2`).
-
-**Ground-up (replace the Blitz3D + DirectX 7 stack):**
-- 3D renderer (~8.2k lines) → wgpu.
-- 2D UI / Gooey, 15+ windows (~9.6k lines) → custom-draw on wgpu (egui for menus optional).
-- Networking (~2k lines) → `rcce-net`.
-- World/zone + animation + environment (~3.5k) → `rcce-world`.
-- Data loaders (~3.1k) → `rcce-data` (**Phase 1, in progress**).
-- Audio → `rodio`.
-
-**Confirmed scope reducers:**
-- **Client links NO scripting VM.** `Client.bb` includes none of `briskvm` /
-  `ScriptingCommands` / `RC_Standard_Invoker`. BVM is server-only; the client
-  merely renders packet-driven dialog/input/progress UI. The Rust client needs
-  zero scripting engine.
-- `briskvm.dll`, MySQL DLLs, DX7 stack: not client-portable and/or not client
-  deps — irrelevant to the port.
-
-**The one real risk:** what `RCEnet.dll` writes on the UDP wire. `.decls` shows a
-12-function message-queue API (reliable-flag + channels ⇒ almost certainly ENet
-underneath). FFI-first (Phase 0) removes it from the critical path; Phase 5
-either reimplements over a Rust ENet crate or, if available, ports RCEnet source
-from the BlitzForge submodule.
-
-## Critical correctness note — byte order
-
-- **File I/O** (`ReadInt`/`ReadShort`/`ReadFloat`, all `.dat`/save files) is
-  **little-endian** native. → `rcce-data::BlitzReader`.
-- **Wire** (`RCE_StrFromInt$`) is **big-endian**. → `rcce-net` codec.
-- `.dat` strings: **4-byte LE length** + bytes (`MediaReadFilename$`, Media.bb:23).
-  Wire strings: **1-byte length** + bytes. Do not conflate.
+---
 
 ## Phases
 
-- ✅ **Phase 0 — Transport spike:** connect to a running server; `P_StartGame` +
-  MD5 login; world-state packets. (Went straight to pure-Rust ENet, not FFI.)
-- ✅ **Phase 1 — Data foundation (`rcce-data`):** parsers for all `.dat` catalogs
-  + B3D + area + Interface/Attributes, tested vs real `data/`.
-  - ✅ Blitz LE reader + indexed catalogs (Meshes/Textures/Sounds/Music).
-  - ✅ B3D chunk parser → CPU mesh + skeleton + ANIM (+ GPU skin attrs).
-  - ✅ Items/Actors/Spells; area `.dat`; Interface.dat; Attributes.dat.
-- ✅ **Phase 2 — Vertical slice:** wgpu window → real zone meshes → walk → remote
-  players (`P_StandardUpdate`) → chat → live multi-zone reload.
-- ✅ **Phase 3 — Gameplay parity:** combat, inventory, spells, trading,
-  examine/right-click wired to UI. (Quests/party UI minimal.)
-- ✅ **Phase 4 — Visual parity:** skeletal anim (CPU + GPU skinning), particles/
-  weather + audio, day-night lighting, textured sky/clouds/stars, minimap.
-  (RTT radar + post-FX substituted by the 2D minimap + fog.)
-- ✅ **Phase 5 — Cross-platform:** pure-Rust ENet (64-bit `enet-sys`); macOS/Linux
-  build scripts (`compile.sh`/`test.sh`). (Path/case normalization as needed.)
-- ⬜ **Phase 6 — Drop-in cutover:** currently ships as `bin/ClientRS.exe` ALONGSIDE
-  `Client.exe` (opt-in `compile.bat -r`). True cutover (rename + `Project
-  Manager.exe` launch) is deferred until parity is signed off.
+Ordered so each phase unblocks the next and front-loads the four play-test gaps (highest user-visible value). Each phase commits independently; after every `.bb` edit run `compile.bat -t` (clean = no `:line:col:`), after every Rust edit `cargo build --release` (zero warnings) + `cargo test` (green), build via `compile.bat -e -t -r` → `bin\ClientRS.exe` (kill any running `client-window.exe` first).
 
-## Acceptance mapping
+### Phase 1 — Local player locomotion animation  → ANIM-1, ANIM-3, ANIM-9
+**Why first:** smallest, highest-visibility fix; the root cause is a single hardcoded `moving=false, running=false` at `client_window.rs:682`. Unblocks the felt quality of every subsequent movement feature.
+- Drive the local player's `moving`/`is_running` from its own dest-delta + run flag, exactly as remote actors already do (`client_window.rs:684-688`).
+- Confirm the clip-switch hysteresis (don't restart a playing clip every frame) and the `Animations.dat` per-clip speed normalization (`AnimStart/AnimEnd/AnimSpeed`).
+- **Verify:** `RCCE_AUTOWALK` + `RCCE_SHOT=walk.png RCCE_SHOT_FRAME=200` → read PNG, confirm the player's legs are in a walk/run pose mid-stride, not idle. `anim_probe` for the speed table. `cargo test` green.
 
-- Viability: Phase 2 playable vertical slice on real server data.
-- Parity: Phases 3–4.
-- "Cross-platform + modern pipeline": Phase 5 (wgpu satisfies the pipeline from
-  Phase 2; cross-platform completes at 5).
-- "Drop-in `Client.exe`": Phase 6.
+### Phase 2 — Click-to-move  → MOVE-5, MOVE-6, MOVE-1..4 alignment
+**Why:** the core interaction the play-test flagged; depends on a working ground raycast that Phase 4 (actor picking) also needs.
+- Add a ground/terrain raycast: on left-click with the world un-occluded by HUD and `GetTarget$==""` (terrain/scenery, not actor), `SetDestination(Me, hitX, hitZ, hitY)`; show a click marker at the hit point; support hold-to-move (repeat each frame).
+- Reconcile WASD onto the destination-projection model (`KeyboardMoveDistance#*(1+IsRunning)` ahead of facing) so keyboard and click share one path.
+- Double-click ground → set running; double-click actor → run to it.
+- **Verify:** live on `Server.exe -UNLOCK` — click a ground point, character paths there and animates (Phase 1); `RCCE_SHOT` before/after shows position change. `move_test` bin.
+
+### Phase 3 — Dedicated 3D menu scene  → MENU-SCENE, MENU-2, MENU-9, MENU-10
+**Why:** first thing a user sees; currently the most obviously "wrong" surface. Independent of gameplay code.
+- Replace the gameplay-zone spectator orbit (`render_menu`) with: dark-blue fogged void (`fog 0,51,102`, range 300-5200); a full-screen backdrop quad per screen textured from `Data\Textures\Menu\{Login,Character Selection,EULA}.png`; optional `Set.b3d` diorama at world `(-210,-35,-145)` scale 30; and the **selected character's actor mesh** at world `(30, ground-adjusted, 100)` playing `Anim_Idle`, camera ~150u back (offset −40 X), dollying to the head/chest joint on selection.
+- Wire the two-phase connect (menu socket `"X"` → disconnect → game socket) and menu music.
+- **Verify:** `RCCE_AUTOSUBMIT` (→ char-select) + `RCCE_SHOT=menu.png RCCE_SHOT_FRAME=60` → read PNG, confirm a backdrop image + a posed 3D character, **not** terrain/zone geometry.
+
+### Phase 4 — Targeting, context menu, NPC dialog  → TGT-1, TGT-2, TGT-3, TGT-4, TGT-5, TGT-6, TGT-7
+**Why:** gates combat (Phase 5) and most NPC interaction; reuses Phase 2's raycast for actor picking.
+- Left-click actor → set `PlayerTarget`, show `ActorSelectEN` ground decal, open the Char-Interaction window (target HP/faction/level/reputation), follow it each frame.
+- Single-click actor → "Actions" context menu at cursor (Interact/Move-To, Attack if attackable, Examine, Trade if `TradeMode>0`); each button sends its packet (`P_RightClick`/set AttackTarget/`P_Examine`/`P_Trade`). Re-bind RMB so mouse-look doesn't eat the menu (or move the menu to the Blitz single-left-click trigger).
+- Render `P_Dialog` N/T/O/C: dialog window with wrapped text + green clickable options; option click → `P_Dialog "O" [4]scriptHandle [1]opt`. Add `TextInput` + `P_ProgressBar`.
+- Cycle-target key.
+- **Verify:** live — left-click the other human → highlight + target HUD; click an NPC → dialog window with selectable options that advance the script; context menu shows Attack on the stag.
+
+### Phase 5 — Combat loop + combat animations + death  → CBT-1, CBT-2, CBT-3, CBT-5, CBT-6, ANIM-7, ANIM-8
+**Why:** depends on Phase 4 targeting; the third play-test gap ("attack the stag").
+- `AttackTarget=True` (from context menu / attack key / dbl-click) drives an auto-attack loop: range gate (melee 4.0 / ranged weapon−0.5), chase out-of-range, stop+face in-range, send `P_AttackActor` on `CombatDelay` cooldown.
+- Render the `P_AttackActor` broadcast: attacker attack-anim, target hit-anim/parry, HP subtract, blood emitter; chat-line damage style. Death (`P_ActorDead`): random death anim + fade + clear target.
+- Jump (MOVE-7) + jump anim (ANIM-7) folded in here (shared anim plumbing).
+- **Verify:** live — select the stag, attack, it loses HP and plays hit/death anims and dies; floating numbers already work (CBT-4).
+
+### Phase 6 — Spellbook, action-bar completeness, spell effects  → SPL-1, SPL-4, SPL-5, SPL-6, SPL-7, SPL-8, PRJ-1
+- Full spellbook window (memorised + known pages), memorise/un-memorise with progress bar, action-bar assign/clear/paging + F-key fire, incoming `P_KnownSpellUpdate`, action-bar load from `P_StartGame`.
+- Projectiles (`P_Projectile`): spawn/homing/impact + emitters — also serves spell visuals.
+- **Verify:** live cast from spellbook + action bar; `RCCE_SHOT` of an in-flight projectile.
+
+### Phase 7 — Chat/quests/party/trade completeness  → CHAT-2..4, QST-1,2, PTY-1,2, TRD-1..4, HUD-3,4,8
+- Chat colors + scrollback + bubbles; quest log + `P_QuestLog`; party window + `P_PartyUpdate`; full trade window (sell side + player↔player + Amount dialog); money display + character sheet + function-button toggles.
+- **Verify:** live (some need a 2nd player); `RCCE_SHOT` of each panel.
+
+### Phase 8 — Environment completeness  → ENV-4, ENV-5, ENV-6, CAM-4,5,6, AUD-2,4, ANIM-4,5,6, ZON-2
+- Water plane + scrolling UV + collision + underwater camera/anim; lightning; screen flash; first-person + MMB camera; sound-zone parsing + combat SFX; swim/ride/idle-fidget anims; same-AreaName re-warp handling.
+- **Verify:** live in a water/storm zone; `RCCE_SHOT`.
+
+### Phase 9 — Drop-in cutover  → TOOL-4
+- Once every non-DEFERRED criterion is DONE: optional rename path + `Project Manager.exe` launch. Sign-off only.
+
+---
+
+## Verification doctrine
+
+Per the Praxis evidence ladder, a criterion flips to `DONE` only with evidence at or above the strength its risk demands:
+- **Visual** criteria → headless `RCCE_SHOT` PNG that is **read and confirmed** to match (never claim a visual pass not seen), or a live run.
+- **Protocol/data** criteria → `cargo test` round-trip + a live exchange against `Server.exe -UNLOCK`.
+- **Interaction** criteria → live run with the documented input → observed result.
+
+Update the status tags in `ACCEPTANCE.md` as criteria pass, citing the evidence. Never flip `RCCE_GPUSKIN` to default as part of parity work.
 
 ## Workspace
 
-`client-rs/` Cargo workspace. Crates: `rcce-data` (parsers), `rcce-net` (ENet +
-packet codecs), `rcce-render` (wgpu pipelines, overlay, sky/skin), `rcce-client`
-(assets, world, audio, HUD, the `client-window` bin + headless render/probe bins).
-Run `cd client-rs && cargo test`; build the client via `compile.bat -r`.
+`client-rs/` Cargo workspace. Crates: `rcce-data` (parsers), `rcce-net` (ENet + packet codecs), `rcce-render` (wgpu pipelines, overlay, sky/skin, world_view), `rcce-client` (assets, world, audio, HUD, login, `client-window` bin + headless probe bins). `cd client-rs && cargo test`; build the client via `compile.bat -r` (or `-e -t -r` for rust-only).
