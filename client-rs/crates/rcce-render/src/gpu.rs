@@ -474,6 +474,68 @@ pub fn mesh_normals(mesh: &B3dMesh) -> Vec<Vec3> {
 
 /// Bind-group layouts + sampler + pipeline for the textured shader, targeting
 /// `color_format` with a `Depth32Float` depth buffer.
+/// Generate a full RGBA8 mip chain by 2× box-filter downsampling. Element 0 is
+/// the source (`w`×`h`); each subsequent level halves each dimension (floored,
+/// min 1) down to 1×1. Edges clamp on odd dimensions. Pure — unit-tested.
+fn rgba_mip_chain(rgba: &[u8], w: u32, h: u32) -> Vec<(u32, u32, Vec<u8>)> {
+    let mut levels: Vec<(u32, u32, Vec<u8>)> = vec![(w.max(1), h.max(1), rgba.to_vec())];
+    loop {
+        let (pw, ph, prev) = levels.last().unwrap();
+        let (pw, ph) = (*pw, *ph);
+        if pw <= 1 && ph <= 1 {
+            break;
+        }
+        let (nw, nh) = ((pw / 2).max(1), (ph / 2).max(1));
+        let mut next = vec![0u8; (nw as usize) * (nh as usize) * 4];
+        let at = |sx: u32, sy: u32| ((sy * pw + sx) * 4) as usize;
+        for y in 0..nh {
+            let (sy0, sy1) = ((2 * y).min(ph - 1), (2 * y + 1).min(ph - 1));
+            for x in 0..nw {
+                let (sx0, sx1) = ((2 * x).min(pw - 1), (2 * x + 1).min(pw - 1));
+                let o = ((y * nw + x) * 4) as usize;
+                for c in 0..4 {
+                    let s = prev[at(sx0, sy0) + c] as u32
+                        + prev[at(sx1, sy0) + c] as u32
+                        + prev[at(sx0, sy1) + c] as u32
+                        + prev[at(sx1, sy1) + c] as u32;
+                    next[o + c] = (s / 4) as u8;
+                }
+            }
+        }
+        levels.push((nw, nh, next));
+    }
+    levels
+}
+
+#[cfg(test)]
+mod mip_tests {
+    use super::rgba_mip_chain;
+
+    #[test]
+    fn mip_chain_dims_and_average() {
+        // 2×2 of distinct greys averages to one mid-grey texel at level 1.
+        let src = vec![
+            0, 0, 0, 255, 100, 100, 100, 255, 200, 200, 200, 255, 255, 255, 255, 255,
+        ];
+        let mips = rgba_mip_chain(&src, 2, 2);
+        assert_eq!(mips.len(), 2); // 2×2 -> 1×1
+        assert_eq!((mips[1].0, mips[1].1), (1, 1));
+        // (0+100+200+255)/4 = 138 (integer).
+        assert_eq!(mips[1].2, vec![138, 138, 138, 255]);
+    }
+
+    #[test]
+    fn mip_chain_full_to_1x1() {
+        // 8×4 should produce levels 8×4, 4×2, 2×1, 1×1.
+        let src = vec![128u8; 8 * 4 * 4];
+        let mips = rgba_mip_chain(&src, 8, 4);
+        let dims: Vec<_> = mips.iter().map(|(w, h, _)| (*w, *h)).collect();
+        assert_eq!(dims, vec![(8, 4), (4, 2), (2, 1), (1, 1)]);
+        // Averaging a constant image stays constant.
+        assert!(mips.last().unwrap().2.iter().all(|&b| b == 128));
+    }
+}
+
 pub struct Pipeline {
     pub pipeline: wgpu::RenderPipeline,
     pub bgl_uniform: wgpu::BindGroupLayout,
@@ -517,11 +579,17 @@ impl Pipeline {
                 },
             ],
         });
+        // Trilinear + anisotropic filtering (the real client runs aniso x4).
+        // `mipmap_filter: Linear` + a full mip chain (built in `texture_bind`)
+        // stops distant/oblique terrain & scenery from aliasing into mud, and
+        // `anisotropy_clamp` keeps grazing-angle surfaces sharp.
         let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
             address_mode_u: wgpu::AddressMode::Repeat,
             address_mode_v: wgpu::AddressMode::Repeat,
             mag_filter: wgpu::FilterMode::Linear,
             min_filter: wgpu::FilterMode::Linear,
+            mipmap_filter: wgpu::FilterMode::Linear,
+            anisotropy_clamp: 8,
             ..Default::default()
         });
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
@@ -583,31 +651,38 @@ impl Pipeline {
             Some(i) if i.width > 0 && i.height > 0 => (i.width, i.height, i.rgba.clone()),
             _ => (1, 1, vec![255, 255, 255, 255]),
         };
+        // Build a full RGBA8 mip chain (level 0 = source) so the trilinear +
+        // anisotropic sampler has something to sample — without mips, distant
+        // terrain/scenery aliases into shimmer/mud. wgpu has no auto mip-gen.
+        let mips = rgba_mip_chain(&data, w, h);
         let tex = device.create_texture(&wgpu::TextureDescriptor {
             label: Some("tex"),
             size: wgpu::Extent3d { width: w, height: h, depth_or_array_layers: 1 },
-            mip_level_count: 1,
+            mip_level_count: mips.len() as u32,
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
             format: wgpu::TextureFormat::Rgba8Unorm,
             usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
             view_formats: &[],
         });
-        queue.write_texture(
-            wgpu::ImageCopyTexture {
-                texture: &tex,
-                mip_level: 0,
-                origin: wgpu::Origin3d::ZERO,
-                aspect: wgpu::TextureAspect::All,
-            },
-            &data,
-            wgpu::ImageDataLayout {
-                offset: 0,
-                bytes_per_row: Some(w * 4),
-                rows_per_image: Some(h),
-            },
-            wgpu::Extent3d { width: w, height: h, depth_or_array_layers: 1 },
-        );
+        for (level, (lw, lh, ldata)) in mips.iter().enumerate() {
+            queue.write_texture(
+                wgpu::ImageCopyTexture {
+                    texture: &tex,
+                    mip_level: level as u32,
+                    origin: wgpu::Origin3d::ZERO,
+                    aspect: wgpu::TextureAspect::All,
+                },
+                ldata,
+                wgpu::ImageDataLayout {
+                    offset: 0,
+                    bytes_per_row: Some(lw * 4),
+                    rows_per_image: Some(*lh),
+                },
+                wgpu::Extent3d { width: *lw, height: *lh, depth_or_array_layers: 1 },
+            );
+        }
+        // Default view spans all mip levels.
         let view = tex.create_view(&Default::default());
         device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: None,
