@@ -2444,6 +2444,10 @@ impl App {
             // Spawn floating damage numbers for any new combat hits, expire old.
             self.floaters.ingest(&net.world.combat_events, elapsed);
             self.floaters.tick(elapsed);
+            // Advance in-flight projectiles (PRJ-1). prev_elapsed is updated
+            // later (weather), so this read gives the same per-frame dt.
+            let proj_dt = (elapsed - self.prev_elapsed).clamp(0.0, 0.1);
+            net.world.tick_projectiles(proj_dt);
             // Send a P_StandardUpdate toward the input direction (unreliable,
             // like ClientNet.bb): the server walks the actor toward Dest and
             // echoes its authoritative position, which on_standard_update
@@ -2737,6 +2741,44 @@ impl App {
                 }
             }
         }
+        // Headless projectile self-test (PRJ-1): spawn a synthetic projectile a
+        // few units in front of the player so its billboard is capturable. No-op
+        // unless RCCE_PROJTEST=<frame> is set.
+        if let Ok(pv) = std::env::var("RCCE_PROJTEST") {
+            if let Ok(at) = pv.parse::<u64>() {
+                if self.frames == at {
+                    let (sy, cy) = self.cam_yaw.sin_cos();
+                    // Place it to the player's right at chest height (clear of the
+                    // body) drifting forward, so the billboard is unobstructed.
+                    let right = [cy, -sy];
+                    let fwd = [-sy, -cy];
+                    if let Some(net) = self.net.as_mut() {
+                        let (mx, my, mz) = (net.world.me_x, net.world.me_y, net.world.me_z);
+                        // Mostly in front of the player (along the look axis), a
+                        // touch to the right, so it projects near screen centre.
+                        let sx = mx + fwd[0] * 10.0 + right[0] * 1.0;
+                        let sy_ = my + 2.5;
+                        let sz = mz + fwd[1] * 10.0 + right[1] * 1.0;
+                        net.world.projectiles.push(rcce_client::world::Projectile {
+                            x: sx,
+                            y: sy_,
+                            z: sz,
+                            target_rid: 0,
+                            tx: sx + fwd[0] * 200.0,
+                            ty: sy_,
+                            tz: sz + fwd[1] * 200.0,
+                            homing: false,
+                            speed: 4.0,
+                        });
+                        let (sw, sh) = (gfx.config.width as f32, gfx.config.height as f32);
+                        match rcce_render::project(&vp, [sx, sy_, sz], sw, sh) {
+                            Some((px, py)) => println!("[projtest] frame {} spawned, screen ({px:.0},{py:.0})", self.frames),
+                            None => println!("[projtest] frame {} spawned, projects to None", self.frames),
+                        }
+                    }
+                }
+            }
+        }
         // Day/night: a slow local cycle modulates fog/sky + ambient. Cycle
         // length is RCCE_DAYNIGHT_SECS (default 600s); RCCE_PHASE pins a fixed
         // phase for screenshots.
@@ -2952,6 +2994,15 @@ impl App {
                         overlay.text_shadow(dx + 12.0, ty + 3.0, 1.0, &format!("{}. {}", i + 1, opt), oc);
                         self.dialog_hitboxes.push((dx, ty, dw, oh));
                         ty += oh;
+                    }
+                }
+
+                // Projectiles (PRJ-1): a bright billboard at each projectile's
+                // projected screen position, with a soft glow halo.
+                for pr in &net.world.projectiles {
+                    if let Some((px, py)) = rcce_render::project(&vp, [pr.x, pr.y, pr.z], sw, sh) {
+                        overlay.rect(px - 12.0, py - 12.0, 24.0, 24.0, [1.0, 0.5, 0.08, 0.4]);
+                        overlay.rect(px - 6.0, py - 6.0, 12.0, 12.0, [1.0, 0.88, 0.35, 1.0]);
                     }
                 }
 

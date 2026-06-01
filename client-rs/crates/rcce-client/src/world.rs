@@ -22,6 +22,25 @@ pub struct Dialog {
     pub options: Vec<String>,
 }
 
+/// An in-flight projectile (`P_Projectile`, id 37). Spawns at the source actor,
+/// flies toward the target (homing → the target actor's live position, else a
+/// snapshot taken at spawn) and is removed on impact (within 2 units). Rendered
+/// as a billboard at its projected screen position. ref ClientNet.bb:217-238.
+#[derive(Debug, Clone)]
+pub struct Projectile {
+    pub x: f32,
+    pub y: f32,
+    pub z: f32,
+    /// Homing target's runtime id (only when `homing`); 0 otherwise.
+    pub target_rid: u16,
+    pub tx: f32,
+    pub ty: f32,
+    pub tz: f32,
+    pub homing: bool,
+    /// World units per second.
+    pub speed: f32,
+}
+
 /// One actor instance in the current zone (player or NPC).
 /// A combat hit reported by `P_AttackActor`.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -120,6 +139,8 @@ pub struct World {
     pub current_trade: Option<crate::trade::TradeWindow>,
     /// The open NPC dialog window, if any (P_Dialog). See [`Dialog`].
     pub dialog: Option<Dialog>,
+    /// In-flight projectiles (P_Projectile). See [`Projectile`].
+    pub projectiles: Vec<Projectile>,
     /// The local player's inventory, keyed by slot (0..13 equipment, 14..45
     /// backpack). Seeded from the P_FetchCharacter sheet, then kept live by
     /// P_InventoryUpdate G/T/H/R. BTreeMap so the panel iterates in slot order.
@@ -172,6 +193,7 @@ impl World {
             pk::WEATHER_CHANGE => self.on_weather_change(&m.data),
             pk::OPEN_TRADING => self.current_trade = crate::trade::TradeWindow::parse(&m.data),
             pk::DIALOG => self.on_dialog(&m.data),
+            pk::PROJECTILE => self.on_projectile(&m.data),
             _ => {}
         }
     }
@@ -691,6 +713,76 @@ impl World {
             _ => {}
         }
     }
+
+    /// Resolve a runtime id to a world position (self or a tracked actor).
+    fn actor_pos(&self, rid: u16) -> Option<[f32; 3]> {
+        if rid == self.my_runtime_id {
+            Some([self.me_x, self.me_y, self.me_z])
+        } else {
+            self.actors.get(&rid).map(|a| [a.x, a.y, a.z])
+        }
+    }
+
+    /// Handle an inbound `P_Projectile`: spawn a projectile at the source actor
+    /// flying toward the target. Soft-fails if either actor is unknown.
+    /// ref ClientNet.bb:217-238.
+    fn on_projectile(&mut self, d: &[u8]) {
+        let mut r = MsgReader::new(d);
+        let (Some(src), Some(tgt), Some(_mesh), Some(_t1), Some(_t2), Some(homing), Some(spd)) =
+            (r.u16(), r.u16(), r.u16(), r.u16(), r.u16(), r.u8(), r.u8())
+        else {
+            return;
+        };
+        let (Some(sp), Some(tp)) = (self.actor_pos(src), self.actor_pos(tgt)) else {
+            return;
+        };
+        // Blitz: Speed# = (serverSpeed/50)·2.0 units/frame@30fps → ·30 for /sec.
+        let speed = (spd as f32 / 50.0) * 2.0 * 30.0;
+        self.projectiles.push(Projectile {
+            x: sp[0],
+            y: sp[1] + 3.0,
+            z: sp[2],
+            target_rid: if homing != 0 { tgt } else { 0 },
+            tx: tp[0],
+            ty: tp[1] + 3.0,
+            tz: tp[2],
+            homing: homing != 0,
+            speed,
+        });
+    }
+
+    /// Advance every projectile toward its target and drop those that impact
+    /// (within 2 units). Homing projectiles re-acquire the live target position.
+    pub fn tick_projectiles(&mut self, dt: f32) {
+        let my = self.my_runtime_id;
+        let me = [self.me_x, self.me_y, self.me_z];
+        for p in &mut self.projectiles {
+            if p.homing {
+                let tp = if p.target_rid == my {
+                    Some(me)
+                } else {
+                    self.actors.get(&p.target_rid).map(|a| [a.x, a.y, a.z])
+                };
+                if let Some(tp) = tp {
+                    p.tx = tp[0];
+                    p.ty = tp[1] + 3.0;
+                    p.tz = tp[2];
+                }
+            }
+            let (dx, dy, dz) = (p.tx - p.x, p.ty - p.y, p.tz - p.z);
+            let dist = (dx * dx + dy * dy + dz * dz).sqrt();
+            if dist > 0.001 {
+                let step = (p.speed * dt).min(dist);
+                p.x += dx / dist * step;
+                p.y += dy / dist * step;
+                p.z += dz / dist * step;
+            }
+        }
+        self.projectiles.retain(|p| {
+            let (dx, dy, dz) = (p.tx - p.x, p.ty - p.y, p.tz - p.z);
+            (dx * dx + dy * dy + dz * dz).sqrt() > 2.0
+        });
+    }
 }
 
 #[cfg(test)]
@@ -741,6 +833,30 @@ mod tests {
         c.u8(b'C').u32(0x1122_3344);
         w.apply(&msg(pk::DIALOG, c.into_bytes()));
         assert!(w.dialog.is_none());
+    }
+
+    #[test]
+    fn projectile_spawn_move_impact() {
+        let mut w = World { my_runtime_id: 1, ..Default::default() };
+        w.actors.insert(
+            2,
+            Actor { runtime_id: 2, x: 10.0, alive: true, ..Default::default() },
+        );
+        // P_Projectile: src=1(me) tgt=2 mesh/tex=0 homing=0 speed=50 emit1len=0.
+        let mut p = MsgWriter::new();
+        p.u16(1).u16(2).u16(0).u16(0).u16(0).u8(0).u8(50).u8(0);
+        w.apply(&msg(pk::PROJECTILE, p.into_bytes()));
+        assert_eq!(w.projectiles.len(), 1);
+        assert!(w.projectiles[0].x.abs() < 0.01); // spawned at me (x=0)
+        // speed = 50/50·2·30 = 60 u/s; 0.1s → ~6 units toward x=10.
+        w.tick_projectiles(0.1);
+        let x = w.projectiles[0].x;
+        assert!((5.0..7.0).contains(&x), "moved to {x}");
+        // Keep ticking until it impacts (within 2 of x=10) and is removed.
+        for _ in 0..10 {
+            w.tick_projectiles(0.1);
+        }
+        assert!(w.projectiles.is_empty(), "projectile impacted + removed");
     }
 
     #[test]

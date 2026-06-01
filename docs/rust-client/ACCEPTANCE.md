@@ -244,7 +244,7 @@ Auto-attack on a flagged target: `AttackTarget=True` + `PlayerTarget` drives `Up
 |---|---|---|---|---|
 | RAD-1 | Minimap/radar showing actors + loot, oriented to player | DONE | `radar.rs`, `client_window.rs:2453-2488` | PNG |
 | RAD-2 | (Reference is an RTT top-down fog-of-war map with persistence; Rust substitutes a blip radar) | DEFERRED | ref `Radar.bb:21-370`; documented substitution | n/a alpha |
-| PRJ-1 | Projectiles (`P_Projectile`): spawn from source, homing tracks target / non-homing snapshots target pos, RP emitters, impact at dist<2 | MISSING | ref `ClientNet.bb:217-238`, `Projectiles3D.bb:11-90`; audit: no projectile code | live (spell/ranged) |
+| PRJ-1 | Projectiles (`P_Projectile`): spawn from source, homing tracks target / non-homing snapshots target pos, impact at dist<2 | DONE ✅ | new `PROJECTILE` const (37) + `World::on_projectile` (parses src/tgt rid, mesh/tex, homing, speed÷50) builds a `Projectile`; `World::tick_projectiles(dt)` flies it toward the target (homing re-acquires the live pos), removes it within 2 units; rendered as a `project()`-billboard each frame. RP emitter meshes/textures are a 2D-billboard simplification (no depth occlusion / no particle emitters). ref `ClientNet.bb:217-238`, `Projectiles3D.bb:11-90` | unit test `projectile_spawn_move_impact` (spawn at source → moves 60u/s → impacts+removed) green; `RCCE_PROJTEST=150` PNG shows the bright billboard on-screen at the projected (709,296) — read & confirmed 2026-06-01 |
 | ZON-1 | Zone warp (`P_ChangeArea`): teardown remote actors/projectiles/loot, save radar fog, reload scenery/water/emitters/sound/terrain, reposition Me, set weather | DONE | `world.rs` multi-zone reload; ref `ClientNet.bb:1633-1777` | live warp |
 | ZON-2 | Same-`AreaName` re-warp skips full reload but still teardowns if numeric AreaID differs | PARTIAL | ref `ClientNet.bb:1676,1717` | live |
 
@@ -274,7 +274,7 @@ Auto-attack on a flagged target: `AttackTarget=True` + `PlayerTarget` drives `Up
 
 ## Parity scorecard (2026-06-01 baseline)
 
-Counting concrete criteria (excluding DEFERRED): **DONE ≈ 41, PARTIAL ≈ 29, MISSING ≈ 15** (Phases 1-5 + ANIM-8 attack, 2026-06-01). **All four headline play-test gaps are now closed.**
+Counting concrete criteria (excluding DEFERRED): **DONE ≈ 42, PARTIAL ≈ 29, MISSING ≈ 14** (Phases 1-5 + ANIM-8 attack + PRJ-1, 2026-06-01). **All four headline play-test gaps are now closed.**
 
 1. ~~**MENU-SCENE** — dedicated 3D menu scene with posed character~~ **DONE ✅** (Phase 3; backdrop-art polish = MENU-SCENE-b).
 2. ~~**ANIM-1** — local-player walk/run animation~~ **DONE ✅** (Phase 1).
