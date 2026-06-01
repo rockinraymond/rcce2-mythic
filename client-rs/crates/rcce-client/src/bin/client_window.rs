@@ -534,6 +534,8 @@ fn build_actors(
     world: &World,
     elapsed: f32,
     gpu_skin: bool,
+    me_moving: bool,
+    me_running: bool,
 ) -> (
     Vec<Rc<B3dModel>>,
     Vec<Rc<Vec<Option<Image>>>>,
@@ -679,7 +681,12 @@ fn build_actors(
     // The local player's equipped weapon/shield are inventory slots 0/1.
     let me_weapon = world.me_inventory.get(&0).map(|it| it.item_id).unwrap_or(0xFFFF);
     let me_shield = world.me_inventory.get(&1).map(|it| it.item_id).unwrap_or(0xFFFF);
-    push(store, &mut models, &mut textures, &mut place, &mut keys, &mut skinned, 0, world.me_gender, world.me_face_tex, world.me_body_tex, world.me_hair, world.me_beard, me_weapon, me_shield, weapon_override, world.my_runtime_id, false, false, [world.me_x, world.me_y, world.me_z], world.me_yaw, [0.85, 0.95, 0.85]);
+    // Animate the local player's own body from this frame's movement intent
+    // (running > walking > idle), matching the remote-actor path below. The
+    // Blitz client drives Me through the SAME locomotion machine as every other
+    // actor (Client.bb UpdateActorInstances); passing false,false here was the
+    // root cause of "the local player never walks/runs while moving" (ANIM-1).
+    push(store, &mut models, &mut textures, &mut place, &mut keys, &mut skinned, 0, world.me_gender, world.me_face_tex, world.me_body_tex, world.me_hair, world.me_beard, me_weapon, me_shield, weapon_override, world.my_runtime_id, me_moving, me_running, [world.me_x, world.me_y, world.me_z], world.me_yaw, [0.85, 0.95, 0.85]);
     for a in world.actors.values() {
         let dx = a.dest_x - a.x;
         let dz = a.dest_z - a.z;
@@ -693,7 +700,7 @@ fn build_actors(
 /// Cheap fingerprint of everything that affects the actor drawables: a ~12 Hz
 /// animation tick plus each actor's quantised position/yaw/run state. When it's
 /// unchanged the dynamic geometry is reused (no re-skin/re-upload).
-fn dyn_hash(world: &World, elapsed: f32) -> u64 {
+fn dyn_hash(world: &World, elapsed: f32, me_moving: bool, me_running: bool) -> u64 {
     use std::hash::{Hash, Hasher};
     let mut h = std::collections::hash_map::DefaultHasher::new();
     ((elapsed * 12.0) as u64).hash(&mut h);
@@ -701,6 +708,10 @@ fn dyn_hash(world: &World, elapsed: f32) -> u64 {
     ((world.me_x * 2.0) as i32).hash(&mut h);
     ((world.me_z * 2.0) as i32).hash(&mut h);
     (world.me_yaw as i32).hash(&mut h);
+    // Include the local player's locomotion state so the CPU-throttled rebuild
+    // picks up walk/run/idle transitions promptly (ANIM-1/ANIM-3).
+    me_moving.hash(&mut h);
+    me_running.hash(&mut h);
     let mut rids: Vec<u16> = world.actors.keys().copied().collect();
     rids.sort_unstable();
     for rid in rids {
@@ -2125,10 +2136,10 @@ impl App {
             // bone-palette uniform; the static body mesh is cached), so rebuild
             // every frame for smooth animation. The CPU path stays throttled to
             // ~12 Hz by dyn_hash (each rebuild re-skins + re-uploads vertices).
-            let hash = dyn_hash(&net.world, elapsed);
+            let hash = dyn_hash(&net.world, elapsed, moving, run);
             if self.gpu_skin || hash != self.last_dyn_hash {
                 let (models, textures, place, keys, skinned) =
-                    build_actors(store, &net.world, elapsed, self.gpu_skin);
+                    build_actors(store, &net.world, elapsed, self.gpu_skin, moving, run);
                 // CPU drawables: attachments (+ bodies when GPU skinning is off).
                 let instances: Vec<SceneInstance> = place
                     .iter()

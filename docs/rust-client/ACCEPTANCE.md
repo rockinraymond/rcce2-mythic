@@ -71,7 +71,7 @@ Anim constants are slot indices into a per-AnimSet table (`Anim_Idle=125, Anim_W
 
 | ID | Criterion | Status | Evidence / Reference | Verification |
 |---|---|---|---|---|
-| ANIM-1 | **Local player plays Walk/Run while moving** (THE known gap): when dist-to-dest > 2.0, play `Anim_Run` (running) / `Anim_Walk` fwd @0.04 / `Anim_Walk` back @−0.02; return to `Anim_Idle` @0.003 when stopped | MISSING | ref `Client.bb:594-728`; local player hardcoded `moving=false,running=false` (`client_window.rs:682`) | `RCCE_AUTOWALK` + `RCCE_SHOT` mid-walk: legs must be in a walk pose, not idle |
+| ANIM-1 | **Local player plays Walk/Run while moving** (THE known gap): when dist-to-dest > 2.0, play `Anim_Run` (running) / `Anim_Walk` fwd @0.04 / `Anim_Walk` back @−0.02; return to `Anim_Idle` @0.003 when stopped | DONE ✅ | Fixed: the local-player push now threads this frame's `moving`/`run` (was hardcoded `false,false`) through `build_actors` + `dyn_hash` (`client_window.rs:682,703,2139,2142`), routing Me through the same Walk/Run/Idle clip selector as remote actors. ref `Client.bb:594-728` | `RCCE_AUTOWALK` + `RCCE_SHOT` frames 300 & 313 vs idle: legs in a walk stride and advancing between frames (player also translates) — PNGs read & confirmed 2026-06-01 |
 | ANIM-2 | Remote actors animate walk/run/idle from their replicated `IsRunning`/dest delta | DONE | `client_window.rs:684-688,572-582`; ref `Client.bb:639-672` | `RCCE_SHOT` of a moving remote actor |
 | ANIM-3 | Anim selection is gated by `CurrentSeq`/`Animating()` so a playing clip isn't restarted every frame | PARTIAL | ref `Client.bb:594-595,639`; confirm Rust clip-switch hysteresis | static + live |
 | ANIM-4 | Swim anims underwater: `Anim_SwimFast`(run)/`Anim_SwimSlow`(walk)/`Anim_SwimIdle`(stop) | MISSING | ref `Client.bb:625-637,720-727` | live (needs water) |
@@ -272,11 +272,11 @@ Auto-attack on a flagged target: `AttackTarget=True` + `PlayerTarget` drives `Up
 
 ## Parity scorecard (2026-06-01 baseline)
 
-Counting concrete criteria (excluding DEFERRED): **DONE ≈ 30, PARTIAL ≈ 33, MISSING ≈ 22**. The headline gaps that block "true drop-in" are the four from the live play-test plus their dependencies:
+Counting concrete criteria (excluding DEFERRED): **DONE ≈ 31, PARTIAL ≈ 33, MISSING ≈ 21** (ANIM-1 closed 2026-06-01, Phase 1). The headline gaps that block "true drop-in" are the four from the live play-test plus their dependencies:
 
-1. **MENU-SCENE** — dedicated 3D menu scene with posed character (MISSING).
-2. **ANIM-1** — local-player walk/run animation (MISSING, one-line root cause).
-3. **MOVE-5** — click-to-move (MISSING).
-4. **TGT-3 / TGT-5 / CBT-1** — context menu, NPC dialog, attack-the-mob loop (MISSING/PARTIAL).
+1. **MENU-SCENE** — dedicated 3D menu scene with posed character (MISSING) → Phase 3.
+2. ~~**ANIM-1** — local-player walk/run animation~~ **DONE ✅** (Phase 1).
+3. **MOVE-5** — click-to-move (MISSING) → Phase 2.
+4. **TGT-3 / TGT-5 / CBT-1** — context menu, NPC dialog, attack-the-mob loop (MISSING/PARTIAL) → Phases 4-5.
 
 These drive the Phase ordering in `PLAN.md`.
