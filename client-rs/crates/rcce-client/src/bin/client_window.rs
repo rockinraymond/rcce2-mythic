@@ -3420,18 +3420,20 @@ impl App {
                 }
             }
         }
-        // Day/night: a slow local cycle modulates fog/sky + ambient. Cycle
-        // length is RCCE_DAYNIGHT_SECS (default 600s); RCCE_PHASE pins a fixed
-        // phase for screenshots.
+        // Lighting: default to full daylight (phase 0.5 = noon), matching the
+        // real client's authored zone Environment brightness. The cosmetic local
+        // day/night cycle free-runs independent of the server's time-of-day and
+        // darkens the whole world (unlike Blitz, which mostly swaps sky/stars and
+        // keeps the terrain lit), so it is OPT-IN via RCCE_DAYNIGHT_SECS. RCCE_PHASE
+        // still pins a fixed phase for screenshots.
         let phase = std::env::var("RCCE_PHASE")
             .ok()
             .and_then(|s| s.parse::<f32>().ok())
             .unwrap_or_else(|| {
-                let cycle = std::env::var("RCCE_DAYNIGHT_SECS")
-                    .ok()
-                    .and_then(|s| s.parse::<f32>().ok())
-                    .unwrap_or(600.0);
-                rcce_client::daynight::phase_at(elapsed, cycle)
+                match std::env::var("RCCE_DAYNIGHT_SECS").ok().and_then(|s| s.parse::<f32>().ok()) {
+                    Some(cycle) => rcce_client::daynight::phase_at(elapsed, cycle),
+                    None => 0.5, // noon — bright, stable, like the real client
+                }
             });
         let sky = rcce_client::daynight::daynight(phase);
         let fog_dn = rcce_client::daynight::modulate(self.fog_color, &sky);
