@@ -431,9 +431,15 @@ pub fn save_texture_png(
 }
 
 /// View-projection matrix for a camera looking from `eye` at `target`.
+///
+/// **Left-handed** to match the Blitz3D world the server streams (Blitz uses a
+/// LH coordinate system: +Z is forward/into-screen). Using RH matrices on LH
+/// world data reflects the image — a horizontal mirror — so the world rendered
+/// backwards (path/NPCs on the wrong side). `perspective_lh` keeps wgpu's [0,1]
+/// depth; `cull_mode: None` on every pipeline means the winding flip is moot.
 pub fn view_proj(eye: [f32; 3], target: [f32; 3], aspect: f32) -> [f32; 16] {
     use glam::{Mat4, Vec3};
-    let proj = Mat4::perspective_rh(50f32.to_radians(), aspect, 1.0, 100_000.0);
-    let view = Mat4::look_at_rh(Vec3::from(eye), Vec3::from(target), Vec3::Y);
+    let proj = Mat4::perspective_lh(50f32.to_radians(), aspect, 1.0, 100_000.0);
+    let view = Mat4::look_at_lh(Vec3::from(eye), Vec3::from(target), Vec3::Y);
     (proj * view).to_cols_array()
 }

@@ -499,9 +499,14 @@ mod tests {
         assert!(centre[1].abs() < 1e-2, "hit is on the y=0 plane: {centre:?}");
         assert!(centre[0].abs() < 2.0 && centre[2].abs() < 2.0, "centre ~origin: {centre:?}");
 
+        // The view is **left-handed** (matches the Blitz world). This test camera
+        // at (0,50,30) looks toward −Z; viewing along −Z in a LH frame puts +X on
+        // the viewer's left, so a screen point further RIGHT maps to a SMALLER
+        // world X. (The gameplay rear-follow camera looks +Z, where screen-right →
+        // +X — which is why NPCs land on the correct side vs the real client.)
         let left = unproject_ground(&vp, w, h, w * 0.25, h * 0.5, 0.0).expect("left hits ground");
         let right = unproject_ground(&vp, w, h, w * 0.75, h * 0.5, 0.0).expect("right hits ground");
-        assert!(right[0] > left[0], "screen X increases with world X: {left:?} {right:?}");
+        assert!(right[0] < left[0], "LH, −Z-facing cam: screen-right maps to −X: {left:?} {right:?}");
 
         let down = unproject_ground(&vp, w, h, w * 0.5, h * 0.75, 0.0).expect("down hits ground");
         assert!(down[2] > centre[2], "below centre lands nearer the camera (+Z): {down:?}");
