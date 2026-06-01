@@ -198,6 +198,8 @@ pub struct World {
     pub pending_bubbles: Vec<(u16, String, [f32; 4])>,
     /// Quest-log entries maintained by P_QuestLog (N/U/D). See [`Quest`].
     pub quests: Vec<Quest>,
+    /// Party member names (P_PartyUpdate): up to 6 others, empty slots dropped.
+    pub party: Vec<String>,
     /// The local player's inventory, keyed by slot (0..13 equipment, 14..45
     /// backpack). Seeded from the P_FetchCharacter sheet, then kept live by
     /// P_InventoryUpdate G/T/H/R. BTreeMap so the panel iterates in slot order.
@@ -255,6 +257,7 @@ impl World {
             pk::KNOWN_SPELL_UPDATE => self.on_known_spell_update(&m.data),
             pk::BUBBLE_MESSAGE => self.on_bubble_message(&m.data),
             pk::QUEST_LOG => self.on_quest_log(&m.data),
+            pk::PARTY_UPDATE => self.on_party_update(&m.data),
             _ => {}
         }
     }
@@ -969,6 +972,20 @@ impl World {
             _ => {}
         }
     }
+
+    /// Handle `P_PartyUpdate` (PTY-2, ClientNet.bb:483): 7 slots of `nameLen u8 ·
+    /// name`; empty slots are dropped. Replaces the party member list.
+    fn on_party_update(&mut self, d: &[u8]) {
+        let mut r = MsgReader::new(d);
+        let mut names = Vec::new();
+        for _ in 0..7 {
+            let Some(name) = r.str8() else { break };
+            if !name.trim().is_empty() {
+                names.push(name);
+            }
+        }
+        self.party = names;
+    }
 }
 
 #[cfg(test)]
@@ -1056,6 +1073,19 @@ mod tests {
         assert_eq!(f.color, [1.0, 0.0, 0.0]);
         assert!((f.alpha - 128.0 / 255.0).abs() < 1e-4);
         assert!((f.length - 2.0).abs() < 1e-4);
+    }
+
+    #[test]
+    fn party_update_names() {
+        let mut w = World::default();
+        let mut p = MsgWriter::new();
+        // 7 slots: "Alice", "Bob", then 5 empty (len 0).
+        p.u8(5).raw(b"Alice").u8(3).raw(b"Bob");
+        for _ in 0..5 {
+            p.u8(0);
+        }
+        w.apply(&msg(pk::PARTY_UPDATE, p.into_bytes()));
+        assert_eq!(w.party, vec!["Alice".to_string(), "Bob".to_string()]);
     }
 
     #[test]

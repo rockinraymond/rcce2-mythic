@@ -202,6 +202,8 @@ struct App {
     show_inventory: bool,
     /// Quest-log panel visible (Quests button / L key) — QST-1.
     show_quests: bool,
+    /// Party panel visible (Party button / P key) — PTY-1.
+    show_party: bool,
     /// Footstep cadence + the resolved footstep .ogg files.
     footsteps: rcce_client::audio::FootstepTimer,
     footstep_paths: Vec<std::path::PathBuf>,
@@ -324,6 +326,7 @@ impl App {
             sheet: None,
             show_inventory: false,
             show_quests: false,
+            show_party: false,
             footsteps: rcce_client::audio::FootstepTimer::new(),
             footstep_paths: Vec::new(),
             weather: rcce_client::weather::WeatherSystem::new(240),
@@ -1458,6 +1461,7 @@ impl ApplicationHandler for App {
                         // Toggle the inventory / spellbook panel.
                         KeyCode::KeyI if pressed => self.show_inventory = !self.show_inventory,
                         KeyCode::KeyL if pressed => self.show_quests = !self.show_quests,
+                        KeyCode::KeyP if pressed => self.show_party = !self.show_party,
                         // Interact (right-click) the target/nearest NPC — a
                         // vendor replies with P_OpenTrading → the vendor panel.
                         KeyCode::KeyR if pressed => {
@@ -1861,9 +1865,10 @@ impl App {
                 HudAction::Inventory | HudAction::Character | HudAction::Spells => {
                     self.show_inventory = !self.show_inventory;
                 }
-                // Quest log (QST-1) toggles its own panel.
+                // Quest log (QST-1) / Party (PTY-1) toggle their own panels.
                 HudAction::Quests => self.show_quests = !self.show_quests,
-                HudAction::Map | HudAction::Party | HudAction::Menu => {
+                HudAction::Party => self.show_party = !self.show_party,
+                HudAction::Map | HudAction::Menu => {
                     println!("[client-window] HUD button not yet implemented");
                 }
             }
@@ -2902,6 +2907,19 @@ impl App {
                 }
             }
         }
+        // Headless party self-test (PTY-1): inject party names + open the panel.
+        // No-op unless RCCE_PARTYTEST=<frame> is set.
+        if let Ok(pv) = std::env::var("RCCE_PARTYTEST") {
+            if let Ok(at) = pv.parse::<u64>() {
+                if self.frames == at {
+                    if let Some(net) = self.net.as_mut() {
+                        net.world.party = vec!["Aldric".into(), "Mira".into(), "Thorne".into()];
+                    }
+                    self.show_party = true;
+                    println!("[partytest] frame {} injected 3 party members + opened panel", self.frames);
+                }
+            }
+        }
         // Headless screen-flash self-test (ENV-6): inject a red flash. No-op
         // unless RCCE_FLASHTEST=<frame> is set.
         if let Ok(fv) = std::env::var("RCCE_FLASHTEST") {
@@ -3306,6 +3324,25 @@ impl App {
                             yy += 12.0;
                         }
                         yy += 6.0;
+                    }
+                }
+
+                // Party panel (PTY-1, toggled by P / the Party button): current
+                // party member names (left of centre so it clears the quest log).
+                if self.show_party {
+                    let (pwd, phd) = (220.0f32, 160.0f32);
+                    let (pxp, pyp) = (sw * 0.5 - pwd - 12.0, (sh - phd) * 0.5);
+                    overlay.rect(pxp, pyp, pwd, phd, [0.05, 0.06, 0.10, 0.94]);
+                    overlay.rect(pxp, pyp, pwd, 22.0, [0.15, 0.18, 0.28, 0.96]);
+                    overlay.text_shadow(pxp + 10.0, pyp + 6.0, 1.3, "Party", white);
+                    overlay.text(pxp + pwd - 78.0, pyp + 7.0, 1.0, "[P] close", [0.6, 0.6, 0.6, 1.0]);
+                    let mut py2 = pyp + 30.0;
+                    if w.party.is_empty() {
+                        overlay.text(pxp + 10.0, py2, 1.0, "Not in a party.", [0.7, 0.7, 0.7, 1.0]);
+                    }
+                    for name in &w.party {
+                        overlay.text_shadow(pxp + 10.0, py2, 1.0, name, [0.5, 1.0, 0.5, 1.0]);
+                        py2 += 15.0;
                     }
                 }
 
