@@ -200,6 +200,8 @@ struct App {
     sheet: Option<rcce_client::fetch::CharacterSheet>,
     /// Inventory/spellbook panel visible (toggled with I).
     show_inventory: bool,
+    /// Quest-log panel visible (Quests button / L key) — QST-1.
+    show_quests: bool,
     /// Footstep cadence + the resolved footstep .ogg files.
     footsteps: rcce_client::audio::FootstepTimer,
     footstep_paths: Vec<std::path::PathBuf>,
@@ -321,6 +323,7 @@ impl App {
             audio: rcce_client::audio::Audio::new(),
             sheet: None,
             show_inventory: false,
+            show_quests: false,
             footsteps: rcce_client::audio::FootstepTimer::new(),
             footstep_paths: Vec::new(),
             weather: rcce_client::weather::WeatherSystem::new(240),
@@ -1454,6 +1457,7 @@ impl ApplicationHandler for App {
                         KeyCode::PageDown if pressed => self.chat_scroll = self.chat_scroll.saturating_sub(3),
                         // Toggle the inventory / spellbook panel.
                         KeyCode::KeyI if pressed => self.show_inventory = !self.show_inventory,
+                        KeyCode::KeyL if pressed => self.show_quests = !self.show_quests,
                         // Interact (right-click) the target/nearest NPC — a
                         // vendor replies with P_OpenTrading → the vendor panel.
                         KeyCode::KeyR if pressed => {
@@ -1857,7 +1861,9 @@ impl App {
                 HudAction::Inventory | HudAction::Character | HudAction::Spells => {
                     self.show_inventory = !self.show_inventory;
                 }
-                HudAction::Map | HudAction::Quests | HudAction::Party | HudAction::Menu => {
+                // Quest log (QST-1) toggles its own panel.
+                HudAction::Quests => self.show_quests = !self.show_quests,
+                HudAction::Map | HudAction::Party | HudAction::Menu => {
                     println!("[client-window] HUD button not yet implemented");
                 }
             }
@@ -2872,6 +2878,30 @@ impl App {
                 }
             }
         }
+        // Headless quest-log self-test (QST-1): inject quests + open the panel.
+        // No-op unless RCCE_QUESTTEST=<frame> is set.
+        if let Ok(qv) = std::env::var("RCCE_QUESTTEST") {
+            if let Ok(at) = qv.parse::<u64>() {
+                if self.frames == at {
+                    if let Some(net) = self.net.as_mut() {
+                        net.world.quests.push(rcce_client::world::Quest {
+                            name: "Find the Lost Sword".into(),
+                            status: "Search the old ruins to the north.".into(),
+                            color: [1.0, 1.0, 0.4, 1.0],
+                            completed: false,
+                        });
+                        net.world.quests.push(rcce_client::world::Quest {
+                            name: "Greet the Mayor".into(),
+                            status: "Done - you spoke with the mayor.".into(),
+                            color: [0.5, 1.0, 0.5, 1.0],
+                            completed: true,
+                        });
+                    }
+                    self.show_quests = true;
+                    println!("[questtest] frame {} injected 2 quests + opened panel", self.frames);
+                }
+            }
+        }
         // Headless screen-flash self-test (ENV-6): inject a red flash. No-op
         // unless RCCE_FLASHTEST=<frame> is set.
         if let Ok(fv) = std::env::var("RCCE_FLASHTEST") {
@@ -3248,6 +3278,37 @@ impl App {
                     1.0
                 };
                 let fps = self.frames as f32 / elapsed.max(0.001);
+
+                // Quest log panel (QST-1, toggled by L / the Quests button): each
+                // quest's name + coloured status; completed quests in gold.
+                if self.show_quests {
+                    let (qw, qh) = (320.0f32, 240.0f32);
+                    let (qx, qy) = ((sw - qw) * 0.5, (sh - qh) * 0.5);
+                    overlay.rect(qx, qy, qw, qh, [0.05, 0.06, 0.10, 0.94]);
+                    overlay.rect(qx, qy, qw, 22.0, [0.15, 0.18, 0.28, 0.96]);
+                    overlay.text_shadow(qx + 10.0, qy + 6.0, 1.3, "Quest Log", white);
+                    overlay.text(qx + qw - 78.0, qy + 7.0, 1.0, "[L] close", [0.6, 0.6, 0.6, 1.0]);
+                    let mut yy = qy + 30.0;
+                    if w.quests.is_empty() {
+                        overlay.text(qx + 10.0, yy, 1.0, "No quests available.", [0.7, 0.7, 0.7, 1.0]);
+                    }
+                    for q in &w.quests {
+                        let title = if q.completed {
+                            format!("{}  (Completed)", q.name)
+                        } else {
+                            q.name.clone()
+                        };
+                        let tcol = if q.completed { [1.0, 0.88, 0.4, 1.0] } else { white };
+                        overlay.text_shadow(qx + 10.0, yy, 1.0, &title, tcol);
+                        yy += 13.0;
+                        for line in wrap_text(&q.status, 46) {
+                            overlay.text(qx + 18.0, yy, 1.0, &line, q.color);
+                            yy += 12.0;
+                        }
+                        yy += 6.0;
+                    }
+                }
+
                 // Vitals bars at the real Interface.dat fractional positions
                 // (Health top-left red, Energy below it blue, …), matching
                 // Client.exe instead of an invented bottom HUD.

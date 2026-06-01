@@ -62,6 +62,32 @@ pub struct KnownSpell {
     pub level: u16,
 }
 
+/// A quest-log entry (`P_QuestLog`, QST-1): name + a coloured status line and a
+/// completed flag.
+#[derive(Debug, Clone, Default)]
+pub struct Quest {
+    pub name: String,
+    pub status: String,
+    pub color: [f32; 4],
+    pub completed: bool,
+}
+
+/// Parse a `P_QuestLog` status blob: 3 RGB bytes, an optional `254` completed
+/// marker, then the status text. Returns `(text, colour, completed)`. Pure —
+/// unit-tested.
+pub fn parse_quest_status(raw: &[u8]) -> (String, [f32; 4], bool) {
+    if raw.len() < 3 {
+        let t: String = raw.iter().filter(|&&b| b >= 32).map(|&b| b as char).collect();
+        return (t.trim().to_string(), [1.0, 1.0, 1.0, 1.0], false);
+    }
+    let color = [raw[0] as f32 / 255.0, raw[1] as f32 / 255.0, raw[2] as f32 / 255.0, 1.0];
+    let rest = &raw[3..];
+    let completed = rest.first() == Some(&254);
+    let text_bytes = if completed { &rest[1..] } else { rest };
+    let text: String = text_bytes.iter().filter(|&&b| b >= 32).map(|&b| b as char).collect();
+    (text.trim().to_string(), color, completed)
+}
+
 /// One actor instance in the current zone (player or NPC).
 /// A combat hit reported by `P_AttackActor`.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -170,6 +196,8 @@ pub struct World {
     /// Chat bubbles to show over actors (P_BubbleMessage): (rid, text, colour).
     /// Drained by the renderer, which times the fade. CHAT-4.
     pub pending_bubbles: Vec<(u16, String, [f32; 4])>,
+    /// Quest-log entries maintained by P_QuestLog (N/U/D). See [`Quest`].
+    pub quests: Vec<Quest>,
     /// The local player's inventory, keyed by slot (0..13 equipment, 14..45
     /// backpack). Seeded from the P_FetchCharacter sheet, then kept live by
     /// P_InventoryUpdate G/T/H/R. BTreeMap so the panel iterates in slot order.
@@ -226,6 +254,7 @@ impl World {
             pk::SCREEN_FLASH => self.on_screen_flash(&m.data),
             pk::KNOWN_SPELL_UPDATE => self.on_known_spell_update(&m.data),
             pk::BUBBLE_MESSAGE => self.on_bubble_message(&m.data),
+            pk::QUEST_LOG => self.on_quest_log(&m.data),
             _ => {}
         }
     }
@@ -903,6 +932,43 @@ impl World {
             self.pending_bubbles.push((rid, text, col));
         }
     }
+
+    /// Handle `P_QuestLog` (QST-1/2, ClientNet.bb:955): "N" adds an entry
+    /// (`nameLen u8 · name · statusLen u16 · statusBlob`), "U" updates a quest's
+    /// status by name, "D" removes by name. The status blob is parsed by
+    /// [`parse_quest_status`] (RGB + optional completed marker + text).
+    fn on_quest_log(&mut self, d: &[u8]) {
+        let mut r = MsgReader::new(d);
+        match r.u8() {
+            Some(b'N') => {
+                let Some(name) = r.str8() else { return };
+                let Some(n) = r.u16() else { return };
+                let Some(raw) = r.bytes(n as usize) else { return };
+                let (status, color, completed) = parse_quest_status(raw);
+                if !name.is_empty() && !self.quests.iter().any(|q| q.name.eq_ignore_ascii_case(&name)) {
+                    self.quests.push(Quest { name, status, color, completed });
+                }
+            }
+            Some(b'U') => {
+                let Some(name) = r.str8() else { return };
+                let Some(n) = r.u16() else { return };
+                let Some(raw) = r.bytes(n as usize) else { return };
+                let (status, color, completed) = parse_quest_status(raw);
+                for q in &mut self.quests {
+                    if q.name.eq_ignore_ascii_case(&name) {
+                        q.status = status.clone();
+                        q.color = color;
+                        q.completed = completed;
+                    }
+                }
+            }
+            Some(b'D') => {
+                let name = String::from_utf8_lossy(r.rest()).trim().to_uppercase();
+                self.quests.retain(|q| q.name.to_uppercase() != name);
+            }
+            _ => {}
+        }
+    }
 }
 
 #[cfg(test)]
@@ -990,6 +1056,34 @@ mod tests {
         assert_eq!(f.color, [1.0, 0.0, 0.0]);
         assert!((f.alpha - 128.0 / 255.0).abs() < 1e-4);
         assert!((f.length - 2.0).abs() < 1e-4);
+    }
+
+    #[test]
+    fn quest_log_add_update_delete() {
+        let mut w = World::default();
+        // "N" Find the Sword: status RGB(255,255,0) + "In progress".
+        let mut status = vec![255u8, 255, 0];
+        status.extend_from_slice(b"In progress");
+        let mut p = MsgWriter::new();
+        p.u8(b'N').u8(14).raw(b"Find the Sword").u16(status.len() as u16).raw(&status);
+        w.apply(&msg(pk::QUEST_LOG, p.into_bytes()));
+        assert_eq!(w.quests.len(), 1);
+        assert_eq!(w.quests[0].name, "Find the Sword");
+        assert_eq!(w.quests[0].status, "In progress");
+        assert_eq!(w.quests[0].color, [1.0, 1.0, 0.0, 1.0]);
+        assert!(!w.quests[0].completed);
+        // "U" mark completed: RGB(0,255,0) + 254 marker + "Done".
+        let mut st2 = vec![0u8, 255, 0, 254];
+        st2.extend_from_slice(b"Done");
+        let mut u = MsgWriter::new();
+        u.u8(b'U').u8(14).raw(b"Find the Sword").u16(st2.len() as u16).raw(&st2);
+        w.apply(&msg(pk::QUEST_LOG, u.into_bytes()));
+        assert!(w.quests[0].completed && w.quests[0].status == "Done");
+        // "D" delete (case-insensitive).
+        let mut del = MsgWriter::new();
+        del.u8(b'D').raw(b"FIND THE SWORD");
+        w.apply(&msg(pk::QUEST_LOG, del.into_bytes()));
+        assert!(w.quests.is_empty());
     }
 
     #[test]

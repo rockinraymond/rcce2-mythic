@@ -191,8 +191,8 @@ Auto-attack on a flagged target: `AttackTarget=True` + `PlayerTarget` drives `Up
 
 | ID | Criterion | Status | Evidence / Reference | Verification |
 |---|---|---|---|---|
-| QST-1 | Quest log window (`L`): per-quest name+status, completed-filter, paging; colored by status RGB; "Completed" gold | MISSING | ref `Interface3D.bb:3634,3979`; Rust prints "not yet implemented" (`:1661-1663`) | live |
-| QST-2 | Incoming `P_QuestLog` N/U/D (new/update/delete) updates the log + "Quest log updated" | MISSING | ref `ClientNet.bb:955` | live |
+| QST-1 | Quest log window (`L`): per-quest name+status, colored by status RGB; "Completed" gold | DONE ✅ | a centred quest panel (toggled by L / the Quests button) lists each quest's name + wrapped coloured status; completed quests show "(Completed)" in gold. ref `Interface3D.bb:3634,3979` | `RCCE_QUESTTEST=150` PNG shows "Find the Lost Sword" (yellow status) + "Greet the Mayor (Completed)" (gold) — read 2026-06-01. (Completed-filter + paging deferred.) |
+| QST-2 | Incoming `P_QuestLog` N/U/D (new/update/delete) updates the log | DONE ✅ | new `QUEST_LOG` const (23) + `World::on_quest_log`: "N" adds (`nameLen u8 · name · statusLen u16 · statusBlob`), "U" updates status by name, "D" removes by name; status parsed by the pure `parse_quest_status` (RGB + 254-completed marker + text). ref `ClientNet.bb:955` | unit test `quest_log_add_update_delete` (N adds yellow in-progress; U → green completed "Done"; D removes) green (68 lib tests) |
 | PTY-1 | Party window (`P`): up to 7 member names, click → `/p <name> ` whisper, Leave → `/leave` | MISSING | ref `Interface3D.bb:3567,1647-1666`; Rust no-op | live (2 players) |
 | PTY-2 | Incoming `P_PartyUpdate` name list updates the roster | MISSING | ref `ClientNet.bb:483` | live |
 
@@ -205,7 +205,7 @@ Auto-attack on a flagged target: `AttackTarget=True` + `PlayerTarget` drives `Up
 | HUD-1 | Vitals bars (Health/Energy + any attribute) at real `Interface.dat` coords, value/max numbers, hover tooltip | DONE ✅ | `client_window.rs:2541-2562`; HUD-layout memory | prior PNG |
 | HUD-2 | XP bar scaled by `XPBarLevel/255`, driven by `P_XPUpdate` | DONE | `client_window.rs:2945-2961`; ref `Interface3D.bb:3166` | live |
 | HUD-3 | Money via multi-denomination `Money$` (shown in Inventory/Trade only) | PARTIAL | ref `Client.bb:1160-1177`; Rust level/gold readout (`:2570`) | live |
-| HUD-4 | Function-button row (Chat/Map/Inventory/Spells/Character/Quests/Party/Menu) toggles panels | PARTIAL | ref `Interface3D.bb:3499-3519`; Rust HUD buttons partly stubbed | live |
+| HUD-4 | Function-button row (Chat/Map/Inventory/Spells/Character/Quests/Party/Menu) toggles panels | PARTIAL | Chat/Inventory/Character/Spells + now **Quests** (QST-1) toggle panels; Map/Party/Menu still stubbed. ref `Interface3D.bb:3499-3519` | live |
 | HUD-5 | Compass strip driven by player yaw | DONE | `client_window.rs:2376-2395`; ref `Interface3D.bb:3068` | PNG |
 | HUD-6 | Buff/debuff icons from `P_ActorEffect` A/R, hover name | DONE | `client_window.rs:2491-2504`; ref `Interface3D.bb:3207` | live |
 | HUD-7 | Nameplates + HP bars over actors | DONE | `client_window.rs:2398-2434` | PNG |
@@ -274,7 +274,7 @@ Auto-attack on a flagged target: `AttackTarget=True` + `PlayerTarget` drives `Up
 
 ## Parity scorecard (2026-06-01 baseline)
 
-Counting concrete criteria (excluding DEFERRED): **DONE ≈ 49, PARTIAL ≈ 26, MISSING ≈ 10** (Phases 1-5 + breadth: ANIM-8 attack, PRJ-1, CHAT-2, ENV-6, HUD-8, CHAT-3, SPL-7, ENV-5, CHAT-4, 2026-06-01). **All four headline play-test gaps are now closed.**
+Counting concrete criteria (excluding DEFERRED): **DONE ≈ 51, PARTIAL ≈ 25, MISSING ≈ 8** (Phases 1-5 + breadth incl. ANIM-8, PRJ-1, CHAT-2/3/4, ENV-5/6, HUD-8, SPL-7, QST-1/2, 2026-06-01). **All four headline play-test gaps are now closed.**
 
 1. ~~**MENU-SCENE** — dedicated 3D menu scene with posed character~~ **DONE ✅** (Phase 3; backdrop-art polish = MENU-SCENE-b).
 2. ~~**ANIM-1** — local-player walk/run animation~~ **DONE ✅** (Phase 1).

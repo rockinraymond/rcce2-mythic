@@ -51,6 +51,7 @@ pub mod packet_id {
     pub const ACTOR_DEAD: u8 = 19;
     pub const RIGHT_CLICK: u8 = 20;
     pub const DIALOG: u8 = 21;
+    pub const QUEST_LOG: u8 = 23;
     pub const STAT_UPDATE: u8 = 22;
     pub const GOLD_CHANGE: u8 = 24;
     pub const NAME_CHANGE: u8 = 25;
