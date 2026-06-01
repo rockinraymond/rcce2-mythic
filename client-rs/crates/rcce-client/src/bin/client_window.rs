@@ -2818,6 +2818,15 @@ impl App {
                 }
             }
         }
+        // Headless panel self-test: open the character/inventory panel so its
+        // contents (HUD-8 sheet) are capturable. No-op unless RCCE_PANEL=<frame>.
+        if let Ok(pl) = std::env::var("RCCE_PANEL") {
+            if let Ok(at) = pl.parse::<u64>() {
+                if self.frames == at {
+                    self.show_inventory = true;
+                }
+            }
+        }
         // Day/night: a slow local cycle modulates fog/sky + ambient. Cycle
         // length is RCCE_DAYNIGHT_SECS (default 600s); RCCE_PHASE pins a fixed
         // phase for screenshots.
@@ -3250,7 +3259,20 @@ impl App {
                 // named, non-hidden attribute slots (Attributes.dat) with live
                 // values from the character sheet.
                 if let Some(sheet) = &self.sheet {
+                    // Character sheet (HUD-8): name title + level/XP/reputation
+                    // header, then the named attributes with live value/max.
+                    let cname = self
+                        .chars
+                        .get(self.char_sel)
+                        .map(|c| c.name.as_str())
+                        .filter(|n| !n.is_empty())
+                        .unwrap_or(self.login_user.as_str())
+                        .to_string();
                     let mut rows: Vec<(String, [f32; 4])> = Vec::new();
+                    rows.push((format!("Level {}", sheet.level), [0.7, 1.0, 0.7, 1.0]));
+                    rows.push((format!("XP {}", sheet.xp), [0.92, 0.86, 0.6, 1.0]));
+                    rows.push((format!("Reputation {}", sheet.reputation), [0.85, 0.85, 1.0, 1.0]));
+                    rows.push((String::new(), white)); // spacer before attributes
                     for i in 0..sheet.attributes.len().min(rcce_data::AttributeNames::COUNT) {
                         if let Some(name) = store.attribute_name(i) {
                             let (val, mx) = sheet.attributes[i];
@@ -3267,18 +3289,16 @@ impl App {
                             rows.push((line, col));
                         }
                     }
-                    if !rows.is_empty() {
-                        let aw = 152.0f32;
-                        let ax = (px - aw - 6.0).max(4.0);
-                        let boxh = 24.0 + rows.len() as f32 * 13.0 + 6.0;
-                        overlay.rect(ax, py, aw, boxh, [0.05, 0.06, 0.10, 0.92]);
-                        overlay.rect(ax, py, aw, 20.0, [0.15, 0.18, 0.28, 0.96]);
-                        overlay.text_shadow(ax + 8.0, py + 5.0, 1.0, "Attributes", white);
-                        let mut ay = py + 24.0;
-                        for (line, col) in &rows {
-                            overlay.text(ax + 8.0, ay, 1.0, line, *col);
-                            ay += 13.0;
-                        }
+                    let aw = 152.0f32;
+                    let ax = (px - aw - 6.0).max(4.0);
+                    let boxh = 24.0 + rows.len() as f32 * 13.0 + 6.0;
+                    overlay.rect(ax, py, aw, boxh, [0.05, 0.06, 0.10, 0.92]);
+                    overlay.rect(ax, py, aw, 20.0, [0.15, 0.18, 0.28, 0.96]);
+                    overlay.text_shadow(ax + 8.0, py + 5.0, 1.0, &cname, white);
+                    let mut ay = py + 24.0;
+                    for (line, col) in &rows {
+                        overlay.text(ax + 8.0, ay, 1.0, line, *col);
+                        ay += 13.0;
                     }
                 }
 

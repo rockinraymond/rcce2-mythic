@@ -209,7 +209,7 @@ Auto-attack on a flagged target: `AttackTarget=True` + `PlayerTarget` drives `Up
 | HUD-5 | Compass strip driven by player yaw | DONE | `client_window.rs:2376-2395`; ref `Interface3D.bb:3068` | PNG |
 | HUD-6 | Buff/debuff icons from `P_ActorEffect` A/R, hover name | DONE | `client_window.rs:2491-2504`; ref `Interface3D.bb:3207` | live |
 | HUD-7 | Nameplates + HP bars over actors | DONE | `client_window.rs:2398-2434` | PNG |
-| HUD-8 | Character sheet (`C`): name, reputation, level, XP, paged attributes | PARTIAL | ref `Interface3D.bb:3644-3665,1721-1797` | live |
+| HUD-8 | Character sheet (`C`): name, reputation, level, XP, attributes | DONE ✅ | the character/inventory panel's left box now leads with the character name + Level / XP / Reputation (from the `CharacterSheet`) above the named attributes (value/max). ref `Interface3D.bb:3644-3665,1721-1797` | `RCCE_PANEL=150` PNG shows the left box with name + Level/XP/Reputation + attributes (Health/Energy/…) — read & confirmed 2026-06-01 |
 
 ---
 
@@ -274,7 +274,7 @@ Auto-attack on a flagged target: `AttackTarget=True` + `PlayerTarget` drives `Up
 
 ## Parity scorecard (2026-06-01 baseline)
 
-Counting concrete criteria (excluding DEFERRED): **DONE ≈ 44, PARTIAL ≈ 28, MISSING ≈ 13** (Phases 1-5 + ANIM-8 attack + PRJ-1 + CHAT-2 + ENV-6, 2026-06-01). **All four headline play-test gaps are now closed.**
+Counting concrete criteria (excluding DEFERRED): **DONE ≈ 45, PARTIAL ≈ 27, MISSING ≈ 13** (Phases 1-5 + ANIM-8 attack + PRJ-1 + CHAT-2 + ENV-6 + HUD-8, 2026-06-01). **All four headline play-test gaps are now closed.**
 
 1. ~~**MENU-SCENE** — dedicated 3D menu scene with posed character~~ **DONE ✅** (Phase 3; backdrop-art polish = MENU-SCENE-b).
 2. ~~**ANIM-1** — local-player walk/run animation~~ **DONE ✅** (Phase 1).
