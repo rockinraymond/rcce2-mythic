@@ -2779,6 +2779,21 @@ impl App {
                 }
             }
         }
+        // Headless chat-colour self-test (CHAT-2): inject coloured lines so the
+        // chat log's colours are capturable. No-op unless RCCE_CHATTEST=<frame>.
+        if let Ok(ct) = std::env::var("RCCE_CHATTEST") {
+            if let Ok(at) = ct.parse::<u64>() {
+                if self.frames == at {
+                    if let Some(net) = self.net.as_mut() {
+                        net.world.chat.push(("[system] a yellow notice".into(), [1.0, 1.0, 0.0, 1.0]));
+                        net.world.chat.push(("[warn] a red warning".into(), [1.0, 0.2, 0.2, 1.0]));
+                        net.world.chat.push(("[party] a green message".into(), [0.08, 0.86, 0.2, 1.0]));
+                        net.world.chat.push(("<<rustbot>> my own blue line".into(), [0.0, 0.5, 1.0, 1.0]));
+                        println!("[chattest] frame {} injected 4 coloured lines", self.frames);
+                    }
+                }
+            }
+        }
         // Day/night: a slow local cycle modulates fog/sky + ambient. Cycle
         // length is RCCE_DAYNIGHT_SECS (default 600s); RCCE_PHASE pins a fixed
         // phase for screenshots.
@@ -3166,10 +3181,10 @@ impl App {
                 overlay.rect(cx0, cy0, cw, chh, [0.0, 0.0, 0.0, 0.28]);
                 let max_lines = ((chh / 12.0) as usize).max(1);
                 let bottom = cy0 + chh - 13.0;
-                for (i, line) in w.chat.iter().rev().take(max_lines).enumerate() {
+                for (i, (text, col)) in w.chat.iter().rev().take(max_lines).enumerate() {
                     let y = bottom - i as f32 * 12.0;
-                    let s: String = line.chars().take(60).collect();
-                    overlay.text_shadow(cx0 + 4.0, y, 1.0, &s, [0.9, 0.9, 0.7, 1.0]);
+                    let s: String = text.chars().take(60).collect();
+                    overlay.text_shadow(cx0 + 4.0, y, 1.0, &s, *col);
                 }
             }
             // Chat input line just under the chat box (real Chat rect bottom).

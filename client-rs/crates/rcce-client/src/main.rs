@@ -95,7 +95,7 @@ fn main() {
                 );
             }
             while chat_seen < world.chat.len() {
-                println!("           chat> {}", world.chat[chat_seen]);
+                println!("           chat> {}", world.chat[chat_seen].0);
                 chat_seen += 1;
             }
         }

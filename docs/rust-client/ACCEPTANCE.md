@@ -170,7 +170,7 @@ Auto-attack on a flagged target: `AttackTarget=True` + `PlayerTarget` drives `Up
 | ID | Criterion | Status | Evidence / Reference | Verification |
 |---|---|---|---|---|
 | CHAT-1 | Open chat (Enter / `/`), type, send `P_ChatMessage` (raw text; `/commands` parsed server-side) | DONE | `client_window.rs:1080-1123`; ref `Interface3D.bb:2190-2213` | `chat_test` / live |
-| CHAT-2 | Incoming `P_ChatMessage` color sentinels (254=yellow,253=red,252=purple,251=green,250=RGB) + `<<self>>`=blue; render in chat log | PARTIAL | ref `ClientNet.bb:1219-1252`; Rust strips control bytes, no colors (`world.rs:607-616`) | live |
+| CHAT-2 | Incoming `P_ChatMessage` color sentinels (254=yellow,253=red,252=purple,251=green,250=RGB) + `<<self>>`=blue; render in chat log | DONE ✅ | `on_chat` parses the leading sentinel into a colour (`World.chat` is now `Vec<(String,[f32;4])>`); a `<<…>>` line renders blue; the chat-log overlay draws each line in its colour. ref `ClientNet.bb:1219-1252` | unit test `chat_colour_sentinels` (yellow/red/RGB/white/blue) green; `RCCE_CHATTEST=150` PNG shows yellow/red/green/blue lines in the chat box — read & confirmed 2026-06-01 |
 | CHAT-3 | Chat scrollback ring buffer (2000) + history mode + up/down scroll | MISSING | ref `Interface3D.bb:3012-3057` | live |
 | CHAT-4 | Chat bubbles over actors (`P_BubbleMessage`, or `<`-prefixed when `UseBubbles>1`) | MISSING | ref `ClientNet.bb:1209-1252`, `Interface3D.bb:219` | live |
 
@@ -274,7 +274,7 @@ Auto-attack on a flagged target: `AttackTarget=True` + `PlayerTarget` drives `Up
 
 ## Parity scorecard (2026-06-01 baseline)
 
-Counting concrete criteria (excluding DEFERRED): **DONE ≈ 42, PARTIAL ≈ 29, MISSING ≈ 14** (Phases 1-5 + ANIM-8 attack + PRJ-1, 2026-06-01). **All four headline play-test gaps are now closed.**
+Counting concrete criteria (excluding DEFERRED): **DONE ≈ 43, PARTIAL ≈ 28, MISSING ≈ 14** (Phases 1-5 + ANIM-8 attack + PRJ-1 + CHAT-2, 2026-06-01). **All four headline play-test gaps are now closed.**
 
 1. ~~**MENU-SCENE** — dedicated 3D menu scene with posed character~~ **DONE ✅** (Phase 3; backdrop-art polish = MENU-SCENE-b).
 2. ~~**ANIM-1** — local-player walk/run animation~~ **DONE ✅** (Phase 1).

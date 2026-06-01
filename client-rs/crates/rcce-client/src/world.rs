@@ -124,7 +124,8 @@ pub struct World {
     /// Other actors keyed by runtime id (excludes the local player).
     pub actors: HashMap<u16, Actor>,
     /// Recent chat lines (control-byte channel prefixes stripped).
-    pub chat: Vec<String>,
+    /// Recent chat lines with their colour (from the `P_ChatMessage` sentinel).
+    pub chat: Vec<(String, [f32; 4])>,
     // Local player progression / stats.
     pub me_xp: i32,
     pub me_xp_bar: u8,
@@ -641,15 +642,32 @@ impl World {
         }
     }
 
-    /// `P_ChatMessage`: a leading control byte (channel, e.g. 253/254) then text.
+    /// `P_ChatMessage`: an optional leading colour sentinel then text (CHAT-2,
+    /// ClientNet.bb:1219). 254=yellow, 253=red, 252=purple, 251=green, 250 = the
+    /// next 3 bytes as explicit RGB; otherwise white. A `<<…>>`-prefixed line
+    /// (the local player's own) renders blue.
     fn on_chat(&mut self, d: &[u8]) {
-        let text: String = d
-            .iter()
-            .filter(|&&b| b >= 32)
-            .map(|&b| b as char)
-            .collect();
-        if !text.trim().is_empty() {
-            self.chat.push(text);
+        if d.is_empty() {
+            return;
+        }
+        let (mut color, body): ([f32; 4], &[u8]) = match d[0] {
+            254 => ([1.0, 1.0, 0.0, 1.0], &d[1..]),
+            253 => ([1.0, 0.2, 0.2, 1.0], &d[1..]),
+            252 => ([0.78, 0.04, 0.78, 1.0], &d[1..]),
+            251 => ([0.08, 0.86, 0.2, 1.0], &d[1..]),
+            250 if d.len() >= 4 => (
+                [d[1] as f32 / 255.0, d[2] as f32 / 255.0, d[3] as f32 / 255.0, 1.0],
+                &d[4..],
+            ),
+            _ => ([0.92, 0.92, 0.78, 1.0], d),
+        };
+        let text: String = body.iter().filter(|&&b| b >= 32).map(|&b| b as char).collect();
+        let text = text.trim().to_string();
+        if text.starts_with("<<") {
+            color = [0.0, 0.5, 1.0, 1.0]; // local player's own line
+        }
+        if !text.is_empty() {
+            self.chat.push((text, color));
         }
     }
 
@@ -857,6 +875,22 @@ mod tests {
             w.tick_projectiles(0.1);
         }
         assert!(w.projectiles.is_empty(), "projectile impacted + removed");
+    }
+
+    #[test]
+    fn chat_colour_sentinels() {
+        let mut w = World::default();
+        w.apply(&msg(pk::CHAT_MESSAGE, vec![254, b'h', b'i'])); // yellow
+        w.apply(&msg(pk::CHAT_MESSAGE, vec![253, b'r', b'e', b'd'])); // red
+        w.apply(&msg(pk::CHAT_MESSAGE, vec![250, 10, 20, 30, b'x'])); // explicit RGB
+        w.apply(&msg(pk::CHAT_MESSAGE, b"plain".to_vec())); // white (no sentinel)
+        w.apply(&msg(pk::CHAT_MESSAGE, b"<<Me>> hi".to_vec())); // own line -> blue
+        assert_eq!(w.chat.len(), 5);
+        assert_eq!(w.chat[0], ("hi".to_string(), [1.0, 1.0, 0.0, 1.0]));
+        assert_eq!(w.chat[1].1, [1.0, 0.2, 0.2, 1.0]);
+        assert_eq!(w.chat[2], ("x".to_string(), [10.0 / 255.0, 20.0 / 255.0, 30.0 / 255.0, 1.0]));
+        assert_eq!(w.chat[3].0, "plain");
+        assert!(w.chat[4].0.starts_with("<<Me>>") && w.chat[4].1 == [0.0, 0.5, 1.0, 1.0]);
     }
 
     #[test]

@@ -67,7 +67,7 @@ fn main() {
     pump(&mut t, &mut w, 1200);
 
     let trade = w.current_trade.as_ref();
-    let new_chat: Vec<&String> = w.chat.iter().skip(chat_before).collect();
+    let new_chat: Vec<&str> = w.chat.iter().skip(chat_before).map(|(t, _)| t.as_str()).collect();
     println!("[interact] trade window opened: {}", trade.is_some());
     if let Some(tw) = trade {
         println!("[interact]   kind {:?}, {} offer(s)", tw.kind, tw.offers.len());

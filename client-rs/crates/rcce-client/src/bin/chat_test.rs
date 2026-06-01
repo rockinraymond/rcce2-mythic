@@ -59,13 +59,13 @@ fn main() {
     settle(&mut tb, &mut wb, 1500);
     println!("[chat] B chat after: {} line(s)", wb.chat.len());
     for line in wb.chat.iter() {
-        println!("[chat]   B saw> {line}");
+        println!("[chat]   B saw> {}", line.0);
     }
 
     ta.disconnect(a.peer);
     tb.disconnect(b.peer);
 
-    let got = wb.chat.iter().any(|l| l.contains("hello from the rust client"));
+    let got = wb.chat.iter().any(|l| l.0.contains("hello from the rust client"));
     if got {
         println!("[chat] RESULT: PASS — B received A's chat message.");
     } else {
