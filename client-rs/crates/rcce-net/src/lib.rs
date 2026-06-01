@@ -64,6 +64,7 @@ pub mod packet_id {
     pub const PROJECTILE: u8 = 37;
     pub const PARTY_UPDATE: u8 = 38;
     pub const EAT_ITEM: u8 = 44;
+    pub const JUMP: u8 = 46;
     pub const BUBBLE_MESSAGE: u8 = 52;
     pub const EXAMINE: u8 = 61;
     pub const TRADE: u8 = 62;

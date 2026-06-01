@@ -9,6 +9,10 @@ use std::collections::HashMap;
 use rcce_net::codec::{MsgReader, MsgWriter};
 use rcce_net::{packet_id as pk, RecvMessage};
 
+/// How long a remote actor plays its jump animation after a `P_Jump` (ANIM-7).
+/// Roughly the airborne duration of the local jump arc.
+pub const JUMP_ANIM_SECS: f32 = 0.5;
+
 /// An open NPC dialog window (`P_Dialog` "N"/"T"/"O"/"C"). Server-driven: the
 /// NPC's `Main` script pushes a title, text lines, and option lines; the client
 /// echoes "N"/"T" acks (via `pending_sends`) so the script advances. One active
@@ -200,6 +204,10 @@ pub struct World {
     pub quests: Vec<Quest>,
     /// Party member names (P_PartyUpdate): up to 6 others, empty slots dropped.
     pub party: Vec<String>,
+    /// Remote actors currently mid-jump (ANIM-7): rid → seconds of jump anim
+    /// left. Set by `on_jump` from `P_Jump`, ticked down each frame; while
+    /// present the actor renders the Jump clip + a vertical hop in `build_actors`.
+    pub jumps: HashMap<u16, f32>,
     /// The local player's inventory, keyed by slot (0..13 equipment, 14..45
     /// backpack). Seeded from the P_FetchCharacter sheet, then kept live by
     /// P_InventoryUpdate G/T/H/R. BTreeMap so the panel iterates in slot order.
@@ -258,6 +266,7 @@ impl World {
             pk::BUBBLE_MESSAGE => self.on_bubble_message(&m.data),
             pk::QUEST_LOG => self.on_quest_log(&m.data),
             pk::PARTY_UPDATE => self.on_party_update(&m.data),
+            pk::JUMP => self.on_jump(&m.data),
             _ => {}
         }
     }
@@ -829,6 +838,28 @@ impl World {
             tz: tp[2],
             homing: homing != 0,
             speed,
+        });
+    }
+
+    /// `P_Jump` (ClientNet.bb:241): a 2-byte RID — a remote actor jumped. Start
+    /// its jump-anim timer (ANIM-7). Skip our own RID; the local jump is driven
+    /// by the App's physics integration, not this timer.
+    fn on_jump(&mut self, d: &[u8]) {
+        if let Some(rid) = MsgReader::new(d).u16() {
+            if rid != self.my_runtime_id {
+                self.jumps.insert(rid, JUMP_ANIM_SECS);
+            }
+        }
+    }
+
+    /// Tick down remote jump-anim timers, dropping any that have elapsed.
+    pub fn tick_jumps(&mut self, dt: f32) {
+        if self.jumps.is_empty() {
+            return;
+        }
+        self.jumps.retain(|_, t| {
+            *t -= dt;
+            *t > 0.0
         });
     }
 

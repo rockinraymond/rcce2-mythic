@@ -187,6 +187,12 @@ struct App {
     /// Elapsed-time (secs) until which the local player plays the attack clip;
     /// set on each swing so the body visibly swings (ANIM-8).
     me_attack_until: f32,
+    /// Local jump state (MOVE-7/ANIM-7): current vertical offset + velocity, and
+    /// whether the player is on the ground (Blitz `PlayerHasTouchedDown`). Jump
+    /// keys only fire when grounded; the offset is added to the local body's Y.
+    jump_offset: f32,
+    jump_vel: f32,
+    grounded: bool,
     /// Active screen flash (P_ScreenFlash): the effect + its start time (secs).
     flash: Option<(rcce_client::world::ScreenFlash, f32)>,
     /// Active chat bubbles over actors (P_BubbleMessage), keyed by runtime id:
@@ -321,6 +327,9 @@ impl App {
             attacking: false,
             last_attack: now,
             me_attack_until: 0.0,
+            jump_offset: 0.0,
+            jump_vel: 0.0,
+            grounded: true,
             flash: None,
             bubbles: std::collections::HashMap::new(),
             floaters: rcce_client::floaters::Floaters::new(),
@@ -645,6 +654,29 @@ enum CombatStep {
 /// ranges are empty so there's no hit-react clip.
 const ATTACK_CLIP: &[&str] = &["Default attack", "Right hand attack", "Staff attack", "attack"];
 const DEATH_CLIP: &[&str] = &["Death 1", "Death", "death"];
+/// The Player body's jump clip (set #0 `Jump` [32..55]). ANIM-7.
+const JUMP_CLIP: &[&str] = &["Jump"];
+/// Jump physics (MOVE-7), the literal Blitz constants: `Gravity# = 0.0125`,
+/// initial vertical velocity `JumpStrength# (8.0) * Gravity# = 0.1`. Per-frame
+/// `position += velocity; velocity -= gravity`, landing when the offset hits 0.
+const JUMP_GRAVITY: f32 = 0.0125;
+const JUMP_INIT_VEL: f32 = 8.0 * JUMP_GRAVITY;
+/// Apex height (world units) of a remote actor's `sin`-arc hop while its
+/// `P_Jump` anim timer runs — matches the ~0.45-unit local-arc apex.
+const JUMP_REMOTE_APEX: f32 = 0.45;
+
+/// One frame of local jump physics (MOVE-7), mirroring Blitz's velocity
+/// integration: `offset += vel`, `vel -= gravity`. Returns
+/// `(offset, vel, grounded)`; lands (grounded) when the offset returns to ≤0.
+/// Pure — unit-tested.
+fn jump_step(offset: f32, vel: f32) -> (f32, f32, bool) {
+    let o = offset + vel;
+    if o <= 0.0 {
+        (0.0, 0.0, true)
+    } else {
+        (o, vel - JUMP_GRAVITY, false)
+    }
+}
 
 /// Melee reach (world units) — Client.exe's `MaxRange# = 4.0` (ClientCombat.bb:37)
 /// plus a small radius pad.
@@ -700,6 +732,8 @@ fn build_actors(
     me_running: bool,
     me_template: u16,
     me_attack: bool,
+    me_jumping: bool,
+    me_jump_offset: f32,
 ) -> (
     Vec<Rc<B3dModel>>,
     Vec<Rc<Vec<Option<Image>>>>,
@@ -862,17 +896,39 @@ fn build_actors(
     // Blitz client drives Me through the SAME locomotion machine as every other
     // actor (Client.bb UpdateActorInstances); passing false,false here was the
     // root cause of "the local player never walks/runs while moving" (ANIM-1).
-    let me_combat = if me_attack { Some((ATTACK_CLIP, false)) } else { None };
-    push(store, &mut models, &mut textures, &mut place, &mut keys, &mut skinned, me_template, world.me_gender, world.me_face_tex, world.me_body_tex, world.me_hair, world.me_beard, me_weapon, me_shield, weapon_override, world.my_runtime_id, me_moving, me_running, me_combat, [world.me_x, world.me_y, world.me_z], world.me_yaw, [0.85, 0.95, 0.85]);
+    // Jump (ANIM-7) overrides the attack clip; the offset lifts the body (MOVE-7).
+    let me_combat = if me_jumping {
+        Some((JUMP_CLIP, false))
+    } else if me_attack {
+        Some((ATTACK_CLIP, false))
+    } else {
+        None
+    };
+    push(store, &mut models, &mut textures, &mut place, &mut keys, &mut skinned, me_template, world.me_gender, world.me_face_tex, world.me_body_tex, world.me_hair, world.me_beard, me_weapon, me_shield, weapon_override, world.my_runtime_id, me_moving, me_running, me_combat, [world.me_x, world.me_y + me_jump_offset, world.me_z], world.me_yaw, [0.85, 0.95, 0.85]);
     for a in world.actors.values() {
         let dx = a.dest_x - a.x;
         let dz = a.dest_z - a.z;
         let moving = (dx * dx + dz * dz) > 1.0;
         let color = if a.is_player { [0.85, 0.9, 1.0] } else { [1.0, 1.0, 1.0] };
-        // A dead actor holds its death pose (ANIM-8); the live attack-anim for
-        // remote actors needs the attacker rid from P_AttackActor (deferred).
-        let combat = if !a.alive { Some((DEATH_CLIP, true)) } else { None };
-        push(store, &mut models, &mut textures, &mut place, &mut keys, &mut skinned, a.template_id, a.gender, a.face_tex, a.body_tex, a.hair, a.beard, a.equipped[0], a.equipped[1], weapon_override, a.runtime_id, moving, a.is_running, combat, [a.x, a.y, a.z], a.yaw, color);
+        // A dead actor holds its death pose (ANIM-8); a remote actor mid-jump
+        // (P_Jump → world.jumps) plays the Jump clip + a sin-arc hop (ANIM-7);
+        // the live attack-anim for remote actors needs the attacker rid from
+        // P_AttackActor (deferred).
+        let jump_left = world.jumps.get(&a.runtime_id).copied();
+        let combat = if !a.alive {
+            Some((DEATH_CLIP, true))
+        } else if jump_left.is_some() {
+            Some((JUMP_CLIP, false))
+        } else {
+            None
+        };
+        let y_off = jump_left
+            .map(|t| {
+                let phase = 1.0 - (t / rcce_client::world::JUMP_ANIM_SECS).clamp(0.0, 1.0);
+                (phase * std::f32::consts::PI).sin() * JUMP_REMOTE_APEX
+            })
+            .unwrap_or(0.0);
+        push(store, &mut models, &mut textures, &mut place, &mut keys, &mut skinned, a.template_id, a.gender, a.face_tex, a.body_tex, a.hair, a.beard, a.equipped[0], a.equipped[1], weapon_override, a.runtime_id, moving, a.is_running, combat, [a.x, a.y + y_off, a.z], a.yaw, color);
     }
     (models, textures, place, keys, skinned)
 }
@@ -903,6 +959,11 @@ fn dyn_hash(world: &World, elapsed: f32, me_moving: bool, me_running: bool, me_a
         (a.yaw as i32).hash(&mut h);
         a.is_running.hash(&mut h);
         a.alive.hash(&mut h); // death pose (ANIM-8)
+        // Remote jump phase (ANIM-7) — quantised so the hop animates under the
+        // CPU throttle while the timer runs.
+        if let Some(t) = world.jumps.get(&rid) {
+            ((t * 30.0) as i32).hash(&mut h);
+        }
     }
     h.finish()
 }
@@ -1491,6 +1552,17 @@ impl ApplicationHandler for App {
                             self.target = next_target(self.target, &rids);
                         }
                         KeyCode::KeyK if pressed => self.show_spellbook = !self.show_spellbook,
+                        KeyCode::KeyJ if pressed && self.grounded => {
+                            // MOVE-7: jump only when grounded. Kick the vertical
+                            // velocity, leave the ground, and tell the server
+                            // (empty payload — it identifies us by FromID).
+                            self.jump_vel = JUMP_INIT_VEL;
+                            self.jump_offset = 0.0;
+                            self.grounded = false;
+                            if let Some(net) = self.net.as_mut() {
+                                net.transport.send(net.peer, rcce_net::packet_id::JUMP, &[], true);
+                            }
+                        }
                         // Interact (right-click) the target/nearest NPC — a
                         // vendor replies with P_OpenTrading → the vendor panel.
                         KeyCode::KeyR if pressed => {
@@ -2181,7 +2253,7 @@ impl App {
                 mw.me_z = char_anchor[2];
                 mw.me_yaw = 0.0; // faces +Z; the camera circles it
                 let (models, textures, place, keys, skinned) =
-                    build_actors(store, &mw, elapsed, self.gpu_skin, false, false, c.actor_id, false);
+                    build_actors(store, &mw, elapsed, self.gpu_skin, false, false, c.actor_id, false, false, 0.0);
                 let instances: Vec<SceneInstance> = place
                     .iter()
                     .map(|&(idx, t, r, color, s)| SceneInstance {
@@ -2540,6 +2612,14 @@ impl App {
             // later (weather), so this read gives the same per-frame dt.
             let proj_dt = (elapsed - self.prev_elapsed).clamp(0.0, 0.1);
             net.world.tick_projectiles(proj_dt);
+            // Remote jump-anim timers (ANIM-7) + the local jump arc (MOVE-7).
+            net.world.tick_jumps(proj_dt);
+            if !self.grounded {
+                let (o, v, g) = jump_step(self.jump_offset, self.jump_vel);
+                self.jump_offset = o;
+                self.jump_vel = v;
+                self.grounded = g;
+            }
             // Start a new screen flash when one arrives (ENV-6), stamping its
             // start time for the fade.
             if let Some(f) = net.world.flash.take() {
@@ -2571,10 +2651,16 @@ impl App {
             // every frame for smooth animation. The CPU path stays throttled to
             // ~12 Hz by dyn_hash (each rebuild re-skins + re-uploads vertices).
             let me_attack = self.me_attack_until > elapsed;
-            let hash = dyn_hash(&net.world, elapsed, moving, run, me_attack);
+            let me_jumping = !self.grounded;
+            let me_jump_offset = self.jump_offset;
+            let hash = dyn_hash(&net.world, elapsed, moving, run, me_attack)
+                ^ (((me_jump_offset * 100.0) as i64 as u64).rotate_left(7))
+                ^ if me_jumping { 0x4A_4D_50_00 } else { 0 };
             if self.gpu_skin || hash != self.last_dyn_hash {
-                let (models, textures, place, keys, skinned) =
-                    build_actors(store, &net.world, elapsed, self.gpu_skin, moving, run, 0, me_attack);
+                let (models, textures, place, keys, skinned) = build_actors(
+                    store, &net.world, elapsed, self.gpu_skin, moving, run, 0, me_attack, me_jumping,
+                    me_jump_offset,
+                );
                 // CPU drawables: attachments (+ bodies when GPU skinning is off).
                 let instances: Vec<SceneInstance> = place
                     .iter()
@@ -2792,6 +2878,35 @@ impl App {
                         "[cycle] frame {} candidates={:?} target={:?}",
                         self.frames, rids, self.target
                     );
+                }
+            }
+        }
+        // Headless local-jump self-test (MOVE-7/ANIM-7): at frame `at`, if
+        // grounded, kick the jump (capture the apex ~8 frames later with
+        // RCCE_SHOT_FRAME=at+8). No-op unless RCCE_JUMP=<frame> is set.
+        if let Ok(jv) = std::env::var("RCCE_JUMP") {
+            if let Ok(at) = jv.parse::<u64>() {
+                if self.frames == at && self.grounded {
+                    self.jump_vel = JUMP_INIT_VEL;
+                    self.jump_offset = 0.0;
+                    self.grounded = false;
+                    println!("[jump] frame {} kicked local jump vel={:.3}", self.frames, self.jump_vel);
+                }
+            }
+        }
+        // Headless remote-jump self-test (ANIM-7): at frame `at`, start the jump
+        // anim timer on the nearest non-me actor so its Jump pose + hop are
+        // capturable. No-op unless RCCE_REMOTEJUMP=<frame> is set.
+        if let Ok(rv) = std::env::var("RCCE_REMOTEJUMP") {
+            if let Ok(at) = rv.parse::<u64>() {
+                if self.frames == at {
+                    if let Some(net) = self.net.as_mut() {
+                        let my = net.world.my_runtime_id;
+                        if let Some(rid) = net.world.actors.keys().copied().find(|&r| r != my) {
+                            net.world.jumps.insert(rid, rcce_client::world::JUMP_ANIM_SECS);
+                            println!("[remotejump] frame {} started jump anim on rid {rid}", self.frames);
+                        }
+                    }
                 }
             }
         }
@@ -4222,6 +4337,28 @@ mod tests {
         assert_eq!(snap_camera(1.5), (1.5, 0.0));
         assert_eq!(snap_camera(-2.0), (-2.0, 0.0));
         assert_eq!(snap_camera(0.0), (0.0, 0.0));
+    }
+
+    // Jump arc (MOVE-7): starting from the ground with the initial upward
+    // velocity, the offset rises to a positive apex then lands (grounded again)
+    // within a sane number of frames; once grounded the step holds at zero.
+    #[test]
+    fn jump_arc_rises_and_lands() {
+        let (mut o, mut v, mut grounded) = (0.0f32, JUMP_INIT_VEL, false);
+        let (mut apex, mut frames) = (0.0f32, 0);
+        while !grounded && frames < 1000 {
+            let (no, nv, g) = jump_step(o, v);
+            o = no;
+            v = nv;
+            grounded = g;
+            apex = apex.max(o);
+            frames += 1;
+        }
+        assert!(grounded, "jump must land");
+        assert!(apex > 0.3, "apex should rise meaningfully: {apex}");
+        assert!((5..40).contains(&frames), "airborne a sane number of frames: {frames}");
+        // Grounded is a fixed point: stepping from rest stays at rest.
+        assert_eq!(jump_step(0.0, 0.0), (0.0, 0.0, true));
     }
 
     // Chat scrollback window (CHAT-3): newest-first, skipping the `skip` newest.
