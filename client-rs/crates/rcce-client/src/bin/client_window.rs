@@ -202,6 +202,11 @@ struct App {
     /// First-person view mode (CAM-4): camera at the head looking along `me_yaw`,
     /// own body hidden. Toggled by `V`.
     first_person: bool,
+    /// ANIM-6 idle fidget: a small LCG advanced each frame, the elapsed-time the
+    /// current fidget plays until, and which `FIDGET_CLIPS` entry is playing.
+    rng: u32,
+    fidget_until: f32,
+    fidget_clip: usize,
     /// Active screen flash (P_ScreenFlash): the effect + its start time (secs).
     flash: Option<(rcce_client::world::ScreenFlash, f32)>,
     /// Active chat bubbles over actors (P_BubbleMessage), keyed by runtime id:
@@ -343,6 +348,9 @@ impl App {
             jump_vel: 0.0,
             grounded: true,
             first_person: false,
+            rng: 0x2545_F491, // nonzero LCG seed
+            fidget_until: 0.0,
+            fidget_clip: 0,
             flash: None,
             bubbles: std::collections::HashMap::new(),
             floaters: rcce_client::floaters::Floaters::new(),
@@ -706,6 +714,20 @@ const JUMP_INIT_VEL: f32 = 8.0 * JUMP_GRAVITY;
 /// `P_Jump` anim timer runs — matches the ~0.45-unit local-arc apex.
 const JUMP_REMOTE_APEX: f32 = 0.45;
 
+/// Idle-fidget clips (ANIM-6): the Player set's `Look around` [1231..1298] and
+/// `Yawn` [193..296], played once when standing still (the Blitz
+/// `Anim_LookRound..Anim_Yawn` idle variations).
+const FIDGET_CLIPS: [&[&str]; 2] = [&["Look around"], &["Yawn"]];
+/// Seconds a fidget plays before returning to idle (covers the longer Yawn).
+const FIDGET_SECS: f32 = 3.5;
+
+/// Whether an idle fidget should start this frame (ANIM-6): only while idle, at
+/// roughly the Blitz ~1/1000-frame probability. `rng_val` is a per-frame
+/// pseudo-random word. Pure — unit-tested.
+fn fidget_fires(rng_val: u32, idle: bool) -> bool {
+    idle && rng_val % 1000 == 0
+}
+
 /// One frame of local jump physics (MOVE-7), mirroring Blitz's velocity
 /// integration: `offset += vel`, `vel -= gravity`. Returns
 /// `(offset, vel, grounded)`; lands (grounded) when the offset returns to ≤0.
@@ -776,6 +798,7 @@ fn build_actors(
     me_jumping: bool,
     me_jump_offset: f32,
     hide_me: bool,
+    me_fidget: Option<&'static [&'static str]>,
 ) -> (
     Vec<Rc<B3dModel>>,
     Vec<Rc<Vec<Option<Image>>>>,
@@ -939,13 +962,14 @@ fn build_actors(
     // actor (Client.bb UpdateActorInstances); passing false,false here was the
     // root cause of "the local player never walks/runs while moving" (ANIM-1).
     // Jump (ANIM-7) overrides the attack clip; the offset lifts the body (MOVE-7).
-    // In first-person (CAM-4) the own body is hidden entirely.
+    // In first-person (CAM-4) the own body is hidden entirely. An idle fidget
+    // (ANIM-6) overrides only when nothing more important is playing.
     let me_combat = if me_jumping {
         Some((JUMP_CLIP, false))
     } else if me_attack {
         Some((ATTACK_CLIP, false))
     } else {
-        None
+        me_fidget.map(|f| (f, false))
     };
     if !hide_me {
         push(store, &mut models, &mut textures, &mut place, &mut keys, &mut skinned, me_template, world.me_gender, world.me_face_tex, world.me_body_tex, world.me_hair, world.me_beard, me_weapon, me_shield, weapon_override, world.my_runtime_id, me_moving, me_running, me_combat, [world.me_x, world.me_y + me_jump_offset, world.me_z], world.me_yaw, [0.85, 0.95, 0.85]);
@@ -2311,7 +2335,7 @@ impl App {
                 mw.me_z = char_anchor[2];
                 mw.me_yaw = 0.0; // faces +Z; the camera circles it
                 let (models, textures, place, keys, skinned) =
-                    build_actors(store, &mw, elapsed, self.gpu_skin, false, false, c.actor_id, false, false, 0.0, false);
+                    build_actors(store, &mw, elapsed, self.gpu_skin, false, false, c.actor_id, false, false, 0.0, false, None);
                 let instances: Vec<SceneInstance> = place
                     .iter()
                     .map(|&(idx, t, r, color, s)| SceneInstance {
@@ -2718,14 +2742,31 @@ impl App {
             let me_attack = self.me_attack_until > elapsed;
             let me_jumping = !self.grounded;
             let me_jump_offset = self.jump_offset;
+            // ANIM-6 idle fidget: advance the LCG, and while standing still kick
+            // off an occasional Look-around/Yawn that plays for FIDGET_SECS. Any
+            // movement / jump / attack cancels it.
+            self.rng = self.rng.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
+            let idle = !moving && self.grounded && !me_attack;
+            if !idle {
+                self.fidget_until = 0.0;
+            } else if elapsed >= self.fidget_until && fidget_fires(self.rng, idle) {
+                self.fidget_clip = (self.rng >> 16) as usize % FIDGET_CLIPS.len();
+                self.fidget_until = elapsed + FIDGET_SECS;
+            }
+            let me_fidget = if idle && elapsed < self.fidget_until {
+                Some(FIDGET_CLIPS[self.fidget_clip])
+            } else {
+                None
+            };
             let hash = dyn_hash(&net.world, elapsed, moving, run, me_attack)
                 ^ (((me_jump_offset * 100.0) as i64 as u64).rotate_left(7))
                 ^ if me_jumping { 0x4A_4D_50_00 } else { 0 }
-                ^ if self.first_person { 0x46_50_00_00 } else { 0 };
+                ^ if self.first_person { 0x46_50_00_00 } else { 0 }
+                ^ if me_fidget.is_some() { 0x46_49_44_00 } else { 0 };
             if self.gpu_skin || hash != self.last_dyn_hash {
                 let (models, textures, place, keys, skinned) = build_actors(
                     store, &net.world, elapsed, self.gpu_skin, moving, run, 0, me_attack, me_jumping,
-                    me_jump_offset, self.first_person,
+                    me_jump_offset, self.first_person, me_fidget,
                 );
                 // CPU drawables: attachments (+ bodies when GPU skinning is off).
                 let instances: Vec<SceneInstance> = place
@@ -2994,6 +3035,18 @@ impl App {
                             println!("[remotejump] frame {} started jump anim on rid {rid}", self.frames);
                         }
                     }
+                }
+            }
+        }
+        // Headless idle-fidget self-test (ANIM-6): force a Yawn fidget so its
+        // pose is capturable (the 1/1000 chance is impractical to wait out).
+        // No-op unless RCCE_FIDGET=<frame> is set.
+        if let Ok(fg) = std::env::var("RCCE_FIDGET") {
+            if let Ok(at) = fg.parse::<u64>() {
+                if self.frames == at {
+                    self.fidget_clip = 1; // Yawn — the most visible fidget
+                    self.fidget_until = self.start.elapsed().as_secs_f32() + 10.0;
+                    println!("[fidget] frame {} -> forced Yawn fidget", self.frames);
                 }
             }
         }
@@ -4427,6 +4480,26 @@ mod tests {
         assert_eq!(next_target(Some(9), &s), Some(3)); // wrap to first
         assert_eq!(next_target(Some(99), &s), Some(3)); // stale -> first
         assert_eq!(next_target(Some(3), &[]), None); // nothing to target
+    }
+
+    // Idle fidget gate (ANIM-6): only when idle, at the 1/1000 probability.
+    #[test]
+    fn fidget_gate() {
+        assert!(fidget_fires(1000, true)); // 1000 % 1000 == 0
+        assert!(fidget_fires(0, true));
+        assert!(!fidget_fires(1, true)); // not a multiple
+        assert!(!fidget_fires(1000, false)); // not idle → never
+        assert!(!fidget_fires(0, false));
+        // Over a full LCG period the gate fires roughly 1/1000 of idle frames.
+        let mut rng: u32 = 0x2545_F491;
+        let mut fires = 0;
+        for _ in 0..100_000 {
+            rng = rng.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
+            if fidget_fires(rng, true) {
+                fires += 1;
+            }
+        }
+        assert!((50..200).contains(&fires), "≈1/1000 over 100k: {fires}");
     }
 
     // Double-click gate (MOVE-6): close in time AND space.
