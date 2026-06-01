@@ -169,6 +169,9 @@ struct App {
     /// `Some` while the chat line is open (the typed buffer); movement keys are
     /// suppressed. Enter sends + closes, Esc cancels.
     chat_input: Option<String>,
+    /// Chat scrollback offset: how many newest lines to skip (PageUp/PageDown),
+    /// so older history scrolls into the chat window (CHAT-3).
+    chat_scroll: usize,
     /// Runtime id of the last-attacked actor (for the target highlight).
     target: Option<u16>,
     /// Open "Actions" context menu over the selected actor (TGT-3), if any.
@@ -302,6 +305,7 @@ impl App {
             last_move: now,
             was_moving: false,
             chat_input: None,
+            chat_scroll: 0,
             target: None,
             context_menu: None,
             dialog_hitboxes: Vec::new(),
@@ -579,6 +583,13 @@ fn nearest_living_actor(world: &rcce_client::world::World, mx: f32, mz: f32) -> 
             da.total_cmp(&db)
         })
         .map(|a| a.runtime_id)
+}
+
+/// The visible chat lines for a scrollback `skip` (already clamped): newest-
+/// first, skipping the `skip` most-recent lines and taking up to `max`. Pure —
+/// shared by the renderer and unit-tested for the scrollback window (CHAT-3).
+fn visible_chat(lines: &[(String, [f32; 4])], skip: usize, max: usize) -> Vec<&(String, [f32; 4])> {
+    lines.iter().rev().skip(skip).take(max).collect()
 }
 
 /// Per-frame combat decision for the auto-attack loop (CBT-1): chase if out of
@@ -1427,6 +1438,10 @@ impl ApplicationHandler for App {
                             let on = !self.mouse_look;
                             self.set_mouse_look(on);
                         }
+                        // Chat scrollback (CHAT-3): PageUp shows older history,
+                        // PageDown returns toward the newest line.
+                        KeyCode::PageUp if pressed => self.chat_scroll = self.chat_scroll.saturating_add(3),
+                        KeyCode::PageDown if pressed => self.chat_scroll = self.chat_scroll.saturating_sub(3),
                         // Toggle the inventory / spellbook panel.
                         KeyCode::KeyI if pressed => self.show_inventory = !self.show_inventory,
                         // Interact (right-click) the target/nearest NPC — a
@@ -2802,6 +2817,25 @@ impl App {
                 }
             }
         }
+        // Headless chat-scrollback self-test (CHAT-3): inject 16 numbered lines
+        // and set the scroll offset from RCCE_CHATSCROLL (default 0), so the
+        // scrolled view is capturable. No-op unless RCCE_CHATSCROLLTEST=<frame>.
+        if let Ok(cs) = std::env::var("RCCE_CHATSCROLLTEST") {
+            if let Ok(at) = cs.parse::<u64>() {
+                if self.frames == at {
+                    if let Some(net) = self.net.as_mut() {
+                        for n in 1..=16 {
+                            net.world.chat.push((format!("chat line {n:02}"), [0.9, 0.9, 0.7, 1.0]));
+                        }
+                    }
+                    self.chat_scroll = std::env::var("RCCE_CHATSCROLL")
+                        .ok()
+                        .and_then(|s| s.parse().ok())
+                        .unwrap_or(0);
+                    println!("[chatscroll] frame {} injected 16 lines, scroll={}", self.frames, self.chat_scroll);
+                }
+            }
+        }
         // Headless screen-flash self-test (ENV-6): inject a red flash. No-op
         // unless RCCE_FLASHTEST=<frame> is set.
         if let Ok(fv) = std::env::var("RCCE_FLASHTEST") {
@@ -3214,10 +3248,17 @@ impl App {
                 overlay.rect(cx0, cy0, cw, chh, [0.0, 0.0, 0.0, 0.28]);
                 let max_lines = ((chh / 12.0) as usize).max(1);
                 let bottom = cy0 + chh - 13.0;
-                for (i, (text, col)) in w.chat.iter().rev().take(max_lines).enumerate() {
+                // Scrollback (CHAT-3): skip the `chat_scroll` newest lines so
+                // older history scrolls in. Clamp so ≥1 line stays visible.
+                let scroll = self.chat_scroll.min(w.chat.len().saturating_sub(1));
+                self.chat_scroll = scroll;
+                for (i, (text, col)) in visible_chat(&w.chat, scroll, max_lines).into_iter().enumerate() {
                     let y = bottom - i as f32 * 12.0;
                     let s: String = text.chars().take(60).collect();
                     overlay.text_shadow(cx0 + 4.0, y, 1.0, &s, *col);
+                }
+                if scroll > 0 {
+                    overlay.text_shadow(cx0 + cw - 68.0, cy0 + 2.0, 1.0, &format!("scroll +{scroll}"), [0.7, 0.85, 1.0, 1.0]);
                 }
             }
             // Chat input line just under the chat box (real Chat rect bottom).
@@ -3849,6 +3890,17 @@ mod tests {
         // Off-screen clamp keeps the whole menu visible.
         let edge = ContextMenu::build(9, false, 1279.0, 799.0, 1280.0, 800.0);
         assert!(edge.x + CTX_W <= 1280.0 && edge.y + CTX_ROW * 4.0 <= 800.0);
+    }
+
+    // Chat scrollback window (CHAT-3): newest-first, skipping the `skip` newest.
+    #[test]
+    fn chat_scrollback_window() {
+        let lines: Vec<(String, [f32; 4])> = (1..=16).map(|n| (format!("line {n}"), [0.0; 4])).collect();
+        let t0: Vec<&str> = visible_chat(&lines, 0, 5).into_iter().map(|(t, _)| t.as_str()).collect();
+        assert_eq!(t0, vec!["line 16", "line 15", "line 14", "line 13", "line 12"]);
+        let t8: Vec<&str> = visible_chat(&lines, 8, 5).into_iter().map(|(t, _)| t.as_str()).collect();
+        assert_eq!(t8, vec!["line 8", "line 7", "line 6", "line 5", "line 4"]);
+        assert!(visible_chat(&lines, 16, 5).is_empty()); // renderer clamps before this
     }
 
     // The auto-combat decision (CBT-1): chase when out of melee range, swing in
