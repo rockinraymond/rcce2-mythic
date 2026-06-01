@@ -172,7 +172,7 @@ Auto-attack on a flagged target: `AttackTarget=True` + `PlayerTarget` drives `Up
 | CHAT-1 | Open chat (Enter / `/`), type, send `P_ChatMessage` (raw text; `/commands` parsed server-side) | DONE | `client_window.rs:1080-1123`; ref `Interface3D.bb:2190-2213` | `chat_test` / live |
 | CHAT-2 | Incoming `P_ChatMessage` color sentinels (254=yellow,253=red,252=purple,251=green,250=RGB) + `<<self>>`=blue; render in chat log | DONE ✅ | `on_chat` parses the leading sentinel into a colour (`World.chat` is now `Vec<(String,[f32;4])>`); a `<<…>>` line renders blue; the chat-log overlay draws each line in its colour. ref `ClientNet.bb:1219-1252` | unit test `chat_colour_sentinels` (yellow/red/RGB/white/blue) green; `RCCE_CHATTEST=150` PNG shows yellow/red/green/blue lines in the chat box — read & confirmed 2026-06-01 |
 | CHAT-3 | Chat scrollback + up/down scroll | DONE ✅ | a `chat_scroll` offset (PageUp/PageDown, ±3) skips the newest lines so older history scrolls into the chat box, clamped so ≥1 line stays visible, with a `scroll +N` indicator; the pure `visible_chat(lines, skip, max)` helper drives the render. ref `Interface3D.bb:3012-3057` | unit test `chat_scrollback_window` (offset 0→newest 16-12, offset 8→older 8-4, past-end→empty) green; `RCCE_CHATSCROLLTEST=150 RCCE_CHATSCROLL=8` PNG shows numbered lines + the indicator — read 2026-06-01. (The 2000-line ring cap is not enforced — the Vec grows unbounded; deferred.) |
-| CHAT-4 | Chat bubbles over actors (`P_BubbleMessage`, or `<`-prefixed when `UseBubbles>1`) | MISSING | ref `ClientNet.bb:1209-1252`, `Interface3D.bb:219` | live |
+| CHAT-4 | Chat bubbles over actors (`P_BubbleMessage`) | DONE ✅ | new `BUBBLE_MESSAGE` const (52) + `World::on_bubble_message` ([2]rid [1]R [1]G [1]B [n]text) queues `pending_bubbles`; the App adopts each (stamping a start time), fades it after ~5s, and draws it over the actor's head — projecting a chest anchor then offsetting a fixed 42px (camera-distance-independent; a fixed world-Y over-shoots when the follow cam is close). ref `ClientNet.bb:1209-1252`, `Interface3D.bb:219` | unit test `bubble_message_parse` green; `RCCE_BUBBLETEST=150` PNG shows the green "Hello, traveler!" bubble over the player (anchor projected to centre 640,400 per the coord log) — read 2026-06-01. (The `<`-prefixed `P_ChatMessage`→bubble path deferred.) |
 
 ---
 
@@ -274,7 +274,7 @@ Auto-attack on a flagged target: `AttackTarget=True` + `PlayerTarget` drives `Up
 
 ## Parity scorecard (2026-06-01 baseline)
 
-Counting concrete criteria (excluding DEFERRED): **DONE ≈ 48, PARTIAL ≈ 26, MISSING ≈ 11** (Phases 1-5 + breadth: ANIM-8 attack, PRJ-1, CHAT-2, ENV-6, HUD-8, CHAT-3, SPL-7, ENV-5, 2026-06-01). **All four headline play-test gaps are now closed.**
+Counting concrete criteria (excluding DEFERRED): **DONE ≈ 49, PARTIAL ≈ 26, MISSING ≈ 10** (Phases 1-5 + breadth: ANIM-8 attack, PRJ-1, CHAT-2, ENV-6, HUD-8, CHAT-3, SPL-7, ENV-5, CHAT-4, 2026-06-01). **All four headline play-test gaps are now closed.**
 
 1. ~~**MENU-SCENE** — dedicated 3D menu scene with posed character~~ **DONE ✅** (Phase 3; backdrop-art polish = MENU-SCENE-b).
 2. ~~**ANIM-1** — local-player walk/run animation~~ **DONE ✅** (Phase 1).

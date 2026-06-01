@@ -189,6 +189,9 @@ struct App {
     me_attack_until: f32,
     /// Active screen flash (P_ScreenFlash): the effect + its start time (secs).
     flash: Option<(rcce_client::world::ScreenFlash, f32)>,
+    /// Active chat bubbles over actors (P_BubbleMessage), keyed by runtime id:
+    /// (text, colour, start-time secs). Fade out after ~5s (CHAT-4).
+    bubbles: std::collections::HashMap<u16, (String, [f32; 4], f32)>,
     /// Floating combat-damage numbers (drained from world.combat_events).
     floaters: rcce_client::floaters::Floaters,
     /// Audio output (zone music). `None` when there's no audio device.
@@ -313,6 +316,7 @@ impl App {
             last_attack: now,
             me_attack_until: 0.0,
             flash: None,
+            bubbles: std::collections::HashMap::new(),
             floaters: rcce_client::floaters::Floaters::new(),
             audio: rcce_client::audio::Audio::new(),
             sheet: None,
@@ -2477,6 +2481,12 @@ impl App {
             if let Some(f) = net.world.flash.take() {
                 self.flash = Some((f, elapsed));
             }
+            // Chat bubbles (CHAT-4): adopt new ones (stamping the start time),
+            // and drop any that have faded out after ~5s.
+            for (rid, text, col) in net.world.pending_bubbles.drain(..) {
+                self.bubbles.insert(rid, (text, col, elapsed));
+            }
+            self.bubbles.retain(|_, (_, _, start)| elapsed - *start < 5.0);
             // Send a P_StandardUpdate toward the input direction (unreliable,
             // like ClientNet.bb): the server walks the actor toward Dest and
             // echoes its authoritative position, which on_standard_update
@@ -2846,6 +2856,22 @@ impl App {
                 }
             }
         }
+        // Headless chat-bubble self-test (CHAT-4): inject a bubble over the local
+        // player (always framed by the follow camera). No-op unless
+        // RCCE_BUBBLETEST=<frame> is set.
+        if let Ok(bv) = std::env::var("RCCE_BUBBLETEST") {
+            if let Ok(at) = bv.parse::<u64>() {
+                if self.frames == at {
+                    if let Some(net) = self.net.as_mut() {
+                        let rid = net.world.my_runtime_id;
+                        net.world
+                            .pending_bubbles
+                            .push((rid, "Hello, traveler!".into(), [0.4, 1.0, 0.5, 1.0]));
+                        println!("[bubbletest] frame {} bubble over rid={rid}", self.frames);
+                    }
+                }
+            }
+        }
         // Headless screen-flash self-test (ENV-6): inject a red flash. No-op
         // unless RCCE_FLASHTEST=<frame> is set.
         if let Ok(fv) = std::env::var("RCCE_FLASHTEST") {
@@ -3095,6 +3121,28 @@ impl App {
                     if let Some((px, py)) = rcce_render::project(&vp, [pr.x, pr.y, pr.z], sw, sh) {
                         overlay.rect(px - 12.0, py - 12.0, 24.0, 24.0, [1.0, 0.5, 0.08, 0.4]);
                         overlay.rect(px - 6.0, py - 6.0, 12.0, 12.0, [1.0, 0.88, 0.35, 1.0]);
+                    }
+                }
+
+                // Chat bubbles (CHAT-4): a small label over the speaking actor's
+                // head (or me), projected each frame.
+                for (rid, (text, col, _)) in &self.bubbles {
+                    let pos = if *rid == net.world.my_runtime_id {
+                        Some([net.world.me_x, net.world.me_y, net.world.me_z])
+                    } else {
+                        net.world.actors.get(rid).map(|a| [a.x, a.y, a.z])
+                    };
+                    if let Some(p) = pos {
+                        // Project a chest-height anchor, then place the bubble a
+                        // fixed pixel distance above it (camera-distance-
+                        // independent — a fixed world-Y offset over-shoots when
+                        // the follow camera is close to the local player).
+                        if let Some((px, py)) = rcce_render::project(&vp, [p[0], p[1] + 3.5, p[2]], sw, sh) {
+                            let tw = rcce_render::font::text_width(text, 1.0);
+                            let by = py - 42.0;
+                            overlay.rect(px - tw * 0.5 - 4.0, by, tw + 8.0, 15.0, [0.0, 0.0, 0.0, 0.7]);
+                            overlay.text_shadow(px - tw * 0.5, by + 2.0, 1.0, text, *col);
+                        }
                     }
                 }
 

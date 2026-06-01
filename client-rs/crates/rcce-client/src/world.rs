@@ -167,6 +167,9 @@ pub struct World {
     pub flash: Option<ScreenFlash>,
     /// Live known-spell list maintained by P_KnownSpellUpdate. See [`KnownSpell`].
     pub known_spells: Vec<KnownSpell>,
+    /// Chat bubbles to show over actors (P_BubbleMessage): (rid, text, colour).
+    /// Drained by the renderer, which times the fade. CHAT-4.
+    pub pending_bubbles: Vec<(u16, String, [f32; 4])>,
     /// The local player's inventory, keyed by slot (0..13 equipment, 14..45
     /// backpack). Seeded from the P_FetchCharacter sheet, then kept live by
     /// P_InventoryUpdate G/T/H/R. BTreeMap so the panel iterates in slot order.
@@ -222,6 +225,7 @@ impl World {
             pk::PROJECTILE => self.on_projectile(&m.data),
             pk::SCREEN_FLASH => self.on_screen_flash(&m.data),
             pk::KNOWN_SPELL_UPDATE => self.on_known_spell_update(&m.data),
+            pk::BUBBLE_MESSAGE => self.on_bubble_message(&m.data),
             _ => {}
         }
     }
@@ -883,6 +887,22 @@ impl World {
             _ => {}
         }
     }
+
+    /// Handle `P_BubbleMessage` (CHAT-4, ClientNet.bb:1209): `[2]rid [1]R [1]G
+    /// [1]B [n]text` — a speech bubble over the actor. Queued for the renderer.
+    fn on_bubble_message(&mut self, d: &[u8]) {
+        let mut r = MsgReader::new(d);
+        let (Some(rid), Some(red), Some(green), Some(blue)) = (r.u16(), r.u8(), r.u8(), r.u8())
+        else {
+            return;
+        };
+        let text: String = r.rest().iter().filter(|&&b| b >= 32).map(|&b| b as char).collect();
+        let text = text.trim().to_string();
+        if !text.is_empty() {
+            let col = [red as f32 / 255.0, green as f32 / 255.0, blue as f32 / 255.0, 1.0];
+            self.pending_bubbles.push((rid, text, col));
+        }
+    }
 }
 
 #[cfg(test)]
@@ -970,6 +990,20 @@ mod tests {
         assert_eq!(f.color, [1.0, 0.0, 0.0]);
         assert!((f.alpha - 128.0 / 255.0).abs() < 1e-4);
         assert!((f.length - 2.0).abs() < 1e-4);
+    }
+
+    #[test]
+    fn bubble_message_parse() {
+        let mut w = World::default();
+        // rid=9, RGB=(0,255,0), text="Hello!"
+        let mut p = MsgWriter::new();
+        p.u16(9).u8(0).u8(255).u8(0).raw(b"Hello!");
+        w.apply(&msg(pk::BUBBLE_MESSAGE, p.into_bytes()));
+        assert_eq!(w.pending_bubbles.len(), 1);
+        let (rid, text, col) = &w.pending_bubbles[0];
+        assert_eq!(*rid, 9);
+        assert_eq!(text, "Hello!");
+        assert_eq!(*col, [0.0, 1.0, 0.0, 1.0]);
     }
 
     #[test]

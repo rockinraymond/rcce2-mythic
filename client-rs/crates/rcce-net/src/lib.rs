@@ -62,6 +62,7 @@ pub mod packet_id {
     pub const ACTOR_EFFECT: u8 = 36;
     pub const PROJECTILE: u8 = 37;
     pub const EAT_ITEM: u8 = 44;
+    pub const BUBBLE_MESSAGE: u8 = 52;
     pub const EXAMINE: u8 = 61;
     pub const TRADE: u8 = 62;
 }
