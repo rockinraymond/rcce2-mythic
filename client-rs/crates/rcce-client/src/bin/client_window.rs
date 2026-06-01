@@ -171,6 +171,8 @@ struct App {
     chat_input: Option<String>,
     /// Runtime id of the last-attacked actor (for the target highlight).
     target: Option<u16>,
+    /// Open "Actions" context menu over the selected actor (TGT-3), if any.
+    context_menu: Option<ContextMenu>,
     /// Floating combat-damage numbers (drained from world.combat_events).
     floaters: rcce_client::floaters::Floaters,
     /// Audio output (zone music). `None` when there's no audio device.
@@ -288,6 +290,7 @@ impl App {
             was_moving: false,
             chat_input: None,
             target: None,
+            context_menu: None,
             floaters: rcce_client::floaters::Floaters::new(),
             audio: rcce_client::audio::Audio::new(),
             sheet: None,
@@ -346,6 +349,55 @@ const FUNCTION_BUTTONS: [(HudAction, f32, &str, &str); 8] = [
 const FBTN_Y: f32 = 0.9415;
 const FBTN_W: f32 = 0.033203125 - 0.006;
 const FBTN_H: f32 = 0.044270833 - 0.008;
+
+/// One action in the actor "Actions" context menu (TGT-3).
+#[derive(Clone, Copy, PartialEq, Debug)]
+enum MenuAction {
+    Interact,
+    Attack,
+    Examine,
+    Trade,
+}
+
+/// An open "Actions" context menu anchored at a screen position over a target
+/// actor — the Rust analogue of Client.exe's WContextMenu (Interface3D.bb:851).
+struct ContextMenu {
+    rid: u16,
+    x: f32,
+    y: f32,
+    items: Vec<(&'static str, MenuAction)>,
+}
+const CTX_W: f32 = 104.0;
+const CTX_ROW: f32 = 22.0;
+
+impl ContextMenu {
+    /// Build the menu for an actor at `(x,y)`; non-players also get Attack +
+    /// Trade. Clamped to stay on screen.
+    fn build(rid: u16, is_player: bool, x: f32, y: f32, sw: f32, sh: f32) -> ContextMenu {
+        let mut items: Vec<(&'static str, MenuAction)> = vec![("Interact", MenuAction::Interact)];
+        if !is_player {
+            items.push(("Attack", MenuAction::Attack));
+        }
+        items.push(("Examine", MenuAction::Examine));
+        if !is_player {
+            items.push(("Trade", MenuAction::Trade));
+        }
+        let h = CTX_ROW * items.len() as f32;
+        let x = x.min(sw - CTX_W - 2.0).max(2.0);
+        let y = y.min(sh - h - 2.0).max(2.0);
+        ContextMenu { rid, x, y, items }
+    }
+
+    /// The action under `(cx,cy)`, or `None` if the click is outside the menu
+    /// (the caller then dismisses it).
+    fn hit(&self, cx: f32, cy: f32) -> Option<MenuAction> {
+        if cx < self.x || cx > self.x + CTX_W || cy < self.y {
+            return None;
+        }
+        let row = ((cy - self.y) / CTX_ROW).floor() as usize;
+        self.items.get(row).map(|&(_, a)| a)
+    }
+}
 
 /// Spell action-bar slot grid (shared by the draw + hover-tooltip paths). The
 /// 12 slots are left-anchored on the FBTN_Y baseline at FBTN_W×FBTN_H each.
@@ -1663,6 +1715,15 @@ impl App {
     /// Positions mirror the draw code exactly (shared FUNCTION_BUTTONS / the
     /// Interface.dat inv_buttons).
     fn hud_click(&mut self) {
+        // The Actions context menu takes priority: a click either picks an
+        // action or dismisses the menu, and is consumed either way (TGT-3).
+        if let Some(menu) = self.context_menu.take() {
+            let (cx, cy) = self.cursor;
+            if let Some(action) = menu.hit(cx, cy) {
+                self.exec_menu_action(action, menu.rid);
+            }
+            return;
+        }
         let Some(gfx) = self.gfx.as_ref() else { return };
         let (sw, sh) = (gfx.config.width as f32, gfx.config.height as f32);
         let (cx, cy) = self.cursor;
@@ -1797,6 +1858,25 @@ impl App {
         }
     }
 
+    /// Execute a chosen context-menu action against `rid` by sending the
+    /// matching packet (TGT-3). Interact→P_RightClick (runs the NPC Main
+    /// script), Examine→P_Examine, Trade→P_Trade, Attack→target + P_AttackActor.
+    fn exec_menu_action(&mut self, action: MenuAction, rid: u16) {
+        use rcce_net::packet_id;
+        if action == MenuAction::Attack {
+            self.target = Some(rid);
+        }
+        let Some(net) = self.net.as_mut() else { return };
+        let rid_bytes = rcce_client::net::right_click_packet(rid); // 2-byte runtime id
+        let (ptype, payload) = match action {
+            MenuAction::Interact => (packet_id::RIGHT_CLICK, rid_bytes),
+            MenuAction::Examine => (packet_id::EXAMINE, rcce_client::net::examine_packet(rid)),
+            MenuAction::Trade => (packet_id::TRADE, rcce_client::net::examine_packet(rid)),
+            MenuAction::Attack => (packet_id::ATTACK_ACTOR, rid_bytes),
+        };
+        net.transport.send(net.peer, ptype, &payload, true);
+    }
+
     /// World click: select the living actor whose projected position is nearest
     /// the cursor (within a pixel radius) as the target highlight. Uses the
     /// cached view-projection from the last rendered frame. No-op without a
@@ -1815,23 +1895,25 @@ impl App {
             actor_at(cx, cy, &actors, &self.vp, sw, sh, PICK_RADIUS)
         });
         if let Some(rid) = pick {
-            // A double-click on the same actor (or Shift+click) interacts; a
-            // plain single click only selects the target.
             let now = Instant::now();
             let double = self.last_click_rid == Some(rid)
                 && now.duration_since(self.last_click).as_millis() < 400;
             self.last_click = now;
             self.last_click_rid = Some(rid);
             self.target = Some(rid);
-            if double || self.run {
-                if let Some(net) = self.net.as_mut() {
-                    net.transport.send(
-                        net.peer,
-                        rcce_net::packet_id::RIGHT_CLICK,
-                        &rcce_client::net::right_click_packet(rid),
-                        true,
-                    );
-                }
+            if double {
+                // Double-click = quick Interact, skipping the menu.
+                self.context_menu = None;
+                self.exec_menu_action(MenuAction::Interact, rid);
+            } else {
+                // Single click = select + open the "Actions" menu at the cursor.
+                let is_player = self
+                    .net
+                    .as_ref()
+                    .and_then(|n| n.world.actors.get(&rid))
+                    .map(|a| a.is_player)
+                    .unwrap_or(false);
+                self.context_menu = Some(ContextMenu::build(rid, is_player, cx, cy, sw, sh));
             }
         } else {
             // No actor under the cursor → click-to-move: walk to the ground
@@ -2416,18 +2498,24 @@ impl App {
                 }
             }
         }
-        // Headless target-select self-test (TGT-1): at the configured frame,
-        // select the nearest living actor so the highlight + Char-Interaction
-        // panel are capturable via RCCE_SHOT without a mouse. No-op unless
-        // RCCE_SELECT=<frame> is set.
+        // Headless target-select self-test (TGT-1/TGT-3): at the configured
+        // frame, select the nearest living actor AND open its "Actions" context
+        // menu (as a single left-click would), so the highlight + Char-Interaction
+        // panel + the context menu are capturable via RCCE_SHOT without a mouse.
+        // No-op unless RCCE_SELECT=<frame> is set.
         if let Ok(sv) = std::env::var("RCCE_SELECT") {
             if let Ok(at) = sv.parse::<u64>() {
                 if self.frames == at && self.target.is_none() {
                     if let Some(net) = self.net.as_ref() {
                         if let Some(rid) = nearest_living_actor(&net.world, net.world.me_x, net.world.me_z) {
                             self.target = Some(rid);
-                            let nm = net.world.actors.get(&rid).map(|a| a.name.clone()).unwrap_or_default();
-                            println!("[select] frame {} target rid={rid} name='{nm}'", self.frames);
+                            let a = net.world.actors.get(&rid);
+                            let nm = a.map(|a| a.name.clone()).unwrap_or_default();
+                            let is_player = a.map(|a| a.is_player).unwrap_or(false);
+                            let (sw, sh) = (gfx.config.width as f32, gfx.config.height as f32);
+                            self.context_menu =
+                                Some(ContextMenu::build(rid, is_player, sw * 0.42, sh * 0.34, sw, sh));
+                            println!("[select] frame {} target rid={rid} name='{nm}' (menu open)", self.frames);
                         }
                     }
                 }
@@ -3259,6 +3347,24 @@ impl App {
                 }
             }
 
+            // Actions context menu (TGT-3): drawn last so it sits over the HUD.
+            // Hover-highlight the row under the cursor; clicks are handled in
+            // hud_click (which has priority over selection/move).
+            if let Some(menu) = &self.context_menu {
+                let (mcx, mcy) = self.cursor;
+                let mh = CTX_ROW * menu.items.len() as f32;
+                overlay.rect(menu.x - 1.0, menu.y - 1.0, CTX_W + 2.0, mh + 2.0, [1.0, 0.85, 0.2, 0.95]);
+                overlay.rect(menu.x, menu.y, CTX_W, mh, [0.05, 0.05, 0.09, 0.96]);
+                for (i, (label, _)) in menu.items.iter().enumerate() {
+                    let ry = menu.y + i as f32 * CTX_ROW;
+                    let hovered = mcx >= menu.x && mcx <= menu.x + CTX_W && mcy >= ry && mcy < ry + CTX_ROW;
+                    if hovered {
+                        overlay.rect(menu.x, ry, CTX_W, CTX_ROW, [0.2, 0.32, 0.55, 0.85]);
+                    }
+                    overlay.text_shadow(menu.x + 8.0, ry + 6.0, 1.0, label, [0.94, 0.94, 0.72, 1.0]);
+                }
+            }
+
             // Headless screenshot INCLUDING the 2D overlay (HUD / nameplates /
             // target panel): render world + overlay to an offscreen texture and
             // exit. The old `capture_png` path rendered only the 3D world, so
@@ -3353,6 +3459,28 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // The Actions context menu: NPCs get Interact/Attack/Examine/Trade; players
+    // get Interact/Examine only. Hit-testing maps a click to the right row and
+    // returns None outside the box, and the menu clamps onto the screen.
+    #[test]
+    fn context_menu_build_and_hit() {
+        let npc = ContextMenu::build(7, false, 100.0, 100.0, 1280.0, 800.0);
+        assert_eq!(npc.items.len(), 4);
+        assert_eq!(npc.items[1].1, MenuAction::Attack);
+        let player = ContextMenu::build(8, true, 100.0, 100.0, 1280.0, 800.0);
+        assert_eq!(player.items.len(), 2);
+        assert!(player.items.iter().all(|&(_, a)| a != MenuAction::Attack));
+        // Row hit-tests (top-left origin).
+        assert_eq!(npc.hit(120.0, 100.0 + CTX_ROW * 0.5), Some(MenuAction::Interact));
+        assert_eq!(npc.hit(120.0, 100.0 + CTX_ROW * 3.5), Some(MenuAction::Trade));
+        assert_eq!(npc.hit(120.0, 100.0 - 5.0), None); // above
+        assert_eq!(npc.hit(120.0, 100.0 + CTX_ROW * 4.0 + 1.0), None); // below
+        assert_eq!(npc.hit(100.0 + CTX_W + 5.0, 105.0), None); // right of box
+        // Off-screen clamp keeps the whole menu visible.
+        let edge = ContextMenu::build(9, false, 1279.0, 799.0, 1280.0, 800.0);
+        assert!(edge.x + CTX_W <= 1280.0 && edge.y + CTX_ROW * 4.0 <= 800.0);
+    }
 
     #[test]
     fn camera_boom_collision() {

@@ -59,6 +59,7 @@ pub mod packet_id {
     pub const ACTOR_EFFECT: u8 = 36;
     pub const EAT_ITEM: u8 = 44;
     pub const EXAMINE: u8 = 61;
+    pub const TRADE: u8 = 62;
 }
 
 /// Type 0: the empty reliable packet the client sends on connect.
