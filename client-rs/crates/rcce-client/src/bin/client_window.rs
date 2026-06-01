@@ -162,6 +162,10 @@ struct App {
     mouse_look: bool,
     last_move: Instant,
     was_moving: bool,
+    /// Click-to-move destination in world XZ. `Some` while walking toward a
+    /// left-clicked ground point; the per-frame movement steers `dir` toward it
+    /// and clears it on arrival or when WASD/auto input overrides (MOVE-5).
+    move_target: Option<[f32; 2]>,
     /// `Some` while the chat line is open (the typed buffer); movement keys are
     /// suppressed. Enter sends + closes, Esc cancels.
     chat_input: Option<String>,
@@ -270,6 +274,7 @@ impl App {
             last_log: now,
             last_dyn_hash: u64::MAX,
             keys_wasd: [false; 4],
+            move_target: None,
             run: false,
             cam_yaw: 0.0,
             cam_pitch: 0.25,
@@ -1822,6 +1827,13 @@ impl App {
                     );
                 }
             }
+        } else {
+            // No actor under the cursor → click-to-move: walk to the ground
+            // point the camera ray hits at the player's feet height (MOVE-5).
+            let plane_y = self.net.as_ref().map(|n| n.world.me_y).unwrap_or(self.ground_y);
+            if let Some(g) = rcce_render::unproject_ground(&self.vp, sw, sh, cx, cy, plane_y) {
+                self.move_target = Some([g[0], g[2]]);
+            }
         }
     }
 
@@ -2068,6 +2080,23 @@ impl App {
         if self.keys_wasd[2] { dir[0] -= fwd[0]; dir[1] -= fwd[1]; }
         if self.keys_wasd[3] { dir[0] += right[0]; dir[1] += right[1]; }
         if self.keys_wasd[1] { dir[0] -= right[0]; dir[1] -= right[1]; }
+        // Click-to-move (MOVE-5): with no manual/auto input this frame, steer
+        // toward a pending clicked ground point until within the Blitz
+        // dist-to-dest stop threshold (2.0 units, Client.bb:548). Any manual
+        // WASD/auto input cancels the click destination (manual override wins).
+        let manual = (dir[0] * dir[0] + dir[1] * dir[1]).sqrt() > 0.01;
+        if manual {
+            self.move_target = None;
+        } else if let Some(tgt) = self.move_target {
+            if let Some(p) = self.net.as_ref().map(|n| [n.world.me_x, n.world.me_z]) {
+                let (tdx, tdz) = (tgt[0] - p[0], tgt[1] - p[1]);
+                if (tdx * tdx + tdz * tdz).sqrt() > 2.0 {
+                    dir = [tdx, tdz]; // steer toward the click; normalised below
+                } else {
+                    self.move_target = None; // arrived
+                }
+            }
+        }
         let mag = (dir[0] * dir[0] + dir[1] * dir[1]).sqrt();
         let moving = mag > 0.01;
         let want_send = self.last_move.elapsed().as_millis() >= 110;
@@ -2284,6 +2313,27 @@ impl App {
         let aspect = gfx.config.width as f32 / gfx.config.height.max(1) as f32;
         let vp = rcce_render::view_proj(eye, target, aspect);
         self.vp = vp; // cache for world-click picking
+        // Headless click-to-move self-test (MOVE-5): at the configured frame,
+        // synthesize a ground click below screen-centre so the walk-there path
+        // is verifiable without a mouse. The destination is consumed by next
+        // frame's movement steering; the periodic `me=()` log shows the player
+        // converge on it. No-op unless RCCE_CLICKMOVE=<frame> is set.
+        if let Ok(cm) = std::env::var("RCCE_CLICKMOVE") {
+            if let Ok(at) = cm.parse::<u64>() {
+                if self.frames == at && self.move_target.is_none() {
+                    let (sw, sh) = (gfx.config.width as f32, gfx.config.height as f32);
+                    let plane_y = self.net.as_ref().map(|n| n.world.me_y).unwrap_or(self.ground_y);
+                    if let Some(g) = rcce_render::unproject_ground(&vp, sw, sh, sw * 0.5, sh * 0.80, plane_y) {
+                        self.move_target = Some([g[0], g[2]]);
+                        let me = self.net.as_ref().map(|n| (n.world.me_x, n.world.me_z)).unwrap_or((0.0, 0.0));
+                        println!(
+                            "[clickmove] frame {} me=({:.1},{:.1}) -> target=({:.1},{:.1})",
+                            self.frames, me.0, me.1, g[0], g[2]
+                        );
+                    }
+                }
+            }
+        }
         // Day/night: a slow local cycle modulates fog/sky + ambient. Cycle
         // length is RCCE_DAYNIGHT_SECS (default 600s); RCCE_PHASE pins a fixed
         // phase for screenshots.

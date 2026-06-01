@@ -12,7 +12,7 @@ pub mod render;
 pub mod render3d;
 pub mod scene;
 pub mod world_view;
-pub use overlay::{project, Overlay};
+pub use overlay::{project, unproject_ground, Overlay};
 pub use render::{render_markers_png, Marker};
 pub use render3d::render_model_png;
 pub use scene::{render_scene_png, render_skinned_png, SceneInstance};

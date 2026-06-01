@@ -56,7 +56,8 @@ Movement is **destination-based**, not velocity-based: input sets `Me\DestX#/Des
 | MOVE-2 | Backward key: `IsRunning=False` (cannot run backward), projects `−dist`, sets `WalkingBackward=True` | PARTIAL | ref `Interface3D.bb:493-507` | live |
 | MOVE-3 | Turn-left/right rotate the character 3°/frame@30fps in place, preserving destination relative to new facing | PARTIAL | ref `Interface3D.bb:514-534`; Rust has Q/E discrete turn (`:1283-1288`) | live |
 | MOVE-4 | Run modifier: `IsRunning = Run-key-down OR AlwaysRun`; AlwaysRun toggles on its key | PARTIAL | ref `Interface3D.bb:483,416` | live |
-| MOVE-5 | **Click-to-move** (THE known gap): left-click on terrain/scenery (`GetTarget$=""`) `CameraPick`s the ground and `SetDestination(Me, PickedX, PickedZ, PickedY)`; a click marker shows at the hit point; hold-to-move repeats every frame | MISSING | ref `Interface3D.bb:949-1033`; current `world_pick` only selects actors (`client_window.rs:1782-1815`), no ground ray → walk | live: click ground → character paths there; `RCCE_SHOT` before/after position |
+| MOVE-5 | **Click-to-move** (THE known gap): left-click on terrain (no actor under cursor) unprojects the ground point and walks the player there, stopping within the 2.0-unit dist-to-dest threshold; manual WASD overrides | DONE ✅ | Added `rcce_render::unproject_ground` (screen ray ∩ player ground plane, inverts the GPU's `clip = vp*world`) + a `move_target` the per-frame movement steers toward (`overlay.rs`, `client_window.rs` world_pick + movement block). ref `Interface3D.bb:949-1033` | unproject unit tests green; live (`RCCE_CLICKMOVE=160`): player walked Z 88.4→83.9 onto the clicked target 83.6 and stopped, X unchanged — logs + PNG read 2026-06-01 |
+| MOVE-5b | Click marker entity at the hit point; hold-to-move (repeat each frame while held) | PARTIAL | core walk-there done; the visual click-marker and press-hold-repeat are deferred (cosmetic / refinement) | follow-up |
 | MOVE-6 | Double-click an actor → run to it; double-click ground → set `IsRunning=True` to existing dest | MISSING | ref `Interface3D.bb:830-844,1022` | live |
 | MOVE-7 | Jump: jump-key when grounded sets `Me\Y# = JumpStrength#*Gravity# (=0.1)`, plays `Anim_Jump`, sends `P_Jump` immediately | MISSING | ref `Interface3D.bb:457-463` | live |
 | MOVE-8 | `SetDestination` blocks walking-character destinations that fall inside a Water volume below its surface | MISSING | ref `Client.bb:998-1011` | live (needs water) |
@@ -272,11 +273,11 @@ Auto-attack on a flagged target: `AttackTarget=True` + `PlayerTarget` drives `Up
 
 ## Parity scorecard (2026-06-01 baseline)
 
-Counting concrete criteria (excluding DEFERRED): **DONE ≈ 31, PARTIAL ≈ 33, MISSING ≈ 21** (ANIM-1 closed 2026-06-01, Phase 1). The headline gaps that block "true drop-in" are the four from the live play-test plus their dependencies:
+Counting concrete criteria (excluding DEFERRED): **DONE ≈ 32, PARTIAL ≈ 33, MISSING ≈ 20** (ANIM-1 + MOVE-5 closed 2026-06-01, Phases 1-2). The headline gaps that block "true drop-in" are the four from the live play-test plus their dependencies:
 
 1. **MENU-SCENE** — dedicated 3D menu scene with posed character (MISSING) → Phase 3.
 2. ~~**ANIM-1** — local-player walk/run animation~~ **DONE ✅** (Phase 1).
-3. **MOVE-5** — click-to-move (MISSING) → Phase 2.
+3. ~~**MOVE-5** — click-to-move~~ **DONE ✅** (Phase 2).
 4. **TGT-3 / TGT-5 / CBT-1** — context menu, NPC dialog, attack-the-mob loop (MISSING/PARTIAL) → Phases 4-5.
 
 These drive the Phase ordering in `PLAN.md`.

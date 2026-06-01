@@ -26,6 +26,43 @@ pub fn project(vp: &[f32; 16], world: [f32; 3], screen_w: f32, screen_h: f32) ->
     ))
 }
 
+/// Unproject a screen pixel (top-left origin) to the world point where the
+/// camera ray through it crosses the horizontal plane `y = plane_y`. `vp` is the
+/// column-major view-projection produced by [`crate::view_proj`] — the same
+/// matrix the GPU renders with (`clip = vp * world`), so the result lands under
+/// the rendered ground pixel. Depth is the wgpu `[0,1]` convention. Returns
+/// `None` if the ray is (near-)parallel to the plane or the hit is behind the
+/// camera. Used for click-to-move: a left-click on terrain → walk-there point.
+pub fn unproject_ground(
+    vp: &[f32; 16],
+    screen_w: f32,
+    screen_h: f32,
+    px: f32,
+    py: f32,
+    plane_y: f32,
+) -> Option<[f32; 3]> {
+    use glam::{Mat4, Vec4};
+    let inv = Mat4::from_cols_array(vp).inverse();
+    let ndc_x = px / screen_w * 2.0 - 1.0;
+    let ndc_y = 1.0 - py / screen_h * 2.0;
+    let unproj = |ndc_z: f32| -> glam::Vec3 {
+        let p = inv * Vec4::new(ndc_x, ndc_y, ndc_z, 1.0);
+        p.truncate() / p.w
+    };
+    let near = unproj(0.0);
+    let far = unproj(1.0);
+    let dir = far - near;
+    if dir.y.abs() < 1e-6 {
+        return None;
+    }
+    let t = (plane_y - near.y) / dir.y;
+    if t < 0.0 {
+        return None;
+    }
+    let hit = near + dir * t;
+    Some([hit.x, hit.y, hit.z])
+}
+
 #[repr(C)]
 #[derive(Clone, Copy, Pod, Zeroable)]
 struct V2 {
@@ -438,5 +475,42 @@ impl Overlay {
         }
         queue.submit(Some(enc.finish()));
         self.clear();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // Angled overhead camera (eye above + behind the origin) looking at the
+    // ground origin. A click at screen-centre must unproject to ≈(0,0,0) on the
+    // y=0 plane; screen X must increase with world X (no roll); a click below
+    // centre (lower on screen, top-left origin) must land nearer the camera
+    // (greater Z, the eye's side). These pin the screen→world mapping that
+    // click-to-move relies on, independent of any GPU.
+    #[test]
+    fn unproject_ground_centre_and_axes() {
+        let vp = crate::view_proj([0.0, 50.0, 30.0], [0.0, 0.0, 0.0], 1.0);
+        let (w, h) = (800.0, 600.0);
+
+        let centre = unproject_ground(&vp, w, h, w * 0.5, h * 0.5, 0.0).expect("centre hits ground");
+        assert!(centre[1].abs() < 1e-2, "hit is on the y=0 plane: {centre:?}");
+        assert!(centre[0].abs() < 2.0 && centre[2].abs() < 2.0, "centre ~origin: {centre:?}");
+
+        let left = unproject_ground(&vp, w, h, w * 0.25, h * 0.5, 0.0).expect("left hits ground");
+        let right = unproject_ground(&vp, w, h, w * 0.75, h * 0.5, 0.0).expect("right hits ground");
+        assert!(right[0] > left[0], "screen X increases with world X: {left:?} {right:?}");
+
+        let down = unproject_ground(&vp, w, h, w * 0.5, h * 0.75, 0.0).expect("down hits ground");
+        assert!(down[2] > centre[2], "below centre lands nearer the camera (+Z): {down:?}");
+    }
+
+    // A ray that can't reach the plane (looking up, plane below) returns None.
+    #[test]
+    fn unproject_ground_miss() {
+        // Eye at y=10 with a slight Z offset, looking UP toward +Y; the y=0
+        // plane is behind the ray, so there is no forward intersection.
+        let vp = crate::view_proj([0.0, 10.0, 1.0], [0.0, 40.0, 0.0], 1.0);
+        assert!(unproject_ground(&vp, 800.0, 600.0, 400.0, 300.0, 0.0).is_none());
     }
 }
