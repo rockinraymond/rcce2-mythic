@@ -585,6 +585,12 @@ fn nearest_living_actor(world: &rcce_client::world::World, mx: f32, mz: f32) -> 
         .map(|a| a.runtime_id)
 }
 
+/// Whether storm lightning/thunder fires this frame (ENV-5): only during a
+/// storm, once the scheduled `next` time is reached. Pure — unit-tested.
+fn lightning_fires(storm: bool, now: f32, next: f32) -> bool {
+    storm && now >= next
+}
+
 /// The visible chat lines for a scrollback `skip` (already clamped): newest-
 /// first, skipping the `skip` most-recent lines and taking up to `max`. Pure —
 /// shared by the renderer and unit-tested for the scrollback window (CHAT-3).
@@ -2570,7 +2576,8 @@ impl App {
             }
             let rain_p = wx.is_rainy().then(|| store.sound_path("Weather/Rain.ogg")).flatten();
             let wind_p = storm.then(|| store.sound_path("Weather/Wind.ogg")).flatten();
-            let thunder_p = if storm && elapsed >= self.next_thunder {
+            let fire = lightning_fires(storm, elapsed, self.next_thunder);
+            let thunder_p = if fire {
                 store.sound_path(&format!("Weather/Thunder{}.ogg", self.thunder_idx % 3 + 1))
             } else {
                 None
@@ -2590,14 +2597,17 @@ impl App {
                     audio.play_oneshot(p, 0.7);
                 }
             }
-            // Advance thunder scheduling (independent of whether audio exists).
-            if storm {
-                if elapsed >= self.next_thunder {
-                    self.thunder_idx = self.thunder_idx.wrapping_add(1);
-                    // Deterministic 8–15s gap from the counter (no RNG).
-                    self.next_thunder = elapsed + 8.0 + (self.thunder_idx as f32 * 2.6) % 7.0;
-                }
-            } else {
+            // On a lightning strike: reschedule + flash the screen bright white
+            // (ENV-5, reusing the ENV-6 ScreenFlash render). Deterministic
+            // 8–15s gap from the counter (no RNG).
+            if fire {
+                self.thunder_idx = self.thunder_idx.wrapping_add(1);
+                self.next_thunder = elapsed + 8.0 + (self.thunder_idx as f32 * 2.6) % 7.0;
+                self.flash = Some((
+                    rcce_client::world::ScreenFlash { color: [1.0, 1.0, 1.0], alpha: 0.7, length: 0.4 },
+                    elapsed,
+                ));
+            } else if !storm {
                 self.next_thunder = elapsed + 6.0;
             }
         }
@@ -3890,6 +3900,14 @@ mod tests {
         // Off-screen clamp keeps the whole menu visible.
         let edge = ContextMenu::build(9, false, 1279.0, 799.0, 1280.0, 800.0);
         assert!(edge.x + CTX_W <= 1280.0 && edge.y + CTX_ROW * 4.0 <= 800.0);
+    }
+
+    // Storm lightning (ENV-5): fires only while storming and once due.
+    #[test]
+    fn lightning_trigger() {
+        assert!(lightning_fires(true, 10.0, 9.0));
+        assert!(!lightning_fires(true, 8.0, 9.0));
+        assert!(!lightning_fires(false, 10.0, 9.0));
     }
 
     // Chat scrollback window (CHAT-3): newest-first, skipping the `skip` newest.

@@ -221,7 +221,7 @@ Auto-attack on a flagged target: `AttackTarget=True` + `PlayerTarget` drives `Up
 | ENV-2 | Weather (`P_WeatherChange` + `P_ChangeArea` byte): Sun/Rain/Snow/Fog/Storm/Wind — particles, fog target, cloud swap, audio | DONE | `weather.rs`; ref `Environment3D.bb:157-235` | `RCCE_SHOT` rain/snow |
 | ENV-3 | Sky/clouds/stars: textured skydome, clouds drift (`TurnEntity 0.05·Delta`), storm-cloud swap, night stars; per-zone tex IDs from area .dat | DONE | `world_view.rs:215-284`; ref `ClientAreas_FE.bb:349-399` | PNG |
 | ENV-4 | Water: per-zone translucent plane with scrolling UV (+ optional bump/foam); collision box for walkers | MISSING | ref `ClientAreas_FE.bb:704-785`, `Environment3D.bb:266-295`; audit: no water in render | live (water zone) |
-| ENV-5 | Lightning during Storm: random `ScreenFlash` white + thunder SFX on final flash | MISSING | ref `Environment3D.bb:316-330` | live storm |
+| ENV-5 | Lightning during Storm: white `ScreenFlash` + thunder SFX | DONE ✅ | the storm thunder scheduler (already plays Thunder1-3.ogg every 8-15s) now, on each strike, also sets a brief bright-white `ScreenFlash` (alpha 0.7, 0.4s) reusing the ENV-6 render. The trigger is the pure `lightning_fires(storm, now, next)`. ref `Environment3D.bb:316-330` | unit test `lightning_trigger` (fires only while storming + due) green; the white-flash render is the ENV-6 full-screen flash (PNG-verified) |
 | ENV-6 | Screen flash (`P_ScreenFlash` R/G/B/alpha/length/texID) full-screen quad, linear decay | DONE ✅ | new `SCREEN_FLASH` const (33) + `World::on_screen_flash` → a `ScreenFlash {color,alpha,length}` the renderer drains (stamping a start time) and draws as a full-screen overlay quad fading `alpha·(1−t)` over `length`, on top of the HUD. ref `Client.bb:1112-1157`, `ClientNet.bb:679-686` | unit test `screen_flash_parse` green; `RCCE_FLASHTEST=150` PNG shows the whole screen tinted red over the world+HUD — read & confirmed 2026-06-01 |
 
 ---
@@ -274,7 +274,7 @@ Auto-attack on a flagged target: `AttackTarget=True` + `PlayerTarget` drives `Up
 
 ## Parity scorecard (2026-06-01 baseline)
 
-Counting concrete criteria (excluding DEFERRED): **DONE ≈ 47, PARTIAL ≈ 26, MISSING ≈ 12** (Phases 1-5 + breadth: ANIM-8 attack, PRJ-1, CHAT-2, ENV-6, HUD-8, CHAT-3, SPL-7, 2026-06-01). **All four headline play-test gaps are now closed.**
+Counting concrete criteria (excluding DEFERRED): **DONE ≈ 48, PARTIAL ≈ 26, MISSING ≈ 11** (Phases 1-5 + breadth: ANIM-8 attack, PRJ-1, CHAT-2, ENV-6, HUD-8, CHAT-3, SPL-7, ENV-5, 2026-06-01). **All four headline play-test gaps are now closed.**
 
 1. ~~**MENU-SCENE** — dedicated 3D menu scene with posed character~~ **DONE ✅** (Phase 3; backdrop-art polish = MENU-SCENE-b).
 2. ~~**ANIM-1** — local-player walk/run animation~~ **DONE ✅** (Phase 1).
