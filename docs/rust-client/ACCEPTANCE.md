@@ -93,7 +93,7 @@ Anim constants are slot indices into a per-AnimSet table (`Anim_Idle=125, Anim_W
 | CAM-2 | Camera collision: `LinePick` from player to desired cam point; on hit snap to pick point (keep player visible); flip 180° if shoved within 2.0 of Head | PARTIAL | ref `Client.bb:864-887`; Rust has per-zone occluder spheres (PLAN note) | live near a wall |
 | CAM-3 | Zoom: wheel `CamDist# ∓= MouseZSpeed*1.5` clamp [5,50]; keyboard zoom clamp [3,50] | PARTIAL | ref `Interface3D.bb:643-657` | live |
 | CAM-4 | First-person mode toggle (`Key_ChangeViewMode` when `ViewMode=2`): cam at Head joint, pitch eased, yaw follows character | MISSING | ref `Client.bb:889-893` | live |
-| CAM-5 | MMB snaps camera behind character (`CamYaw=EntityYaw(Me)`, `CamPitch=0`) | MISSING | ref `Interface3D.bb:444-447` | live |
+| CAM-5 | MMB snaps camera behind character (`CamYaw=EntityYaw(Me)`, `CamPitch=0`) | DONE | `MouseButton::Middle` → `snap_camera(me_yaw)` sets `cam_yaw=me_yaw, cam_pitch=0`; unit test `camera_snap_behind`; `RCCE_CAMSNAP` before/after PNGs (off-angle cam_yaw=3.14/pitch=0.90 → snapped 0.00/0.00, behind-the-character view restored) | unit + live PNG |
 | CAM-6 | Underwater: cam below a water plane tints cls/fog to water color, near/far 1/50, hides sky/stars/clouds; restores on surfacing | MISSING | ref `Client.bb:895-922` | live (needs water) |
 
 ---
@@ -274,7 +274,7 @@ Auto-attack on a flagged target: `AttackTarget=True` + `PlayerTarget` drives `Up
 
 ## Parity scorecard (2026-06-01 baseline)
 
-Counting concrete criteria (excluding DEFERRED): **DONE ≈ 55, PARTIAL ≈ 24, MISSING ≈ 5** (Phases 1-5 + breadth incl. ANIM-8, PRJ-1, CHAT-2/3/4, ENV-5/6, HUD-8, SPL-7, QST-1/2, PTY-1/2, TGT-7, HUD-3, 2026-06-01). **All four headline play-test gaps are now closed.**
+Counting concrete criteria (excluding DEFERRED): **DONE ≈ 56, PARTIAL ≈ 24, MISSING ≈ 4** (Phases 1-5 + breadth incl. ANIM-8, PRJ-1, CHAT-2/3/4, ENV-5/6, HUD-8, SPL-7, QST-1/2, PTY-1/2, TGT-7, HUD-3, CAM-5, 2026-06-01). **All four headline play-test gaps are now closed.**
 
 1. ~~**MENU-SCENE** — dedicated 3D menu scene with posed character~~ **DONE ✅** (Phase 3; backdrop-art polish = MENU-SCENE-b).
 2. ~~**ANIM-1** — local-player walk/run animation~~ **DONE ✅** (Phase 1).

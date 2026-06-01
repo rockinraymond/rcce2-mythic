@@ -604,6 +604,13 @@ fn lightning_fires(storm: bool, now: f32, next: f32) -> bool {
     storm && now >= next
 }
 
+/// CAM-5: snap the orbit camera directly behind the character — camera yaw set
+/// to the character's facing, pitch levelled. Mirrors the Blitz MMB handler
+/// (`CamYaw = EntityYaw(Me)`, `CamPitch = 0`). Pure — unit-tested.
+fn snap_camera(me_yaw: f32) -> (f32, f32) {
+    (me_yaw, 0.0)
+}
+
 /// The next cycle-target after `current` in the sorted runtime-id list, wrapping
 /// around; the first id if `current` is `None` or no longer present (TGT-7).
 /// `None` only if the list is empty. Pure — unit-tested.
@@ -1573,6 +1580,13 @@ impl ApplicationHandler for App {
                     self.hud_click();
                 } else if button == MouseButton::Right {
                     self.set_mouse_look(state == ElementState::Pressed);
+                } else if button == MouseButton::Middle && state == ElementState::Pressed {
+                    // CAM-5: middle-click snaps the camera directly behind the
+                    // character (cam_yaw -> me_yaw, cam_pitch -> 0).
+                    let me_yaw = self.net.as_ref().map(|n| n.world.me_yaw).unwrap_or(self.cam_yaw);
+                    let (yaw, pitch) = snap_camera(me_yaw);
+                    self.cam_yaw = yaw;
+                    self.cam_pitch = pitch;
                 }
             }
             WindowEvent::RedrawRequested => {
@@ -2778,6 +2792,26 @@ impl App {
                         "[cycle] frame {} candidates={:?} target={:?}",
                         self.frames, rids, self.target
                     );
+                }
+            }
+        }
+        // Headless MMB snap-camera self-test (CAM-5): at frame `at` swing the
+        // camera 180° round + tilt it up (the "before" state, capturable with
+        // RCCE_SHOT_FRAME=at+10), then at frame at+30 snap it behind the
+        // character (the "after" state, RCCE_SHOT_FRAME=at+40). No-op unless
+        // RCCE_CAMSNAP=<frame> is set.
+        if let Ok(cv) = std::env::var("RCCE_CAMSNAP") {
+            if let Ok(at) = cv.parse::<u64>() {
+                let me_yaw = self.net.as_ref().map(|n| n.world.me_yaw).unwrap_or(0.0);
+                if self.frames == at {
+                    self.cam_yaw = me_yaw + std::f32::consts::PI;
+                    self.cam_pitch = 0.9;
+                    println!("[camsnap] frame {} OFF cam_yaw={:.2} pitch={:.2}", self.frames, self.cam_yaw, self.cam_pitch);
+                } else if self.frames == at + 30 {
+                    let (yaw, pitch) = snap_camera(me_yaw);
+                    self.cam_yaw = yaw;
+                    self.cam_pitch = pitch;
+                    println!("[camsnap] frame {} SNAP cam_yaw={:.2} pitch={:.2}", self.frames, self.cam_yaw, self.cam_pitch);
                 }
             }
         }
@@ -4180,6 +4214,14 @@ mod tests {
         assert_eq!(next_target(Some(9), &s), Some(3)); // wrap to first
         assert_eq!(next_target(Some(99), &s), Some(3)); // stale -> first
         assert_eq!(next_target(Some(3), &[]), None); // nothing to target
+    }
+
+    // MMB snap-camera (CAM-5): yaw -> character facing, pitch -> level.
+    #[test]
+    fn camera_snap_behind() {
+        assert_eq!(snap_camera(1.5), (1.5, 0.0));
+        assert_eq!(snap_camera(-2.0), (-2.0, 0.0));
+        assert_eq!(snap_camera(0.0), (0.0, 0.0));
     }
 
     // Chat scrollback window (CHAT-3): newest-first, skipping the `skip` newest.
