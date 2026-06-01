@@ -1161,6 +1161,32 @@ fn load_zone_static(store: &mut AssetStore, view: &mut WorldView, gfx: &Gfx, dat
             None => {
                 let Some(m) = store.mesh_model(s.mesh_id) else { continue };
                 let tex = store.scenery_textures(s.mesh_id, s.texture_id);
+                if std::env::var("RCCE_MESHDIAG").is_ok() {
+                    let (mut umin, mut umax, mut vmin, mut vmax) =
+                        (f32::MAX, f32::MIN, f32::MAX, f32::MIN);
+                    let mut tris = 0usize;
+                    for mesh in &m.meshes {
+                        tris += mesh.indices.len() / 3;
+                        for uv in &mesh.uvs {
+                            umin = umin.min(uv[0]);
+                            umax = umax.max(uv[0]);
+                            vmin = vmin.min(uv[1]);
+                            vmax = vmax.max(uv[1]);
+                        }
+                    }
+                    let texs: Vec<String> = tex
+                        .iter()
+                        .map(|t| {
+                            t.as_ref()
+                                .map(|i| format!("{}x{}", i.width, i.height))
+                                .unwrap_or_else(|| "none".into())
+                        })
+                        .collect();
+                    eprintln!(
+                        "[meshdiag] mesh {} tex {}: tris={tris} uv u[{umin:.1}..{umax:.1}] v[{vmin:.1}..{vmax:.1}] surfaces={} texs={texs:?}",
+                        s.mesh_id, s.texture_id, m.meshes.len()
+                    );
+                }
                 let i = models.len();
                 models.push(m);
                 textures.push(tex);
