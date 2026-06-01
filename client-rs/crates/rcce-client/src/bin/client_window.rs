@@ -166,6 +166,12 @@ struct App {
     /// left-clicked ground point; the per-frame movement steers `dir` toward it
     /// and clears it on arrival or when WASD/auto input overrides (MOVE-5).
     move_target: Option<[f32; 2]>,
+    /// MOVE-6: the current click-to-move was issued by a double-click, so the
+    /// player runs to it (set on a ground double-click, cleared on arrival).
+    move_running: bool,
+    /// Last ground left-click time + screen pos, for ground double-click detection.
+    last_ground_click: Instant,
+    last_ground_pos: [f32; 2],
     /// `Some` while the chat line is open (the typed buffer); movement keys are
     /// suppressed. Enter sends + closes, Esc cancels.
     chat_input: Option<String>,
@@ -315,6 +321,9 @@ impl App {
             last_dyn_hash: u64::MAX,
             keys_wasd: [false; 4],
             move_target: None,
+            move_running: false,
+            last_ground_click: now,
+            last_ground_pos: [0.0, 0.0],
             menu_scene_init: false,
             run: false,
             cam_yaw: 0.0,
@@ -622,6 +631,19 @@ fn lightning_fires(storm: bool, now: f32, next: f32) -> bool {
 /// (`CamYaw = EntityYaw(Me)`, `CamPitch = 0`). Pure — unit-tested.
 fn snap_camera(me_yaw: f32) -> (f32, f32) {
     (me_yaw, 0.0)
+}
+
+/// Whether a click `dt_ms` after the previous one and `dist_px` away counts as a
+/// double-click (MOVE-6): close in both time (<350 ms) and space (<12 px). Pure.
+fn is_double_click(dt_ms: u128, dist_px: f32) -> bool {
+    dt_ms < 350 && dist_px < 12.0
+}
+
+/// Whether the player should run this frame (MOVE-6): Shift-run always wins;
+/// otherwise a double-click-issued move runs while a click-to-move is active.
+/// Pure — unit-tested.
+fn move_run(shift_run: bool, has_move_target: bool, dbl_running: bool) -> bool {
+    shift_run || (has_move_target && dbl_running)
 }
 
 /// Eye height (world units) of the first-person camera above the player's feet
@@ -2162,7 +2184,12 @@ impl App {
             self.last_click_rid = Some(rid);
             self.target = Some(rid);
             if double {
-                // Double-click = quick Interact, skipping the menu.
+                // Double-click an actor (MOVE-6): run toward it, then quick
+                // Interact (skipping the menu).
+                if let Some(pos) = self.net.as_ref().and_then(|n| n.world.actors.get(&rid)).map(|a| [a.x, a.z]) {
+                    self.move_target = Some(pos);
+                    self.move_running = true;
+                }
                 self.context_menu = None;
                 self.exec_menu_action(MenuAction::Interact, rid);
             } else {
@@ -2178,8 +2205,15 @@ impl App {
         } else {
             // No actor under the cursor → click-to-move: walk to the ground
             // point the camera ray hits at the player's feet height (MOVE-5).
-            // A manual move also breaks off any auto-attack.
+            // A double-click runs there instead (MOVE-6). A manual move also
+            // breaks off any auto-attack.
             self.attacking = false;
+            let now = Instant::now();
+            let dt = now.duration_since(self.last_ground_click).as_millis();
+            let dist = ((cx - self.last_ground_pos[0]).powi(2) + (cy - self.last_ground_pos[1]).powi(2)).sqrt();
+            self.move_running = is_double_click(dt, dist);
+            self.last_ground_click = now;
+            self.last_ground_pos = [cx, cy];
             let plane_y = self.net.as_ref().map(|n| n.world.me_y).unwrap_or(self.ground_y);
             if let Some(g) = rcce_render::unproject_ground(&self.vp, sw, sh, cx, cy, plane_y) {
                 self.move_target = Some([g[0], g[2]]);
@@ -2580,13 +2614,15 @@ impl App {
                     dir = [tdx, tdz]; // steer toward the click; normalised below
                 } else {
                     self.move_target = None; // arrived
+                    self.move_running = false; // stop running once we get there
                 }
             }
         }
         let mag = (dir[0] * dir[0] + dir[1] * dir[1]).sqrt();
         let moving = mag > 0.01;
         let want_send = self.last_move.elapsed().as_millis() >= 110;
-        let run = self.run;
+        // MOVE-6: a double-click move runs; Shift-run always wins.
+        let run = move_run(self.run, self.move_target.is_some(), self.move_running);
 
         // Pump the network, send movement, and rebuild animated actors.
         let mut cam_target = self.center;
@@ -2666,6 +2702,10 @@ impl App {
                 let p = movement_packet(mx + nx * 16.0, mz + nz * 16.0, my, mx, mz, run, false);
                 net.transport.send(net.peer, rcce_net::packet_id::STANDARD_UPDATE, &p, false);
                 did_send = true;
+                // MOVE-6 trace: confirm a double-click move sends the run flag.
+                if self.move_running && run && std::env::var("RCCE_DBLRUN").is_ok() {
+                    println!("[dblrun] frame {} sent RUN move packet (run={run})", self.frames);
+                }
             } else if !moving && self.was_moving {
                 let p = movement_packet(mx, mz, my, mx, mz, false, false);
                 net.transport.send(net.peer, rcce_net::packet_id::STANDARD_UPDATE, &p, false);
@@ -2857,6 +2897,22 @@ impl App {
                             "[clickmove] frame {} me=({:.1},{:.1}) -> target=({:.1},{:.1})",
                             self.frames, me.0, me.1, g[0], g[2]
                         );
+                    }
+                }
+            }
+        }
+        // Headless double-click-run self-test (MOVE-6): set a ground move target
+        // AND the run flag (as a ground double-click would); the next frames send
+        // a RUN move packet ([dblrun] trace above). No-op unless RCCE_DBLRUN=<frame>.
+        if let Ok(dr) = std::env::var("RCCE_DBLRUN") {
+            if let Ok(at) = dr.parse::<u64>() {
+                if self.frames == at {
+                    let (sw, sh) = (gfx.config.width as f32, gfx.config.height as f32);
+                    let plane_y = self.net.as_ref().map(|n| n.world.me_y).unwrap_or(self.ground_y);
+                    if let Some(g) = rcce_render::unproject_ground(&vp, sw, sh, sw * 0.5, sh * 0.80, plane_y) {
+                        self.move_target = Some([g[0], g[2]]);
+                        self.move_running = true;
+                        println!("[dblrun] frame {} double-click RUN target=({:.1},{:.1})", self.frames, g[0], g[2]);
                     }
                 }
             }
@@ -4371,6 +4427,27 @@ mod tests {
         assert_eq!(next_target(Some(9), &s), Some(3)); // wrap to first
         assert_eq!(next_target(Some(99), &s), Some(3)); // stale -> first
         assert_eq!(next_target(Some(3), &[]), None); // nothing to target
+    }
+
+    // Double-click gate (MOVE-6): close in time AND space.
+    #[test]
+    fn double_click_gate() {
+        assert!(is_double_click(120, 4.0)); // fast + near
+        assert!(!is_double_click(500, 4.0)); // too slow
+        assert!(!is_double_click(120, 40.0)); // too far
+        assert!(!is_double_click(500, 40.0));
+        assert!(is_double_click(349, 11.9)); // just inside both bounds
+    }
+
+    // Run derivation (MOVE-6): Shift always runs; a double-click move runs only
+    // while a click-to-move target is active.
+    #[test]
+    fn move_run_sources() {
+        assert!(move_run(true, false, false)); // shift wins regardless
+        assert!(move_run(false, true, true)); // double-click move-to
+        assert!(!move_run(false, false, true)); // dbl flag but no active target
+        assert!(!move_run(false, true, false)); // walking click (single)
+        assert!(!move_run(false, false, false));
     }
 
     // First-person camera (CAM-4): eye at head height, looking along facing.
