@@ -217,6 +217,10 @@ struct App {
     /// GPU linear-blend skinning for actor bodies (RCCE_GPUSKIN). Off by default
     /// (the CPU posed-meshes path); attachments stay CPU either way.
     gpu_skin: bool,
+    /// True once the menu has replaced the startup gameplay-zone geometry with
+    /// the dedicated menu scene (void + posed character). Cleared so entering
+    /// the world forces a fresh zone reload (MENU-SCENE).
+    menu_scene_init: bool,
 
     // ---- Login / character-select menu state (Mode::Login / CharSelect) ----
     /// Current screen.
@@ -275,6 +279,7 @@ impl App {
             last_dyn_hash: u64::MAX,
             keys_wasd: [false; 4],
             move_target: None,
+            menu_scene_init: false,
             run: false,
             cam_yaw: 0.0,
             cam_pitch: 0.25,
@@ -541,6 +546,7 @@ fn build_actors(
     gpu_skin: bool,
     me_moving: bool,
     me_running: bool,
+    me_template: u16,
 ) -> (
     Vec<Rc<B3dModel>>,
     Vec<Rc<Vec<Option<Image>>>>,
@@ -691,7 +697,7 @@ fn build_actors(
     // Blitz client drives Me through the SAME locomotion machine as every other
     // actor (Client.bb UpdateActorInstances); passing false,false here was the
     // root cause of "the local player never walks/runs while moving" (ANIM-1).
-    push(store, &mut models, &mut textures, &mut place, &mut keys, &mut skinned, 0, world.me_gender, world.me_face_tex, world.me_body_tex, world.me_hair, world.me_beard, me_weapon, me_shield, weapon_override, world.my_runtime_id, me_moving, me_running, [world.me_x, world.me_y, world.me_z], world.me_yaw, [0.85, 0.95, 0.85]);
+    push(store, &mut models, &mut textures, &mut place, &mut keys, &mut skinned, me_template, world.me_gender, world.me_face_tex, world.me_body_tex, world.me_hair, world.me_beard, me_weapon, me_shield, weapon_override, world.my_runtime_id, me_moving, me_running, [world.me_x, world.me_y, world.me_z], world.me_yaw, [0.85, 0.95, 0.85]);
     for a in world.actors.values() {
         let dx = a.dest_x - a.x;
         let dz = a.dest_z - a.z;
@@ -1876,18 +1882,94 @@ impl App {
         };
         let (sw, sh) = (w as f32, h.max(1) as f32);
 
-        // Spectator orbit of the zone centre (the backdrop behind the menu).
-        let ang = elapsed * 0.12;
-        let r = self.span * 0.7;
+        // Dedicated 3D menu scene (MENU-SCENE): the selected character posed at
+        // a fixed gallery anchor against a dark-blue void — NOT a spectator
+        // orbit of the gameplay zone. Mirrors MainMenu.bb: char at world
+        // (30, ground, 100) playing Idle, camera circling the torso.
+        let char_anchor = [30.0f32, 0.0, 100.0];
+        if let (Some(gfx), Some(view), Some(store)) =
+            (self.gfx.as_ref(), self.view.as_mut(), self.store.as_mut())
+        {
+            // Replace the startup gameplay-zone geometry once, and force a fresh
+            // zone reload when the player enters the world (loaded_zone cleared).
+            if !self.menu_scene_init {
+                view.set_scene(&gfx.device, &gfx.queue, &[], 0.0);
+                self.loaded_zone = String::new();
+                self.menu_scene_init = true;
+            }
+            // The highlighted character (CharSelect only); Login shows the void.
+            let sel = if self.mode == Mode::CharSelect {
+                self.chars.get(self.char_sel).cloned()
+            } else {
+                None
+            };
+            if let Some(c) = sel {
+                let mut mw = World::default();
+                mw.my_runtime_id = 1;
+                mw.me_gender = c.gender;
+                mw.me_face_tex = c.face;
+                mw.me_body_tex = c.body;
+                mw.me_hair = c.hair;
+                mw.me_beard = c.beard;
+                mw.me_x = char_anchor[0];
+                mw.me_y = char_anchor[1];
+                mw.me_z = char_anchor[2];
+                mw.me_yaw = 0.0; // faces +Z; the camera circles it
+                let (models, textures, place, keys, skinned) =
+                    build_actors(store, &mw, elapsed, self.gpu_skin, false, false, c.actor_id);
+                let instances: Vec<SceneInstance> = place
+                    .iter()
+                    .map(|&(idx, t, r, color, s)| SceneInstance {
+                        model: &models[idx],
+                        textures: &textures[idx][..],
+                        translation: t,
+                        rot: r,
+                        scale: s,
+                        color,
+                    })
+                    .collect();
+                view.set_dynamic(&gfx.device, &gfx.queue, &instances, &keys);
+                if self.gpu_skin {
+                    let sinst: Vec<rcce_render::SkinnedInstance> = skinned
+                        .iter()
+                        .map(|a| rcce_render::SkinnedInstance {
+                            key: &a.key,
+                            model: &a.model,
+                            textures: &a.textures[..],
+                            frame: a.frame,
+                            transform: a.transform,
+                            color: a.color,
+                        })
+                        .collect();
+                    view.set_skinned(&gfx.device, &gfx.queue, &sinst);
+                } else {
+                    view.set_skinned(&gfx.device, &gfx.queue, &[]);
+                }
+            } else {
+                view.set_dynamic(&gfx.device, &gfx.queue, &[], &[]);
+                view.set_skinned(&gfx.device, &gfx.queue, &[]);
+            }
+        }
+
+        // Camera: a slow turntable circling the character's torso (the Blitz
+        // menu gallery framing), not the zone centre.
+        let ang = elapsed * 0.4;
+        let dist = 13.0;
+        let target = [char_anchor[0], char_anchor[1] + 3.5, char_anchor[2]];
         let eye = [
-            self.center[0] + r * ang.cos(),
-            self.ground_y + self.span * 0.45,
-            self.center[2] + r * ang.sin(),
+            char_anchor[0] + dist * ang.sin(),
+            char_anchor[1] + 4.5,
+            char_anchor[2] + dist * ang.cos(),
         ];
-        let target = [self.center[0], self.ground_y + self.span * 0.08, self.center[2]];
         let vp = rcce_render::view_proj(eye, target, sw / sh);
-        let fog = self.fog_color;
-        let clear = wgpu::Color { r: fog[0] as f64, g: fog[1] as f64, b: fog[2] as f64, a: 1.0 };
+        // Dark-blue fogged void (CameraFogColor 0,51,102); near/far set wide so
+        // the nearby character isn't fogged.
+        let fog = [0.0f32, 0.2, 0.4];
+        let clear = wgpu::Color { r: 0.0, g: 0.2, b: 0.4, a: 1.0 };
+        let menu_fog_near = 60.0f32;
+        let menu_fog_far = 6000.0f32;
+        let menu_ambient = [0.9f32, 0.9, 0.9];
+        let menu_light = [0.3f32, -1.0, 0.4];
 
         // Build the overlay command list first (a `&mut self` call, so no other
         // borrow of `self` may be live), then render world + overlay together.
@@ -1919,7 +2001,7 @@ impl App {
                 view_formats: &[],
             });
             let oview = tex.create_view(&Default::default());
-            view.render(&gfx.device, &gfx.queue, &oview, vp, eye, fog, self.fog_near, self.fog_far, self.ambient, self.light_dir, clear, ang, elapsed, 0.0);
+            view.render(&gfx.device, &gfx.queue, &oview, vp, eye, fog, menu_fog_near, menu_fog_far, menu_ambient, menu_light, clear, ang, elapsed, 0.0);
             overlay.render(&gfx.device, &gfx.queue, &oview, sw, sh);
             match rcce_render::save_texture_png(&gfx.device, &gfx.queue, &tex, w, h, gfx.config.format, &path) {
                 Ok(()) => println!("[client-window] menu screenshot -> {path}"),
@@ -1939,7 +2021,7 @@ impl App {
             }
         };
         let tview = frame.texture.create_view(&Default::default());
-        view.render(&gfx.device, &gfx.queue, &tview, vp, eye, fog, self.fog_near, self.fog_far, self.ambient, self.light_dir, clear, ang, elapsed, 0.0);
+        view.render(&gfx.device, &gfx.queue, &tview, vp, eye, fog, menu_fog_near, menu_fog_far, menu_ambient, menu_light, clear, ang, elapsed, 0.0);
         overlay.render(&gfx.device, &gfx.queue, &tview, sw, sh);
         frame.present();
         self.frames += 1;
@@ -2168,7 +2250,7 @@ impl App {
             let hash = dyn_hash(&net.world, elapsed, moving, run);
             if self.gpu_skin || hash != self.last_dyn_hash {
                 let (models, textures, place, keys, skinned) =
-                    build_actors(store, &net.world, elapsed, self.gpu_skin, moving, run);
+                    build_actors(store, &net.world, elapsed, self.gpu_skin, moving, run, 0);
                 // CPU drawables: attachments (+ bodies when GPU skinning is off).
                 let instances: Vec<SceneInstance> = place
                     .iter()
