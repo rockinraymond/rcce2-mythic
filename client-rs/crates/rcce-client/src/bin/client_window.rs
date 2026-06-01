@@ -204,6 +204,8 @@ struct App {
     show_quests: bool,
     /// Party panel visible (Party button / P key) — PTY-1.
     show_party: bool,
+    /// Spellbook window visible (K key) — SPL-1; lists `World.known_spells`.
+    show_spellbook: bool,
     /// Footstep cadence + the resolved footstep .ogg files.
     footsteps: rcce_client::audio::FootstepTimer,
     footstep_paths: Vec<std::path::PathBuf>,
@@ -327,6 +329,7 @@ impl App {
             show_inventory: false,
             show_quests: false,
             show_party: false,
+            show_spellbook: false,
             footsteps: rcce_client::audio::FootstepTimer::new(),
             footstep_paths: Vec::new(),
             weather: rcce_client::weather::WeatherSystem::new(240),
@@ -1480,6 +1483,7 @@ impl ApplicationHandler for App {
                             let rids = self.living_npc_rids();
                             self.target = next_target(self.target, &rids);
                         }
+                        KeyCode::KeyK if pressed => self.show_spellbook = !self.show_spellbook,
                         // Interact (right-click) the target/nearest NPC — a
                         // vendor replies with P_OpenTrading → the vendor panel.
                         KeyCode::KeyR if pressed => {
@@ -2983,6 +2987,24 @@ impl App {
                 }
             }
         }
+        // Headless spellbook self-test (SPL-1): inject known spells + open the
+        // window. No-op unless RCCE_SPELLBOOKTEST=<frame> is set.
+        if let Ok(kv) = std::env::var("RCCE_SPELLBOOKTEST") {
+            if let Ok(at) = kv.parse::<u64>() {
+                if self.frames == at {
+                    if let Some(net) = self.net.as_mut() {
+                        use rcce_client::world::KnownSpell;
+                        net.world.known_spells = vec![
+                            KnownSpell { id: 12, name: "Fireball".into(), level: 3 },
+                            KnownSpell { id: 7, name: "Heal".into(), level: 2 },
+                            KnownSpell { id: 21, name: "Lightning Bolt".into(), level: 1 },
+                        ];
+                    }
+                    self.show_spellbook = true;
+                    println!("[spellbooktest] frame {} injected 3 known spells + opened window", self.frames);
+                }
+            }
+        }
         // Headless screen-flash self-test (ENV-6): inject a red flash. No-op
         // unless RCCE_FLASHTEST=<frame> is set.
         if let Ok(fv) = std::env::var("RCCE_FLASHTEST") {
@@ -3406,6 +3428,29 @@ impl App {
                     for name in &w.party {
                         overlay.text_shadow(pxp + 10.0, py2, 1.0, name, [0.5, 1.0, 0.5, 1.0]);
                         py2 += 15.0;
+                    }
+                }
+
+                // Spellbook window (SPL-1, toggled by K): the live known-spell list
+                // (`World.known_spells`, populated by SPL-7) with name + rank, kept
+                // name-sorted by the handler. Right of centre so it clears the party
+                // panel; scrolls nothing yet (list is short in practice).
+                if self.show_spellbook {
+                    let (kwd, khd) = (240.0f32, 220.0f32);
+                    let (kxp, kyp) = (sw * 0.5 + 12.0, (sh - khd) * 0.5);
+                    overlay.rect(kxp, kyp, kwd, khd, [0.05, 0.06, 0.10, 0.94]);
+                    overlay.rect(kxp, kyp, kwd, 22.0, [0.18, 0.15, 0.28, 0.96]);
+                    overlay.text_shadow(kxp + 10.0, kyp + 6.0, 1.3, "Spellbook", white);
+                    overlay.text(kxp + kwd - 78.0, kyp + 7.0, 1.0, "[K] close", [0.6, 0.6, 0.6, 1.0]);
+                    let mut ky2 = kyp + 30.0;
+                    if w.known_spells.is_empty() {
+                        overlay.text(kxp + 10.0, ky2, 1.0, "No spells known.", [0.7, 0.7, 0.7, 1.0]);
+                    }
+                    for sp in w.known_spells.iter().take(11) {
+                        overlay.text_shadow(kxp + 10.0, ky2, 1.0, &sp.name, [0.7, 0.85, 1.0, 1.0]);
+                        let rank = format!("Rank {}", sp.level);
+                        overlay.text(kxp + kwd - 64.0, ky2, 1.0, &rank, [0.85, 0.8, 0.6, 1.0]);
+                        ky2 += 16.0;
                     }
                 }
 

@@ -154,7 +154,7 @@ Auto-attack on a flagged target: `AttackTarget=True` + `PlayerTarget` drives `Up
 
 | ID | Criterion | Status | Evidence / Reference | Verification |
 |---|---|---|---|---|
-| SPL-1 | Spellbook window (`K`): memorised-page (10 slots) + paged known-spells (alphabetical), icons + name/rank/description | PARTIAL | ref `Interface3D.bb:3578-3598,3081`; Rust has action bar, spellbook window coverage unclear | live |
+| SPL-1 | Spellbook window (`K`): memorised-page (10 slots) + paged known-spells (alphabetical), icons + name/rank/description | PARTIAL | `show_spellbook` panel (K key + `RCCE_SPELLBOOKTEST`) lists `World.known_spells` (SPL-7) name-sorted with name + `Rank N`; live PNG shows Fireball/Heal/Lightning Bolt at ranks 3/2/1. **Still missing: memorised 10-slot page (ties to SPL-4), per-spell icons, descriptions, paging** — `known_spells` carries no thumb/description | live |
 | SPL-2 | Cast: `P_SpellUpdate "F" [2]spellID [+2 targetRid]` when `SpellChargeReady`; else "not recharged" | DONE | `net.rs:34-41`, `client_window.rs:1253-1274`; ref `Interface3D.bb:1543` | live |
 | SPL-3 | Cooldown/charge keyed by spell ID; predictive decrement 100/100ms; display shading | DONE | `client_window.rs:2869-2927`; ref `Interface3D.bb:386-395`, SpellCharge memory | live |
 | SPL-4 | Memorise (`P_SpellUpdate "M"`) with a 60-tick progress bar when `RequireMemorise`; un-memorise (`"U"`) | MISSING | ref `Interface3D.bb:1466-1502,1368-1370` | live |
