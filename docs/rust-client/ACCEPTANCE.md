@@ -104,8 +104,8 @@ Anim constants are slot indices into a per-AnimSet table (`Anim_Idle=125, Anim_W
 
 | ID | Criterion | Status | Evidence / Reference | Verification |
 |---|---|---|---|---|
-| TGT-1 | Left-click an actor selects it (`PlayerTarget` set via the entity's name→handle), shows `ActorSelectEN` ground decal under its feet, and opens the Char-Interaction window (target HP/faction/level/reputation) | PARTIAL | ref `Interface3D.bb:792-882,1056-1074,3229-3293`; Rust selects nearest projected actor (`world_pick`). **Phase 4a: fixed `overlay::project` — it was transposed (column-major matrix indexed as row-major), misplacing every pick AND nameplate/floater/loot label; now `clip = vp*world`, unit-tested (centre-maps-to-centre + round-trips with the live-verified `unproject_ground`).** Still missing: ground decal + interaction window | live: click other human → highlight + target HUD |
-| TGT-2 | Selection highlight follows the target each frame (LinePick to ground, align to normal); clears + hides when target stale/dies | PARTIAL | ref `Interface3D.bb:1056-1074`, `ClientNet.bb:1105` | live |
+| TGT-1 | Left-click an actor selects it (`PlayerTarget` set via the entity's name→handle), shows `ActorSelectEN` ground decal under its feet, and opens the Char-Interaction window (target HP/faction/level/reputation) | DONE ✅ | ref `Interface3D.bb:792-882,1056-1074,3229-3293`; Rust selects nearest projected actor (`world_pick`). **Phase 4a: fixed `overlay::project` — it was transposed (column-major matrix indexed as row-major), misplacing every pick AND nameplate/floater/loot label; now `clip = vp*world`, unit-tested (centre-maps-to-centre + round-trips with the live-verified `unproject_ground`).** **Phase 4b: target now gets a corner-bracket selection reticle (feet→head, the on-screen analogue of `ActorSelectEN`) + a top-centre Char-Interaction panel (name + HP bar).** Omitted: faction/level/reputation (not yet parsed into the `Actor` struct) | DONE ✅ — `RCCE_SELECT=160` + HUD-inclusive `RCCE_SHOT`: panel shows "TEST HUMAN" + HP, read 2026-06-01 |
+| TGT-2 | Selection highlight follows the target each frame; clears + hides when target stale/dies | DONE ✅ | the reticle + panel re-project/redraw from live actor data every frame; `on_actor_dead` clears `self.target` so both vanish on death. ref `Interface3D.bb:1056-1074`, `ClientNet.bb:1105` | same `RCCE_SELECT` PNG |
 | TGT-3 | **Right-click context menu** (THE known gap): single left-click on an actor pops an "Actions" menu at the cursor with Interact/Move-To, Attack (if `Aggressiveness<3` & faction attackable), Examine, Trade (if `TradeMode>0`) | MISSING | ref `Interface3D.bb:845-880,660-717`; Rust binds RMB to mouse-look, no menu | live: click stag → menu with Attack |
 | TGT-4 | Context **Interact/RMB** sends `P_RightClick [2]RuntimeID` when in range → server runs the NPC `Main` script | PARTIAL | ref `Interface3D.bb:668,748,782`; Rust sends RIGHT_CLICK on dbl/shift-click (`:1804-1812`) | live: talk to NPC |
 | TGT-5 | **NPC dialog window** (THE known gap): server `P_Dialog` sub-protocol `N`(new)/`T`(text)/`O`(options)/`C`(close) opens a window with wrapped text + green clickable options; selecting an option sends `P_Dialog "O" [4]scriptHandle [1]opt` | MISSING | ref `ClientNet.bb:1027-1068`, `Interface3D.bb:45-162,1561-1586`; Rust shows NPC replies only as chat text (`net.rs:60-65`) | live: NPC dialog with selectable options |
@@ -265,7 +265,7 @@ Auto-attack on a flagged target: `AttackTarget=True` + `PlayerTarget` drives `Up
 
 | ID | Criterion | Status | Evidence / Reference | Verification |
 |---|---|---|---|---|
-| TOOL-1 | Headless PNG capture (`RCCE_SHOT`/`_FRAME`) for menu (frame 45) and world (frame 150) | DONE ✅ | `client_window.rs:1877-1906,2318-2334` | self-evident |
+| TOOL-1 | Headless PNG capture (`RCCE_SHOT`/`_FRAME`) for menu (frame 45) and world (frame 150). **Phase 4b: the world shot now renders the 2D overlay too** (was 3D-only via `capture_png`), so HUD / nameplates / target panel are headlessly verifiable. New hooks: `RCCE_SELECT=<frame>` (select nearest actor). | DONE ✅ | `client_window.rs` world shot now world+overlay→offscreen | self-evident |
 | TOOL-2 | AUTO* headless drivers (LOGIN/SUBMIT/ENTER/WALK) | DONE | audit §8 | self |
 | TOOL-3 | `cargo build --release` zero warnings + `cargo test` green | DONE | workspace state | `cargo build/test` |
 | TOOL-4 | Phase 6 true drop-in cutover (rename → `Client.exe`, `Project Manager.exe` launch) | DEFERRED | PLAN Phase 6 | post-parity |
@@ -274,11 +274,11 @@ Auto-attack on a flagged target: `AttackTarget=True` + `PlayerTarget` drives `Up
 
 ## Parity scorecard (2026-06-01 baseline)
 
-Counting concrete criteria (excluding DEFERRED): **DONE ≈ 33, PARTIAL ≈ 33, MISSING ≈ 19** (ANIM-1, MOVE-5, MENU-SCENE closed 2026-06-01, Phases 1-3; MENU-SCENE-b backdrop polish remains). The headline gaps that block "true drop-in" are the four from the live play-test plus their dependencies:
+Counting concrete criteria (excluding DEFERRED): **DONE ≈ 35, PARTIAL ≈ 31, MISSING ≈ 19** (ANIM-1, MOVE-5, MENU-SCENE, project-fix, TGT-1/TGT-2 closed 2026-06-01, Phases 1-4b). The headline gaps that block "true drop-in" are the four from the live play-test plus their dependencies:
 
 1. ~~**MENU-SCENE** — dedicated 3D menu scene with posed character~~ **DONE ✅** (Phase 3; backdrop-art polish = MENU-SCENE-b).
 2. ~~**ANIM-1** — local-player walk/run animation~~ **DONE ✅** (Phase 1).
 3. ~~**MOVE-5** — click-to-move~~ **DONE ✅** (Phase 2).
-4. **TGT-3 / TGT-5 / CBT-1** — context menu, NPC dialog, attack-the-mob loop (MISSING/PARTIAL) → Phases 4-5.
+4. Targeting cluster: ✅ TGT-1/TGT-2 (select + highlight + Char-Interaction panel, Phase 4b) **DONE**; **TGT-3 / TGT-5 / CBT-1** — context menu, NPC dialog, attack-the-mob loop — remain → Phases 4c-5.
 
 These drive the Phase ordering in `PLAN.md`.

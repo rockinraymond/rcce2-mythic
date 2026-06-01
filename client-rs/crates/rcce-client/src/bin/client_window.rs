@@ -2416,6 +2416,23 @@ impl App {
                 }
             }
         }
+        // Headless target-select self-test (TGT-1): at the configured frame,
+        // select the nearest living actor so the highlight + Char-Interaction
+        // panel are capturable via RCCE_SHOT without a mouse. No-op unless
+        // RCCE_SELECT=<frame> is set.
+        if let Ok(sv) = std::env::var("RCCE_SELECT") {
+            if let Ok(at) = sv.parse::<u64>() {
+                if self.frames == at && self.target.is_none() {
+                    if let Some(net) = self.net.as_ref() {
+                        if let Some(rid) = nearest_living_actor(&net.world, net.world.me_x, net.world.me_z) {
+                            self.target = Some(rid);
+                            let nm = net.world.actors.get(&rid).map(|a| a.name.clone()).unwrap_or_default();
+                            println!("[select] frame {} target rid={rid} name='{nm}'", self.frames);
+                        }
+                    }
+                }
+            }
+        }
         // Day/night: a slow local cycle modulates fog/sky + ambient. Cycle
         // length is RCCE_DAYNIGHT_SECS (default 600s); RCCE_PHASE pins a fixed
         // phase for screenshots.
@@ -2454,28 +2471,9 @@ impl App {
             rcce_client::daynight::night_factor(phase),
         );
 
-        // Headless screenshot of the live world: RCCE_SHOT=<path> captures one
-        // frame (after RCCE_SHOT_FRAME frames, default 150, so the zone + actors
-        // have loaded) to a PNG and exits. Verifies the live render — actor
-        // placement, foliage cutout, camera framing — without a visible window.
-        if let Ok(shot) = std::env::var("RCCE_SHOT") {
-            let want = std::env::var("RCCE_SHOT_FRAME")
-                .ok()
-                .and_then(|s| s.parse::<u64>().ok())
-                .unwrap_or(150);
-            if self.frames >= want {
-                match view.capture_png(
-                    &gfx.device, &gfx.queue, gfx.config.width, gfx.config.height, vp, eye,
-                    fog_dn, self.fog_near, self.fog_far, ambient_dn, self.light_dir,
-                    wgpu::Color { r: fog_dn[0] as f64, g: fog_dn[1] as f64, b: fog_dn[2] as f64, a: 1.0 },
-                    self.cam_yaw, elapsed, rcce_client::daynight::night_factor(phase), &shot,
-                ) {
-                    Ok(()) => println!("[client-window] screenshot -> {shot}"),
-                    Err(e) => eprintln!("[client-window] screenshot failed: {e}"),
-                }
-                std::process::exit(0);
-            }
-        }
+        // (Headless RCCE_SHOT capture moved BELOW the overlay build so the PNG
+        // includes the HUD / nameplates / target panel — see the offscreen
+        // capture just before the surface overlay present.)
 
         // 2D overlay: nameplates + health bars over actors, and a player HUD.
         let target_rid = self.target;
@@ -2561,6 +2559,27 @@ impl App {
                             // Target brackets around the bar.
                             overlay.rect(px - 28.0, py - 15.0, 2.0, 7.0, col);
                             overlay.rect(px + 26.0, py - 15.0, 2.0, 7.0, col);
+                            // Selection reticle: four corner brackets around the
+                            // actor's screen extent (feet -> head), the on-screen
+                            // analogue of the Blitz ActorSelectEN ground decal.
+                            if let (Some((fx, fy)), Some((hx, hy))) = (
+                                rcce_render::project(&vp, [a.x, a.y, a.z], sw, sh),
+                                rcce_render::project(&vp, [a.x, a.y + 7.0, a.z], sw, sh),
+                            ) {
+                                let cxp = (fx + hx) * 0.5;
+                                let (top, bot) = (hy.min(fy), hy.max(fy));
+                                let halfw = ((bot - top) * 0.28).max(8.0);
+                                let len = ((bot - top) * 0.22).max(6.0);
+                                let th = 2.0;
+                                for &(ex, sgn) in &[(cxp - halfw, 1.0f32), (cxp + halfw, -1.0)] {
+                                    let x0 = if sgn > 0.0 { ex } else { ex - len };
+                                    overlay.rect(x0, top, len, th, col);
+                                    overlay.rect(x0, bot - th, len, th, col);
+                                    let vx = if sgn > 0.0 { ex } else { ex - th };
+                                    overlay.rect(vx, top, th, len, col);
+                                    overlay.rect(vx, bot - len, th, len, col);
+                                }
+                            }
                         }
                         if !a.name.is_empty() {
                             let tw = rcce_render::font::text_width(&a.name, 1.0);
@@ -2573,6 +2592,31 @@ impl App {
                             let tw = rcce_render::font::text_width(&wname, 1.0);
                             overlay.text_shadow(px - tw * 0.5, py - 38.0, 1.0, &wname, [0.85, 0.85, 0.7, 1.0]);
                         }
+                    }
+                }
+
+                // Char-Interaction target panel (TGT-1/2): the selected actor's
+                // name + HP, top-centre below the compass — the Rust analogue of
+                // Client.exe's WCharInteract window. Cleared automatically when
+                // the target dies/zones (on_actor_dead clears self.target).
+                if let Some(rid) = target_rid {
+                    if let Some(t) = net.world.actors.get(&rid).filter(|a| a.alive) {
+                        let (pw, ph) = (240.0f32, 48.0f32);
+                        let px0 = (sw - pw) * 0.5;
+                        let py0 = 40.0;
+                        overlay.rect(px0, py0, pw, ph, [0.0, 0.0, 0.0, 0.55]);
+                        overlay.rect(px0, py0, pw, 2.0, [1.0, 0.85, 0.2, 0.9]);
+                        let name: &str = if t.name.is_empty() { "Target" } else { t.name.as_str() };
+                        overlay.text_shadow(px0 + 8.0, py0 + 6.0, 1.2, name, [1.0, 0.92, 0.6, 1.0]);
+                        let frac = if t.health_max > 0 {
+                            (t.health as f32 / t.health_max as f32).clamp(0.0, 1.0)
+                        } else {
+                            1.0
+                        };
+                        overlay.bar(px0 + 8.0, py0 + 28.0, pw - 16.0, 12.0, frac, [0.85, 0.25, 0.25, 1.0]);
+                        let hp = format!("{} / {}", t.health.max(0), t.health_max.max(0));
+                        let tw = rcce_render::font::text_width(&hp, 1.0);
+                        overlay.text_shadow(px0 + pw * 0.5 - tw * 0.5, py0 + 29.0, 1.0, &hp, [1.0, 1.0, 1.0, 1.0]);
                     }
                 }
 
@@ -3215,6 +3259,39 @@ impl App {
                 }
             }
 
+            // Headless screenshot INCLUDING the 2D overlay (HUD / nameplates /
+            // target panel): render world + overlay to an offscreen texture and
+            // exit. The old `capture_png` path rendered only the 3D world, so
+            // every HUD/targeting feature was invisible to RCCE_SHOT. Default
+            // frame 150 (zone + actors loaded).
+            if let Ok(shot) = std::env::var("RCCE_SHOT") {
+                let want = std::env::var("RCCE_SHOT_FRAME")
+                    .ok()
+                    .and_then(|s| s.parse::<u64>().ok())
+                    .unwrap_or(150);
+                if self.frames >= want {
+                    let (w, h) = (gfx.config.width, gfx.config.height);
+                    let stex = gfx.device.create_texture(&wgpu::TextureDescriptor {
+                        label: Some("world-shot"),
+                        size: wgpu::Extent3d { width: w, height: h, depth_or_array_layers: 1 },
+                        mip_level_count: 1,
+                        sample_count: 1,
+                        dimension: wgpu::TextureDimension::D2,
+                        format: gfx.config.format,
+                        usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
+                        view_formats: &[],
+                    });
+                    let sview = stex.create_view(&Default::default());
+                    let clear = wgpu::Color { r: fog_dn[0] as f64, g: fog_dn[1] as f64, b: fog_dn[2] as f64, a: 1.0 };
+                    view.render(&gfx.device, &gfx.queue, &sview, vp, eye, fog_dn, self.fog_near, self.fog_far, ambient_dn, self.light_dir, clear, self.cam_yaw, elapsed, rcce_client::daynight::night_factor(phase));
+                    overlay.render(&gfx.device, &gfx.queue, &sview, sw, sh);
+                    match rcce_render::save_texture_png(&gfx.device, &gfx.queue, &stex, w, h, gfx.config.format, &shot) {
+                        Ok(()) => println!("[client-window] screenshot -> {shot}"),
+                        Err(e) => eprintln!("[client-window] screenshot failed: {e}"),
+                    }
+                    std::process::exit(0);
+                }
+            }
             overlay.render(&gfx.device, &gfx.queue, &tview, sw, sh);
         }
 
