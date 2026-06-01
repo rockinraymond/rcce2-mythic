@@ -14,6 +14,7 @@ pub mod b3d;
 pub mod catalog;
 pub mod interface;
 pub mod items;
+pub mod money;
 pub mod reader;
 pub mod texture;
 
@@ -29,6 +30,7 @@ pub use catalog::{
 pub use attributes::{AttributeDef, AttributeNames};
 pub use items::{equip_slot, equip_slot_name, ItemCatalog, ItemDef};
 pub use interface::{IComp, InterfaceLayout};
+pub use money::MoneyConfig;
 pub use reader::{BlitzReader, ReadError};
 
 #[cfg(test)]

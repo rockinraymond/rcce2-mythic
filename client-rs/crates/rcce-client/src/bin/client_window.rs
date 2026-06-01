@@ -3485,11 +3485,16 @@ impl App {
                 }
                 overlay.text_shadow(8.0, sh - 16.0, 1.0, &w.zone.name, [0.8, 0.85, 0.9, 1.0]);
                 overlay.text(sw - 84.0, 10.0, 1.0, &format!("{fps:.0} fps"), [0.8, 1.0, 0.8, 1.0]);
-                // Character sheet readout (level + gold) from P_FetchCharacter.
+                // Character sheet readout (level + gold) from P_FetchCharacter,
+                // plus the multi-denomination Money$ string (HUD-3) on the line
+                // below, formatted via Money.dat (Platinum/Gold/Silver/Copper).
                 if let Some(sheet) = &self.sheet {
                     let line = format!("Lv {}   {}g", sheet.level, sheet.gold);
                     let tw = rcce_render::font::text_width(&line, 1.0);
                     overlay.text_shadow(sw - tw - 12.0, 24.0, 1.0, &line, [1.0, 0.88, 0.4, 1.0]);
+                    let money = store.money().format(sheet.gold as i64);
+                    let mw = rcce_render::font::text_width(&money, 1.0);
+                    overlay.text_shadow(sw - mw - 12.0, 36.0, 1.0, &money, [0.95, 0.82, 0.55, 1.0]);
                 }
                 // Audio readout (M mute, [ / ] volume).
                 if let Some(a) = self.audio.as_ref() {
@@ -3500,7 +3505,7 @@ impl App {
                     };
                     let tw = rcce_render::font::text_width(&s, 1.0);
                     let col = if a.is_muted() { [1.0, 0.6, 0.6, 1.0] } else { [0.7, 0.85, 1.0, 1.0] };
-                    overlay.text_shadow(sw - tw - 12.0, 38.0, 1.0, &s, col);
+                    overlay.text_shadow(sw - tw - 12.0, 50.0, 1.0, &s, col);
                 }
 
                 // Chat log at the real Chat rect (bottom-left), newest at the

@@ -9,7 +9,7 @@ use std::rc::Rc;
 
 use rcce_data::{
     texture, ActorCatalog, AnimClip, AnimSetCatalog, B3dModel, Image, InterfaceLayout, ItemCatalog,
-    MeshCatalog, MusicCatalog, TextureCatalog,
+    MeshCatalog, MoneyConfig, MusicCatalog, TextureCatalog,
 };
 
 pub struct AssetStore {
@@ -23,6 +23,9 @@ pub struct AssetStore {
     /// In-game HUD layout (Interface.dat) — fractional element positions that
     /// match the real Client.exe. `None` if the file is absent.
     interface: Option<InterfaceLayout>,
+    /// Currency denominations (Money.dat) for the HUD money readout (HUD-3).
+    /// Defaults to the stock Copper/Silver/Gold/Platinum if the file is absent.
+    money: MoneyConfig,
     attribute_names: Option<rcce_data::AttributeNames>,
     cache: HashMap<u16, Option<Rc<B3dModel>>>,
     /// Memoised decoded actor skins, keyed by appearance, so per-frame actor
@@ -115,6 +118,12 @@ impl AssetStore {
         let interface = std::fs::read(data_root.join("Game Data/Interface.dat"))
             .ok()
             .and_then(|b| InterfaceLayout::parse(&b).ok());
+        // Currency denominations (HUD-3). Falls back to the stock config so the
+        // money readout always renders even if Money.dat is missing.
+        let money = std::fs::read(data_root.join("Game Data/Money.dat"))
+            .ok()
+            .and_then(|b| MoneyConfig::parse(&b).ok())
+            .unwrap_or_default();
         // Attribute slot names (Health/Mana/Strength/…) for the character panel.
         let attribute_names = std::fs::read(data_root.join("Server Data/Attributes.dat"))
             .ok()
@@ -128,6 +137,7 @@ impl AssetStore {
             music,
             items,
             interface,
+            money,
             attribute_names,
             cache: HashMap::new(),
             actor_tex_cache: HashMap::new(),
@@ -176,6 +186,12 @@ impl AssetStore {
     /// present — used to place the HUD exactly where Client.exe does.
     pub fn interface(&self) -> Option<&InterfaceLayout> {
         self.interface.as_ref()
+    }
+
+    /// Currency denominations (Money.dat) for formatting a base-unit amount as
+    /// `"Platinum 1, Gold 23, …"` — always present (stock fallback). HUD-3.
+    pub fn money(&self) -> &MoneyConfig {
+        &self.money
     }
 
     /// Base value (gold) for an item id, 0 if unknown.

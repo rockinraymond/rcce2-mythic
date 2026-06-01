@@ -204,7 +204,7 @@ Auto-attack on a flagged target: `AttackTarget=True` + `PlayerTarget` drives `Up
 |---|---|---|---|---|
 | HUD-1 | Vitals bars (Health/Energy + any attribute) at real `Interface.dat` coords, value/max numbers, hover tooltip | DONE ✅ | `client_window.rs:2541-2562`; HUD-layout memory | prior PNG |
 | HUD-2 | XP bar scaled by `XPBarLevel/255`, driven by `P_XPUpdate` | DONE | `client_window.rs:2945-2961`; ref `Interface3D.bb:3166` | live |
-| HUD-3 | Money via multi-denomination `Money$` (shown in Inventory/Trade only) | PARTIAL | ref `Client.bb:1160-1177`; Rust level/gold readout (`:2570`) | live |
+| HUD-3 | Money via multi-denomination `Money$` | DONE | new `rcce_data::MoneyConfig` parses `Money.dat` (str/str/u16/str/u16/str/u16 LE) + `format()` replicates `Money$` exactly (all tiers, zeros kept); 3 unit tests (`parse_stock_money_dat`/`format_matches_reference`/`empty_tier_skipped`); `AssetStore::money()` loads it (stock fallback); HUD renders the denomination line under the corner gold readout — live PNG gold=5000 → "Platinum 0, Gold 0, Silver 50, Copper 0" | unit + live PNG |
 | HUD-4 | Function-button row (Chat/Map/Inventory/Spells/Character/Quests/Party/Menu) toggles panels | PARTIAL | Chat/Inventory/Character/Spells/Quests/**Party** toggle panels; only Map + Menu still stubbed. ref `Interface3D.bb:3499-3519` | live |
 | HUD-5 | Compass strip driven by player yaw | DONE | `client_window.rs:2376-2395`; ref `Interface3D.bb:3068` | PNG |
 | HUD-6 | Buff/debuff icons from `P_ActorEffect` A/R, hover name | DONE | `client_window.rs:2491-2504`; ref `Interface3D.bb:3207` | live |
@@ -274,7 +274,7 @@ Auto-attack on a flagged target: `AttackTarget=True` + `PlayerTarget` drives `Up
 
 ## Parity scorecard (2026-06-01 baseline)
 
-Counting concrete criteria (excluding DEFERRED): **DONE ≈ 54, PARTIAL ≈ 25, MISSING ≈ 5** (Phases 1-5 + breadth incl. ANIM-8, PRJ-1, CHAT-2/3/4, ENV-5/6, HUD-8, SPL-7, QST-1/2, PTY-1/2, TGT-7, 2026-06-01). **All four headline play-test gaps are now closed.**
+Counting concrete criteria (excluding DEFERRED): **DONE ≈ 55, PARTIAL ≈ 24, MISSING ≈ 5** (Phases 1-5 + breadth incl. ANIM-8, PRJ-1, CHAT-2/3/4, ENV-5/6, HUD-8, SPL-7, QST-1/2, PTY-1/2, TGT-7, HUD-3, 2026-06-01). **All four headline play-test gaps are now closed.**
 
 1. ~~**MENU-SCENE** — dedicated 3D menu scene with posed character~~ **DONE ✅** (Phase 3; backdrop-art polish = MENU-SCENE-b).
 2. ~~**ANIM-1** — local-player walk/run animation~~ **DONE ✅** (Phase 1).
