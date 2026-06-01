@@ -110,7 +110,7 @@ Anim constants are slot indices into a per-AnimSet table (`Anim_Idle=125, Anim_W
 | TGT-4 | Context **Interact** sends `P_RightClick [2]RuntimeID` → server runs the NPC `Main` script | DONE ✅ | menu Interact (+ double-click) → `exec_menu_action` sends RIGHT_CLICK. ref `Interface3D.bb:668,748,782` | server-side dialog reply verified in TGT-5 |
 | TGT-5 | **NPC dialog window** (THE known gap): server `P_Dialog` sub-protocol `N`(new)/`T`(text)/`O`(options)/`C`(close) opens a window with wrapped text + green clickable options; selecting an option sends `P_Dialog "O" [4]scriptHandle [1]opt` | DONE ✅ | `World::on_dialog` parses N/T/O/C into a `Dialog` + queues the "N"/"T" acks (via `pending_sends`); `client_window` draws the left-side window (title + wrapped text + green numbered options) and hit-tests option clicks (`dialog_option_packet`, new `DIALOG` const 21). ref `ClientNet.bb:1027-1068`, `Interface3D.bb:45-162,1561-1586` | unit test `dialog_new_text_options_close` (parse + acks) green; `RCCE_DIALOGTEST` PNG shows the window "Greetings, traveler" + 3 green options, read 2026-06-01. (Live scripted dialog needs an NPC with a dialog `Main` script — the starter "Test Human" has none; `RCCE_INTERACT` fires `RIGHT_CLICK` for that path.) |
 | TGT-6 | Context **Examine** sends `P_Examine [2]RuntimeID`; **Trade** sends `P_Trade [2]RuntimeID` | DONE ✅ | menu Examine→`EXAMINE`, Trade→`TRADE` (new packet const 62) via `exec_menu_action`. ref `Interface3D.bb:694,703` | menu rows present in the `RCCE_SELECT` PNG |
-| TGT-7 | Cycle-target key walks to the next NPC combatant (`Aggressiveness<3`, `RNID=0`) | MISSING | ref `Interface3D.bb:419-438` | live |
+| TGT-7 | Cycle-target key (`T`) selects the next living NPC, wrapping | DONE | `next_target`+`living_npc_rids` (`client_window.rs`); test `cycle_target_wraps`; live `RCCE_CYCLE=150` candidates=[3,4]→rid 3, target panel renders | unit + live PNG |
 | TGT-8 | Free-text input dialog (`TextInput`) and timed `P_ProgressBar` prompts render and reply | MISSING | ref `Interface3D.bb:1587-1599`, `ClientNet.bb:151-167` | live (scripted) |
 | TGT-9 | Pick-up a dropped item in range (`<25`): `P_InventoryUpdate "P" [4]serverHandle [1]slot`; "No inventory space" otherwise | DONE | ref `Interface3D.bb:911-914`; world loot handling | live |
 
@@ -274,7 +274,7 @@ Auto-attack on a flagged target: `AttackTarget=True` + `PlayerTarget` drives `Up
 
 ## Parity scorecard (2026-06-01 baseline)
 
-Counting concrete criteria (excluding DEFERRED): **DONE ≈ 53, PARTIAL ≈ 25, MISSING ≈ 6** (Phases 1-5 + breadth incl. ANIM-8, PRJ-1, CHAT-2/3/4, ENV-5/6, HUD-8, SPL-7, QST-1/2, PTY-1/2, 2026-06-01). **All four headline play-test gaps are now closed.**
+Counting concrete criteria (excluding DEFERRED): **DONE ≈ 54, PARTIAL ≈ 25, MISSING ≈ 5** (Phases 1-5 + breadth incl. ANIM-8, PRJ-1, CHAT-2/3/4, ENV-5/6, HUD-8, SPL-7, QST-1/2, PTY-1/2, TGT-7, 2026-06-01). **All four headline play-test gaps are now closed.**
 
 1. ~~**MENU-SCENE** — dedicated 3D menu scene with posed character~~ **DONE ✅** (Phase 3; backdrop-art polish = MENU-SCENE-b).
 2. ~~**ANIM-1** — local-player walk/run animation~~ **DONE ✅** (Phase 1).

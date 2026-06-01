@@ -601,6 +601,19 @@ fn lightning_fires(storm: bool, now: f32, next: f32) -> bool {
     storm && now >= next
 }
 
+/// The next cycle-target after `current` in the sorted runtime-id list, wrapping
+/// around; the first id if `current` is `None` or no longer present (TGT-7).
+/// `None` only if the list is empty. Pure — unit-tested.
+fn next_target(current: Option<u16>, sorted: &[u16]) -> Option<u16> {
+    if sorted.is_empty() {
+        return None;
+    }
+    match current.and_then(|c| sorted.iter().position(|&r| r == c)) {
+        Some(i) => Some(sorted[(i + 1) % sorted.len()]),
+        None => Some(sorted[0]),
+    }
+}
+
 /// The visible chat lines for a scrollback `skip` (already clamped): newest-
 /// first, skipping the `skip` most-recent lines and taking up to `max`. Pure —
 /// shared by the renderer and unit-tested for the scrollback window (CHAT-3).
@@ -1462,6 +1475,11 @@ impl ApplicationHandler for App {
                         KeyCode::KeyI if pressed => self.show_inventory = !self.show_inventory,
                         KeyCode::KeyL if pressed => self.show_quests = !self.show_quests,
                         KeyCode::KeyP if pressed => self.show_party = !self.show_party,
+                        KeyCode::KeyT if pressed => {
+                            // TGT-7: cycle the target to the next living NPC.
+                            let rids = self.living_npc_rids();
+                            self.target = next_target(self.target, &rids);
+                        }
                         // Interact (right-click) the target/nearest NPC — a
                         // vendor replies with P_OpenTrading → the vendor panel.
                         KeyCode::KeyR if pressed => {
@@ -2069,6 +2087,23 @@ impl App {
             let _ = w.set_cursor_grab(CursorGrabMode::None);
             w.set_cursor_visible(true);
         }
+    }
+
+    /// Sorted runtime-ids of every living non-player actor — the cycle-target
+    /// candidate set (TGT-7). Stable order so `next_target` wraps predictably.
+    fn living_npc_rids(&self) -> Vec<u16> {
+        let mut v: Vec<u16> = match self.net.as_ref() {
+            Some(net) => net
+                .world
+                .actors
+                .values()
+                .filter(|a| a.alive && !a.is_player)
+                .map(|a| a.runtime_id)
+                .collect(),
+            None => Vec::new(),
+        };
+        v.sort_unstable();
+        v
     }
 
     /// Render the login / character-select screen: a slowly-orbiting view of the
@@ -2711,6 +2746,34 @@ impl App {
                             println!("[select] frame {} target rid={rid} name='{nm}' (menu open)", self.frames);
                         }
                     }
+                }
+            }
+        }
+        // Headless cycle-target self-test (TGT-7): at the configured frame, cycle
+        // the target to the next living NPC (as the cycle key would) so the
+        // highlight + Char-Interaction panel are capturable via RCCE_SHOT.
+        // No-op unless RCCE_CYCLE=<frame> is set.
+        if let Ok(cv) = std::env::var("RCCE_CYCLE") {
+            if let Ok(at) = cv.parse::<u64>() {
+                if self.frames == at {
+                    // Inline (not living_npc_rids): self.gfx is mutably borrowed in
+                    // this scope, so only disjoint-field access to self.net is legal.
+                    let mut rids: Vec<u16> = match self.net.as_ref() {
+                        Some(net) => net
+                            .world
+                            .actors
+                            .values()
+                            .filter(|a| a.alive && !a.is_player)
+                            .map(|a| a.runtime_id)
+                            .collect(),
+                        None => Vec::new(),
+                    };
+                    rids.sort_unstable();
+                    self.target = next_target(self.target, &rids);
+                    println!(
+                        "[cycle] frame {} candidates={:?} target={:?}",
+                        self.frames, rids, self.target
+                    );
                 }
             }
         }
@@ -4054,6 +4117,19 @@ mod tests {
         assert!(lightning_fires(true, 10.0, 9.0));
         assert!(!lightning_fires(true, 8.0, 9.0));
         assert!(!lightning_fires(false, 10.0, 9.0));
+    }
+
+    // Cycle-target (TGT-7): walks the sorted candidate list, wrapping; falls to
+    // the first when the current target is absent; None on an empty list.
+    #[test]
+    fn cycle_target_wraps() {
+        let s = [3u16, 7, 9];
+        assert_eq!(next_target(None, &s), Some(3)); // no target -> first
+        assert_eq!(next_target(Some(3), &s), Some(7)); // advance
+        assert_eq!(next_target(Some(7), &s), Some(9));
+        assert_eq!(next_target(Some(9), &s), Some(3)); // wrap to first
+        assert_eq!(next_target(Some(99), &s), Some(3)); // stale -> first
+        assert_eq!(next_target(Some(3), &[]), None); // nothing to target
     }
 
     // Chat scrollback window (CHAT-3): newest-first, skipping the `skip` newest.
