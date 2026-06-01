@@ -40,6 +40,24 @@ pub fn cast_packet(spell_id: u16, target: Option<u16>) -> Vec<u8> {
     w.into_bytes()
 }
 
+/// `P_SpellUpdate "M"` (ServerNet.bb:1143) — request to memorise the known-spell
+/// at index `known_num` (0..999). The server starts a `MemorisingSpell` timer
+/// when its global `RequireMemorise` is set, then fills a `MemorisedSpells` slot.
+/// Sent reliable. SPL-4.
+pub fn memorise_packet(known_num: u16) -> Vec<u8> {
+    let mut w = MsgWriter::new();
+    w.u8(b'M').u16(known_num);
+    w.into_bytes()
+}
+
+/// `P_SpellUpdate "U"` (ServerNet.bb:1135) — un-memorise the known-spell index
+/// `num`, clearing its `MemorisedSpells` slot server-side. Sent reliable. SPL-4.
+pub fn unmemorise_packet(num: u16) -> Vec<u8> {
+    let mut w = MsgWriter::new();
+    w.u8(b'U').u16(num);
+    w.into_bytes()
+}
+
 /// Build a `P_InventoryUpdate` pickup request (`ServerNet.bb:1611`): `"P"` +
 /// DroppedItem handle (u32) + target inventory slot (u8). The server validates
 /// same-area + distance + slot, then replies `"R"` to the picker and `"P"` to
@@ -169,6 +187,16 @@ mod tests {
     #[test]
     fn trade_close_is_empty() {
         assert!(trade_close_packet().is_empty());
+    }
+
+    #[test]
+    fn memorise_packet_layout() {
+        // 'M' + known_num as LE u16 (matches cast_packet's "F"+u16 framing).
+        assert_eq!(memorise_packet(0x0102), vec![b'M', 0x02, 0x01]);
+        assert_eq!(memorise_packet(7), vec![b'M', 7, 0]);
+        // 'U' + num as LE u16.
+        assert_eq!(unmemorise_packet(0x0102), vec![b'U', 0x02, 0x01]);
+        assert_eq!(unmemorise_packet(3), vec![b'U', 3, 0]);
     }
 
     #[test]

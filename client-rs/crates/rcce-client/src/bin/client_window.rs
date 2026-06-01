@@ -226,6 +226,12 @@ struct App {
     show_party: bool,
     /// Spellbook window visible (K key) — SPL-1; lists `World.known_spells`.
     show_spellbook: bool,
+    /// SPL-4 memorise: the in-progress `(known_spell index, start elapsed)` while
+    /// the progress bar fills, and the set of memorised known-spell indices.
+    memorising: Option<(usize, f32)>,
+    memorised: std::collections::HashSet<usize>,
+    /// Spellbook row hitboxes `(x,y,w,h, known index)`, rebuilt as the panel draws.
+    spell_hitboxes: Vec<(f32, f32, f32, f32, usize)>,
     /// Footstep cadence + the resolved footstep .ogg files.
     footsteps: rcce_client::audio::FootstepTimer,
     footstep_paths: Vec<std::path::PathBuf>,
@@ -360,6 +366,9 @@ impl App {
             show_quests: false,
             show_party: false,
             show_spellbook: false,
+            memorising: None,
+            memorised: std::collections::HashSet::new(),
+            spell_hitboxes: Vec::new(),
             footsteps: rcce_client::audio::FootstepTimer::new(),
             footstep_paths: Vec::new(),
             weather: rcce_client::weather::WeatherSystem::new(240),
@@ -720,6 +729,15 @@ const JUMP_REMOTE_APEX: f32 = 0.45;
 const FIDGET_CLIPS: [&[&str]; 2] = [&["Look around"], &["Yawn"]];
 /// Seconds a fidget plays before returning to idle (covers the longer Yawn).
 const FIDGET_SECS: f32 = 3.5;
+
+/// Seconds a memorise takes — the Blitz ~60-tick `MemorisingSpell` timer. SPL-4.
+const MEMORISE_SECS: f32 = 3.0;
+
+/// Memorise progress 0..1 for a memorise started at `start`, sampled at `now`
+/// (both elapsed seconds). Clamped. Pure — unit-tested. SPL-4.
+fn memorise_progress(start: f32, now: f32) -> f32 {
+    ((now - start) / MEMORISE_SECS).clamp(0.0, 1.0)
+}
 
 /// Whether an idle fidget should start this frame (ANIM-6): only while idle, at
 /// roughly the Blitz ~1/1000-frame probability. `rng_val` is a per-frame
@@ -1991,6 +2009,27 @@ impl App {
     /// function-button row, then the inventory slot grid when the panel is open.
     /// Positions mirror the draw code exactly (shared FUNCTION_BUTTONS / the
     /// Interface.dat inv_buttons).
+    /// SPL-4: toggle memorisation of known-spell `idx`. If already memorised,
+    /// send `P_SpellUpdate "U"` and clear it; otherwise send `"M"` and start the
+    /// memorise progress bar. `known_num` is the spell's index in the known list
+    /// (the server applies it against its `KnownSpells[]` when `RequireMemorise`).
+    fn toggle_memorise(&mut self, idx: usize) {
+        let now = self.start.elapsed().as_secs_f32();
+        let already = self.memorised.contains(&idx);
+        let packet = if already {
+            self.memorised.remove(&idx);
+            self.memorising = None;
+            rcce_client::net::unmemorise_packet(idx as u16)
+        } else {
+            self.memorising = Some((idx, now));
+            rcce_client::net::memorise_packet(idx as u16)
+        };
+        if let Some(net) = self.net.as_mut() {
+            net.transport.send(net.peer, rcce_net::packet_id::SPELL_UPDATE, &packet, true);
+        }
+        println!("[memorise] idx {idx} {}", if already { "UNMEMORISE sent" } else { "MEMORISE sent" });
+    }
+
     fn hud_click(&mut self) {
         // An open NPC dialog is modal (TGT-5): a click either selects an option
         // or is swallowed (no move/select while talking).
@@ -2025,6 +2064,20 @@ impl App {
                 self.exec_menu_action(action, menu.rid);
             }
             return;
+        }
+        // Spellbook memorise (SPL-4): a click on a spell row memorises it (or
+        // un-memorises an already-memorised one), and is consumed.
+        if self.show_spellbook {
+            let (cx, cy) = self.cursor;
+            let hit = self
+                .spell_hitboxes
+                .iter()
+                .find(|&&(x, y, w, h, _)| cx >= x && cx <= x + w && cy >= y && cy <= y + h)
+                .map(|&(_, _, _, _, idx)| idx);
+            if let Some(idx) = hit {
+                self.toggle_memorise(idx);
+                return;
+            }
         }
         let Some(gfx) = self.gfx.as_ref() else { return };
         let (sw, sh) = (gfx.config.width as f32, gfx.config.height as f32);
@@ -2758,6 +2811,13 @@ impl App {
             } else {
                 None
             };
+            // SPL-4: complete a memorise once its progress bar fills.
+            if let Some((idx, start)) = self.memorising {
+                if memorise_progress(start, elapsed) >= 1.0 {
+                    self.memorised.insert(idx);
+                    self.memorising = None;
+                }
+            }
             let hash = dyn_hash(&net.world, elapsed, moving, run, me_attack)
                 ^ (((me_jump_offset * 100.0) as i64 as u64).rotate_left(7))
                 ^ if me_jumping { 0x4A_4D_50_00 } else { 0 }
@@ -3305,6 +3365,36 @@ impl App {
                 }
             }
         }
+        // Headless memorise self-test (SPL-4): inject known spells, open the
+        // spellbook, mark one memorised, and start a memorise on another so the
+        // progress bar + memorised dot are capturable. No-op unless
+        // RCCE_MEMORISE=<frame> is set.
+        if let Ok(mv) = std::env::var("RCCE_MEMORISE") {
+            if let Ok(at) = mv.parse::<u64>() {
+                if self.frames == at {
+                    if let Some(net) = self.net.as_mut() {
+                        use rcce_client::world::KnownSpell;
+                        if net.world.known_spells.is_empty() {
+                            net.world.known_spells = vec![
+                                KnownSpell { id: 12, name: "Fireball".into(), level: 3 },
+                                KnownSpell { id: 7, name: "Heal".into(), level: 2 },
+                                KnownSpell { id: 21, name: "Lightning Bolt".into(), level: 1 },
+                            ];
+                        }
+                    }
+                    self.show_spellbook = true;
+                    self.memorised.insert(0); // Fireball already memorised
+                    // Inline (not toggle_memorise): self.gfx is mutably borrowed in
+                    // this scope, so only disjoint-field access is legal here.
+                    self.memorising = Some((1, self.start.elapsed().as_secs_f32()));
+                    let pkt = rcce_client::net::memorise_packet(1);
+                    if let Some(net) = self.net.as_mut() {
+                        net.transport.send(net.peer, rcce_net::packet_id::SPELL_UPDATE, &pkt, true);
+                    }
+                    println!("[memorise] frame {} marked idx0 memorised + started idx1", self.frames);
+                }
+            }
+        }
         // Headless screen-flash self-test (ENV-6): inject a red flash. No-op
         // unless RCCE_FLASHTEST=<frame> is set.
         if let Ok(fv) = std::env::var("RCCE_FLASHTEST") {
@@ -3735,8 +3825,9 @@ impl App {
                 // (`World.known_spells`, populated by SPL-7) with name + rank, kept
                 // name-sorted by the handler. Right of centre so it clears the party
                 // panel; scrolls nothing yet (list is short in practice).
+                self.spell_hitboxes.clear();
                 if self.show_spellbook {
-                    let (kwd, khd) = (240.0f32, 220.0f32);
+                    let (kwd, khd) = (240.0f32, 240.0f32);
                     let (kxp, kyp) = (sw * 0.5 + 12.0, (sh - khd) * 0.5);
                     overlay.rect(kxp, kyp, kwd, khd, [0.05, 0.06, 0.10, 0.94]);
                     overlay.rect(kxp, kyp, kwd, 22.0, [0.18, 0.15, 0.28, 0.96]);
@@ -3746,11 +3837,30 @@ impl App {
                     if w.known_spells.is_empty() {
                         overlay.text(kxp + 10.0, ky2, 1.0, "No spells known.", [0.7, 0.7, 0.7, 1.0]);
                     }
-                    for sp in w.known_spells.iter().take(11) {
-                        overlay.text_shadow(kxp + 10.0, ky2, 1.0, &sp.name, [0.7, 0.85, 1.0, 1.0]);
+                    // Each row is clickable to memorise the spell (SPL-4); a green
+                    // dot marks the memorised ones.
+                    for (i, sp) in w.known_spells.iter().take(11).enumerate() {
+                        let memorised = self.memorised.contains(&i);
+                        let name_col = if memorised { [0.5, 1.0, 0.6, 1.0] } else { [0.7, 0.85, 1.0, 1.0] };
+                        if memorised {
+                            overlay.rect(kxp + 4.0, ky2 + 3.0, 4.0, 4.0, [0.4, 1.0, 0.5, 1.0]);
+                        }
+                        overlay.text_shadow(kxp + 12.0, ky2, 1.0, &sp.name, name_col);
                         let rank = format!("Rank {}", sp.level);
                         overlay.text(kxp + kwd - 64.0, ky2, 1.0, &rank, [0.85, 0.8, 0.6, 1.0]);
+                        self.spell_hitboxes.push((kxp + 2.0, ky2 - 2.0, kwd - 4.0, 15.0, i));
                         ky2 += 16.0;
+                    }
+                    // Memorise progress bar (SPL-4) while a memorise is in flight.
+                    if let Some((idx, start)) = self.memorising {
+                        let prog = memorise_progress(start, elapsed);
+                        let name = w.known_spells.get(idx).map(|s| s.name.as_str()).unwrap_or("spell");
+                        let by = kyp + khd - 30.0;
+                        overlay.text(kxp + 10.0, by - 13.0, 1.0, &format!("Memorising {name}…"), [0.85, 0.85, 0.6, 1.0]);
+                        overlay.rect(kxp + 10.0, by, kwd - 20.0, 8.0, [0.0, 0.0, 0.0, 0.6]);
+                        overlay.bar(kxp + 10.0, by, kwd - 20.0, 8.0, prog, [0.5, 0.8, 1.0, 1.0]);
+                    } else {
+                        overlay.text(kxp + 10.0, kyp + khd - 16.0, 1.0, "Click a spell to memorise", [0.55, 0.55, 0.6, 1.0]);
                     }
                 }
 
@@ -4480,6 +4590,16 @@ mod tests {
         assert_eq!(next_target(Some(9), &s), Some(3)); // wrap to first
         assert_eq!(next_target(Some(99), &s), Some(3)); // stale -> first
         assert_eq!(next_target(Some(3), &[]), None); // nothing to target
+    }
+
+    // Memorise progress (SPL-4): 0 at start, ramps to 1.0 over MEMORISE_SECS, clamped.
+    #[test]
+    fn memorise_progress_ramps() {
+        assert_eq!(memorise_progress(10.0, 10.0), 0.0);
+        assert!((memorise_progress(10.0, 10.0 + MEMORISE_SECS * 0.5) - 0.5).abs() < 1e-6);
+        assert_eq!(memorise_progress(10.0, 10.0 + MEMORISE_SECS), 1.0);
+        assert_eq!(memorise_progress(10.0, 100.0), 1.0); // clamped at full
+        assert_eq!(memorise_progress(10.0, 9.0), 0.0); // clamped at zero
     }
 
     // Idle fidget gate (ANIM-6): only when idle, at the 1/1000 probability.
