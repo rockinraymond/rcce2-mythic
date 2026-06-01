@@ -54,6 +54,7 @@ pub mod packet_id {
     pub const STAT_UPDATE: u8 = 22;
     pub const GOLD_CHANGE: u8 = 24;
     pub const NAME_CHANGE: u8 = 25;
+    pub const KNOWN_SPELL_UPDATE: u8 = 26;
     pub const SPELL_UPDATE: u8 = 27;
     pub const XP_UPDATE: u8 = 32;
     pub const SCREEN_FLASH: u8 = 33;

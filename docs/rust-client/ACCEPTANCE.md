@@ -160,7 +160,7 @@ Auto-attack on a flagged target: `AttackTarget=True` + `PlayerTarget` drives `Up
 | SPL-4 | Memorise (`P_SpellUpdate "M"`) with a 60-tick progress bar when `RequireMemorise`; un-memorise (`"U"`) | MISSING | ref `Interface3D.bb:1466-1502,1368-1370` | live |
 | SPL-5 | Action bar: assign item (`"I"`), assign spell (`"S"`), clear (`"N"`); 12 slots fire on F1-F12 / click; 3-page swap | PARTIAL | ref `Interface3D.bb:1077-1280,1169-1212`; Rust fires 1-9, paging/assign unclear | live |
 | SPL-6 | Action bar loaded from the `P_StartGame` payload (3 slot-groups) | PARTIAL | ref `ClientNet.bb:62-106` | live |
-| SPL-7 | Incoming `P_KnownSpellUpdate` A/D/L (add/remove/level) updates known spells + resort | PARTIAL | ref `ClientNet.bb:823-923` | live |
+| SPL-7 | Incoming `P_KnownSpellUpdate` A/D/L (add/remove/level) updates known spells + resort | DONE ✅ | new `KNOWN_SPELL_UPDATE` const (26) + `World::on_known_spell_update` maintains a `known_spells: Vec<KnownSpell{id,name,level}>` — "A" adds (parses level/id/thumb/recharge/name·str16) keeping it name-sorted, "D" removes by name, "L" sets a spell's level by name. ref `ClientNet.bb:823-933` | unit test `known_spell_add_remove_level` (A adds 2 sorted, L levels Fireball→3, D removes Heal) green (66 lib tests). (The live list is state-only; the spellbook render of it is SPL-1.) |
 | SPL-8 | Render own cast effects / projectiles (currently send-only) | MISSING | audit §5c: `SPELL_UPDATE` send-only | live |
 
 ---
@@ -274,7 +274,7 @@ Auto-attack on a flagged target: `AttackTarget=True` + `PlayerTarget` drives `Up
 
 ## Parity scorecard (2026-06-01 baseline)
 
-Counting concrete criteria (excluding DEFERRED): **DONE ≈ 46, PARTIAL ≈ 27, MISSING ≈ 12** (Phases 1-5 + ANIM-8 attack + PRJ-1 + CHAT-2 + ENV-6 + HUD-8 + CHAT-3, 2026-06-01). **All four headline play-test gaps are now closed.**
+Counting concrete criteria (excluding DEFERRED): **DONE ≈ 47, PARTIAL ≈ 26, MISSING ≈ 12** (Phases 1-5 + breadth: ANIM-8 attack, PRJ-1, CHAT-2, ENV-6, HUD-8, CHAT-3, SPL-7, 2026-06-01). **All four headline play-test gaps are now closed.**
 
 1. ~~**MENU-SCENE** — dedicated 3D menu scene with posed character~~ **DONE ✅** (Phase 3; backdrop-art polish = MENU-SCENE-b).
 2. ~~**ANIM-1** — local-player walk/run animation~~ **DONE ✅** (Phase 1).

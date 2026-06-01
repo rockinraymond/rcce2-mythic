@@ -52,6 +52,16 @@ pub struct ScreenFlash {
     pub length: f32,
 }
 
+/// A known spell tracked live via `P_KnownSpellUpdate` (SPL-7): id + name +
+/// rank/level. The full record (icon/recharge/desc) is in the P_FetchCharacter
+/// sheet; this is the live add/remove/level state, kept sorted by name.
+#[derive(Debug, Clone, Default)]
+pub struct KnownSpell {
+    pub id: u16,
+    pub name: String,
+    pub level: u16,
+}
+
 /// One actor instance in the current zone (player or NPC).
 /// A combat hit reported by `P_AttackActor`.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -155,6 +165,8 @@ pub struct World {
     pub projectiles: Vec<Projectile>,
     /// A pending screen flash (P_ScreenFlash), drained by the renderer.
     pub flash: Option<ScreenFlash>,
+    /// Live known-spell list maintained by P_KnownSpellUpdate. See [`KnownSpell`].
+    pub known_spells: Vec<KnownSpell>,
     /// The local player's inventory, keyed by slot (0..13 equipment, 14..45
     /// backpack). Seeded from the P_FetchCharacter sheet, then kept live by
     /// P_InventoryUpdate G/T/H/R. BTreeMap so the panel iterates in slot order.
@@ -209,6 +221,7 @@ impl World {
             pk::DIALOG => self.on_dialog(&m.data),
             pk::PROJECTILE => self.on_projectile(&m.data),
             pk::SCREEN_FLASH => self.on_screen_flash(&m.data),
+            pk::KNOWN_SPELL_UPDATE => self.on_known_spell_update(&m.data),
             _ => {}
         }
     }
@@ -832,6 +845,44 @@ impl World {
             length: (length_ms as f32 / 1000.0).max(0.05),
         });
     }
+
+    /// Handle `P_KnownSpellUpdate` (SPL-7, ClientNet.bb:823-933): "A" adds a
+    /// spell (level u16, id u16, thumb u16, recharge u16, name str16, …), "D"
+    /// removes by name, "L" sets a spell's level (level u32 + name). Keeps the
+    /// list sorted by name.
+    fn on_known_spell_update(&mut self, d: &[u8]) {
+        match d.first() {
+            Some(b'A') => {
+                let mut r = MsgReader::new(&d[1..]);
+                let (Some(level), Some(id), Some(_thumb), Some(_recharge)) =
+                    (r.u16(), r.u16(), r.u16(), r.u16())
+                else {
+                    return;
+                };
+                let name = r.str16().unwrap_or_default();
+                if !name.is_empty() && !self.known_spells.iter().any(|s| s.id == id) {
+                    self.known_spells.push(KnownSpell { id, name, level });
+                    self.known_spells
+                        .sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+                }
+            }
+            Some(b'D') => {
+                let name = String::from_utf8_lossy(&d[1..]).trim().to_uppercase();
+                self.known_spells.retain(|s| s.name.to_uppercase() != name);
+            }
+            Some(b'L') => {
+                let mut r = MsgReader::new(&d[1..]);
+                let Some(level) = r.u32() else { return };
+                let name = String::from_utf8_lossy(r.rest()).trim().to_uppercase();
+                for s in &mut self.known_spells {
+                    if s.name.to_uppercase() == name {
+                        s.level = level as u16;
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
 }
 
 #[cfg(test)]
@@ -919,6 +970,35 @@ mod tests {
         assert_eq!(f.color, [1.0, 0.0, 0.0]);
         assert!((f.alpha - 128.0 / 255.0).abs() < 1e-4);
         assert!((f.length - 2.0).abs() < 1e-4);
+    }
+
+    #[test]
+    fn known_spell_add_remove_level() {
+        let mut w = World::default();
+        // "A" Heal (level 2, id 7): name as str16 (u16 len + bytes), empty desc, mem 0.
+        let mut p = MsgWriter::new();
+        p.u8(b'A').u16(2).u16(7).u16(0).u16(500).u16(4).raw(b"Heal").u16(0).u8(0);
+        w.apply(&msg(pk::KNOWN_SPELL_UPDATE, p.into_bytes()));
+        // "A" Fireball (level 1, id 5).
+        let mut p2 = MsgWriter::new();
+        p2.u8(b'A').u16(1).u16(5).u16(0).u16(1000).u16(8).raw(b"Fireball").u16(0).u8(0);
+        w.apply(&msg(pk::KNOWN_SPELL_UPDATE, p2.into_bytes()));
+        // Sorted by name → Fireball, Heal.
+        assert_eq!(
+            w.known_spells.iter().map(|s| s.name.as_str()).collect::<Vec<_>>(),
+            ["Fireball", "Heal"]
+        );
+        // "L" Fireball → level 3.
+        let mut l = MsgWriter::new();
+        l.u8(b'L').u32(3).raw(b"FIREBALL");
+        w.apply(&msg(pk::KNOWN_SPELL_UPDATE, l.into_bytes()));
+        assert_eq!(w.known_spells.iter().find(|s| s.name == "Fireball").unwrap().level, 3);
+        // "D" remove Heal.
+        let mut del = MsgWriter::new();
+        del.u8(b'D').raw(b"HEAL");
+        w.apply(&msg(pk::KNOWN_SPELL_UPDATE, del.into_bytes()));
+        assert_eq!(w.known_spells.len(), 1);
+        assert_eq!(w.known_spells[0].name, "Fireball");
     }
 
     #[test]
