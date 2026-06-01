@@ -7,14 +7,16 @@
 use bytemuck::{Pod, Zeroable};
 use wgpu::util::DeviceExt;
 
-/// Project a world point to screen pixels (top-left origin) using a row-major
-/// view-projection matrix. Returns `None` if behind the camera. `y_off` raises
-/// the result in world units before projection (e.g. to a head/nameplate).
+/// Project a world point to screen pixels (top-left origin) using the
+/// **column-major** view-projection matrix from [`crate::view_proj`] — the same
+/// `clip = vp * world` the GPU uses (`gpu.rs`), so projected nameplates / picks
+/// land exactly on the rendered geometry. Returns `None` if behind the camera.
 pub fn project(vp: &[f32; 16], world: [f32; 3], screen_w: f32, screen_h: f32) -> Option<(f32, f32)> {
     let (x, y, z) = (world[0], world[1], world[2]);
-    let cx = vp[0] * x + vp[1] * y + vp[2] * z + vp[3];
-    let cy = vp[4] * x + vp[5] * y + vp[6] * z + vp[7];
-    let cw = vp[12] * x + vp[13] * y + vp[14] * z + vp[15];
+    // clip.r = Σ_c M[r][c]·world_c, with M column-major so M[r][c] = vp[c*4 + r].
+    let cx = vp[0] * x + vp[4] * y + vp[8] * z + vp[12];
+    let cy = vp[1] * x + vp[5] * y + vp[9] * z + vp[13];
+    let cw = vp[3] * x + vp[7] * y + vp[11] * z + vp[15];
     if cw <= 0.0001 {
         return None;
     }
@@ -503,6 +505,29 @@ mod tests {
 
         let down = unproject_ground(&vp, w, h, w * 0.5, h * 0.75, 0.0).expect("down hits ground");
         assert!(down[2] > centre[2], "below centre lands nearer the camera (+Z): {down:?}");
+    }
+
+    // `project` must agree with the GPU matrix (clip = vp*world): the camera's
+    // look-target lands at screen centre, and a point off the look axis lands
+    // off-centre. This catches a row/column-major (transpose) mismatch — the
+    // exact bug that misplaces nameplates and actor picking.
+    #[test]
+    fn project_centre_and_offaxis() {
+        // Angled overhead camera (so the y=0 ground plane is not edge-on).
+        let vp = crate::view_proj([0.0, 50.0, 30.0], [0.0, 0.0, 0.0], 1.0);
+        let (w, h) = (800.0, 600.0);
+        // The look-target must land at screen centre — the key transpose-catcher
+        // (a row/column swap would not map the look point to the centre).
+        let (cx, cy) = project(&vp, [0.0, 0.0, 0.0], w, h).expect("target projects");
+        assert!((cx - w * 0.5).abs() < 1.0 && (cy - h * 0.5).abs() < 1.0, "look-target at centre: {cx},{cy}");
+        // project is the inverse of unproject_ground (already tested): unproject a
+        // screen pixel to the ground, re-project it, get the same pixel back.
+        let g = unproject_ground(&vp, w, h, 520.0, 360.0, 0.0).expect("ground hit");
+        let (rx, ry) = project(&vp, g, w, h).expect("reproject");
+        assert!((rx - 520.0).abs() < 1.0 && (ry - 360.0).abs() < 1.0, "round-trip {rx},{ry}");
+        // A world point off the look axis is not at the screen centre.
+        let (ox, _) = project(&vp, [10.0, 0.0, 0.0], w, h).expect("offset projects");
+        assert!((ox - w * 0.5).abs() > 5.0, "off-axis point is off-centre: {ox}");
     }
 
     // A ray that can't reach the plane (looking up, plane below) returns None.
