@@ -184,6 +184,8 @@ struct App {
     /// Elapsed-time (secs) until which the local player plays the attack clip;
     /// set on each swing so the body visibly swings (ANIM-8).
     me_attack_until: f32,
+    /// Active screen flash (P_ScreenFlash): the effect + its start time (secs).
+    flash: Option<(rcce_client::world::ScreenFlash, f32)>,
     /// Floating combat-damage numbers (drained from world.combat_events).
     floaters: rcce_client::floaters::Floaters,
     /// Audio output (zone music). `None` when there's no audio device.
@@ -306,6 +308,7 @@ impl App {
             attacking: false,
             last_attack: now,
             me_attack_until: 0.0,
+            flash: None,
             floaters: rcce_client::floaters::Floaters::new(),
             audio: rcce_client::audio::Audio::new(),
             sheet: None,
@@ -2448,6 +2451,11 @@ impl App {
             // later (weather), so this read gives the same per-frame dt.
             let proj_dt = (elapsed - self.prev_elapsed).clamp(0.0, 0.1);
             net.world.tick_projectiles(proj_dt);
+            // Start a new screen flash when one arrives (ENV-6), stamping its
+            // start time for the fade.
+            if let Some(f) = net.world.flash.take() {
+                self.flash = Some((f, elapsed));
+            }
             // Send a P_StandardUpdate toward the input direction (unreliable,
             // like ClientNet.bb): the server walks the actor toward Dest and
             // echoes its authoritative position, which on_standard_update
@@ -2790,6 +2798,22 @@ impl App {
                         net.world.chat.push(("[party] a green message".into(), [0.08, 0.86, 0.2, 1.0]));
                         net.world.chat.push(("<<rustbot>> my own blue line".into(), [0.0, 0.5, 1.0, 1.0]));
                         println!("[chattest] frame {} injected 4 coloured lines", self.frames);
+                    }
+                }
+            }
+        }
+        // Headless screen-flash self-test (ENV-6): inject a red flash. No-op
+        // unless RCCE_FLASHTEST=<frame> is set.
+        if let Ok(fv) = std::env::var("RCCE_FLASHTEST") {
+            if let Ok(at) = fv.parse::<u64>() {
+                if self.frames == at {
+                    if let Some(net) = self.net.as_mut() {
+                        net.world.flash = Some(rcce_client::world::ScreenFlash {
+                            color: [1.0, 0.1, 0.1],
+                            alpha: 0.6,
+                            length: 3.0,
+                        });
+                        println!("[flashtest] frame {} red flash", self.frames);
                     }
                 }
             }
@@ -3675,6 +3699,18 @@ impl App {
                         overlay.rect(menu.x, ry, CTX_W, CTX_ROW, [0.2, 0.32, 0.55, 0.85]);
                     }
                     overlay.text_shadow(menu.x + 8.0, ry + 6.0, 1.0, label, [0.94, 0.94, 0.72, 1.0]);
+                }
+            }
+
+            // Screen flash (ENV-6): a full-screen colour fading out over its
+            // length, drawn on top of the whole HUD.
+            if let Some((f, start)) = self.flash {
+                let t = (elapsed - start) / f.length;
+                if t < 1.0 {
+                    let a = f.alpha * (1.0 - t).max(0.0);
+                    overlay.rect(0.0, 0.0, sw, sh, [f.color[0], f.color[1], f.color[2], a]);
+                } else {
+                    self.flash = None;
                 }
             }
 

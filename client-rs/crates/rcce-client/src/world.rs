@@ -41,6 +41,17 @@ pub struct Projectile {
     pub speed: f32,
 }
 
+/// A screen-flash effect (`P_ScreenFlash`, id 33): a full-screen colour that
+/// fades out over `length` seconds. ref ClientNet.bb:679-686, Client.bb:1112.
+#[derive(Debug, Clone, Copy)]
+pub struct ScreenFlash {
+    pub color: [f32; 3],
+    /// Initial alpha (0..1).
+    pub alpha: f32,
+    /// Fade duration in seconds.
+    pub length: f32,
+}
+
 /// One actor instance in the current zone (player or NPC).
 /// A combat hit reported by `P_AttackActor`.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -142,6 +153,8 @@ pub struct World {
     pub dialog: Option<Dialog>,
     /// In-flight projectiles (P_Projectile). See [`Projectile`].
     pub projectiles: Vec<Projectile>,
+    /// A pending screen flash (P_ScreenFlash), drained by the renderer.
+    pub flash: Option<ScreenFlash>,
     /// The local player's inventory, keyed by slot (0..13 equipment, 14..45
     /// backpack). Seeded from the P_FetchCharacter sheet, then kept live by
     /// P_InventoryUpdate G/T/H/R. BTreeMap so the panel iterates in slot order.
@@ -195,6 +208,7 @@ impl World {
             pk::OPEN_TRADING => self.current_trade = crate::trade::TradeWindow::parse(&m.data),
             pk::DIALOG => self.on_dialog(&m.data),
             pk::PROJECTILE => self.on_projectile(&m.data),
+            pk::SCREEN_FLASH => self.on_screen_flash(&m.data),
             _ => {}
         }
     }
@@ -801,6 +815,23 @@ impl World {
             (dx * dx + dy * dy + dz * dz).sqrt() > 2.0
         });
     }
+
+    /// Handle `P_ScreenFlash`: `[1]R [1]G [1]B [1]alpha [4]lengthMs [2]texID`.
+    /// Stores a pending flash the renderer drains + fades out. ref
+    /// ClientNet.bb:679-686.
+    fn on_screen_flash(&mut self, d: &[u8]) {
+        let mut r = MsgReader::new(d);
+        let (Some(red), Some(green), Some(blue), Some(alpha), Some(length_ms), Some(_tex)) =
+            (r.u8(), r.u8(), r.u8(), r.u8(), r.u32(), r.u16())
+        else {
+            return;
+        };
+        self.flash = Some(ScreenFlash {
+            color: [red as f32 / 255.0, green as f32 / 255.0, blue as f32 / 255.0],
+            alpha: alpha as f32 / 255.0,
+            length: (length_ms as f32 / 1000.0).max(0.05),
+        });
+    }
 }
 
 #[cfg(test)]
@@ -875,6 +906,19 @@ mod tests {
             w.tick_projectiles(0.1);
         }
         assert!(w.projectiles.is_empty(), "projectile impacted + removed");
+    }
+
+    #[test]
+    fn screen_flash_parse() {
+        let mut w = World::default();
+        // R=255 G=0 B=0 alpha=128 length=2000ms tex=65535.
+        let mut p = MsgWriter::new();
+        p.u8(255).u8(0).u8(0).u8(128).u32(2000).u16(65535);
+        w.apply(&msg(pk::SCREEN_FLASH, p.into_bytes()));
+        let f = w.flash.expect("flash set");
+        assert_eq!(f.color, [1.0, 0.0, 0.0]);
+        assert!((f.alpha - 128.0 / 255.0).abs() < 1e-4);
+        assert!((f.length - 2.0).abs() < 1e-4);
     }
 
     #[test]

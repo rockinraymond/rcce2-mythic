@@ -222,7 +222,7 @@ Auto-attack on a flagged target: `AttackTarget=True` + `PlayerTarget` drives `Up
 | ENV-3 | Sky/clouds/stars: textured skydome, clouds drift (`TurnEntity 0.05·Delta`), storm-cloud swap, night stars; per-zone tex IDs from area .dat | DONE | `world_view.rs:215-284`; ref `ClientAreas_FE.bb:349-399` | PNG |
 | ENV-4 | Water: per-zone translucent plane with scrolling UV (+ optional bump/foam); collision box for walkers | MISSING | ref `ClientAreas_FE.bb:704-785`, `Environment3D.bb:266-295`; audit: no water in render | live (water zone) |
 | ENV-5 | Lightning during Storm: random `ScreenFlash` white + thunder SFX on final flash | MISSING | ref `Environment3D.bb:316-330` | live storm |
-| ENV-6 | Screen flash (`P_ScreenFlash` R/G/B/alpha/length/texID) full-screen quad, linear decay | MISSING | ref `Client.bb:1112-1157`, `ClientNet.bb:679-686` | live (scripted) |
+| ENV-6 | Screen flash (`P_ScreenFlash` R/G/B/alpha/length/texID) full-screen quad, linear decay | DONE ✅ | new `SCREEN_FLASH` const (33) + `World::on_screen_flash` → a `ScreenFlash {color,alpha,length}` the renderer drains (stamping a start time) and draws as a full-screen overlay quad fading `alpha·(1−t)` over `length`, on top of the HUD. ref `Client.bb:1112-1157`, `ClientNet.bb:679-686` | unit test `screen_flash_parse` green; `RCCE_FLASHTEST=150` PNG shows the whole screen tinted red over the world+HUD — read & confirmed 2026-06-01 |
 
 ---
 
@@ -274,7 +274,7 @@ Auto-attack on a flagged target: `AttackTarget=True` + `PlayerTarget` drives `Up
 
 ## Parity scorecard (2026-06-01 baseline)
 
-Counting concrete criteria (excluding DEFERRED): **DONE ≈ 43, PARTIAL ≈ 28, MISSING ≈ 14** (Phases 1-5 + ANIM-8 attack + PRJ-1 + CHAT-2, 2026-06-01). **All four headline play-test gaps are now closed.**
+Counting concrete criteria (excluding DEFERRED): **DONE ≈ 44, PARTIAL ≈ 28, MISSING ≈ 13** (Phases 1-5 + ANIM-8 attack + PRJ-1 + CHAT-2 + ENV-6, 2026-06-01). **All four headline play-test gaps are now closed.**
 
 1. ~~**MENU-SCENE** — dedicated 3D menu scene with posed character~~ **DONE ✅** (Phase 3; backdrop-art polish = MENU-SCENE-b).
 2. ~~**ANIM-1** — local-player walk/run animation~~ **DONE ✅** (Phase 1).
