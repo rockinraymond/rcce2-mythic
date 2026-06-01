@@ -92,7 +92,7 @@ Anim constants are slot indices into a per-AnimSet table (`Anim_Idle=125, Anim_W
 | CAM-1 | Third-person boom: pivot at player + `CamHeight#`, rotate `(CamPitch, CamYaw+180)`, push back `CamDist#`, smooth-follow curve 6.0·Delta | DONE | ref `Client.bb:846-877`; `render` camera path | `RCCE_SHOT` world |
 | CAM-2 | Camera collision: `LinePick` from player to desired cam point; on hit snap to pick point (keep player visible); flip 180° if shoved within 2.0 of Head | PARTIAL | ref `Client.bb:864-887`; Rust has per-zone occluder spheres (PLAN note) | live near a wall |
 | CAM-3 | Zoom: wheel `CamDist# ∓= MouseZSpeed*1.5` clamp [5,50]; keyboard zoom clamp [3,50] | PARTIAL | ref `Interface3D.bb:643-657` | live |
-| CAM-4 | First-person mode toggle (`Key_ChangeViewMode` when `ViewMode=2`): cam at Head joint, pitch eased, yaw follows character | MISSING | ref `Client.bb:889-893` | live |
+| CAM-4 | First-person mode toggle: cam at head height, yaw follows character, own body hidden | DONE | `V` key toggles `first_person`; `first_person_view(me, me_yaw)` puts the eye at head height (`FP_EYE_HEIGHT 3.5`) looking along the facing (`-sin/-cos yaw`); `build_actors` `hide_me` skips the local body. Unit test `first_person_eye_and_forward` (yaw 0→-Z, 90→-X); `RCCE_FIRSTPERSON` before/after PNGs — 3rd-person body-fills-frame vs 1st-person body-gone forward world view | unit + live PNG |
 | CAM-5 | MMB snaps camera behind character (`CamYaw=EntityYaw(Me)`, `CamPitch=0`) | DONE | `MouseButton::Middle` → `snap_camera(me_yaw)` sets `cam_yaw=me_yaw, cam_pitch=0`; unit test `camera_snap_behind`; `RCCE_CAMSNAP` before/after PNGs (off-angle cam_yaw=3.14/pitch=0.90 → snapped 0.00/0.00, behind-the-character view restored) | unit + live PNG |
 | CAM-6 | Underwater: cam below a water plane tints cls/fog to water color, near/far 1/50, hides sky/stars/clouds; restores on surfacing | MISSING | ref `Client.bb:895-922` | live (needs water) |
 
@@ -274,7 +274,7 @@ Auto-attack on a flagged target: `AttackTarget=True` + `PlayerTarget` drives `Up
 
 ## Parity scorecard (2026-06-01 baseline)
 
-Counting concrete criteria (excluding DEFERRED): **DONE ≈ 58, PARTIAL ≈ 24** (Phases 1-5 + breadth incl. ANIM-8, PRJ-1, CHAT-2/3/4, ENV-5/6, HUD-8, SPL-7, QST-1/2, PTY-1/2, TGT-7, HUD-3, CAM-5, MOVE-7+ANIM-7 jump, 2026-06-01). **All four headline play-test gaps are now closed.** Of the 12 remaining MISSING rows, most are **live-only-with-content** (MOVE-8 / ANIM-4 / ANIM-5 / CAM-6 / ENV-4 = water·swim·ride, TRD-3 = 2 players, TGT-8 = scripted text dialog, SPL-8 = own-cast FX). The non-deferred implementable remainder is **MOVE-6 (dbl-click-run), ANIM-6 (idle fidget), CAM-4 (first-person), SPL-4 (memorise)**.
+Counting concrete criteria (excluding DEFERRED): **DONE ≈ 59, PARTIAL ≈ 24** (Phases 1-5 + breadth incl. ANIM-8, PRJ-1, CHAT-2/3/4, ENV-5/6, HUD-8, SPL-7, QST-1/2, PTY-1/2, TGT-7, HUD-3, CAM-5, MOVE-7+ANIM-7 jump, CAM-4, 2026-06-01). **All four headline play-test gaps are now closed.** Of the 11 remaining MISSING rows, most are **live-only-with-content** (MOVE-8 / ANIM-4 / ANIM-5 / CAM-6 / ENV-4 = water·swim·ride, TRD-3 = 2 players, TGT-8 = scripted text dialog, SPL-8 = own-cast FX). The non-deferred implementable remainder is **MOVE-6 (dbl-click-run), ANIM-6 (idle fidget), SPL-4 (memorise)**.
 
 1. ~~**MENU-SCENE** — dedicated 3D menu scene with posed character~~ **DONE ✅** (Phase 3; backdrop-art polish = MENU-SCENE-b).
 2. ~~**ANIM-1** — local-player walk/run animation~~ **DONE ✅** (Phase 1).

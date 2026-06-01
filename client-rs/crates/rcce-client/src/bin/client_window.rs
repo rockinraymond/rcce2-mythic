@@ -193,6 +193,9 @@ struct App {
     jump_offset: f32,
     jump_vel: f32,
     grounded: bool,
+    /// First-person view mode (CAM-4): camera at the head looking along `me_yaw`,
+    /// own body hidden. Toggled by `V`.
+    first_person: bool,
     /// Active screen flash (P_ScreenFlash): the effect + its start time (secs).
     flash: Option<(rcce_client::world::ScreenFlash, f32)>,
     /// Active chat bubbles over actors (P_BubbleMessage), keyed by runtime id:
@@ -330,6 +333,7 @@ impl App {
             jump_offset: 0.0,
             jump_vel: 0.0,
             grounded: true,
+            first_person: false,
             flash: None,
             bubbles: std::collections::HashMap::new(),
             floaters: rcce_client::floaters::Floaters::new(),
@@ -620,6 +624,21 @@ fn snap_camera(me_yaw: f32) -> (f32, f32) {
     (me_yaw, 0.0)
 }
 
+/// Eye height (world units) of the first-person camera above the player's feet
+/// — the same look height the third-person boom pivots around (CAM-4).
+const FP_EYE_HEIGHT: f32 = 3.5;
+
+/// First-person camera (CAM-4): eye at the player's head, looking out along the
+/// character's facing `me_yaw` (flat). The forward vector matches the
+/// third-person view direction when `cam_yaw = me_yaw` (the rear-follow looks
+/// along the character's facing), i.e. `(-sin yaw, 0, -cos yaw)`. Returns
+/// `(eye, target)`. Pure — unit-tested.
+fn first_person_view(me: [f32; 3], me_yaw: f32) -> ([f32; 3], [f32; 3]) {
+    let eye = [me[0], me[1] + FP_EYE_HEIGHT, me[2]];
+    let fwd = [-me_yaw.sin(), 0.0, -me_yaw.cos()];
+    (eye, [eye[0] + fwd[0], eye[1] + fwd[1], eye[2] + fwd[2]])
+}
+
 /// The next cycle-target after `current` in the sorted runtime-id list, wrapping
 /// around; the first id if `current` is `None` or no longer present (TGT-7).
 /// `None` only if the list is empty. Pure — unit-tested.
@@ -734,6 +753,7 @@ fn build_actors(
     me_attack: bool,
     me_jumping: bool,
     me_jump_offset: f32,
+    hide_me: bool,
 ) -> (
     Vec<Rc<B3dModel>>,
     Vec<Rc<Vec<Option<Image>>>>,
@@ -897,6 +917,7 @@ fn build_actors(
     // actor (Client.bb UpdateActorInstances); passing false,false here was the
     // root cause of "the local player never walks/runs while moving" (ANIM-1).
     // Jump (ANIM-7) overrides the attack clip; the offset lifts the body (MOVE-7).
+    // In first-person (CAM-4) the own body is hidden entirely.
     let me_combat = if me_jumping {
         Some((JUMP_CLIP, false))
     } else if me_attack {
@@ -904,7 +925,9 @@ fn build_actors(
     } else {
         None
     };
-    push(store, &mut models, &mut textures, &mut place, &mut keys, &mut skinned, me_template, world.me_gender, world.me_face_tex, world.me_body_tex, world.me_hair, world.me_beard, me_weapon, me_shield, weapon_override, world.my_runtime_id, me_moving, me_running, me_combat, [world.me_x, world.me_y + me_jump_offset, world.me_z], world.me_yaw, [0.85, 0.95, 0.85]);
+    if !hide_me {
+        push(store, &mut models, &mut textures, &mut place, &mut keys, &mut skinned, me_template, world.me_gender, world.me_face_tex, world.me_body_tex, world.me_hair, world.me_beard, me_weapon, me_shield, weapon_override, world.my_runtime_id, me_moving, me_running, me_combat, [world.me_x, world.me_y + me_jump_offset, world.me_z], world.me_yaw, [0.85, 0.95, 0.85]);
+    }
     for a in world.actors.values() {
         let dx = a.dest_x - a.x;
         let dz = a.dest_z - a.z;
@@ -1552,6 +1575,7 @@ impl ApplicationHandler for App {
                             self.target = next_target(self.target, &rids);
                         }
                         KeyCode::KeyK if pressed => self.show_spellbook = !self.show_spellbook,
+                        KeyCode::KeyV if pressed => self.first_person = !self.first_person, // CAM-4
                         KeyCode::KeyJ if pressed && self.grounded => {
                             // MOVE-7: jump only when grounded. Kick the vertical
                             // velocity, leave the ground, and tell the server
@@ -2253,7 +2277,7 @@ impl App {
                 mw.me_z = char_anchor[2];
                 mw.me_yaw = 0.0; // faces +Z; the camera circles it
                 let (models, textures, place, keys, skinned) =
-                    build_actors(store, &mw, elapsed, self.gpu_skin, false, false, c.actor_id, false, false, 0.0);
+                    build_actors(store, &mw, elapsed, self.gpu_skin, false, false, c.actor_id, false, false, 0.0, false);
                 let instances: Vec<SceneInstance> = place
                     .iter()
                     .map(|&(idx, t, r, color, s)| SceneInstance {
@@ -2566,6 +2590,7 @@ impl App {
 
         // Pump the network, send movement, and rebuild animated actors.
         let mut cam_target = self.center;
+        let mut cam_me_yaw = 0.0f32; // player facing, for the first-person camera (CAM-4)
         let mut following = false;
         let mut did_send = false;
         if let Some(net) = self.net.as_mut() {
@@ -2655,11 +2680,12 @@ impl App {
             let me_jump_offset = self.jump_offset;
             let hash = dyn_hash(&net.world, elapsed, moving, run, me_attack)
                 ^ (((me_jump_offset * 100.0) as i64 as u64).rotate_left(7))
-                ^ if me_jumping { 0x4A_4D_50_00 } else { 0 };
+                ^ if me_jumping { 0x4A_4D_50_00 } else { 0 }
+                ^ if self.first_person { 0x46_50_00_00 } else { 0 };
             if self.gpu_skin || hash != self.last_dyn_hash {
                 let (models, textures, place, keys, skinned) = build_actors(
                     store, &net.world, elapsed, self.gpu_skin, moving, run, 0, me_attack, me_jumping,
-                    me_jump_offset,
+                    me_jump_offset, self.first_person,
                 );
                 // CPU drawables: attachments (+ bodies when GPU skinning is off).
                 let instances: Vec<SceneInstance> = place
@@ -2692,6 +2718,7 @@ impl App {
                 self.last_dyn_hash = hash;
             }
             cam_target = [net.world.me_x, net.world.me_y, net.world.me_z];
+            cam_me_yaw = net.world.me_yaw;
             following = true;
         }
         if did_send {
@@ -2786,7 +2813,11 @@ impl App {
 
         // Camera: third-person follow behind the player along cam_yaw (live),
         // or a slow orbit of the zone centre (spectator). `behind = -forward`.
-        let (eye, target) = if following {
+        let (eye, target) = if following && self.first_person {
+            // First-person (CAM-4): eye at the head, looking along the character's
+            // facing. The own body is hidden in build_actors (hide_me).
+            first_person_view(cam_target, cam_me_yaw)
+        } else if following {
             // Orbit behind the player: yaw places the camera on the -forward
             // side, pitch raises it. `dist` is the boom length.
             let dist = 13.0;
@@ -2907,6 +2938,17 @@ impl App {
                             println!("[remotejump] frame {} started jump anim on rid {rid}", self.frames);
                         }
                     }
+                }
+            }
+        }
+        // Headless first-person self-test (CAM-4): at frame `at` switch to
+        // first-person (capture with RCCE_SHOT to see the body gone + a forward
+        // view). No-op unless RCCE_FIRSTPERSON=<frame> is set.
+        if let Ok(fv) = std::env::var("RCCE_FIRSTPERSON") {
+            if let Ok(at) = fv.parse::<u64>() {
+                if self.frames == at {
+                    self.first_person = true;
+                    println!("[firstperson] frame {} -> first-person view", self.frames);
                 }
             }
         }
@@ -4329,6 +4371,21 @@ mod tests {
         assert_eq!(next_target(Some(9), &s), Some(3)); // wrap to first
         assert_eq!(next_target(Some(99), &s), Some(3)); // stale -> first
         assert_eq!(next_target(Some(3), &[]), None); // nothing to target
+    }
+
+    // First-person camera (CAM-4): eye at head height, looking along facing.
+    #[test]
+    fn first_person_eye_and_forward() {
+        let (eye, target) = first_person_view([10.0, 2.0, -5.0], 0.0);
+        // Eye is at the player's head (feet + eye height).
+        assert_eq!(eye, [10.0, 2.0 + FP_EYE_HEIGHT, -5.0]);
+        // yaw=0 looks toward -Z (matches the rear-follow view direction).
+        let fwd = [target[0] - eye[0], target[1] - eye[1], target[2] - eye[2]];
+        assert!((fwd[0]).abs() < 1e-6 && (fwd[2] + 1.0).abs() < 1e-6, "yaw 0 -> -Z: {fwd:?}");
+        // A quarter turn looks toward -X.
+        let (eye2, t2) = first_person_view([0.0, 0.0, 0.0], std::f32::consts::FRAC_PI_2);
+        let f2 = [t2[0] - eye2[0], t2[2] - eye2[2]];
+        assert!((f2[0] + 1.0).abs() < 1e-5 && f2[1].abs() < 1e-5, "yaw 90 -> -X: {f2:?}");
     }
 
     // MMB snap-camera (CAM-5): yaw -> character facing, pitch -> level.
