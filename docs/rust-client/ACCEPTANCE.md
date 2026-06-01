@@ -80,7 +80,7 @@ Anim constants are slot indices into a per-AnimSet table (`Anim_Idle=125, Anim_W
 | ANIM-5 | Mounted rider anims: `Anim_RideRun/RideWalk/RideIdle` mirror the mount's gait | MISSING | ref `Client.bb:599-610,716-718` | live (needs mount) |
 | ANIM-6 | Idle fidget: ~1/1000 frames while idle, play a random `Anim_LookRound..Anim_Yawn` once | MISSING | ref `Client.bb:706-708` | live observation |
 | ANIM-7 | Jump anim (`Anim_Jump`, mode 3 @0.05) on local jump and on remote `P_Jump` | MISSING | ref `Interface3D.bb:460`, `ClientNet.bb:241-246` | live |
-| ANIM-8 | Combat anims: attack (138-141 by weapon), hit-react (130-132), parry (133-137), death (127-129) play on `P_AttackActor`/`P_ActorDead` | MISSING | ref `ClientNet.bb:1131-1203,1096` | live combat |
+| ANIM-8 | Combat anims: attack, hit-react, parry, death play on combat events | PARTIAL | `build_actors` `push` gained a `combat` clip override (ATTACK_CLIP/DEATH_CLIP, exact-then-substring). **Attack: DONE ✅** — the local player plays "Default attack" [297..406] while auto-attacking (`me_attack_until` set on each swing). **Death: wired** — a dead actor (`!alive`) holds its "Death" clip's last frame (clips valid per `anim_probe`). **Hit/parry: N/A** — the shipped `Animations.dat` Hit/parry ranges are all `[0..0]` (empty). Remote-actor attack anim deferred (needs the attacker rid in `CombatEvent`). ref `ClientNet.bb:1131-1203,1096` | `RCCE_COMBATANIM=150` PNG: player visibly mid-swing (torso twisted, arm drawn) vs the straight idle pose — read & confirmed 2026-06-01. Death pose live-capture obscured by the rear camera (corpse at the player's feet); not visually claimed. |
 | ANIM-9 | `PlayAnimation` speed scaling reads `AnimStart/AnimEnd/AnimSpeed` from `Animations.dat`; reproduce the per-clip speed normalization | PARTIAL | ref `Animations.bb:41-66`; `anim.rs` parses ANIM — confirm speed scaling | `anim_probe`, `cargo test` |
 
 ---
@@ -274,7 +274,7 @@ Auto-attack on a flagged target: `AttackTarget=True` + `PlayerTarget` drives `Up
 
 ## Parity scorecard (2026-06-01 baseline)
 
-Counting concrete criteria (excluding DEFERRED): **DONE ≈ 41, PARTIAL ≈ 28, MISSING ≈ 16** (ANIM-1, MOVE-5, MENU-SCENE, project-fix, TGT-1..6, CBT-1/2 closed 2026-06-01, Phases 1-5). **All four headline play-test gaps are now closed.**
+Counting concrete criteria (excluding DEFERRED): **DONE ≈ 41, PARTIAL ≈ 29, MISSING ≈ 15** (Phases 1-5 + ANIM-8 attack, 2026-06-01). **All four headline play-test gaps are now closed.**
 
 1. ~~**MENU-SCENE** — dedicated 3D menu scene with posed character~~ **DONE ✅** (Phase 3; backdrop-art polish = MENU-SCENE-b).
 2. ~~**ANIM-1** — local-player walk/run animation~~ **DONE ✅** (Phase 1).

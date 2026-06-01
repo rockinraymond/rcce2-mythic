@@ -181,6 +181,9 @@ struct App {
     /// Attack menu/key, cleared on target death/vanish or manual movement.
     attacking: bool,
     last_attack: Instant,
+    /// Elapsed-time (secs) until which the local player plays the attack clip;
+    /// set on each swing so the body visibly swings (ANIM-8).
+    me_attack_until: f32,
     /// Floating combat-damage numbers (drained from world.combat_events).
     floaters: rcce_client::floaters::Floaters,
     /// Audio output (zone music). `None` when there's no audio device.
@@ -302,6 +305,7 @@ impl App {
             dialog_hitboxes: Vec::new(),
             attacking: false,
             last_attack: now,
+            me_attack_until: 0.0,
             floaters: rcce_client::floaters::Floaters::new(),
             audio: rcce_client::audio::Audio::new(),
             sheet: None,
@@ -583,6 +587,12 @@ enum CombatStep {
     Wait,
 }
 
+/// Combat animation clip names (ANIM-8), tried in order (exact match first, then
+/// substring). The shipped data labels them "Default attack"/"Death 1"; Hit
+/// ranges are empty so there's no hit-react clip.
+const ATTACK_CLIP: &[&str] = &["Default attack", "Right hand attack", "Staff attack", "attack"];
+const DEATH_CLIP: &[&str] = &["Death 1", "Death", "death"];
+
 /// Melee reach (world units) — Client.exe's `MaxRange# = 4.0` (ClientCombat.bb:37)
 /// plus a small radius pad.
 const MELEE_RANGE: f32 = 4.5;
@@ -636,6 +646,7 @@ fn build_actors(
     me_moving: bool,
     me_running: bool,
     me_template: u16,
+    me_attack: bool,
 ) -> (
     Vec<Rc<B3dModel>>,
     Vec<Rc<Vec<Option<Image>>>>,
@@ -667,21 +678,33 @@ fn build_actors(
                     rid: u16,
                     moving: bool,
                     running: bool,
+                    combat: Option<(&'static [&'static str], bool)>,
                     pos: [f32; 3],
                     yaw: f32,
                     color: [f32; 3]| {
         let Some(src) = store.actor_model(tmpl, gender) else { return };
-        let names: &[&str] = if running {
-            &["Run"]
-        } else if moving {
-            &["Walk"]
-        } else {
-            &["Idle", "Sit idle"]
-        };
         let fps = src.anim.map(|a| a.fps).unwrap_or(15.0);
-        let frame = store
-            .actor_clip(tmpl, gender, names)
-            .map(|c| clip_frame(c, fps, elapsed + rid as f32 * 0.13));
+        // A combat clip (attack/death) overrides locomotion when present. Empty
+        // clips (this data's Hit ranges are [0..0]) are skipped; `hold` pins the
+        // clip's last frame for a static corpse pose (ANIM-8).
+        let frame = match combat {
+            Some((names, hold)) => store
+                .actor_clip(tmpl, gender, names)
+                .filter(|c| c.end > c.start)
+                .map(|c| if hold { c.end as f32 } else { clip_frame(c, fps, elapsed + rid as f32 * 0.13) }),
+            None => {
+                let names: &[&str] = if running {
+                    &["Run"]
+                } else if moving {
+                    &["Walk"]
+                } else {
+                    &["Idle", "Sit idle"]
+                };
+                store
+                    .actor_clip(tmpl, gender, names)
+                    .map(|c| clip_frame(c, fps, elapsed + rid as f32 * 0.13))
+            }
+        };
         let scale = store.actor_render_scale(tmpl, gender).unwrap_or(0.05);
         let tex = store.actor_textures_rc(tmpl, gender, face, body);
         // Joint positions + bounds come from the bind-pose source model
@@ -786,13 +809,17 @@ fn build_actors(
     // Blitz client drives Me through the SAME locomotion machine as every other
     // actor (Client.bb UpdateActorInstances); passing false,false here was the
     // root cause of "the local player never walks/runs while moving" (ANIM-1).
-    push(store, &mut models, &mut textures, &mut place, &mut keys, &mut skinned, me_template, world.me_gender, world.me_face_tex, world.me_body_tex, world.me_hair, world.me_beard, me_weapon, me_shield, weapon_override, world.my_runtime_id, me_moving, me_running, [world.me_x, world.me_y, world.me_z], world.me_yaw, [0.85, 0.95, 0.85]);
+    let me_combat = if me_attack { Some((ATTACK_CLIP, false)) } else { None };
+    push(store, &mut models, &mut textures, &mut place, &mut keys, &mut skinned, me_template, world.me_gender, world.me_face_tex, world.me_body_tex, world.me_hair, world.me_beard, me_weapon, me_shield, weapon_override, world.my_runtime_id, me_moving, me_running, me_combat, [world.me_x, world.me_y, world.me_z], world.me_yaw, [0.85, 0.95, 0.85]);
     for a in world.actors.values() {
         let dx = a.dest_x - a.x;
         let dz = a.dest_z - a.z;
         let moving = (dx * dx + dz * dz) > 1.0;
         let color = if a.is_player { [0.85, 0.9, 1.0] } else { [1.0, 1.0, 1.0] };
-        push(store, &mut models, &mut textures, &mut place, &mut keys, &mut skinned, a.template_id, a.gender, a.face_tex, a.body_tex, a.hair, a.beard, a.equipped[0], a.equipped[1], weapon_override, a.runtime_id, moving, a.is_running, [a.x, a.y, a.z], a.yaw, color);
+        // A dead actor holds its death pose (ANIM-8); the live attack-anim for
+        // remote actors needs the attacker rid from P_AttackActor (deferred).
+        let combat = if !a.alive { Some((DEATH_CLIP, true)) } else { None };
+        push(store, &mut models, &mut textures, &mut place, &mut keys, &mut skinned, a.template_id, a.gender, a.face_tex, a.body_tex, a.hair, a.beard, a.equipped[0], a.equipped[1], weapon_override, a.runtime_id, moving, a.is_running, combat, [a.x, a.y, a.z], a.yaw, color);
     }
     (models, textures, place, keys, skinned)
 }
@@ -800,7 +827,7 @@ fn build_actors(
 /// Cheap fingerprint of everything that affects the actor drawables: a ~12 Hz
 /// animation tick plus each actor's quantised position/yaw/run state. When it's
 /// unchanged the dynamic geometry is reused (no re-skin/re-upload).
-fn dyn_hash(world: &World, elapsed: f32, me_moving: bool, me_running: bool) -> u64 {
+fn dyn_hash(world: &World, elapsed: f32, me_moving: bool, me_running: bool, me_attack: bool) -> u64 {
     use std::hash::{Hash, Hasher};
     let mut h = std::collections::hash_map::DefaultHasher::new();
     ((elapsed * 12.0) as u64).hash(&mut h);
@@ -808,10 +835,11 @@ fn dyn_hash(world: &World, elapsed: f32, me_moving: bool, me_running: bool) -> u
     ((world.me_x * 2.0) as i32).hash(&mut h);
     ((world.me_z * 2.0) as i32).hash(&mut h);
     (world.me_yaw as i32).hash(&mut h);
-    // Include the local player's locomotion state so the CPU-throttled rebuild
-    // picks up walk/run/idle transitions promptly (ANIM-1/ANIM-3).
+    // Include the local player's locomotion + attack state so the CPU-throttled
+    // rebuild picks up walk/run/idle/attack transitions promptly (ANIM-1/ANIM-8).
     me_moving.hash(&mut h);
     me_running.hash(&mut h);
+    me_attack.hash(&mut h);
     let mut rids: Vec<u16> = world.actors.keys().copied().collect();
     rids.sort_unstable();
     for rid in rids {
@@ -821,6 +849,7 @@ fn dyn_hash(world: &World, elapsed: f32, me_moving: bool, me_running: bool) -> u
         ((a.z * 2.0) as i32).hash(&mut h);
         (a.yaw as i32).hash(&mut h);
         a.is_running.hash(&mut h);
+        a.alive.hash(&mut h); // death pose (ANIM-8)
     }
     h.finish()
 }
@@ -2060,7 +2089,7 @@ impl App {
                 mw.me_z = char_anchor[2];
                 mw.me_yaw = 0.0; // faces +Z; the camera circles it
                 let (models, textures, place, keys, skinned) =
-                    build_actors(store, &mw, elapsed, self.gpu_skin, false, false, c.actor_id);
+                    build_actors(store, &mw, elapsed, self.gpu_skin, false, false, c.actor_id, false);
                 let instances: Vec<SceneInstance> = place
                     .iter()
                     .map(|&(idx, t, r, color, s)| SceneInstance {
@@ -2326,6 +2355,7 @@ impl App {
                                 );
                             }
                             self.last_attack = Instant::now();
+                            self.me_attack_until = elapsed + 0.8; // play the swing clip
                             println!("[combat] swing -> rid={rid} (dist {dist:.1})");
                         }
                     }
@@ -2433,10 +2463,11 @@ impl App {
             // bone-palette uniform; the static body mesh is cached), so rebuild
             // every frame for smooth animation. The CPU path stays throttled to
             // ~12 Hz by dyn_hash (each rebuild re-skins + re-uploads vertices).
-            let hash = dyn_hash(&net.world, elapsed, moving, run);
+            let me_attack = self.me_attack_until > elapsed;
+            let hash = dyn_hash(&net.world, elapsed, moving, run, me_attack);
             if self.gpu_skin || hash != self.last_dyn_hash {
                 let (models, textures, place, keys, skinned) =
-                    build_actors(store, &net.world, elapsed, self.gpu_skin, moving, run, 0);
+                    build_actors(store, &net.world, elapsed, self.gpu_skin, moving, run, 0, me_attack);
                 // CPU drawables: attachments (+ bodies when GPU skinning is off).
                 let instances: Vec<SceneInstance> = place
                     .iter()
@@ -2682,6 +2713,25 @@ impl App {
                             self.target = Some(rid);
                             self.attacking = true;
                             println!("[attack] frame {} engage rid={rid}", self.frames);
+                        }
+                    }
+                }
+            }
+        }
+        // Headless combat-anim self-test (ANIM-8): hold the local player's attack
+        // pose AND kill the nearest actor (death pose) so both render in one
+        // RCCE_SHOT. No-op unless RCCE_COMBATANIM=<frame> is set.
+        if let Ok(cv) = std::env::var("RCCE_COMBATANIM") {
+            if let Ok(at) = cv.parse::<u64>() {
+                if self.frames == at {
+                    self.me_attack_until = elapsed + 1.0e6;
+                    if let Some(net) = self.net.as_mut() {
+                        let (mx, mz) = (net.world.me_x, net.world.me_z);
+                        if let Some(rid) = nearest_living_actor(&net.world, mx, mz) {
+                            if let Some(a) = net.world.actors.get_mut(&rid) {
+                                a.alive = false;
+                            }
+                            println!("[combatanim] frame {} attack-pose + killed rid={rid}", self.frames);
                         }
                     }
                 }
