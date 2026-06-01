@@ -51,8 +51,11 @@ fn main() {
                     let base = texture::basename(name);
                     let found = texture::find_texture(&roots, name);
                     let loaded = found.as_ref().and_then(|p| texture::load(p)).is_some();
+                    let f = m.texture_flag;
                     println!(
-                        "  [{i}] b3d='{}' base='{}' -> {}",
+                        "  [{i}] flags={f}(mask={} alpha={}) b3d='{}' base='{}' -> {}",
+                        (f & 4) != 0,
+                        (f & 2) != 0,
                         name,
                         base,
                         match (&found, loaded) {

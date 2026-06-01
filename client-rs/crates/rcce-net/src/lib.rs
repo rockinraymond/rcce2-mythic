@@ -37,6 +37,7 @@ pub mod packet_id {
     pub const VERIFY_ACCOUNT: u8 = 2;
     pub const FETCH_CHARACTER: u8 = 3;
     pub const CREATE_CHARACTER: u8 = 4;
+    pub const DELETE_CHARACTER: u8 = 5;
     pub const FETCH_ACTORS: u8 = 7;
     pub const CHANGE_AREA: u8 = 9;
     pub const NEW_ACTOR: u8 = 11;

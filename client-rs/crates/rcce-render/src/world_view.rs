@@ -44,6 +44,8 @@ pub struct WorldView {
     pipeline: Pipeline,
     skin: SkinPipeline,
     sky: SkyPipeline,
+    /// Surface colour format (for offscreen screenshot captures).
+    color_format: wgpu::TextureFormat,
     uniform_buf: wgpu::Buffer,
     bind0: wgpu::BindGroup,
     depth: wgpu::TextureView,
@@ -105,6 +107,7 @@ impl WorldView {
             pipeline,
             skin,
             sky,
+            color_format,
             uniform_buf,
             bind0,
             depth: make_depth(device, w, h),
@@ -303,6 +306,128 @@ impl WorldView {
         }
         queue.submit(Some(enc.finish()));
     }
+
+    /// Render one frame of the live world to an offscreen texture and save it as
+    /// a PNG — a headless screenshot of exactly what the window shows (same
+    /// pipelines, same `set_scene`/`set_dynamic`/`set_skinned` state, same
+    /// camera + atmosphere args as [`render`](Self::render)). For verifying the
+    /// live render (actor placement, foliage cutout, camera framing) without a
+    /// visible window. `w`/`h` should match the depth buffer (the window size).
+    #[allow(clippy::too_many_arguments)]
+    pub fn capture_png(
+        &self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        w: u32,
+        h: u32,
+        view_proj: [f32; 16],
+        eye: [f32; 3],
+        fog_color: [f32; 3],
+        fog_near: f32,
+        fog_far: f32,
+        ambient: [f32; 3],
+        light_dir: [f32; 3],
+        clear: wgpu::Color,
+        sky_yaw: f32,
+        sky_time: f32,
+        sky_night: f32,
+        path: &str,
+    ) -> Result<(), String> {
+        let tex = device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("screenshot"),
+            size: wgpu::Extent3d { width: w, height: h, depth_or_array_layers: 1 },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: self.color_format,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
+            view_formats: &[],
+        });
+        let view = tex.create_view(&Default::default());
+        // Reuse the exact live render path, but target the offscreen view.
+        self.render(
+            device, queue, &view, view_proj, eye, fog_color, fog_near, fog_far, ambient,
+            light_dir, clear, sky_yaw, sky_time, sky_night,
+        );
+        save_texture_png(device, queue, &tex, w, h, self.color_format, path)
+    }
+}
+
+/// Copy a rendered texture back to the CPU and write it as a PNG (swizzling
+/// BGRA surfaces to RGBA). The texture must have been created with `COPY_SRC`.
+/// Shared by [`WorldView::capture_png`] and the client's menu screenshot.
+pub fn save_texture_png(
+    device: &wgpu::Device,
+    queue: &wgpu::Queue,
+    tex: &wgpu::Texture,
+    w: u32,
+    h: u32,
+    format: wgpu::TextureFormat,
+    path: &str,
+) -> Result<(), String> {
+    let bpp = 4u32;
+    let unpadded = w * bpp;
+    let padded = unpadded.div_ceil(256) * 256;
+    let readback = device.create_buffer(&wgpu::BufferDescriptor {
+        label: Some("shot-rb"),
+        size: (padded * h) as u64,
+        usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+        mapped_at_creation: false,
+    });
+    let mut enc = device.create_command_encoder(&Default::default());
+    enc.copy_texture_to_buffer(
+        wgpu::ImageCopyTexture {
+            texture: tex,
+            mip_level: 0,
+            origin: wgpu::Origin3d::ZERO,
+            aspect: wgpu::TextureAspect::All,
+        },
+        wgpu::ImageCopyBuffer {
+            buffer: &readback,
+            layout: wgpu::ImageDataLayout {
+                offset: 0,
+                bytes_per_row: Some(padded),
+                rows_per_image: Some(h),
+            },
+        },
+        wgpu::Extent3d { width: w, height: h, depth_or_array_layers: 1 },
+    );
+    queue.submit(Some(enc.finish()));
+
+    let slice = readback.slice(..);
+    let (tx, rx) = std::sync::mpsc::channel();
+    slice.map_async(wgpu::MapMode::Read, move |r| {
+        let _ = tx.send(r);
+    });
+    device.poll(wgpu::Maintain::Wait);
+    rx.recv().map_err(|e| e.to_string())?.map_err(|e| format!("map: {e:?}"))?;
+    let data = slice.get_mapped_range();
+    let bgra = matches!(
+        format,
+        wgpu::TextureFormat::Bgra8Unorm | wgpu::TextureFormat::Bgra8UnormSrgb
+    );
+    let mut rgba = Vec::with_capacity((unpadded * h) as usize);
+    for row in 0..h {
+        let start = (row * padded) as usize;
+        let line = &data[start..start + unpadded as usize];
+        if bgra {
+            for px in line.chunks_exact(4) {
+                rgba.extend_from_slice(&[px[2], px[1], px[0], px[3]]);
+            }
+        } else {
+            rgba.extend_from_slice(line);
+        }
+    }
+    drop(data);
+    readback.unmap();
+
+    let file = std::fs::File::create(path).map_err(|e| e.to_string())?;
+    let mut encoder = png::Encoder::new(std::io::BufWriter::new(file), w, h);
+    encoder.set_color(png::ColorType::Rgba);
+    encoder.set_depth(png::BitDepth::Eight);
+    let mut wr = encoder.write_header().map_err(|e| e.to_string())?;
+    wr.write_image_data(&rgba).map_err(|e| e.to_string())?;
+    Ok(())
 }
 
 /// View-projection matrix for a camera looking from `eye` at `target`.

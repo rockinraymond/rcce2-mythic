@@ -16,7 +16,7 @@ pub use overlay::{project, Overlay};
 pub use render::{render_markers_png, Marker};
 pub use render3d::render_model_png;
 pub use scene::{render_scene_png, render_skinned_png, SceneInstance};
-pub use world_view::{view_proj, SkinnedInstance, WorldView};
+pub use world_view::{save_texture_png, view_proj, SkinnedInstance, WorldView};
 
 use pollster::block_on;
 

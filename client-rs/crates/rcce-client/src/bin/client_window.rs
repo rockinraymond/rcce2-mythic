@@ -24,11 +24,24 @@ use rcce_client::net::movement_packet;
 
 use enet_sys::EnetTransport;
 use rcce_client::assets::{attachment_placement, clip_frame, AssetStore};
-use rcce_client::login::{login, Credentials};
+use rcce_client::login::{
+    account_login, create_char, delete_char, enter_world, login, CharInfo, Credentials,
+};
 use rcce_client::world::World;
 use rcce_data::{AreaScenery, B3dModel, Image};
 use rcce_net::Transport;
 use rcce_render::{SceneInstance, WorldView};
+
+/// Top-level client screen. The window boots into `Login`, advances to
+/// `CharSelect` after a successful account login, and to `InWorld` once a
+/// character enters the game. `RCCE_AUTOLOGIN` skips straight to `InWorld`
+/// (the headless/benchmark path).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Mode {
+    Login,
+    CharSelect,
+    InWorld,
+}
 
 struct Gfx {
     surface: wgpu::Surface<'static>,
@@ -112,6 +125,10 @@ struct App {
     center: [f32; 3],
     span: f32,
     ground_y: f32,
+    /// Solid-prop occluder spheres (world centre, radius) for camera collision —
+    /// buildings/rocks/props, excluding terrain and see-through foliage. The
+    /// third-person boom shortens when it would pass through one.
+    cam_occluders: Vec<([f32; 3], f32)>,
     fog_color: [f32; 3],
     fog_near: f32,
     fog_far: f32,
@@ -196,6 +213,31 @@ struct App {
     /// GPU linear-blend skinning for actor bodies (RCCE_GPUSKIN). Off by default
     /// (the CPU posed-meshes path); attachments stay CPU either way.
     gpu_skin: bool,
+
+    // ---- Login / character-select menu state (Mode::Login / CharSelect) ----
+    /// Current screen.
+    mode: Mode,
+    /// The menu connection's transport (account login + char create/delete).
+    /// Moved into `Net`'s transport when a character enters the world.
+    login_transport: Option<EnetTransport>,
+    /// Open menu-connection peer handle (valid in CharSelect).
+    login_peer: i32,
+    /// Editable credential fields + which one has focus (0 = user, 1 = pass).
+    login_user: String,
+    login_pass: String,
+    login_focus: u8,
+    /// MD5 of the password, cached after a successful login for create/delete.
+    login_md5: String,
+    /// A status / error line shown under the fields.
+    login_msg: String,
+    /// The account's characters (CharSelect) + the highlighted row.
+    chars: Vec<CharInfo>,
+    char_sel: usize,
+    /// `Some(name)` while typing a new character's name (create sub-screen); the
+    /// `usize` is the chosen playable-template index.
+    creating: Option<(String, usize)>,
+    /// Playable templates (actor id, race name) for the create race picker.
+    playable: Vec<(u16, String)>,
 }
 
 impl App {
@@ -214,6 +256,7 @@ impl App {
             center: [0.0; 3],
             span: 100.0,
             ground_y: 0.0,
+            cam_occluders: Vec::new(),
             fog_color: [0.45, 0.62, 0.82],
             fog_near: 1000.0,
             fog_far: 9000.0,
@@ -254,6 +297,18 @@ impl App {
             cloud_regular_img: None,
             cloud_storm_img: None,
             cloud_is_storm: false,
+            mode: Mode::Login,
+            login_transport: None,
+            login_peer: 0,
+            login_user: std::env::var("RCCE_USER").unwrap_or_else(|_| "rustbot".to_string()),
+            login_pass: "rustpass".to_string(),
+            login_focus: 0,
+            login_md5: String::new(),
+            login_msg: String::new(),
+            chars: Vec::new(),
+            char_sel: 0,
+            creating: None,
+            playable: Vec::new(),
             data_root: String::new(),
             loaded_zone: String::new(),
             gpu_skin: std::env::var("RCCE_GPUSKIN").is_ok(),
@@ -478,7 +533,6 @@ fn build_actors(
     store: &mut AssetStore,
     world: &World,
     elapsed: f32,
-    ground_y: f32,
     gpu_skin: bool,
 ) -> (
     Vec<Rc<B3dModel>>,
@@ -535,7 +589,13 @@ fn build_actors(
         let head = src.joint_pos("Head").unwrap_or([0.0, 0.0, 0.0]);
         let hand = src.joint_pos("R_Hand");
         let l_hand = src.joint_pos("L_Hand");
-        let trans = [pos[0], ground_y - min[1] * scale, pos[2]];
+        // Stand the actor on ITS OWN authoritative Y (from P_NewActor /
+        // P_ChangeArea spawn). P_StandardUpdate carries only X/Z, so this is the
+        // actor's spawn/terrain height — far better than a single zone-wide
+        // `ground_y`, which placed every actor (and the local player body) at the
+        // global-minimum scenery Y, off-screen below their own nameplates and the
+        // follow camera. `pos[1] - min[1]*scale` puts the mesh's feet at `pos[1]`.
+        let trans = [pos[0], pos[1] - min[1] * scale, pos[2]];
         let yaw_rad = yaw.to_radians();
         let key_body = format!("{tmpl}:{gender}:{face}:{body}");
         let can_skin = !src.bones.is_empty() && src.bones.len() <= rcce_render::gpu::MAX_BONES;
@@ -557,6 +617,7 @@ fn build_actors(
             let posed = Rc::new(B3dModel {
                 meshes: src.posed_meshes(frame),
                 textures: src.textures.clone(),
+                tex_flags: src.tex_flags.clone(),
                 brushes: src.brushes.clone(),
                 bones: src.bones.clone(),
                 anim: src.anim,
@@ -653,6 +714,34 @@ fn dyn_hash(world: &World, elapsed: f32) -> u64 {
     h.finish()
 }
 
+/// Third-person camera collision. Marches the boom outward from the pivot
+/// `look` along the unit direction `dir` and returns the furthest distance
+/// (≤ `max_dist`) the camera can sit without its eye entering a solid occluder
+/// sphere. Handles two cases the reference client does:
+///   * boom passing *through* a building from outside → stop just before the wall;
+///   * pivot *inside* a building (player indoors) → collapse to the minimum so
+///     the camera sits close behind the player instead of deep in the geometry.
+fn camera_boom(look: [f32; 3], dir: [f32; 3], max_dist: f32, occ: &[([f32; 3], f32)]) -> f32 {
+    const MIN: f32 = 2.5;
+    let inside = |t: f32| {
+        let p = [look[0] + dir[0] * t, look[1] + dir[1] * t, look[2] + dir[2] * t];
+        occ.iter().any(|&(c, r)| {
+            let d2 = (p[0] - c[0]).powi(2) + (p[1] - c[1]).powi(2) + (p[2] - c[2]).powi(2);
+            d2 < r * r
+        })
+    };
+    let step = 0.4;
+    let mut t = MIN;
+    while t < max_dist {
+        let next = (t + step).min(max_dist);
+        if inside(next) {
+            return t; // the next step would enter an occluder — stop here
+        }
+        t = next;
+    }
+    max_dist
+}
+
 /// Locate the project `data/` directory so the bin/-placed exe finds its
 /// assets like the Blitz client does. Priority: `RCCE_DATA` env → a `data/`
 /// next to or above the current dir → a `data/` next to or above the exe
@@ -714,7 +803,8 @@ fn register_gui_textures(overlay: &mut rcce_render::Overlay, device: &wgpu::Devi
     println!("[client-window] registered {ok}/{} GUI textures from {}", files.len(), gui.display());
 }
 
-fn load_zone_static(store: &mut AssetStore, view: &mut WorldView, gfx: &Gfx, data_root: &str, zone: &str) -> Option<([f32; 3], f32, f32, rcce_data::AreaEnv)> {
+#[allow(clippy::type_complexity)]
+fn load_zone_static(store: &mut AssetStore, view: &mut WorldView, gfx: &Gfx, data_root: &str, zone: &str) -> Option<([f32; 3], f32, f32, rcce_data::AreaEnv, Vec<([f32; 3], f32)>)> {
     let path = std::path::Path::new(data_root).join("Areas").join(format!("{zone}.dat"));
     let bytes = std::fs::read(&path).map_err(|e| eprintln!("[client-window] {}: {e}", path.display())).ok()?;
     let scenery = AreaScenery::parse(&bytes).ok()?;
@@ -796,8 +886,48 @@ fn load_zone_static(store: &mut AssetStore, view: &mut WorldView, gfx: &Gfx, dat
     }
     let center = [(min[0] + max[0]) * 0.5, (min[1] + max[1]) * 0.5, (min[2] + max[2]) * 0.5];
     let span = ((max[0] - min[0]).powi(2) + (max[2] - min[2]).powi(2)).sqrt().max(50.0);
-    println!("[client-window] zone '{zone}': {} objects, {} meshes, span {span:.0}", place.len(), models.len());
-    Some((center, span, min[1], scenery.env.clone()))
+
+    // Camera-collision occluders: a world bounding sphere per SOLID prop
+    // (buildings, rocks, statues, barrels, fences…). Excluded: see-through
+    // foliage (any masked sub-mesh — grass/trees), the huge terrain mesh
+    // (radius > span*0.25), and tiny scatter (radius < 2). The third-person boom
+    // shortens when it would pass through one of these, so the camera doesn't
+    // end up inside a building.
+    let mut occluders: Vec<([f32; 3], f32)> = Vec::new();
+    for &(idx, pos, _rot, scale) in &place {
+        let model = &models[idx];
+        let foliage = model.meshes.iter().any(|m| m.texture_flag & 4 != 0);
+        if foliage {
+            continue;
+        }
+        let (lmin, lmax) = model.bounds();
+        let smax = scale[0].abs().max(scale[1].abs()).max(scale[2].abs());
+        let extent = [lmax[0] - lmin[0], lmax[1] - lmin[1], lmax[2] - lmin[2]];
+        let radius = 0.5 * (extent[0] * extent[0] + extent[1] * extent[1] + extent[2] * extent[2]).sqrt() * smax;
+        // Only building-sized occluders: large enough to be a structure the
+        // camera can get stuck inside, but not the whole-zone terrain shell.
+        // Small/medium props (barrels, fountains, lamp posts) are skipped so the
+        // camera isn't yanked close every time the player walks past one.
+        if radius < 8.0 || radius > span * 0.25 {
+            continue;
+        }
+        // The bounding-sphere of a boxy building overshoots its footprint at the
+        // corners; shrink it so "camera inside" only fires when the player is
+        // genuinely within the walls, not merely standing beside the building.
+        let radius = radius * 0.62;
+        let c = [
+            pos[0] + (lmin[0] + lmax[0]) * 0.5 * scale[0],
+            pos[1] + (lmin[1] + lmax[1]) * 0.5 * scale[1],
+            pos[2] + (lmin[2] + lmax[2]) * 0.5 * scale[2],
+        ];
+        occluders.push((c, radius));
+    }
+
+    println!(
+        "[client-window] zone '{zone}': {} objects, {} meshes, span {span:.0}, {} cam occluders",
+        place.len(), models.len(), occluders.len()
+    );
+    Some((center, span, min[1], scenery.env.clone(), occluders))
 }
 
 /// Result of loading a zone: camera framing + env + the decoded cloud textures
@@ -809,19 +939,20 @@ struct ZoneLoad {
     env: rcce_data::AreaEnv,
     cloud_regular: Option<rcce_data::texture::Image>,
     cloud_storm: Option<rcce_data::texture::Image>,
+    occluders: Vec<([f32; 3], f32)>,
 }
 
 /// Load a zone's scenery + sky/cloud/stars (via `load_zone_static`) and decode
 /// its cloud textures. The single primitive used by both the initial load and a
 /// live area-change reload.
 fn load_zone_full(store: &mut AssetStore, view: &mut WorldView, gfx: &Gfx, data_root: &str, zone: &str) -> Option<ZoneLoad> {
-    let (center, span, ground_y, env) = load_zone_static(store, view, gfx, data_root, zone)?;
+    let (center, span, ground_y, env, occluders) = load_zone_static(store, view, gfx, data_root, zone)?;
     let load_img = |id: u16| -> Option<rcce_data::texture::Image> {
         (id != 65535).then(|| store.texture_path(id).and_then(|p| rcce_data::texture::load(&p))).flatten()
     };
     let cloud_regular = load_img(env.cloud_tex_id);
     let cloud_storm = load_img(env.storm_cloud_tex_id);
-    Some(ZoneLoad { center, span, ground_y, env, cloud_regular, cloud_storm })
+    Some(ZoneLoad { center, span, ground_y, env, cloud_regular, cloud_storm, occluders })
 }
 
 impl ApplicationHandler for App {
@@ -853,6 +984,7 @@ impl ApplicationHandler for App {
             self.center = z.center;
             self.span = z.span;
             self.ground_y = z.ground_y;
+            self.cam_occluders = z.occluders;
             self.fog_color = z.env.fog_color;
             self.fog_near = z.env.fog_near;
             self.fog_far = z.env.fog_far;
@@ -868,46 +1000,40 @@ impl ApplicationHandler for App {
         }
         // Resolve footstep sounds once (played as one-shots while moving).
         self.footstep_paths = store.footstep_sounds();
+        // Playable races for the character-create screen.
+        self.playable = store.playable_templates();
 
-        // Try to log into the live server.
-        println!("[client-window] logging in to {}:{} ...", self.host, self.port);
-        let mut transport = EnetTransport::new();
-        // Use a pre-existing account (with a character) so login is fast — a
-        // brand-new account would enter the slow CreateCharacter loop and block
-        // window creation. Overridable via RCCE_USER. (A non-clean prior exit
-        // leaves the account "online" → 'L'; restart the server to clear it.)
-        let user = std::env::var("RCCE_USER").unwrap_or_else(|_| "rustbot".to_string());
-        let creds = Credentials {
-            username: user,
-            password: "rustpass".to_string(),
-            email: "rust@bot.com".to_string(),
-        };
-        match login(&mut transport, &self.host, self.port, &creds) {
-            Ok(outcome) => {
-                let mut world = World {
-                    my_runtime_id: outcome.runtime_id,
-                    template_genders: store.template_genders(),
-                    ..Default::default()
-                };
-                for m in &outcome.world_packets {
-                    world.apply(m);
+        // RCCE_AUTOLOGIN=1 keeps the old straight-to-world path. The headless
+        // world harnesses (RCCE_BENCH / RCCE_AUTOWALK) are meaningless at the
+        // login screen, so they imply auto-login too. Otherwise the window boots
+        // into the interactive login screen; the menu connection opens on submit.
+        let auto_login = std::env::var_os("RCCE_AUTOLOGIN").is_some()
+            || std::env::var_os("RCCE_BENCH").is_some()
+            || std::env::var_os("RCCE_AUTOWALK").is_some();
+        if auto_login {
+            println!("[client-window] auto-login to {}:{} ...", self.host, self.port);
+            let mut transport = EnetTransport::new();
+            let creds = Credentials {
+                username: self.login_user.clone(),
+                password: self.login_pass.clone(),
+                email: "rust@bot.com".to_string(),
+            };
+            match login(&mut transport, &self.host, self.port, &creds) {
+                Ok(outcome) => {
+                    self.enter_outcome(transport, outcome, &store);
                 }
-                println!("[client-window] ✓ in world '{}', RuntimeID={}", world.zone.name, outcome.runtime_id);
-                if let Some(s) = &outcome.sheet {
-                    println!(
-                        "[client-window] sheet: gold={} level={} {} item(s) {} spell(s)",
-                        s.gold, s.level, s.inventory.len(), s.spells.len()
-                    );
-                    // Seed the live inventory from the fetched sheet; from here
-                    // P_InventoryUpdate G/T/H/R keeps world.me_inventory current.
-                    for it in &s.inventory {
-                        world.me_inventory.insert(it.slot, *it);
-                    }
-                }
-                self.sheet = outcome.sheet;
-                self.net = Some(Net { transport, world, peer: outcome.peer, updates: 0 });
+                Err(e) => eprintln!("[client-window] auto-login failed ({e}); zone-only spectator view"),
             }
-            Err(e) => eprintln!("[client-window] login failed ({e}); zone-only spectator view"),
+        } else {
+            self.mode = Mode::Login;
+            self.login_msg = "Type your account name + password, then Enter".to_string();
+            println!("[client-window] login screen (server {}:{})", self.host, self.port);
+            // Headless test hook: jump straight to character select (drives the
+            // real account-login against the server) so the screen is screenshot-
+            // verifiable. Pre-fills from RCCE_USER like the live "Enter" press.
+            if std::env::var_os("RCCE_AUTOSUBMIT").is_some() {
+                self.submit_login();
+            }
         }
 
         let mut overlay = rcce_render::Overlay::new(&gfx.device, format);
@@ -938,6 +1064,18 @@ impl ApplicationHandler for App {
             }
             WindowEvent::KeyboardInput { event, .. } => {
                 let pressed = event.state == ElementState::Pressed;
+                // Login / character-select screens consume all keys.
+                if self.mode != Mode::InWorld {
+                    if pressed {
+                        if let PhysicalKey::Code(code) = event.physical_key {
+                            self.menu_key(event_loop, code, event.text.as_deref());
+                            if let Some(w) = self.window.as_ref() {
+                                w.request_redraw();
+                            }
+                        }
+                    }
+                    return;
+                }
                 // Chat typing mode: capture text, Enter sends, Esc cancels.
                 if self.chat_input.is_some() {
                     if pressed {
@@ -1266,6 +1404,238 @@ impl ApplicationHandler for App {
 }
 
 impl App {
+    /// Build the live `Net` + world from a successful login and switch to the
+    /// in-world screen. Shared by auto-login and interactive enter-world. The
+    /// render loop reloads the character's actual spawn zone on the next frame
+    /// (its `P_ChangeArea` differs from the menu backdrop zone).
+    fn enter_outcome(
+        &mut self,
+        transport: EnetTransport,
+        outcome: rcce_client::login::LoginOutcome,
+        store: &AssetStore,
+    ) {
+        let mut world = World {
+            my_runtime_id: outcome.runtime_id,
+            template_genders: store.template_genders(),
+            ..Default::default()
+        };
+        for m in &outcome.world_packets {
+            world.apply(m);
+        }
+        println!("[client-window] ✓ in world '{}', RuntimeID={}", world.zone.name, outcome.runtime_id);
+        if let Some(s) = &outcome.sheet {
+            println!(
+                "[client-window] sheet: gold={} level={} {} item(s) {} spell(s)",
+                s.gold, s.level, s.inventory.len(), s.spells.len()
+            );
+            for it in &s.inventory {
+                world.me_inventory.insert(it.slot, *it);
+            }
+        }
+        self.sheet = outcome.sheet;
+        self.net = Some(Net { transport, world, peer: outcome.peer, updates: 0 });
+        self.mode = Mode::InWorld;
+    }
+
+    /// Login screen submit: open the menu connection, create/verify the account,
+    /// and advance to character select on success.
+    fn submit_login(&mut self) {
+        let creds = Credentials {
+            username: self.login_user.trim().to_string(),
+            password: self.login_pass.clone(),
+            email: "rust@bot.com".to_string(),
+        };
+        if creds.username.is_empty() {
+            self.login_msg = "Account name required".to_string();
+            return;
+        }
+        self.login_msg = "Connecting…".to_string();
+        let mut transport = EnetTransport::new();
+        match account_login(&mut transport, &self.host, self.port, &creds) {
+            Ok((peer, chars)) => {
+                self.login_transport = Some(transport);
+                self.login_peer = peer;
+                self.login_md5 = rcce_net::auth::md5_hex(&creds.password);
+                self.chars = chars;
+                self.char_sel = 0;
+                self.creating = None;
+                self.login_msg = if self.chars.is_empty() {
+                    "No characters — press C to create one".to_string()
+                } else {
+                    String::new()
+                };
+                self.mode = Mode::CharSelect;
+            }
+            Err(e) => self.login_msg = e,
+        }
+    }
+
+    /// Enter the world as the highlighted character.
+    fn enter_selected(&mut self) {
+        if self.chars.is_empty() {
+            self.login_msg = "Create a character first (press C)".to_string();
+            return;
+        }
+        let idx = self.char_sel.min(self.chars.len() - 1) as u8;
+        let user = self.login_user.trim().to_string();
+        let md5 = self.login_md5.clone();
+        let (host, port) = (self.host.clone(), self.port);
+        let Some(mut transport) = self.login_transport.take() else { return };
+        self.login_msg = "Entering world…".to_string();
+        match enter_world(&mut transport, self.login_peer, &host, port, &user, &md5, idx) {
+            Ok(outcome) => {
+                let store = self.store.take();
+                if let Some(s) = &store {
+                    self.enter_outcome(transport, outcome, s);
+                }
+                self.store = store;
+            }
+            Err(e) => {
+                self.login_msg = format!("Enter failed: {e}");
+                self.login_transport = Some(transport);
+            }
+        }
+    }
+
+    /// Open the create sub-screen (type a name, Left/Right picks the race).
+    fn begin_create(&mut self) {
+        if self.playable.is_empty() {
+            self.login_msg = "No playable races in this project".to_string();
+            return;
+        }
+        self.creating = Some((String::new(), 0));
+        self.login_msg = "Name it · ←/→ race · Enter create · Esc cancel".to_string();
+    }
+
+    /// Submit the create sub-screen.
+    fn submit_create(&mut self) {
+        let Some((name, tpl_idx)) = self.creating.clone() else { return };
+        let name = name.trim().to_string();
+        if name.is_empty() {
+            self.login_msg = "Name required".to_string();
+            return;
+        }
+        let Some(&(actor_id, _)) = self.playable.get(tpl_idx) else { return };
+        let user = self.login_user.trim().to_string();
+        let md5 = self.login_md5.clone();
+        let Some(mut t) = self.login_transport.take() else { return };
+        match create_char(&mut t, self.login_peer, &user, &md5, actor_id, &name) {
+            Ok(chars) => {
+                self.chars = chars;
+                self.creating = None;
+                self.char_sel = self.chars.len().saturating_sub(1);
+                self.login_msg = format!("Created {name}");
+            }
+            Err(e) => self.login_msg = e,
+        }
+        self.login_transport = Some(t);
+    }
+
+    /// Delete the highlighted character (best-effort; the server may reject it
+    /// pre-session).
+    fn delete_selected(&mut self) {
+        if self.chars.is_empty() {
+            return;
+        }
+        let idx = self.char_sel.min(self.chars.len() - 1) as u8;
+        let user = self.login_user.trim().to_string();
+        let md5 = self.login_md5.clone();
+        let Some(mut t) = self.login_transport.take() else { return };
+        match delete_char(&mut t, self.login_peer, &user, &md5, idx) {
+            Ok(chars) => {
+                self.chars = chars;
+                self.char_sel = 0;
+                self.login_msg = "Character deleted".to_string();
+            }
+            Err(e) => self.login_msg = e,
+        }
+        self.login_transport = Some(t);
+    }
+
+    /// Keyboard handling for the login + character-select screens.
+    fn menu_key(&mut self, event_loop: &ActiveEventLoop, code: KeyCode, text: Option<&str>) {
+        match self.mode {
+            Mode::Login => match code {
+                KeyCode::Enter | KeyCode::NumpadEnter => self.submit_login(),
+                KeyCode::Tab | KeyCode::ArrowDown | KeyCode::ArrowUp => {
+                    self.login_focus ^= 1;
+                }
+                KeyCode::Backspace => {
+                    let f = if self.login_focus == 0 { &mut self.login_user } else { &mut self.login_pass };
+                    f.pop();
+                }
+                KeyCode::Escape => event_loop.exit(),
+                _ => {
+                    if let Some(t) = text {
+                        let f = if self.login_focus == 0 { &mut self.login_user } else { &mut self.login_pass };
+                        for ch in t.chars().filter(|c| !c.is_control() && *c != ' ') {
+                            if f.chars().count() < 24 {
+                                f.push(ch);
+                            }
+                        }
+                    }
+                }
+            },
+            Mode::CharSelect => {
+                if let Some((name, tpl)) = self.creating.as_mut() {
+                    match code {
+                        KeyCode::Enter | KeyCode::NumpadEnter => self.submit_create(),
+                        KeyCode::Escape => {
+                            self.creating = None;
+                            self.login_msg = String::new();
+                        }
+                        KeyCode::Backspace => {
+                            name.pop();
+                        }
+                        KeyCode::ArrowLeft => {
+                            let n = self.playable.len();
+                            if n > 0 {
+                                *tpl = (*tpl + n - 1) % n;
+                            }
+                        }
+                        KeyCode::ArrowRight => {
+                            let n = self.playable.len();
+                            if n > 0 {
+                                *tpl = (*tpl + 1) % n;
+                            }
+                        }
+                        _ => {
+                            if let Some(t) = text {
+                                for ch in t.chars().filter(|c| c.is_alphanumeric()) {
+                                    if name.chars().count() < 16 {
+                                        name.push(ch);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    match code {
+                        KeyCode::Enter | KeyCode::NumpadEnter => self.enter_selected(),
+                        KeyCode::ArrowUp => {
+                            if self.char_sel > 0 {
+                                self.char_sel -= 1;
+                            }
+                        }
+                        KeyCode::ArrowDown => {
+                            if self.char_sel + 1 < self.chars.len() {
+                                self.char_sel += 1;
+                            }
+                        }
+                        KeyCode::KeyC => self.begin_create(),
+                        KeyCode::Delete => self.delete_selected(),
+                        KeyCode::Escape => {
+                            self.mode = Mode::Login;
+                            self.login_msg = String::new();
+                        }
+                        _ => {}
+                    }
+                }
+            }
+            Mode::InWorld => {}
+        }
+    }
+
     /// Handle a left-click on the HUD (mouse-look off). Hit-tests the bottom
     /// function-button row, then the inventory slot grid when the panel is open.
     /// Positions mirror the draw code exactly (shared FUNCTION_BUTTONS / the
@@ -1460,7 +1830,213 @@ impl App {
         }
     }
 
+    /// Render the login / character-select screen: a slowly-orbiting view of the
+    /// loaded zone as a backdrop, with the menu UI drawn over it.
+    fn render_menu(&mut self) {
+        let elapsed = self.start.elapsed().as_secs_f32();
+        // Headless test hook: enter the world from character select on the first
+        // menu frame (the actual menu->world path), so it's verifiable end-to-end.
+        if self.frames == 0
+            && std::env::var_os("RCCE_AUTOENTER").is_some()
+            && self.mode == Mode::CharSelect
+            && !self.chars.is_empty()
+            && self.creating.is_none()
+        {
+            self.enter_selected();
+            if self.mode == Mode::InWorld {
+                return;
+            }
+        }
+        let (w, h) = match self.gfx.as_ref() {
+            Some(g) => (g.config.width, g.config.height),
+            None => return,
+        };
+        let (sw, sh) = (w as f32, h.max(1) as f32);
+
+        // Spectator orbit of the zone centre (the backdrop behind the menu).
+        let ang = elapsed * 0.12;
+        let r = self.span * 0.7;
+        let eye = [
+            self.center[0] + r * ang.cos(),
+            self.ground_y + self.span * 0.45,
+            self.center[2] + r * ang.sin(),
+        ];
+        let target = [self.center[0], self.ground_y + self.span * 0.08, self.center[2]];
+        let vp = rcce_render::view_proj(eye, target, sw / sh);
+        let fog = self.fog_color;
+        let clear = wgpu::Color { r: fog[0] as f64, g: fog[1] as f64, b: fog[2] as f64, a: 1.0 };
+
+        // Build the overlay command list first (a `&mut self` call, so no other
+        // borrow of `self` may be live), then render world + overlay together.
+        self.draw_menu_overlay(elapsed, sw, sh);
+
+        // Headless screenshot (RCCE_SHOT): render to an offscreen texture and
+        // read it back, then exit — so the login / char-select screens are
+        // verifiable without a visible window. `overlay.render` consumes the
+        // command list, so this path skips the surface present.
+        let shot = std::env::var("RCCE_SHOT").ok().filter(|_| {
+            let want = std::env::var("RCCE_SHOT_FRAME").ok().and_then(|s| s.parse::<u64>().ok()).unwrap_or(45);
+            self.frames + 1 >= want
+        });
+
+        let (Some(gfx), Some(view), Some(overlay)) =
+            (self.gfx.as_ref(), self.view.as_ref(), self.overlay.as_mut())
+        else {
+            return;
+        };
+        if let Some(path) = shot {
+            let tex = gfx.device.create_texture(&wgpu::TextureDescriptor {
+                label: Some("menu-shot"),
+                size: wgpu::Extent3d { width: w, height: h, depth_or_array_layers: 1 },
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format: gfx.config.format,
+                usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
+                view_formats: &[],
+            });
+            let oview = tex.create_view(&Default::default());
+            view.render(&gfx.device, &gfx.queue, &oview, vp, eye, fog, self.fog_near, self.fog_far, self.ambient, self.light_dir, clear, ang, elapsed, 0.0);
+            overlay.render(&gfx.device, &gfx.queue, &oview, sw, sh);
+            match rcce_render::save_texture_png(&gfx.device, &gfx.queue, &tex, w, h, gfx.config.format, &path) {
+                Ok(()) => println!("[client-window] menu screenshot -> {path}"),
+                Err(e) => eprintln!("[client-window] menu screenshot failed: {e}"),
+            }
+            std::process::exit(0);
+        }
+
+        let frame = match gfx.surface.get_current_texture() {
+            Ok(f) => f,
+            Err(_) => {
+                gfx.surface.configure(&gfx.device, &gfx.config);
+                match gfx.surface.get_current_texture() {
+                    Ok(f) => f,
+                    Err(_) => return,
+                }
+            }
+        };
+        let tview = frame.texture.create_view(&Default::default());
+        view.render(&gfx.device, &gfx.queue, &tview, vp, eye, fog, self.fog_near, self.fog_far, self.ambient, self.light_dir, clear, ang, elapsed, 0.0);
+        overlay.render(&gfx.device, &gfx.queue, &tview, sw, sh);
+        frame.present();
+        self.frames += 1;
+        if let Some(win) = self.window.as_ref() {
+            win.request_redraw();
+        }
+    }
+
+    /// Populate the overlay's command list with the login / character-select UI
+    /// (the panel, fields, character roster). Called before the world render so
+    /// both the live window and the offscreen screenshot draw the same thing.
+    fn draw_menu_overlay(&mut self, elapsed: f32, sw: f32, sh: f32) {
+        let Some(overlay) = self.overlay.as_mut() else { return };
+        overlay.clear();
+        let title = "RCCE2";
+        let ts = 5.0;
+        overlay.text_shadow(sw * 0.5 - title.len() as f32 * 9.0 * ts * 0.5, sh * 0.12, ts, title, [0.95, 0.85, 0.5, 1.0]);
+        let sub = "RealmCrafter Community Edition";
+        overlay.text_shadow(sw * 0.5 - sub.len() as f32 * 9.0 * 1.3 * 0.5, sh * 0.12 + 9.0 * ts + 6.0, 1.3, sub, [0.8, 0.85, 0.95, 0.9]);
+
+        let pw = (sw * 0.46).clamp(420.0, 760.0);
+        let ph = sh * 0.42;
+        let px = (sw - pw) * 0.5;
+        let py = sh * 0.34;
+        overlay.rect(px, py, pw, ph, [0.05, 0.06, 0.10, 0.86]);
+        overlay.rect(px, py, pw, 2.5, [0.45, 0.5, 0.65, 0.95]);
+        overlay.rect(px, py + ph - 2.5, pw, 2.5, [0.45, 0.5, 0.65, 0.95]);
+        let pad = 26.0;
+        let fs = 1.7;
+
+        match self.mode {
+            Mode::Login => {
+                let lbl = [0.7, 0.78, 0.92, 0.95];
+                let field_bg = |o: &mut rcce_render::Overlay, x, y, w, focused: bool| {
+                    o.rect(x, y, w, 30.0, [0.10, 0.12, 0.18, 1.0]);
+                    let c = if focused { [0.9, 0.8, 0.4, 1.0] } else { [0.3, 0.34, 0.45, 1.0] };
+                    o.rect(x, y + 30.0, w, 2.0, c);
+                };
+                let fx = px + pad;
+                let fw = pw - pad * 2.0;
+                let mut y = py + pad + 6.0;
+                overlay.text(fx, y, 1.1, "ACCOUNT", lbl);
+                y += 18.0;
+                field_bg(overlay, fx, y, fw, self.login_focus == 0);
+                overlay.text(fx + 8.0, y + 7.0, fs, &self.login_user, [1.0, 1.0, 1.0, 1.0]);
+                if self.login_focus == 0 && (elapsed * 2.0) as i32 % 2 == 0 {
+                    overlay.text(fx + 8.0 + self.login_user.chars().count() as f32 * 9.0 * fs, y + 7.0, fs, "_", [1.0, 1.0, 1.0, 1.0]);
+                }
+                y += 56.0;
+                overlay.text(fx, y, 1.1, "PASSWORD", lbl);
+                y += 18.0;
+                field_bg(overlay, fx, y, fw, self.login_focus == 1);
+                let masked: String = "*".repeat(self.login_pass.chars().count());
+                overlay.text(fx + 8.0, y + 7.0, fs, &masked, [1.0, 1.0, 1.0, 1.0]);
+                if self.login_focus == 1 && (elapsed * 2.0) as i32 % 2 == 0 {
+                    overlay.text(fx + 8.0 + masked.chars().count() as f32 * 9.0 * fs, y + 7.0, fs, "_", [1.0, 1.0, 1.0, 1.0]);
+                }
+                y += 58.0;
+                if !self.login_msg.is_empty() {
+                    overlay.text(fx, y, 1.1, &self.login_msg, [1.0, 0.7, 0.5, 1.0]);
+                }
+                let hint = "Tab switch field   Enter login   Esc quit";
+                overlay.text(sw * 0.5 - hint.len() as f32 * 9.0 * 0.5, py + ph + 14.0, 1.0, hint, [0.6, 0.66, 0.8, 0.9]);
+                let srv = format!("server {}:{}", self.host, self.port);
+                overlay.text(px + pad, py + ph - 22.0, 0.95, &srv, [0.45, 0.5, 0.62, 0.8]);
+            }
+            Mode::CharSelect => {
+                let fx = px + pad;
+                overlay.text(fx, py + pad, 1.6, "SELECT CHARACTER", [0.85, 0.9, 1.0, 1.0]);
+                let list_y = py + pad + 40.0;
+                let row_h = 34.0;
+                if self.chars.is_empty() {
+                    overlay.text(fx, list_y, 1.3, "(no characters yet)", [0.6, 0.64, 0.75, 0.9]);
+                }
+                for (i, c) in self.chars.iter().enumerate() {
+                    let ry = list_y + i as f32 * row_h;
+                    if i == self.char_sel {
+                        overlay.rect(fx - 6.0, ry - 4.0, pw - pad * 2.0 + 12.0, row_h - 4.0, [0.18, 0.22, 0.34, 0.9]);
+                        overlay.rect(fx - 6.0, ry - 4.0, 3.0, row_h - 4.0, [0.9, 0.8, 0.4, 1.0]);
+                    }
+                    let race = self
+                        .playable
+                        .iter()
+                        .find(|(aid, _)| *aid == c.actor_id)
+                        .map(|(_, r)| r.as_str())
+                        .unwrap_or("?");
+                    let g = if c.gender == 1 { "F" } else { "M" };
+                    overlay.text(fx + 4.0, ry, 1.5, &c.name, [1.0, 1.0, 1.0, 1.0]);
+                    overlay.text(fx + 220.0, ry + 2.0, 1.1, &format!("{race}  ({g})"), [0.7, 0.78, 0.9, 0.95]);
+                }
+
+                if let Some((name, tpl)) = &self.creating {
+                    let by = py + ph - 96.0;
+                    overlay.rect(fx - 6.0, by - 8.0, pw - pad * 2.0 + 12.0, 78.0, [0.08, 0.10, 0.16, 0.96]);
+                    overlay.text(fx, by, 1.2, "NEW CHARACTER", [0.85, 0.9, 1.0, 1.0]);
+                    let race = self.playable.get(*tpl).map(|(_, r)| r.as_str()).unwrap_or("?");
+                    overlay.text(fx, by + 22.0, 1.5, &format!("{name}_"), [1.0, 1.0, 0.9, 1.0]);
+                    overlay.text(fx, by + 48.0, 1.2, &format!("< {race} >"), [0.7, 0.85, 0.95, 1.0]);
+                }
+
+                if !self.login_msg.is_empty() {
+                    overlay.text(fx, py + ph - 30.0, 1.05, &self.login_msg, [1.0, 0.75, 0.5, 1.0]);
+                }
+                let hint = if self.creating.is_some() {
+                    "Type name   Left/Right race   Enter create   Esc cancel"
+                } else {
+                    "Up/Down select   Enter play   C create   Del delete   Esc back"
+                };
+                overlay.text(sw * 0.5 - hint.len() as f32 * 9.0 * 0.5, py + ph + 14.0, 1.0, hint, [0.6, 0.66, 0.8, 0.9]);
+            }
+            Mode::InWorld => {}
+        }
+    }
+
     fn render(&mut self) {
+        // Login / character-select: a slowly-orbiting zone backdrop + the menu.
+        if self.mode != Mode::InWorld {
+            self.render_menu();
+            return;
+        }
         let (Some(gfx), Some(view), Some(store)) =
             (self.gfx.as_mut(), self.view.as_mut(), self.store.as_mut())
         else {
@@ -1504,6 +2080,7 @@ impl App {
                     self.center = z.center;
                     self.span = z.span;
                     self.ground_y = z.ground_y;
+                    self.cam_occluders = z.occluders;
                     self.fog_color = z.env.fog_color;
                     self.fog_near = z.env.fog_near;
                     self.fog_far = z.env.fog_far;
@@ -1551,7 +2128,7 @@ impl App {
             let hash = dyn_hash(&net.world, elapsed);
             if self.gpu_skin || hash != self.last_dyn_hash {
                 let (models, textures, place, keys, skinned) =
-                    build_actors(store, &net.world, elapsed, self.ground_y, self.gpu_skin);
+                    build_actors(store, &net.world, elapsed, self.gpu_skin);
                 // CPU drawables: attachments (+ bodies when GPU skinning is off).
                 let instances: Vec<SceneInstance> = place
                     .iter()
@@ -1679,11 +2256,13 @@ impl App {
             let dist = 13.0;
             let (sp, cp) = self.cam_pitch.sin_cos();
             let look = [cam_target[0], cam_target[1] + 3.5, cam_target[2]];
-            let eye = [
-                look[0] + sy * dist * cp,
-                look[1] + dist * sp,
-                look[2] + cy * dist * cp,
-            ];
+            // Boom direction (pivot -> desired eye), unit length.
+            let dir = [sy * cp, sp, cy * cp];
+            // Camera collision: march the boom outward and stop before it enters
+            // a building occluder, so the camera never clips into / through a
+            // wall. Matches the reference client's zoom-in-on-obstruction.
+            let dist = camera_boom(look, dir, dist, &self.cam_occluders).max(2.5);
+            let eye = [look[0] + dir[0] * dist, look[1] + dir[1] * dist, look[2] + dir[2] * dist];
             (eye, look)
         } else {
             let ang = elapsed * 0.3;
@@ -1731,6 +2310,29 @@ impl App {
             elapsed,
             rcce_client::daynight::night_factor(phase),
         );
+
+        // Headless screenshot of the live world: RCCE_SHOT=<path> captures one
+        // frame (after RCCE_SHOT_FRAME frames, default 150, so the zone + actors
+        // have loaded) to a PNG and exits. Verifies the live render — actor
+        // placement, foliage cutout, camera framing — without a visible window.
+        if let Ok(shot) = std::env::var("RCCE_SHOT") {
+            let want = std::env::var("RCCE_SHOT_FRAME")
+                .ok()
+                .and_then(|s| s.parse::<u64>().ok())
+                .unwrap_or(150);
+            if self.frames >= want {
+                match view.capture_png(
+                    &gfx.device, &gfx.queue, gfx.config.width, gfx.config.height, vp, eye,
+                    fog_dn, self.fog_near, self.fog_far, ambient_dn, self.light_dir,
+                    wgpu::Color { r: fog_dn[0] as f64, g: fog_dn[1] as f64, b: fog_dn[2] as f64, a: 1.0 },
+                    self.cam_yaw, elapsed, rcce_client::daynight::night_factor(phase), &shot,
+                ) {
+                    Ok(()) => println!("[client-window] screenshot -> {shot}"),
+                    Err(e) => eprintln!("[client-window] screenshot failed: {e}"),
+                }
+                std::process::exit(0);
+            }
+        }
 
         // 2D overlay: nameplates + health bars over actors, and a player HUD.
         let target_rid = self.target;
@@ -2505,12 +3107,12 @@ impl App {
             let (actors, ups, pos) = self
                 .net
                 .as_ref()
-                .map(|n| (n.world.actors.len(), n.updates, (n.world.me_x, n.world.me_z)))
-                .unwrap_or((0, 0, (0.0, 0.0)));
+                .map(|n| (n.world.actors.len(), n.updates, (n.world.me_x, n.world.me_y, n.world.me_z)))
+                .unwrap_or((0, 0, (0.0, 0.0, 0.0)));
             let draws = self.view.as_ref().map(|v| v.drawable_count()).unwrap_or(0);
             println!(
-                "[client-window] frame {} (~{fps:.0} fps), {actors} actor(s), {draws} drawables, {ups} packets, me=({:.1},{:.1})",
-                self.frames, pos.0, pos.1
+                "[client-window] frame {} (~{fps:.0} fps), {actors} actor(s), {draws} drawables, {ups} packets, me=({:.1},{:.1},{:.1})",
+                self.frames, pos.0, pos.1, pos.2
             );
             self.last_log = Instant::now();
         }
@@ -2531,6 +3133,32 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn camera_boom_collision() {
+        let dir = [0.0, 0.0, 1.0];
+        // No occluders -> full boom.
+        assert_eq!(camera_boom([0.0; 3], dir, 13.0, &[]), 13.0);
+        // Sphere centred 10 ahead, r=2 (spans z=8..12): the march stops before
+        // its eye enters at z=8 — within one 0.4 step below 8.
+        let occ = [([0.0, 0.0, 10.0], 2.0)];
+        let d = camera_boom([0.0; 3], dir, 13.0, &occ);
+        assert!(d >= 7.6 && d < 8.0, "expected ~7.6..8, got {d}");
+        // Sphere off to the side -> missed, full boom.
+        let side = [([20.0, 0.0, 10.0], 2.0)];
+        assert_eq!(camera_boom([0.0; 3], dir, 13.0, &side), 13.0);
+        // Sphere behind the pivot (opposite dir) -> not a hit.
+        let behind = [([0.0, 0.0, -10.0], 2.0)];
+        assert_eq!(camera_boom([0.0; 3], dir, 13.0, &behind), 13.0);
+        // Pivot INSIDE a sphere (player indoors) -> collapse to the minimum.
+        let around = [([0.0, 0.0, 0.0], 6.0)];
+        let d = camera_boom([0.0; 3], dir, 13.0, &around);
+        assert!((d - 2.5).abs() < 1e-4, "indoors -> MIN 2.5, got {d}");
+        // Nearest occluder wins.
+        let many = [([0.0, 0.0, 30.0], 2.0), ([0.0, 0.0, 6.0], 1.0), ([0.0, 0.0, 12.0], 1.0)];
+        let d = camera_boom([0.0; 3], dir, 40.0, &many);
+        assert!(d >= 4.6 && d < 5.0, "nearest hit ~5 -> ~4.6..5, got {d}");
+    }
 
     // The function-button row hit-test must agree with the draw geometry: a
     // click at each button's centre returns that button's action, and the gaps

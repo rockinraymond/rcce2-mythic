@@ -401,6 +401,33 @@ pub fn decode_png(b: &[u8]) -> Option<Image> {
     })
 }
 
+/// Apply Blitz3D **masked**-texture color-keying in place: pixels that are
+/// (near-)pure black become fully transparent. This reproduces the engine's
+/// `LoadTexture(..., flags)` behaviour for the `4` (mask) flag, which foliage
+/// and tree-leaf billboards rely on — their cutout shape is a black background
+/// the renderer keys out (the texture itself carries no alpha channel). Only
+/// pixels already opaque are touched, so a real alpha channel is preserved.
+///
+/// The threshold is tight (all channels `< 16`) so only the keyed background is
+/// removed, not legitimately dark texels (bark, shadowed cloth).
+pub fn mask_black(img: &mut Image) {
+    for px in img.rgba.chunks_exact_mut(4) {
+        if px[3] != 0 && px[0] < 16 && px[1] < 16 && px[2] < 16 {
+            px[3] = 0;
+        }
+    }
+}
+
+/// Decode a texture and, when `flags` carries the Blitz3D mask bit (`& 4`),
+/// color-key its black background to transparent (see [`mask_black`]).
+pub fn load_with_flags(path: &Path, flags: i32) -> Option<Image> {
+    let mut img = load(path)?;
+    if flags & 4 != 0 {
+        mask_black(&mut img);
+    }
+    Some(img)
+}
+
 /// The basename of a (possibly Windows-absolute) texture path.
 pub fn basename(stale: &str) -> &str {
     stale
@@ -451,6 +478,25 @@ fn walk_find(dir: &Path, target_lower: &str, depth: usize) -> Option<PathBuf> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn mask_black_keys_only_black_opaque() {
+        let mut img = Image {
+            width: 4,
+            height: 1,
+            rgba: vec![
+                0, 0, 0, 255, // pure black opaque -> keyed to a=0
+                10, 8, 12, 255, // near-black opaque -> keyed
+                40, 0, 0, 255, // dark red but channel >=16 -> kept
+                0, 0, 0, 0, // already transparent -> untouched (still 0)
+            ],
+        };
+        mask_black(&mut img);
+        assert_eq!(img.rgba[3], 0, "pure black keyed");
+        assert_eq!(img.rgba[7], 0, "near-black keyed");
+        assert_eq!(img.rgba[11], 255, "dark-red kept opaque");
+        assert_eq!(img.rgba[15], 0, "transparent untouched");
+    }
 
     #[test]
     fn basename_handles_windows_paths() {

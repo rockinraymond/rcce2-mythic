@@ -155,6 +155,7 @@ fn main() {
                     std::rc::Rc::new(rcce_data::B3dModel {
                         meshes: src.posed_meshes(frame),
                         textures: src.textures.clone(),
+                        tex_flags: src.tex_flags.clone(),
                         brushes: src.brushes.clone(),
                         bones: src.bones.clone(),
                         anim: src.anim,

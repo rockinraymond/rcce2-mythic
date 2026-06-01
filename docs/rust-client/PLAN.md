@@ -6,6 +6,31 @@ to and plays against the **unmodified** RCCE2 server and reads the **unchanged**
 project files the GUE editor produces. No existing project file (`.bb`, `data/`)
 is modified — the port is additive under `client-rs/`.
 
+## Status (2026-06-01) — login flow + live-render bug fixes
+
+Round of fixes after the first live play-test (all verified via the new
+`RCCE_SHOT` headless capture or unit tests):
+
+- **Login / character-select screen** — the client no longer auto-logs in. It
+  boots into a login screen (account + password fields, typed input, masked
+  password) over an orbiting zone backdrop, then a character-select screen
+  (roster with race/gender, create with a race picker, delete, enter world).
+  `login.rs` was split into `account_login` / `create_char` / `delete_char` /
+  `enter_world` steps. `RCCE_AUTOLOGIN` (implied by `RCCE_BENCH`/`RCCE_AUTOWALK`)
+  keeps the straight-to-world path for headless runs.
+- **Masked-texture transparency** — foliage/grass/tree-leaf billboards rendered
+  as opaque **black squares**: the b3d `TEXS` mask flag (Blitz `&4`) was parsed
+  then discarded. Now threaded through (`B3dMesh.texture_flag`) and black is
+  color-keyed transparent on masked textures (`texture::load_with_flags`).
+- **Actor placement** — actors rendered ~16 units below their nameplates and the
+  camera (every actor was pinned to one flat zone `ground_y` instead of its own
+  authoritative spawn Y). Now each actor stands on `pos[1]`.
+- **Third-person camera collision** — the boom marches out and stops before
+  entering a building occluder (per-zone bounding spheres of building-sized,
+  non-foliage props), so the camera no longer clips into / through walls.
+- **Headless screenshot** — `RCCE_SHOT=<path>` (`RCCE_SHOT_FRAME=N`) captures the
+  live world OR menu to a PNG and exits; `save_texture_png` in `rcce-render`.
+
 ## Status (2026-05-31) — vertical slice through visual parity DONE
 
 The port is now a playable, feature-rich client built to `bin/ClientRS.exe`

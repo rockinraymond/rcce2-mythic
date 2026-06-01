@@ -281,6 +281,11 @@ pub struct B3dMesh {
     /// stored in the B3D (often a stale absolute author path — resolve by
     /// basename against the project's texture dirs).
     pub texture: Option<String>,
+    /// Blitz3D texture flags for this mesh's resolved texture slot (`TEXS`
+    /// flags: `1`=color, `2`=alpha, `4`=masked/color-key, `8`=mipmap, …).
+    /// `4` (masked) means the texture's black pixels are transparent — the
+    /// engine color-keys them; foliage/grass billboards rely on this.
+    pub texture_flag: i32,
 }
 
 /// A parsed `.b3d` model: all meshes, flattened (node translation applied).
@@ -289,6 +294,8 @@ pub struct B3dModel {
     pub meshes: Vec<B3dMesh>,
     /// `TEXS` texture filenames, by index.
     pub textures: Vec<String>,
+    /// `TEXS` Blitz3D flags, parallel to [`textures`](Self::textures).
+    pub tex_flags: Vec<i32>,
     /// `BRUS` brushes — each brush's texture-slot indices into `textures`
     /// (`-1` = empty slot).
     pub brushes: Vec<Vec<i32>>,
@@ -520,6 +527,7 @@ impl B3dModel {
                 if let Some(name) = self.textures.get(tex_id as usize) {
                     mesh.texture = Some(name.clone());
                 }
+                mesh.texture_flag = self.tex_flags.get(tex_id as usize).copied().unwrap_or(0);
             }
         }
     }
@@ -612,12 +620,13 @@ fn parse_keys(r: &mut BlitzReader, end: usize) -> Result<Vec<B3dKey>, ReadError>
 fn parse_texs(r: &mut BlitzReader, end: usize, model: &mut B3dModel) -> Result<(), ReadError> {
     while r.position() < end {
         let file = r.read_cstr(1024)?;
-        let _flags = r.read_int()?;
+        let flags = r.read_int()?;
         let _blend = r.read_int()?;
         for _ in 0..5 {
             r.read_float()?;
         }
         model.textures.push(file);
+        model.tex_flags.push(flags);
     }
     Ok(())
 }
@@ -753,6 +762,7 @@ fn parse_mesh(r: &mut BlitzReader, end: usize, world: &Mat4) -> Result<Vec<B3dMe
             indices,
             brush_id,
             texture: None,
+            texture_flag: 0,
         });
     }
     Ok(out)

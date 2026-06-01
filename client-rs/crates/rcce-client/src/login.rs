@@ -19,6 +19,179 @@ pub struct Credentials {
     pub email: String,
 }
 
+/// One character on an account, as packed in the `P_VerifyAccount` /
+/// `P_DeleteCharacter` 'Y'/list response (`ServerNet.bb:3001`): name, the actor
+/// template id, gender, and the appearance selections.
+#[derive(Debug, Clone)]
+pub struct CharInfo {
+    pub name: String,
+    pub actor_id: u16,
+    pub gender: u8,
+    pub face: u8,
+    pub hair: u8,
+    pub beard: u8,
+    pub body: u8,
+}
+
+/// Parse a packed character-list blob (the bytes AFTER any sentinel). Each
+/// record: `nameLen:u8 name`, `actorID:u16`, `gender:u8`, `face:u8`, `hair:u8`,
+/// `beard:u8`, `body:u8`. Stops at the first short/garbage record.
+pub fn parse_char_list(data: &[u8]) -> Vec<CharInfo> {
+    let mut r = MsgReader::new(data);
+    let mut out = Vec::new();
+    while r.remaining() > 0 {
+        let Some(name) = r.str8() else { break };
+        let (Some(actor_id), Some(gender)) = (r.u16(), r.u8()) else { break };
+        let face = r.u8().unwrap_or(0);
+        let hair = r.u8().unwrap_or(0);
+        let beard = r.u8().unwrap_or(0);
+        let body = r.u8().unwrap_or(0);
+        out.push(CharInfo { name, actor_id, gender, face, hair, beard, body });
+    }
+    out
+}
+
+/// Re-query the account's character list (a fresh `P_VerifyAccount`). Used after
+/// a create/delete to refresh the on-screen roster.
+fn verify_list<T: Transport>(t: &mut T, peer: i32, user: &str, md5: &str) -> Result<Vec<CharInfo>, String> {
+    let mut w = MsgWriter::new();
+    w.str8(user).str8(md5);
+    t.send(peer, pk::VERIFY_ACCOUNT, w.as_slice(), true);
+    let resp = pump(t, 1500);
+    let m = resp
+        .into_iter()
+        .find(|m| matches!(sentinel(m), 'Y' | 'P' | 'N' | 'B' | 'L'))
+        .ok_or("no VerifyAccount response")?;
+    match sentinel(&m) {
+        'Y' => Ok(parse_char_list(&m.data[1..])),
+        'B' => Err("account banned".into()),
+        'L' | 'P' => Err("account already online".into()),
+        _ => Err("wrong username or password".into()),
+    }
+}
+
+/// **Step 1 of the interactive flow.** Connect, ensure the account exists
+/// (CreateAccount is idempotent), verify the password, and return the live
+/// connection plus the character roster. Keep `peer` open for create/delete and
+/// the eventual [`enter_world`]. Maps server sentinels to human errors.
+pub fn account_login<T: Transport>(
+    t: &mut T,
+    host: &str,
+    port: u16,
+    c: &Credentials,
+) -> Result<(i32, Vec<CharInfo>), String> {
+    let md5 = md5_hex(&c.password);
+    let peer = t.connect(host, port).map_err(|e| format!("connect: {e}"))?;
+    // CreateAccount — 'N' just means it already exists (idempotent).
+    let mut w = MsgWriter::new();
+    w.str8(&c.username)
+        .str8(&md5)
+        .u8(c.email.len() as u8)
+        .raw(&encrypt_email(&c.email));
+    t.send(peer, pk::CREATE_ACCOUNT, w.as_slice(), true);
+    let _ = pump(t, 1000);
+    let chars = verify_list(t, peer, &c.username, &md5)?;
+    Ok((peer, chars))
+}
+
+/// **Create a character** on the open login connection, then return the
+/// refreshed roster. `actor_id` is a playable template; appearance selections
+/// default to 0.
+pub fn create_char<T: Transport>(
+    t: &mut T,
+    peer: i32,
+    user: &str,
+    md5: &str,
+    actor_id: u16,
+    name: &str,
+) -> Result<Vec<CharInfo>, String> {
+    let mut w = MsgWriter::new();
+    w.str8(user).str8(md5);
+    w.u16(actor_id).u8(0).u8(0).u8(0).u8(0).u8(0);
+    w.raw(&[0u8; 40]);
+    w.raw(name.as_bytes());
+    t.send(peer, pk::CREATE_CHARACTER, w.as_slice(), true);
+    match pump(t, 1500)
+        .iter()
+        .find(|m| matches!(sentinel(m), 'Y' | 'I' | 'N'))
+        .map(sentinel)
+    {
+        Some('Y') => verify_list(t, peer, user, md5),
+        Some('I') => Err("that name is taken".into()),
+        _ => Err("character creation rejected".into()),
+    }
+}
+
+/// **Delete a character** by slot index, returning the refreshed roster. The
+/// server only honours this for the session that owns the account, so it may be
+/// rejected pre-game (returns an error the UI surfaces).
+pub fn delete_char<T: Transport>(
+    t: &mut T,
+    peer: i32,
+    user: &str,
+    md5: &str,
+    index: u8,
+) -> Result<Vec<CharInfo>, String> {
+    let mut w = MsgWriter::new();
+    w.str8(user).str8(md5).u8(index);
+    t.send(peer, pk::DELETE_CHARACTER, w.as_slice(), true);
+    let m = pump(t, 1500)
+        .into_iter()
+        .find(|m| m.msg_type == pk::DELETE_CHARACTER)
+        .ok_or("no delete response")?;
+    if sentinel(&m) == 'N' && m.data.len() == 1 {
+        return Err("delete rejected by server".into());
+    }
+    Ok(parse_char_list(&m.data))
+}
+
+/// **Final step.** Leave the menu connection and open the game connection for
+/// character `index`: fetch the sheet on the menu connection, disconnect, then
+/// `P_StartGame` on a fresh connection. Mirrors [`login`]'s conn#2 handshake.
+pub fn enter_world<T: Transport>(
+    t: &mut T,
+    menu_peer: i32,
+    host: &str,
+    port: u16,
+    user: &str,
+    md5: &str,
+    index: u8,
+) -> Result<LoginOutcome, String> {
+    let sheet = fetch_character(t, menu_peer, user, md5, index);
+    t.disconnect(menu_peer);
+    sleep(Duration::from_millis(300));
+
+    let peer2 = t.connect(host, port).map_err(|e| format!("conn#2: {e}"))?;
+    let mut w = MsgWriter::new();
+    w.str8(user).str8(md5).u8(index);
+    t.send(peer2, pk::START_GAME, w.as_slice(), true);
+
+    let mut runtime_id = 0u16;
+    let mut replies = 0;
+    let mut world_packets = Vec::new();
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while Instant::now() < deadline && replies < 13 {
+        for m in t.poll() {
+            if m.msg_type == pk::START_GAME {
+                if sentinel(&m) == 'N' && m.data.len() == 1 {
+                    return Err("StartGame rejected ('N')".into());
+                }
+                if m.data.len() <= 2 {
+                    runtime_id = MsgReader::new(&m.data).u16().unwrap_or(0);
+                }
+                replies += 1;
+            } else {
+                world_packets.push(m);
+            }
+        }
+        sleep(Duration::from_millis(20));
+    }
+    if runtime_id == 0 {
+        return Err("no RuntimeID assigned".into());
+    }
+    Ok(LoginOutcome { runtime_id, peer: peer2, world_packets, sheet })
+}
+
 pub struct LoginOutcome {
     /// Server-assigned runtime id for the local player.
     pub runtime_id: u16,

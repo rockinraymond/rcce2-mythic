@@ -299,6 +299,20 @@ impl AssetStore {
         self.mesh_model(mesh_id)
     }
 
+    /// Playable races offered in character create: `(template_id, race_name)`
+    /// for every `playable` template that has a usable body mesh, sorted by id.
+    pub fn playable_templates(&self) -> Vec<(u16, String)> {
+        let mut out: Vec<(u16, String)> = self
+            .actors
+            .templates
+            .values()
+            .filter(|t| t.playable && (t.mesh_ids[0] != 65535 || t.mesh_ids[1] != 65535))
+            .map(|t| (t.id, t.race.clone()))
+            .collect();
+        out.sort_by_key(|&(id, _)| id);
+        out
+    }
+
     /// The actor's in-world render scale, matching the engine
     /// (`Actors3D.bb:45`): `0.05 × LoadedMeshScales[mesh] × Actor.Scale`.
     /// Positions stay in raw world units. Falls back to `0.05` if a stored
@@ -379,7 +393,7 @@ impl AssetStore {
                         m.texture
                             .as_ref()
                             .and_then(|name| texture::find_texture(&roots, name))
-                            .and_then(|p| texture::load(&p))
+                            .and_then(|p| texture::load_with_flags(&p, m.texture_flag))
                     })
             })
             .collect()
@@ -415,12 +429,16 @@ impl AssetStore {
             .iter()
             .map(|m| {
                 if let Some(img) = &retex {
-                    return Some(img.clone());
+                    let mut img = img.clone();
+                    if m.texture_flag & 4 != 0 {
+                        texture::mask_black(&mut img);
+                    }
+                    return Some(img);
                 }
                 m.texture
                     .as_ref()
                     .and_then(|name| texture::find_texture(&roots, name))
-                    .and_then(|p| texture::load(&p))
+                    .and_then(|p| texture::load_with_flags(&p, m.texture_flag))
             })
             .collect()
     }
