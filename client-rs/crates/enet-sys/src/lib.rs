@@ -74,6 +74,10 @@ extern "C" {
     pub fn enet_host_flush(host: *mut ENetHost);
     pub fn enet_peer_send(peer: *mut ENetPeer, channel: u8, packet: *mut ENetPacket) -> c_int;
     pub fn enet_peer_disconnect_now(peer: *mut ENetPeer, data: u32);
+    /// Graceful disconnect: queues a disconnect that is acknowledged by the peer
+    /// (reliable), unlike `_now`. Service the host afterward until the DISCONNECT
+    /// event arrives so the server clears the session before we exit (CBT login).
+    pub fn enet_peer_disconnect(peer: *mut ENetPeer, data: u32);
     pub fn enet_peer_reset(peer: *mut ENetPeer);
     pub fn enet_packet_create(
         data: *const c_void,

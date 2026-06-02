@@ -46,7 +46,34 @@ impl EnetTransport {
 
     fn teardown(&mut self) {
         unsafe {
-            if !self.peer.is_null() {
+            if !self.peer.is_null() && !self.host.is_null() {
+                // Graceful, acknowledged disconnect so the server clears the
+                // account's session (LoggedOn) before we exit — otherwise it
+                // lingers until the ENet connection timeout (~30 s) and an
+                // immediate re-login is rejected with "already online" ('L').
+                // `enet_peer_disconnect_now` only sends one unreliable packet, so
+                // we use the reliable `enet_peer_disconnect` and pump the host for
+                // up to ~1 s waiting for the DISCONNECT acknowledgement.
+                enet_peer_disconnect(self.peer, 0);
+                let mut ev: ENetEvent = std::mem::zeroed();
+                let mut acked = false;
+                for _ in 0..20 {
+                    let r = enet_host_service(self.host, &mut ev, 50);
+                    if r > 0 && ev.type_ == ENET_EVENT_TYPE_DISCONNECT {
+                        acked = true;
+                        break;
+                    }
+                    if r < 0 {
+                        break;
+                    }
+                }
+                // If the peer never acked (lost packet / server gone), force it
+                // so we at least flush a disconnect command out the door.
+                if !acked {
+                    enet_peer_disconnect_now(self.peer, 0);
+                    enet_host_flush(self.host);
+                }
+            } else if !self.peer.is_null() {
                 enet_peer_disconnect_now(self.peer, 0);
             }
             if !self.host.is_null() {

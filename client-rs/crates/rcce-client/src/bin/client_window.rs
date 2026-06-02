@@ -3070,6 +3070,7 @@ impl App {
                 Ok(()) => println!("[client-window] menu screenshot -> {path}"),
                 Err(e) => eprintln!("[client-window] menu screenshot failed: {e}"),
             }
+            self.shutdown_net();
             std::process::exit(0);
         }
 
@@ -3311,6 +3312,20 @@ impl App {
                 overlay.text(sw * 0.5 - hint.len() as f32 * 9.0 * 0.5, py + ph + 14.0, 1.0, hint, [0.6, 0.66, 0.8, 0.9]);
             }
             Mode::InWorld => {}
+        }
+    }
+
+    /// Gracefully disconnect any open ENet connection. Called before a hard
+    /// `std::process::exit` (RCCE_SHOT / RCCE_BENCH), which skips destructors —
+    /// so the server clears the account session (LoggedOn) promptly rather than
+    /// waiting out the connection timeout and rejecting the next login with 'L'.
+    fn shutdown_net(&mut self) {
+        if let Some(net) = self.net.as_mut() {
+            net.transport.disconnect(net.peer);
+        }
+        let lp = self.login_peer;
+        if let Some(t) = self.login_transport.as_mut() {
+            t.disconnect(lp);
         }
     }
 
@@ -5428,6 +5443,7 @@ impl App {
                         Ok(()) => println!("[client-window] screenshot -> {shot}"),
                         Err(e) => eprintln!("[client-window] screenshot failed: {e}"),
                     }
+                    self.shutdown_net();
                     std::process::exit(0);
                 }
             }
@@ -5456,6 +5472,7 @@ impl App {
                         "[bench] avg fps over {measured} frames: {:.1} ({secs:.2}s, {actors} actors, {draws} drawables)",
                         measured as f32 / secs
                     );
+                    self.shutdown_net();
                     std::process::exit(0);
                 }
             }
