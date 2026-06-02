@@ -53,8 +53,8 @@ that hurt out of proportion to their count.
    modal + reply) and `P_ProgressBar` (`C`/`U`/`D` + create-ack) now parse, render, and close via ESC.
    *(The NPC **dialog** window — `P_Dialog` — was already DONE, TGT-5; the remaining stuck-window path
    was the unhandled `P_ScriptInput`.)*
-3. **No camera zoom of any kind.** `dist = 13.0` hardcoded; no mouse-wheel handler, no keyboard zoom.
-   (Both the rendering and input audits found ACCEPTANCE's "PARTIAL" overstated — it's MISSING.) `client_window.rs:3078`.
+3. ~~**No camera zoom of any kind.**~~ **FIXED** (CAM-3). `cam_dist` field + `MouseWheel` handler +
+   `-`/`=` keys, clamped [5,50] via `zoom_step`, threaded into the third-person boom.
 4. **No client-side body yaw (`me_yaw`).** Turn keys, mouse-look, and movement never rotate the local
    character; facing is purely server-echoed. Root cause behind 4+ DIVERGENT movement/camera rows.
 5. **Can't melee or chat-attack at range; can't talk via several paths.** Outbound `P_AttackActor` exists

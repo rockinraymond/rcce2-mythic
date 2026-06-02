@@ -15,7 +15,7 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use winit::application::ApplicationHandler;
-use winit::event::{DeviceEvent, DeviceId, ElementState, MouseButton, WindowEvent};
+use winit::event::{DeviceEvent, DeviceId, ElementState, MouseButton, MouseScrollDelta, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
 use winit::keyboard::{KeyCode, PhysicalKey};
 use winit::window::{CursorGrabMode, Window, WindowId};
@@ -159,6 +159,10 @@ struct App {
     cam_yaw: f32,
     /// Vertical look angle (radians, + tilts the camera up over the player).
     cam_pitch: f32,
+    /// Third-person boom length (CAM-3). Adjusted by the mouse wheel and the
+    /// `-`/`=` keys, clamped to [`CAM_DIST_MIN`, `CAM_DIST_MAX`]; fed as the
+    /// boom's max distance (camera collision may pull it in further).
+    cam_dist: f32,
     /// Mouse-look active: cursor grabbed/hidden, mouse motion drives yaw/pitch.
     /// Toggled with Tab; off by default so the headless/autowalk path and the
     /// arrow/Q-E discrete turn keep working unchanged.
@@ -343,6 +347,7 @@ impl App {
             run: false,
             cam_yaw: 0.0,
             cam_pitch: 0.25,
+            cam_dist: CAM_DIST_DEFAULT,
             mouse_look: false,
             last_move: now,
             was_moving: false,
@@ -652,6 +657,20 @@ fn lightning_fires(storm: bool, now: f32, next: f32) -> bool {
 /// (`CamYaw = EntityYaw(Me)`, `CamPitch = 0`). Pure — unit-tested.
 fn snap_camera(me_yaw: f32) -> (f32, f32) {
     (me_yaw, 0.0)
+}
+
+/// Camera zoom bounds (CAM-3). Blitz clamps the mouse-wheel zoom to [5,50] and
+/// the keyboard zoom to [3,50] (`Interface3D.bb:643-657`); we use [5,50] for
+/// both with a 13.0 default (the prior hardcoded boom length).
+const CAM_DIST_MIN: f32 = 5.0;
+const CAM_DIST_MAX: f32 = 50.0;
+const CAM_DIST_DEFAULT: f32 = 13.0;
+
+/// Apply a zoom delta to the boom length and clamp (CAM-3). `delta` is in world
+/// units: negative pulls the camera in (zoom toward the player), positive pushes
+/// out. Pure — unit-tested. ref `Interface3D.bb:643-657` (CamDist ∓ MZSpeed*1.5).
+fn zoom_step(dist: f32, delta: f32) -> f32 {
+    (dist + delta).clamp(CAM_DIST_MIN, CAM_DIST_MAX)
 }
 
 /// Which UI layers are currently open, for ESC close-precedence. Pure snapshot
@@ -1846,6 +1865,9 @@ impl ApplicationHandler for App {
                         // still available as a fallback when mouse-look is off.
                         KeyCode::ArrowLeft | KeyCode::KeyQ if pressed => self.cam_yaw -= 0.18,
                         KeyCode::ArrowRight | KeyCode::KeyE if pressed => self.cam_yaw += 0.18,
+                        // Keyboard camera zoom (CAM-3): `-` zooms out, `=` zooms in.
+                        KeyCode::Minus if pressed => self.cam_dist = zoom_step(self.cam_dist, 1.5),
+                        KeyCode::Equal if pressed => self.cam_dist = zoom_step(self.cam_dist, -1.5),
                         // Toggle mouse-look (grab/hide the cursor).
                         KeyCode::Tab if pressed => {
                             let on = !self.mouse_look;
@@ -2010,6 +2032,17 @@ impl ApplicationHandler for App {
                     let (yaw, pitch) = snap_camera(me_yaw);
                     self.cam_yaw = yaw;
                     self.cam_pitch = pitch;
+                }
+            }
+            WindowEvent::MouseWheel { delta, .. } => {
+                // CAM-3: wheel zooms the third-person boom. One line/notch ≈ 1.5
+                // units (Blitz MZSpeed*1.5); wheel-up (positive y) zooms IN.
+                let lines = match delta {
+                    MouseScrollDelta::LineDelta(_, y) => y,
+                    MouseScrollDelta::PixelDelta(p) => (p.y as f32) / 40.0,
+                };
+                if lines != 0.0 {
+                    self.cam_dist = zoom_step(self.cam_dist, -lines * 1.5);
                 }
             }
             WindowEvent::RedrawRequested => {
@@ -3224,8 +3257,8 @@ impl App {
             first_person_view(cam_target, cam_me_yaw)
         } else if following {
             // Orbit behind the player: yaw places the camera on the -forward
-            // side, pitch raises it. `dist` is the boom length.
-            let dist = 13.0;
+            // side, pitch raises it. `dist` is the boom length (CAM-3 zoom).
+            let dist = self.cam_dist;
             let (sp, cp) = self.cam_pitch.sin_cos();
             let look = [cam_target[0], cam_target[1] + 3.5, cam_target[2]];
             // Boom direction (pivot -> desired eye), unit length.
@@ -3449,6 +3482,13 @@ impl App {
                         });
                     }
                 }
+            }
+        }
+        // Headless camera-zoom self-test (CAM-3): pin the boom length so two
+        // zoom levels can be captured. No-op unless RCCE_CAMDIST=<units> is set.
+        if let Ok(cv) = std::env::var("RCCE_CAMDIST") {
+            if let Ok(d) = cv.parse::<f32>() {
+                self.cam_dist = zoom_step(d, 0.0);
             }
         }
         // Headless script-input + progress-bar self-test (TGT-8): inject a
@@ -5118,6 +5158,18 @@ mod tests {
         assert_eq!(combat_step(3.0, true), CombatStep::Swing);
         assert_eq!(combat_step(3.0, false), CombatStep::Wait);
         assert_eq!(combat_step(MELEE_RANGE, true), CombatStep::Swing);
+    }
+
+    // Camera zoom (CAM-3): steps adjust the boom length and clamp to [5,50];
+    // negative zooms in, positive out.
+    #[test]
+    fn zoom_step_clamps() {
+        assert_eq!(zoom_step(13.0, -1.5), 11.5); // zoom in
+        assert_eq!(zoom_step(13.0, 1.5), 14.5); // zoom out
+        assert_eq!(zoom_step(6.0, -10.0), CAM_DIST_MIN); // clamp at min
+        assert_eq!(zoom_step(45.0, 100.0), CAM_DIST_MAX); // clamp at max
+        assert_eq!(zoom_step(CAM_DIST_MIN, -1.0), CAM_DIST_MIN); // already at floor
+        assert_eq!(zoom_step(CAM_DIST_MAX, 1.0), CAM_DIST_MAX); // already at ceil
     }
 
     #[test]
