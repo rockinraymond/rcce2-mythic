@@ -880,17 +880,20 @@ fn build_actors(
         // Joint positions + bounds come from the bind-pose source model
         // (joint_pos returns the bind-pose joint, so attachments don't need the
         // posed body — letting the body go to the GPU skinning path).
-        let (min, _) = src.bounds();
+        let (min, max) = src.bounds();
         let head = src.joint_pos("Head").unwrap_or([0.0, 0.0, 0.0]);
         let hand = src.joint_pos("R_Hand");
         let l_hand = src.joint_pos("L_Hand");
         // Stand the actor on ITS OWN authoritative Y (from P_NewActor /
-        // P_ChangeArea spawn). P_StandardUpdate carries only X/Z, so this is the
-        // actor's spawn/terrain height — far better than a single zone-wide
-        // `ground_y`, which placed every actor (and the local player body) at the
-        // global-minimum scenery Y, off-screen below their own nameplates and the
-        // follow camera. `pos[1] - min[1]*scale` puts the mesh's feet at `pos[1]`.
-        let trans = [pos[0], pos[1] - min[1] * scale, pos[2]];
+        // P_ChangeArea spawn; P_StandardUpdate carries only X/Z). The server's
+        // actor Y is the COLLISION-PIVOT height, and the engine seats the body
+        // CENTRED on that pivot, not feet-on-it: `Actors3D.bb` does
+        // `PositionEntity body, 0, -(MaxY-MinY)/2, 0`. Matching that offset
+        // (half the mesh height, scaled) stops actors floating ~half a body
+        // above the terrain; the previous `- min*scale` put the feet at `pos[1]`,
+        // lifting the whole body.
+        let half_h = (max[1] - min[1]) * 0.5;
+        let trans = [pos[0], pos[1] - half_h * scale, pos[2]];
         let yaw_rad = yaw.to_radians();
         let key_body = format!("{tmpl}:{gender}:{face}:{body}");
         let can_skin = !src.bones.is_empty() && src.bones.len() <= rcce_render::gpu::MAX_BONES;
