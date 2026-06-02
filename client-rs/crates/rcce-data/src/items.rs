@@ -46,6 +46,9 @@ pub struct ItemDef {
     pub weapon_range: f32,
     /// Armour level for armour (item_type 2), else 0.
     pub armour_level: i16,
+    /// Texture catalog id of the full-size image for image items (item_type 6),
+    /// shown in the `WItemWindow` popup on use. -1 for non-image items.
+    pub image_id: i16,
 }
 
 /// All item definitions from `Items.dat`, in file order.
@@ -102,6 +105,7 @@ impl ItemCatalog {
         let mut weapon_wtype = 0i16;
         let mut weapon_range = 0.0f32;
         let mut armour_level = 0i16;
+        let mut image_id = -1i16;
         match item_type {
             1 => {
                 // Weapon: damage, dtype, wtype, rangedProjectile (4×i16),
@@ -120,7 +124,7 @@ impl ItemCatalog {
                 r.read_short()?; // EatEffectsLength (Potion / Ingredient)
             }
             6 => {
-                r.read_short()?; // ImageID
+                image_id = r.read_short()?; // ImageID (texture catalog id)
             }
             _ => {} // Ring (3), Other (7): no tail
         }
@@ -140,6 +144,7 @@ impl ItemCatalog {
             weapon_wtype,
             weapon_range,
             armour_level,
+            image_id,
         })
     }
 

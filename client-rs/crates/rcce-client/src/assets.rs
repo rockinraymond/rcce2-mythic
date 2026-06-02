@@ -190,6 +190,15 @@ impl AssetStore {
         self.skin_path(tex as u16)
     }
 
+    /// First catalogued item's `thumbnail_tex_id` that resolves to a real
+    /// texture on disk — a known-renderable id for the image-window self-test.
+    pub fn first_item_thumbnail(&self) -> Option<u16> {
+        self.items.items.iter().find_map(|i| {
+            let t = i.thumbnail_tex_id;
+            (t >= 0 && self.texture_path(t as u16).is_some()).then_some(t as u16)
+        })
+    }
+
     /// The in-game HUD layout from Interface.dat (fractional positions), if
     /// present — used to place the HUD exactly where Client.exe does.
     pub fn interface(&self) -> Option<&InterfaceLayout> {

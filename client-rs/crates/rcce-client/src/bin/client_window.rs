@@ -284,6 +284,10 @@ struct App {
     /// Whether the looping menu track (Menu.ogg) is currently playing (MENU-10).
     /// Guards the once-only start in `render_menu` and the stop on enter-world.
     menu_music_on: bool,
+    /// Open image-item popup (INV-5 / `WItemWindow`): the texture catalog id of
+    /// the image to show full-screen-centred. `None` when closed. Set on using an
+    /// I_Image item, cleared by ESC or another click.
+    image_window: Option<u16>,
 
     // ---- Login / character-select menu state (Mode::Login / CharSelect) ----
     /// Current screen.
@@ -348,6 +352,7 @@ impl App {
             last_ground_pos: [0.0, 0.0],
             menu_scene_init: false,
             menu_music_on: false,
+            image_window: None,
             run: false,
             cam_yaw: 0.0,
             cam_pitch: 0.25,
@@ -702,6 +707,7 @@ fn zoom_step(dist: f32, delta: f32) -> f32 {
 #[derive(Debug, Clone, Copy, Default)]
 struct EscOpen {
     mouse_look: bool,
+    image_window: bool,
     script_input: bool,
     dialog: bool,
     context_menu: bool,
@@ -719,6 +725,7 @@ struct EscOpen {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum EscLayer {
     MouseLook,
+    ImageWindow,
     ScriptInput,
     Dialog,
     ContextMenu,
@@ -738,6 +745,8 @@ enum EscLayer {
 fn esc_layer(o: EscOpen) -> EscLayer {
     if o.mouse_look {
         EscLayer::MouseLook
+    } else if o.image_window {
+        EscLayer::ImageWindow
     } else if o.script_input {
         EscLayer::ScriptInput
     } else if o.dialog {
@@ -2005,6 +2014,7 @@ impl ApplicationHandler for App {
                                 .unwrap_or((false, false, false));
                             let open = EscOpen {
                                 mouse_look: self.mouse_look,
+                                image_window: self.image_window.is_some(),
                                 script_input: script_input_open,
                                 dialog: dialog_open,
                                 context_menu: self.context_menu.is_some(),
@@ -2017,6 +2027,7 @@ impl ApplicationHandler for App {
                             };
                             match esc_layer(open) {
                                 EscLayer::MouseLook => self.set_mouse_look(false),
+                                EscLayer::ImageWindow => self.image_window = None,
                                 EscLayer::ScriptInput => {
                                     if let Some(net) = self.net.as_mut() {
                                         net.world.script_input = None;
@@ -2493,12 +2504,13 @@ impl App {
                             // (weapon/armour) is equipped via Shift-click elsewhere;
                             // here the script send still fires, matching the server
                             // contract (it tolerates items with no Use script).
-                            let edible = self
+                            let (item_type, image_id) = self
                                 .store
                                 .as_ref()
                                 .and_then(|s| s.item_def(item_id))
-                                .map(|d| d.item_type == 4 || d.item_type == 5)
-                                .unwrap_or(false);
+                                .map(|d| (d.item_type, d.image_id))
+                                .unwrap_or((0, -1));
+                            let edible = item_type == 4 || item_type == 5;
                             let target = self.target;
                             if let Some(net) = self.net.as_mut() {
                                 if edible {
@@ -2516,6 +2528,11 @@ impl App {
                                         true,
                                     );
                                 }
+                            }
+                            // I_Image (type 6): also open the full-size image
+                            // popup (Interface3D.bb:4158-4204).
+                            if item_type == 6 && image_id >= 0 {
+                                self.image_window = Some(image_id as u16);
                             }
                         }
                     }
@@ -3614,6 +3631,24 @@ impl App {
             }
         }
         // Headless script-input + progress-bar self-test (TGT-8): inject a
+        // Headless image-window self-test (INV-5): open the WItemWindow popup
+        // with a texture id so it's capturable without an I_Image item. No-op
+        // unless RCCE_IMAGEWINDOWTEST=<frame> set; texture id from
+        // RCCE_IMAGEWINDOWID (default: the first catalogued item's thumbnail).
+        if let Ok(dv) = std::env::var("RCCE_IMAGEWINDOWTEST") {
+            if let Ok(at) = dv.parse::<u64>() {
+                if self.frames == at {
+                    let id = std::env::var("RCCE_IMAGEWINDOWID")
+                        .ok()
+                        .and_then(|s| s.parse::<u16>().ok())
+                        .or_else(|| store.first_item_thumbnail());
+                    if let Some(id) = id {
+                        self.image_window = Some(id);
+                        println!("[imagewindowtest] frame {} opened image window tex {id}", self.frames);
+                    }
+                }
+            }
+        }
         // synthetic P_ScriptInput dialog and a P_ProgressBar so both render
         // without a scripted NPC. No-op unless RCCE_SCRIPTINPUTTEST=<frame> set.
         if let Ok(dv) = std::env::var("RCCE_SCRIPTINPUTTEST") {
@@ -4152,6 +4187,31 @@ impl App {
                         "Enter = submit    Esc = cancel",
                         [0.6, 0.6, 0.65, 1.0],
                     );
+                }
+
+                // Image-item popup (INV-5 / WItemWindow): a centred window showing
+                // the used image item's full texture (lazily registered from its
+                // ImageID). Closed via ESC (UI-ESC chain). ref Interface3D.bb:4158.
+                if let Some(img_id) = self.image_window {
+                    let key = format!("image:{img_id}");
+                    if !overlay.has_texture(&key) {
+                        if let Some(im) =
+                            store.texture_path(img_id).and_then(|p| rcce_data::texture::load(&p))
+                        {
+                            overlay.register_texture(&gfx.device, &gfx.queue, &key, im.width, im.height, &im.rgba);
+                        }
+                    }
+                    let (ww, wh) = (sw * 0.55, sh * 0.7);
+                    let (wx, wy) = ((sw - ww) * 0.5, (sh - wh) * 0.5);
+                    overlay.rect(wx - 3.0, wy - 3.0, ww + 6.0, wh + 6.0, [0.6, 0.5, 0.2, 0.97]);
+                    overlay.rect(wx, wy, ww, wh, [0.05, 0.05, 0.08, 0.97]);
+                    if overlay.has_texture(&key) {
+                        let pad = 12.0;
+                        overlay.image(wx + pad, wy + pad, ww - pad * 2.0, wh - pad * 2.0 - 16.0, &key, [1.0, 1.0, 1.0, 1.0]);
+                    } else {
+                        overlay.text_shadow(wx + 14.0, wy + 14.0, 1.1, "[image unavailable]", [0.8, 0.8, 0.8, 1.0]);
+                    }
+                    overlay.text_shadow(wx + 14.0, wy + wh - 22.0, 0.85, "Esc = close", [0.6, 0.6, 0.65, 1.0]);
                 }
 
                 // Projectiles (PRJ-1): a bright billboard at each projectile's
@@ -5097,6 +5157,7 @@ mod tests {
         // Transient overlays win over everything beneath them.
         let everything = EscOpen {
             mouse_look: true,
+            image_window: true,
             script_input: true,
             dialog: true,
             context_menu: true,
@@ -5112,6 +5173,8 @@ mod tests {
         // Strict ordering: peel one layer at a time, top to bottom.
         let mut o = everything;
         o.mouse_look = false;
+        assert_eq!(esc_layer(o), EscLayer::ImageWindow);
+        o.image_window = false;
         assert_eq!(esc_layer(o), EscLayer::ScriptInput);
         o.script_input = false;
         assert_eq!(esc_layer(o), EscLayer::Dialog);
