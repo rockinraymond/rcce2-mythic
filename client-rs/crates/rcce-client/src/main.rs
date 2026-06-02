@@ -159,6 +159,7 @@ fn main() {
                         brushes: src.brushes.clone(),
                         bones: src.bones.clone(),
                         anim: src.anim,
+                        ..Default::default()
                     })
                 } else {
                     src

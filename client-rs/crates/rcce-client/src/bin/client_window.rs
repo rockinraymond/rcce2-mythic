@@ -916,6 +916,7 @@ fn build_actors(
                 brushes: src.brushes.clone(),
                 bones: src.bones.clone(),
                 anim: src.anim,
+                ..Default::default()
             });
             let idx = models.len();
             models.push(posed);
@@ -1182,8 +1183,13 @@ fn load_zone_static(store: &mut AssetStore, view: &mut WorldView, gfx: &Gfx, dat
                                 .unwrap_or_else(|| "none".into())
                         })
                         .collect();
+                    let scales: Vec<String> = m
+                        .meshes
+                        .iter()
+                        .map(|mm| format!("{:.1}x{:.1}", mm.uv_scale[0], mm.uv_scale[1]))
+                        .collect();
                     eprintln!(
-                        "[meshdiag] mesh {} tex {}: tris={tris} uv u[{umin:.1}..{umax:.1}] v[{vmin:.1}..{vmax:.1}] surfaces={} texs={texs:?}",
+                        "[meshdiag] mesh {} tex {}: tris={tris} uv u[{umin:.1}..{umax:.1}] v[{vmin:.1}..{vmax:.1}] surfaces={} texs={texs:?} uv_scales={scales:?}",
                         s.mesh_id, s.texture_id, m.meshes.len()
                     );
                 }

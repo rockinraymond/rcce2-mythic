@@ -75,6 +75,7 @@ fn main() {
         brushes: src.brushes.clone(),
         bones: src.bones.clone(),
         anim: src.anim,
+        ..Default::default()
     });
     let scale = store.actor_render_scale(tmpl, gender).unwrap_or(0.05);
     let body_tex = store.actor_textures(tmpl, gender, 0, 0);

@@ -286,6 +286,11 @@ pub struct B3dMesh {
     /// `4` (masked) means the texture's black pixels are transparent — the
     /// engine color-keys them; foliage/grass billboards rely on this.
     pub texture_flag: i32,
+    /// Texcoord scale `(u,v)` from the resolved texture's `TEXS` transform —
+    /// the texture tiles this many times across the mesh's UVs. `(1,1)` = none.
+    pub uv_scale: [f32; 2],
+    /// Texcoord offset `(u,v)` from the resolved texture's `TEXS` transform.
+    pub uv_offset: [f32; 2],
 }
 
 /// A parsed `.b3d` model: all meshes, flattened (node translation applied).
@@ -296,6 +301,13 @@ pub struct B3dModel {
     pub textures: Vec<String>,
     /// `TEXS` Blitz3D flags, parallel to [`textures`](Self::textures).
     pub tex_flags: Vec<i32>,
+    /// `TEXS` texture-coordinate **scale** `(xscale, yscale)`, parallel to
+    /// [`textures`](Self::textures). The engine applies this as a texcoord
+    /// transform (`ScaleTexture`), so the texture tiles `scale×` across the
+    /// mesh's UVs — terrain textures rely on it for crisp tiling. `(1,1)` = none.
+    pub tex_scales: Vec<[f32; 2]>,
+    /// `TEXS` texture-coordinate **offset** `(xpos, ypos)`, parallel to textures.
+    pub tex_offsets: Vec<[f32; 2]>,
     /// `BRUS` brushes — each brush's texture-slot indices into `textures`
     /// (`-1` = empty slot).
     pub brushes: Vec<Vec<i32>>,
@@ -528,6 +540,10 @@ impl B3dModel {
                     mesh.texture = Some(name.clone());
                 }
                 mesh.texture_flag = self.tex_flags.get(tex_id as usize).copied().unwrap_or(0);
+                // Carry the texture's texcoord scale/offset so the renderer can
+                // tile it like the engine's `ScaleTexture` (terrain crispness).
+                mesh.uv_scale = self.tex_scales.get(tex_id as usize).copied().unwrap_or([1.0, 1.0]);
+                mesh.uv_offset = self.tex_offsets.get(tex_id as usize).copied().unwrap_or([0.0, 0.0]);
             }
         }
     }
@@ -622,11 +638,18 @@ fn parse_texs(r: &mut BlitzReader, end: usize, model: &mut B3dModel) -> Result<(
         let file = r.read_cstr(1024)?;
         let flags = r.read_int()?;
         let _blend = r.read_int()?;
-        for _ in 0..5 {
-            r.read_float()?;
-        }
+        let xpos = r.read_float()?;
+        let ypos = r.read_float()?;
+        let xscale = r.read_float()?;
+        let yscale = r.read_float()?;
+        let _rot = r.read_float()?;
         model.textures.push(file);
         model.tex_flags.push(flags);
+        // Blitz `setScale` only kicks in when != 1; treat 0 as "no scale" (1).
+        let sx = if xscale != 0.0 { xscale } else { 1.0 };
+        let sy = if yscale != 0.0 { yscale } else { 1.0 };
+        model.tex_scales.push([sx, sy]);
+        model.tex_offsets.push([xpos, ypos]);
     }
     Ok(())
 }
@@ -763,6 +786,8 @@ fn parse_mesh(r: &mut BlitzReader, end: usize, world: &Mat4) -> Result<Vec<B3dMe
             brush_id,
             texture: None,
             texture_flag: 0,
+            uv_scale: [1.0, 1.0],
+            uv_offset: [0.0, 0.0],
         });
     }
     Ok(out)

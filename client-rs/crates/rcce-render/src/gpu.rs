@@ -974,16 +974,27 @@ fn bake_mesh(
 fn bake_verts(device: &wgpu::Device, nrot: Mat3, scale: Vec3, trans: Vec3, color: [f32; 3], mesh: &B3dMesh) -> wgpu::Buffer {
     let normals = mesh_normals(mesh);
     let has_uv = mesh.uvs.len() == mesh.positions.len();
+    // Texcoord transform from the texture's TEXS scale/offset (engine
+    // `ScaleTexture`): u' = u*sx + tx. Terrain textures tile via this — without
+    // it the 0..1 UVs stretch one texture across the whole ground (the smear).
+    let (sx, sy) = (mesh.uv_scale[0], mesh.uv_scale[1]);
+    let (tx, ty) = (mesh.uv_offset[0], mesh.uv_offset[1]);
     let verts: Vec<Vertex> = mesh
         .positions
         .iter()
         .enumerate()
         .map(|(i, p)| {
             let world = trans + nrot * (Vec3::from(*p) * scale);
+            let uv = if has_uv {
+                let u = mesh.uvs[i];
+                [u[0] * sx + tx, u[1] * sy + ty]
+            } else {
+                [0.0, 0.0]
+            };
             Vertex {
                 pos: world.into(),
                 normal: (nrot * normals[i]).into(),
-                uv: if has_uv { mesh.uvs[i] } else { [0.0, 0.0] },
+                uv,
                 color,
             }
         })
