@@ -202,7 +202,7 @@ choice produces most of the DIVERGENT ratings.
 | Mouse-carry inventory (cursor item, swap, split) | MISSING | Direct equip/drop only |
 | Trade — sell side / amounts / cost / P2P sync | MISSING | Buy-only; `P_UpdateTrading` unhandled |
 | Blood-spurt / parry / hit-react / death-msg | MISSING | Cosmetic combat feedback |
-| Attack anim by weapon type; remote attackers | PARTIAL | Generic clip; remote attackers don't animate |
+| Attack anim by weapon type; remote attackers | PARTIAL | **Remote attackers now animate** (CBT-3: `attack_anims` set from `P_AttackActor` `'Y'`/broadcast → swing clip); weapon-specific clip selection + target hit-anim/blood/parry still generic/missing |
 
 ---
 

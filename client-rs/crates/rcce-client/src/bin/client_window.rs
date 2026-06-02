@@ -1153,14 +1153,18 @@ fn build_actors(
         let moving = (dx * dx + dz * dz) > 1.0;
         let color = if a.is_player { [0.85, 0.9, 1.0] } else { [1.0, 1.0, 1.0] };
         // A dead actor holds its death pose (ANIM-8); a remote actor mid-jump
-        // (P_Jump → world.jumps) plays the Jump clip + a sin-arc hop (ANIM-7);
-        // the live attack-anim for remote actors needs the attacker rid from
-        // P_AttackActor (deferred).
+        // (P_Jump → world.jumps) plays the Jump clip + a sin-arc hop (ANIM-7); a
+        // remote actor mid-attack (P_AttackActor → world.attack_anims) plays its
+        // swing clip (CBT-3).
         let jump_left = world.jumps.get(&a.runtime_id).copied();
+        // CBT-3: a remote actor mid-attack (P_AttackActor 'Y'/broadcast) plays its
+        // swing clip. Priority: dead > jump > attack > none.
         let combat = if !a.alive {
             Some((DEATH_CLIP, true))
         } else if jump_left.is_some() {
             Some((JUMP_CLIP, false))
+        } else if world.attack_anims.contains_key(&a.runtime_id) {
+            Some((ATTACK_CLIP, false))
         } else {
             None
         };
@@ -1206,6 +1210,8 @@ fn dyn_hash(world: &World, elapsed: f32, me_moving: bool, me_running: bool, me_a
         if let Some(t) = world.jumps.get(&rid) {
             ((t * 30.0) as i32).hash(&mut h);
         }
+        // Remote attack-swing presence (CBT-3) so the swing shows under the throttle.
+        world.attack_anims.contains_key(&rid).hash(&mut h);
     }
     h.finish()
 }
@@ -3164,6 +3170,8 @@ impl App {
             net.world.tick_projectiles(proj_dt);
             // Remote jump-anim timers (ANIM-7) + the local jump arc (MOVE-7).
             net.world.tick_jumps(proj_dt);
+            // Remote attack-swing timers (CBT-3).
+            net.world.tick_attack_anims(proj_dt);
             if !self.grounded {
                 let (o, v, g) = jump_step(self.jump_offset, self.jump_vel);
                 self.jump_offset = o;
@@ -3631,6 +3639,32 @@ impl App {
             }
         }
         // Headless script-input + progress-bar self-test (TGT-8): inject a
+        // Headless remote-attack self-test (CBT-3): make the nearest actor play
+        // its attack swing so it's capturable without a hostile NPC. No-op unless
+        // RCCE_REMOTEATTACK=<frame> set.
+        if let Ok(av) = std::env::var("RCCE_REMOTEATTACK") {
+            if let Ok(at) = av.parse::<u64>() {
+                if self.frames >= at {
+                    if let Some(net) = self.net.as_mut() {
+                        // Re-arm every living actor each frame so whichever is in
+                        // frame (incl. a humanoid) holds the swing across capture.
+                        let rids: Vec<u16> = net
+                            .world
+                            .actors
+                            .values()
+                            .filter(|a| a.alive)
+                            .map(|a| a.runtime_id)
+                            .collect();
+                        for rid in &rids {
+                            net.world.attack_anims.insert(*rid, rcce_client::world::ATTACK_ANIM_SECS);
+                        }
+                        if self.frames == at {
+                            println!("[remoteattack] frame {} attackers={rids:?}", self.frames);
+                        }
+                    }
+                }
+            }
+        }
         // Headless image-window self-test (INV-5): open the WItemWindow popup
         // with a texture id so it's capturable without an I_Image item. No-op
         // unless RCCE_IMAGEWINDOWTEST=<frame> set; texture id from

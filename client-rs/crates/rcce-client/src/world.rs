@@ -13,6 +13,10 @@ use rcce_net::{packet_id as pk, RecvMessage};
 /// Roughly the airborne duration of the local jump arc.
 pub const JUMP_ANIM_SECS: f32 = 0.5;
 
+/// How long a remote actor plays its attack swing after a `P_AttackActor`
+/// broadcast (CBT-3). Matches the local player's `me_attack_until` ~0.8 s window.
+pub const ATTACK_ANIM_SECS: f32 = 0.8;
+
 /// An open NPC dialog window (`P_Dialog` "N"/"T"/"O"/"C"). Server-driven: the
 /// NPC's `Main` script pushes a title, text lines, and option lines; the client
 /// echoes "N"/"T" acks (via `pending_sends`) so the script advances. One active
@@ -250,6 +254,11 @@ pub struct World {
     /// left. Set by `on_jump` from `P_Jump`, ticked down each frame; while
     /// present the actor renders the Jump clip + a vertical hop in `build_actors`.
     pub jumps: HashMap<u16, f32>,
+    /// Remote actors currently mid-attack-swing (CBT-3): rid → seconds of attack
+    /// clip left. Set by `on_attack_actor` for the attacker in a `P_AttackActor`
+    /// `'Y'`/broadcast, ticked down each frame; while present the actor renders
+    /// its attack clip in `build_actors`. (The local player uses `me_attack_until`.)
+    pub attack_anims: HashMap<u16, f32>,
     /// The local player's inventory, keyed by slot (0..13 equipment, 14..45
     /// backpack). Seeded from the P_FetchCharacter sheet, then kept live by
     /// P_InventoryUpdate G/T/H/R. BTreeMap so the panel iterates in slot order.
@@ -555,22 +564,54 @@ impl World {
         }
     }
 
-    /// `P_AttackActor` (ClientNet.bb:1115): byte0 `'H'`(hit) + targetRID(u16) +
-    /// rawDamage(u16, −1) + damageType(u8). HP itself arrives via P_StatUpdate;
-    /// this records the hit for feedback.
+    /// `P_AttackActor` (ClientNet.bb:1115): byte0 subtype + RID(u16) + tail.
+    /// - `'H'` I hit RID(=target): rawDamage(u16,−1) + dtype(u8) → feedback floater.
+    /// - `'Y'` RID(=attacker) hit me: rawDamage + dtype → attacker plays its swing
+    ///   (CBT-3) + a damage floater on me.
+    /// - else  RID(=attacker) hit someone else (broadcast): attacker plays its swing.
+    ///
+    /// The local player's own swing is animated client-side (`me_attack_until`);
+    /// this adds the previously-missing **remote** attacker animation.
     fn on_attack_actor(&mut self, d: &[u8]) {
-        if d.first() != Some(&b'H') {
+        let Some(&sub) = d.first() else { return };
+        let mut r = MsgReader::new(&d[1..]);
+        let Some(rid) = r.u16() else { return };
+        match sub {
+            b'H' => {
+                // RID is the target I hit.
+                let (Some(raw_dmg), Some(dtype)) = (r.u16(), r.u8()) else { return };
+                self.combat_events.push(CombatEvent {
+                    target: rid,
+                    damage: raw_dmg.saturating_sub(1),
+                    damage_type: dtype,
+                });
+            }
+            b'Y' => {
+                // RID is the attacker who hit me: animate it + floater on me.
+                self.attack_anims.insert(rid, ATTACK_ANIM_SECS);
+                if let (Some(raw_dmg), Some(dtype)) = (r.u16(), r.u8()) {
+                    self.combat_events.push(CombatEvent {
+                        target: self.my_runtime_id,
+                        damage: raw_dmg.saturating_sub(1),
+                        damage_type: dtype,
+                    });
+                }
+            }
+            _ => {
+                // Broadcast: RID is the attacker (target is RID2, not needed here).
+                self.attack_anims.insert(rid, ATTACK_ANIM_SECS);
+            }
+        }
+    }
+
+    /// Tick down remote attack-swing timers (CBT-3), dropping elapsed ones.
+    pub fn tick_attack_anims(&mut self, dt: f32) {
+        if self.attack_anims.is_empty() {
             return;
         }
-        let mut r = MsgReader::new(&d[1..]);
-        let (Some(target), Some(raw_dmg), Some(dtype)) = (r.u16(), r.u16(), r.u8()) else {
-            return;
-        };
-        let damage = raw_dmg.saturating_sub(1);
-        self.combat_events.push(CombatEvent {
-            target,
-            damage,
-            damage_type: dtype,
+        self.attack_anims.retain(|_, t| {
+            *t -= dt;
+            *t > 0.0
         });
     }
 
@@ -1291,6 +1332,37 @@ mod tests {
         dd.u8(b'D').u32(handle);
         w.apply(&msg(pk::PROGRESS_BAR, dd.into_bytes()));
         assert!(w.progress_bars.is_empty());
+    }
+
+    #[test]
+    fn attack_actor_subtypes() {
+        let mut w = World { my_runtime_id: 1, ..Default::default() };
+        // 'H' I hit target 9 for 5 (raw 6): records a combat event on the target,
+        // no attacker animation (the local swing is animated client-side).
+        let mut h = MsgWriter::new();
+        h.u8(b'H').u16(9).u16(6).u8(2);
+        w.apply(&msg(pk::ATTACK_ACTOR, h.into_bytes()));
+        assert_eq!(w.combat_events.last().unwrap().target, 9);
+        assert_eq!(w.combat_events.last().unwrap().damage, 5);
+        assert!(w.attack_anims.is_empty());
+
+        // 'Y' actor 7 hit me: animates the attacker + a floater on me (rid 1).
+        let mut y = MsgWriter::new();
+        y.u8(b'Y').u16(7).u16(4).u8(0);
+        w.apply(&msg(pk::ATTACK_ACTOR, y.into_bytes()));
+        assert!((w.attack_anims.get(&7).copied().unwrap() - ATTACK_ANIM_SECS).abs() < 1e-6);
+        assert_eq!(w.combat_events.last().unwrap().target, 1); // me
+        assert_eq!(w.combat_events.last().unwrap().damage, 3);
+
+        // Broadcast (other subtype): attacker (first rid) animates.
+        let mut b = MsgWriter::new();
+        b.u8(b'X').u16(12).u16(8); // attacker 12, target 8
+        w.apply(&msg(pk::ATTACK_ACTOR, b.into_bytes()));
+        assert!(w.attack_anims.contains_key(&12));
+
+        // Tick expires the timers.
+        w.tick_attack_anims(ATTACK_ANIM_SECS + 0.01);
+        assert!(w.attack_anims.is_empty());
     }
 
     #[test]
