@@ -67,9 +67,9 @@ that hurt out of proportion to their count.
 6. **Front-of-game shell — substantially addressed.** Menu music (`Menu.ogg`) **DONE**; the **EULA /
    license screen DONE** (`Mode::Eula` — the user-flagged "license agreement on startup", PNG-verified).
    The **Sound options** (`Mode::Options`, F1), **Controls reference** (`Mode::Controls`, Tab), and the
-   **2D-screen backdrop art** (EULA→`EULA.PNG`, Options/Controls→`Login.PNG`) are now **DONE** (all
-   PNG-verified). Still open: Graphics options, keybind *remapping*, backdrop behind the Login/CharSelect
-   3D scene, Set.b3d menu diorama, Server-Selector. (Loading screen intentionally skipped — fast sync loads.)
+   **menu backdrop art** (EULA→`EULA.PNG`, Login/Options/Controls→`Login.PNG`) are now **DONE** (all
+   PNG-verified; Login works because it has no 3D char). Still open: Graphics options, keybind *remapping*,
+   backdrop behind the CharSelect 3D scene, Set.b3d menu diorama, Server-Selector. (Loading screen skipped — fast sync loads.)
 
 ---
 
@@ -144,7 +144,7 @@ Gaps are the front-of-game shell and modal dialogs.
 | EULA / license screen | MISSING | Front-of-game |
 | Loading screen | MISSING | Synchronous zone load |
 | Options menus (Graphics/Control/Sound/Other) | MISSING | No settings UI at all |
-| Menu backdrop art + Set.b3d diorama | MISSING | "lower quality" menu gap |
+| Menu backdrop art + Set.b3d diorama | PARTIAL | EULA/Login/Options/Controls draw their real backdrop PNGs (DONE); CharSelect-behind-3D + Set.b3d diorama remain |
 | Server status / selector | MISSING | — |
 | Action bar slot-assign UI / paging | MISSING | Fires on number keys, no slots model |
 | Action bar key binding | DIVERGENT | Digits 1-9, reference uses F-keys / assignable |

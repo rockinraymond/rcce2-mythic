@@ -3082,7 +3082,9 @@ impl App {
         // a separate change.)
         let backdrop = match self.mode {
             Mode::Eula => Some("EULA.PNG"),
-            Mode::Options | Mode::Controls => Some("Login.PNG"),
+            // Login has no 3D character (only CharSelect does), so a 2D backdrop
+            // sits cleanly behind the login panel. CharSelect keeps its 3D char.
+            Mode::Login | Mode::Options | Mode::Controls => Some("Login.PNG"),
             _ => None,
         };
         if let Some(name) = backdrop {
