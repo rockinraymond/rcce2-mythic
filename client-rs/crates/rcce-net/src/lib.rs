@@ -47,6 +47,9 @@ pub mod packet_id {
     pub const INVENTORY_UPDATE: u8 = 15;
     pub const CHAT_MESSAGE: u8 = 16;
     pub const WEATHER_CHANGE: u8 = 17;
+    pub const SOUND: u8 = 29;
+    pub const MUSIC: u8 = 34;
+    pub const SPEECH: u8 = 50;
     pub const ATTACK_ACTOR: u8 = 18;
     pub const ACTOR_DEAD: u8 = 19;
     pub const RIGHT_CLICK: u8 = 20;

@@ -232,10 +232,10 @@ Auto-attack on a flagged target: `AttackTarget=True` + `PlayerTarget` drives `Up
 
 | ID | Criterion | Status | Evidence / Reference | Verification |
 |---|---|---|---|---|
-| AUD-1 | Zone music (`P_Music`) loops, frees previous channel; loading-screen music during zone load | DONE | `audio.rs`; ref `ClientNet.bb:758-769` | live |
+| AUD-1 | Zone music (`P_Music`) loops, frees previous channel; loading-screen music during zone load | DONE ✅ | The **inbound `P_Music` packet is now handled** (was previously driven only off the zone-env `music_id` at load — the audit flagged mid-zone switches as ignored): `World::on_music` parses `[2]musicID` → the App applies `audio.set_music` (stops/frees the prior track, loops the new one). ref `ClientNet.bb:758-769`; `packet_id::MUSIC=34`, `world.rs on_music` | unit test `sound_speech_music_dispatch` green; live audio unobserved (headless) |
 | AUD-2 | Sound zones (radius-triggered, 3D/2D by filename last-byte flag, repeat timer, fade-out on exit) | PARTIAL | ref `Client.bb:938-993`; confirm Rust sound-zone parsing | live |
 | AUD-3 | Footstep SFX at gait extremes, wet/dry × gender, 3D positional, suppressed underwater | DONE | `audio.rs`; ref `Client.bb:677-701` | live (footsteps fire only when moving+following) |
-| AUD-4 | Combat/cast/speech SFX (`P_Sound`, `P_Speech`) 3D from actor; note shipped `Sounds.dat` may be empty | PARTIAL | ref `ClientNet.bb:733-769`, `Actors3D.bb:790-803` | live |
+| AUD-4 | Combat/cast/speech SFX (`P_Sound`, `P_Speech`) 3D from actor; note shipped `Sounds.dat` may be empty | PARTIAL | The **packets are now dispatched + played** (was silent — no `world.rs` case): `packet_id::SOUND=29`/`SPEECH=50`; `World::on_sound` (`[2]id [+ [2]rid]`) / `on_speech` (`[2]id [2]rid`) queue the id; the App drains to `audio.play_oneshot` via the new `SoundCatalog` (`Sounds.dat` id→filename, strips the `chr(1)` 3D-marker). **2D playback for the alpha** — full 3D positional attenuation by the actor's position is the remaining gap (the `P_Speech` rid is parsed but not yet used to pan/attenuate). ref `ClientNet.bb:733-769`, `Actors3D.bb:790-803` | unit tests `sound_speech_music_dispatch` + `sound_catalog_parses_and_marks_3d` green; live audio unobserved (no sound assets / no live trigger in starter) |
 | AUD-5 | Weather audio: rain/wind looped, thunder one-shots; volume/mute | DONE | `weather.rs`; ref `Environment3D.bb:129-154` | live |
 
 ---

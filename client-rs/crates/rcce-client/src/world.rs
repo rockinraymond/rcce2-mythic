@@ -260,6 +260,13 @@ pub struct World {
     /// Active status effects (buffs/debuffs) on the local player, from
     /// P_ActorEffect. Shown as a HUD icon row.
     pub active_effects: Vec<ActiveEffect>,
+    /// Sound ids to play one-shot, from `P_Sound`/`P_Speech` (AUD-4/AUD-5). The
+    /// App drains these to `audio.play_oneshot` each frame. 2D playback for the
+    /// alpha; the `P_Speech`/3D positional attenuation is a noted follow-up.
+    pub pending_sounds: Vec<u16>,
+    /// A pending mid-zone music switch (`P_Music`, AUD-1): the App applies it via
+    /// `audio.set_music`, replacing the looping track. `None` when unchanged.
+    pub pending_music: Option<u16>,
 }
 
 /// A buff/debuff on the local player (P_ActorEffect "A").
@@ -300,6 +307,9 @@ impl World {
             pk::INVENTORY_UPDATE => self.on_inventory_update(&m.data),
             pk::ACTOR_EFFECT => self.on_actor_effect(&m.data),
             pk::WEATHER_CHANGE => self.on_weather_change(&m.data),
+            pk::SOUND => self.on_sound(&m.data),
+            pk::SPEECH => self.on_speech(&m.data),
+            pk::MUSIC => self.on_music(&m.data),
             pk::OPEN_TRADING => self.current_trade = crate::trade::TradeWindow::parse(&m.data),
             pk::DIALOG => self.on_dialog(&m.data),
             pk::SCRIPT_INPUT => self.on_script_input(&m.data),
@@ -716,6 +726,38 @@ impl World {
         };
         if area == self.zone.area_id {
             self.zone.weather = weather;
+        }
+    }
+
+    /// `P_Sound` (ClientNet.bb:739): `[2]soundID [+ [2]runtimeID]`. The optional
+    /// runtime id is present only for sounds whose name carries the 3D marker;
+    /// for the alpha we play every sound 2D, so we read just the id and queue it.
+    /// (3D positional attenuation by the actor's position is a noted follow-up.)
+    fn on_sound(&mut self, d: &[u8]) {
+        let mut r = MsgReader::new(d);
+        if let Some(id) = r.u16() {
+            self.pending_sounds.push(id);
+        }
+    }
+
+    /// `P_Speech` (ClientNet.bb:733): `[2]soundID [2]runtimeID` — a positional
+    /// actor sound. Queued as a 2D one-shot for the alpha (the actor-anchored 3D
+    /// `PlayActorSound` is a follow-up; the rid is parsed but not yet used).
+    fn on_speech(&mut self, d: &[u8]) {
+        let mut r = MsgReader::new(d);
+        if let Some(id) = r.u16() {
+            let _rid = r.u16();
+            self.pending_sounds.push(id);
+        }
+    }
+
+    /// `P_Music` (ClientNet.bb:758): `[2]musicID`. A mid-zone music switch — the
+    /// App applies it via `audio.set_music`, which stops/frees the prior track
+    /// and loops the new one (matching the Blitz channel-replace).
+    fn on_music(&mut self, d: &[u8]) {
+        let mut r = MsgReader::new(d);
+        if let Some(id) = r.u16() {
+            self.pending_music = Some(id);
         }
     }
 
@@ -1249,6 +1291,33 @@ mod tests {
         dd.u8(b'D').u32(handle);
         w.apply(&msg(pk::PROGRESS_BAR, dd.into_bytes()));
         assert!(w.progress_bars.is_empty());
+    }
+
+    #[test]
+    fn sound_speech_music_dispatch() {
+        let mut w = World::default();
+        // P_Sound: [2]soundID (+ optional rid, ignored for 2D alpha playback).
+        let mut s = MsgWriter::new();
+        s.u16(42);
+        w.apply(&msg(pk::SOUND, s.into_bytes()));
+        assert_eq!(w.pending_sounds, vec![42]);
+
+        // P_Speech: [2]soundID [2]runtimeID → queues the sound (rid parsed, unused).
+        let mut sp = MsgWriter::new();
+        sp.u16(99).u16(7);
+        w.apply(&msg(pk::SPEECH, sp.into_bytes()));
+        assert_eq!(w.pending_sounds, vec![42, 99]);
+
+        // P_Music: [2]musicID → pending switch.
+        let mut mu = MsgWriter::new();
+        mu.u16(5);
+        w.apply(&msg(pk::MUSIC, mu.into_bytes()));
+        assert_eq!(w.pending_music, Some(5));
+        // A later P_Music supersedes the pending one.
+        let mut mu2 = MsgWriter::new();
+        mu2.u16(8);
+        w.apply(&msg(pk::MUSIC, mu2.into_bytes()));
+        assert_eq!(w.pending_music, Some(8));
     }
 
     #[test]

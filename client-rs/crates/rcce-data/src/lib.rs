@@ -24,8 +24,8 @@ pub use area::{AreaEnv, AreaScenery, SceneryPlacement};
 pub use b3d::{B3dAnim, B3dBone, B3dKey, B3dMesh, B3dModel};
 pub use texture::Image;
 pub use catalog::{
-    MeshCatalog, MeshEntry, MusicCatalog, MusicEntry, ParsedCatalog, TextureCatalog, TextureEntry,
-    CATALOG_SLOTS,
+    MeshCatalog, MeshEntry, MusicCatalog, MusicEntry, ParsedCatalog, SoundCatalog, SoundEntry,
+    TextureCatalog, TextureEntry, CATALOG_SLOTS,
 };
 pub use attributes::{AttributeDef, AttributeNames};
 pub use items::{equip_slot, equip_slot_name, ItemCatalog, ItemDef};

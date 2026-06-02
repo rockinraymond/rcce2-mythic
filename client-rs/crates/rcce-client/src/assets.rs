@@ -9,7 +9,7 @@ use std::rc::Rc;
 
 use rcce_data::{
     texture, ActorCatalog, AnimClip, AnimSetCatalog, B3dModel, Image, InterfaceLayout, ItemCatalog,
-    MeshCatalog, MoneyConfig, MusicCatalog, TextureCatalog,
+    MeshCatalog, MoneyConfig, MusicCatalog, SoundCatalog, TextureCatalog,
 };
 
 pub struct AssetStore {
@@ -19,6 +19,7 @@ pub struct AssetStore {
     textures: TextureCatalog,
     anims: AnimSetCatalog,
     music: MusicCatalog,
+    sounds: SoundCatalog,
     items: ItemCatalog,
     /// In-game HUD layout (Interface.dat) — fractional element positions that
     /// match the real Client.exe. `None` if the file is absent.
@@ -110,6 +111,12 @@ impl AssetStore {
             .and_then(|b| MusicCatalog::parse(&b).ok())
             .map(|p| p.value)
             .unwrap_or_default();
+        // Sound index (sound id → filename, for P_Sound/P_Speech). Non-fatal.
+        let sounds = std::fs::read(data_root.join("Game Data/Sounds.dat"))
+            .ok()
+            .and_then(|b| SoundCatalog::parse(&b).ok())
+            .map(|p| p.value)
+            .unwrap_or_default();
         // Item definitions (id → name, for the inventory panel). Non-fatal.
         let items = std::fs::read(data_root.join("Server Data/Items.dat"))
             .map(|b| ItemCatalog::parse(&b))
@@ -135,6 +142,7 @@ impl AssetStore {
             textures,
             anims,
             music,
+            sounds,
             items,
             interface,
             money,
@@ -238,6 +246,16 @@ impl AssetStore {
         let entry = self.music.get(id)?;
         let rel = entry.filename.replace('\\', "/");
         let path = self.data_root.join("Music").join(rel);
+        path.exists().then_some(path)
+    }
+
+    /// Resolve a `P_Sound`/`P_Speech` sound id to an on-disk path under
+    /// `Data/Sounds/`, stripping the trailing `chr(1)` 3D-marker byte from the
+    /// stored name first. `None` if the id is unknown or the file is missing.
+    pub fn sound_path_by_id(&self, id: u16) -> Option<std::path::PathBuf> {
+        let entry = self.sounds.get(id)?;
+        let rel = entry.clean_name().replace('\\', "/");
+        let path = self.data_root.join("Sounds").join(rel);
         path.exists().then_some(path)
     }
 

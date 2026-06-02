@@ -3105,6 +3105,21 @@ impl App {
                 self.bubbles.insert(rid, (text, col, elapsed));
             }
             self.bubbles.retain(|_, (_, _, start)| elapsed - *start < 5.0);
+            // Inbound sound (AUD-4/5: P_Sound/P_Speech) + mid-zone music switch
+            // (AUD-1: P_Music). Drain the queued events to the audio engine —
+            // one-shots play 2D for the alpha; the music switch replaces the
+            // looping track. (3D positional attenuation is a noted follow-up.)
+            if let Some(audio) = self.audio.as_mut() {
+                for sid in net.world.pending_sounds.drain(..) {
+                    if let Some(path) = store.sound_path_by_id(sid) {
+                        audio.play_oneshot(&path, 0.7);
+                    }
+                }
+                if let Some(mid) = net.world.pending_music.take() {
+                    audio.set_music(mid, 0.4, |id| store.music_path(id));
+                    println!("[audio] P_Music -> music id {mid}");
+                }
+            }
             // Send a P_StandardUpdate toward the input direction (unreliable,
             // like ClientNet.bb): the server walks the actor toward Dest and
             // echoes its authoritative position, which on_standard_update

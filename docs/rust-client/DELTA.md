@@ -213,7 +213,7 @@ choice produces most of the DIVERGENT ratings.
 | Weather rain/snow + storm audio | DONE | Wind loop + thunder |
 | Lightning + screen flash | DONE | ENV-5/6 |
 | Cloud texture swap | DONE | — |
-| **Live P_Music / P_Sound / P_Speech (in)** | MISSING | **No dispatch → combat/cast/speech silent, mid-zone music change ignored** |
+| **Live P_Music / P_Sound / P_Speech (in)** | DONE (2D) | **Now dispatched** — `SOUND=29`/`MUSIC=34`/`SPEECH=50` parse + play via new `SoundCatalog`; one-shots 2D, music switch replaces the loop. Remaining: 3D positional attenuation, sound zones (AUD-2) |
 | **Sound zones (radius/3D/repeat/fade)** | MISSING | No SoundZone type at all (AUD-2 was PARTIAL — actually absent) |
 | **Menu music (Menu.ogg)** | MISSING | Absent (MENU-10 was PARTIAL — absent) |
 | Footstep selection | PARTIAL | Time cadence only; no gender/wet-dry/3D/underwater |
