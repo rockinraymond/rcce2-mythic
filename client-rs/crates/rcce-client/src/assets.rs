@@ -275,6 +275,16 @@ impl AssetStore {
         p.exists().then_some(p)
     }
 
+    /// The optional EULA / license text from `Data/Game Data/EULA.txt` (MENU-13).
+    /// `None` when the file is absent or contains only whitespace — in which case
+    /// the gate is skipped, exactly like the engine. ref `MainMenu.bb:2908-2911`.
+    pub fn eula_text(&self) -> Option<String> {
+        let p = self.data_root.join("Game Data").join("EULA.txt");
+        let raw = std::fs::read_to_string(p).ok()?;
+        let trimmed = raw.trim();
+        (!trimmed.is_empty()).then(|| trimmed.to_string())
+    }
+
     /// First `Music.dat` entry that resolves to a file on disk, as `(id, path)`.
     /// Used to exercise the music pipeline when no zone sets `LoadingMusicID`.
     pub fn any_music(&self) -> Option<(u16, std::path::PathBuf)> {

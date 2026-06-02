@@ -38,6 +38,9 @@ use rcce_render::{SceneInstance, WorldView};
 /// (the headless/benchmark path).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Mode {
+    /// Optional license gate shown before login when `EULA.txt` is non-empty
+    /// (MENU-13). Accept → Login; Decline (Esc) → quit.
+    Eula,
     Login,
     CharSelect,
     InWorld,
@@ -288,6 +291,11 @@ struct App {
     /// the image to show full-screen-centred. `None` when closed. Set on using an
     /// I_Image item, cleared by ESC or another click.
     image_window: Option<u16>,
+    /// The license text shown on the `Mode::Eula` gate (MENU-13); `None` when the
+    /// project ships no `EULA.txt`. `eula_scroll` is the first visible wrapped
+    /// line (PageUp/PageDown).
+    eula_text: Option<String>,
+    eula_scroll: usize,
 
     // ---- Login / character-select menu state (Mode::Login / CharSelect) ----
     /// Current screen.
@@ -353,6 +361,8 @@ impl App {
             menu_scene_init: false,
             menu_music_on: false,
             image_window: None,
+            eula_text: None,
+            eula_scroll: 0,
             run: false,
             cam_yaw: 0.0,
             cam_pitch: 0.25,
@@ -666,6 +676,16 @@ fn lightning_fires(storm: bool, now: f32, next: f32) -> bool {
 /// (`CamYaw = EntityYaw(Me)`, `CamPitch = 0`). Pure — unit-tested.
 fn snap_camera(me_yaw: f32) -> (f32, f32) {
     (me_yaw, 0.0)
+}
+
+/// The interactive client's initial menu screen (MENU-13): the EULA gate when
+/// the project ships license text, otherwise straight to the login screen. Pure.
+fn initial_menu_mode(eula_present: bool) -> Mode {
+    if eula_present {
+        Mode::Eula
+    } else {
+        Mode::Login
+    }
 }
 
 /// Camera zoom bounds (CAM-3). Blitz clamps the mouse-wheel zoom to [5,50] and
@@ -1614,7 +1634,10 @@ impl ApplicationHandler for App {
                 Err(e) => eprintln!("[client-window] auto-login failed ({e}); zone-only spectator view"),
             }
         } else {
-            self.mode = Mode::Login;
+            // MENU-13: show the EULA gate first when the project ships a non-empty
+            // EULA.txt, otherwise straight to login (the engine's behavior).
+            self.eula_text = store.eula_text();
+            self.mode = initial_menu_mode(self.eula_text.is_some());
             self.login_msg = "Type your account name + password, then Enter".to_string();
             println!("[client-window] login screen (server {}:{})", self.host, self.port);
             // Headless test hook: jump straight to character select (drives the
@@ -2287,6 +2310,15 @@ impl App {
     /// Keyboard handling for the login + character-select screens.
     fn menu_key(&mut self, event_loop: &ActiveEventLoop, code: KeyCode, text: Option<&str>) {
         match self.mode {
+            // MENU-13 EULA gate: Enter accepts → Login; Esc declines → quit;
+            // PageUp/PageDown scroll the license text.
+            Mode::Eula => match code {
+                KeyCode::Enter | KeyCode::NumpadEnter => self.mode = Mode::Login,
+                KeyCode::Escape => event_loop.exit(),
+                KeyCode::PageUp => self.eula_scroll = self.eula_scroll.saturating_sub(8),
+                KeyCode::PageDown => self.eula_scroll = self.eula_scroll.saturating_add(8),
+                _ => {}
+            },
             Mode::Login => match code {
                 KeyCode::Enter | KeyCode::NumpadEnter => self.submit_login(),
                 KeyCode::Tab | KeyCode::ArrowDown | KeyCode::ArrowUp => {
@@ -2734,6 +2766,15 @@ impl App {
             // silent until the next session.
             self.menu_music_on = true;
         }
+        // MENU-13: auto-accept the EULA under any headless hook so the existing
+        // login/world capture paths aren't blocked by the new gate.
+        if self.mode == Mode::Eula
+            && (std::env::var_os("RCCE_AUTOSUBMIT").is_some()
+                || std::env::var_os("RCCE_AUTOENTER").is_some()
+                || std::env::var_os("RCCE_AUTOLOGIN").is_some())
+        {
+            self.mode = Mode::Login;
+        }
         // Headless test hook: enter the world from character select on the first
         // menu frame (the actual menu->world path), so it's verifiable end-to-end.
         if self.frames == 0
@@ -2907,6 +2948,42 @@ impl App {
     fn draw_menu_overlay(&mut self, elapsed: f32, sw: f32, sh: f32) {
         let Some(overlay) = self.overlay.as_mut() else { return };
         overlay.clear();
+        // MENU-13: the EULA gate gets a full-screen license panel instead of the
+        // login/character UI. Wrapped text + PageUp/PageDown scroll + Accept/Decline.
+        if self.mode == Mode::Eula {
+            let text = self.eula_text.clone().unwrap_or_default();
+            let (pw, ph) = (sw * 0.74, sh * 0.84);
+            let (px, py) = ((sw - pw) * 0.5, (sh - ph) * 0.5);
+            overlay.rect(px, py, pw, ph, [0.04, 0.05, 0.09, 0.93]);
+            overlay.rect(px, py, pw, 3.0, [0.5, 0.55, 0.7, 0.95]);
+            overlay.rect(px, py + ph - 3.0, pw, 3.0, [0.5, 0.55, 0.7, 0.95]);
+            let title = "End User License Agreement";
+            overlay.text_shadow(px + (pw - title.len() as f32 * 9.0 * 1.4) * 0.5, py + 14.0, 1.4, title, [0.95, 0.88, 0.55, 1.0]);
+            // Wrap each source line to the panel width.
+            let max_chars = (((pw - 40.0) / 7.0) as usize).max(20);
+            let mut lines: Vec<String> = Vec::new();
+            for para in text.split('\n') {
+                if para.trim().is_empty() {
+                    lines.push(String::new());
+                } else {
+                    lines.extend(wrap_text(para, max_chars));
+                }
+            }
+            let body_top = py + 50.0;
+            let line_h = 15.0;
+            let visible = (((py + ph - 44.0) - body_top) / line_h).max(1.0) as usize;
+            let start = self.eula_scroll.min(lines.len().saturating_sub(1));
+            for (i, wl) in lines.iter().skip(start).take(visible).enumerate() {
+                overlay.text(px + 20.0, body_top + i as f32 * line_h, 1.0, wl, [0.85, 0.86, 0.9, 1.0]);
+            }
+            if lines.len() > visible {
+                let more = format!("[{}-{}/{} · PgUp/PgDn]", start + 1, (start + visible).min(lines.len()), lines.len());
+                overlay.text(px + 20.0, py + ph - 24.0, 0.85, &more, [0.5, 0.55, 0.65, 0.9]);
+            }
+            let prompt = "Accept (Enter)     Decline (Esc)";
+            overlay.text_shadow(px + pw - prompt.len() as f32 * 9.0 - 20.0, py + ph - 26.0, 1.0, prompt, [0.6, 0.92, 0.6, 1.0]);
+            return;
+        }
         let title = "RCCE2";
         let ts = 5.0;
         overlay.text_shadow(sw * 0.5 - title.len() as f32 * 9.0 * ts * 0.5, sh * 0.12, ts, title, [0.95, 0.85, 0.5, 1.0]);
@@ -2924,6 +3001,8 @@ impl App {
         let fs = 1.7;
 
         match self.mode {
+            // Eula is fully drawn + returned above; never reaches this panel match.
+            Mode::Eula => {}
             Mode::Login => {
                 let lbl = [0.7, 0.78, 0.92, 0.95];
                 let field_bg = |o: &mut rcce_render::Overlay, x, y, w, focused: bool| {
@@ -5179,6 +5258,13 @@ mod tests {
         // Off-screen clamp keeps the whole menu visible.
         let edge = ContextMenu::build(9, false, 1279.0, 799.0, 1280.0, 800.0);
         assert!(edge.x + CTX_W <= 1280.0 && edge.y + CTX_ROW * 4.0 <= 800.0);
+    }
+
+    // MENU-13: the EULA gate is the initial screen only when license text exists.
+    #[test]
+    fn eula_gate_initial_mode() {
+        assert_eq!(initial_menu_mode(true), Mode::Eula);
+        assert_eq!(initial_menu_mode(false), Mode::Login);
     }
 
     // ESC close-precedence (DELTA blocker #1): ESC dismisses the topmost open

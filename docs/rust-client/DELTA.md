@@ -64,10 +64,10 @@ that hurt out of proportion to their count.
    `P_ItemScript` (`ITEM_SCRIPT=43`); ranged-weapon `MaxRange` works (`effective_attack_range`,
    ranged → `range−0.5` when item-health > 0); and the I_Image `WItemWindow` popup now renders the
    item image in a centred ESC-closeable modal (PNG-verified). Talk paths covered (chat send exists).
-6. **Front-of-game shell — partly addressed.** Menu music (`Menu.ogg`) is now **DONE** (loops in the
-   menu, stops on enter-world; headless log-confirmed). Still open: EULA gate, loading screen during
-   zone load, Graphics/Control/Sound options menus, Set.b3d menu diorama — the rest of the "lower
-   quality" gap.
+6. **Front-of-game shell — substantially addressed.** Menu music (`Menu.ogg`) **DONE**; the **EULA /
+   license screen DONE** (`Mode::Eula` — the user-flagged "license agreement on startup", PNG-verified).
+   Still open: Graphics/Control/Sound options menus, Set.b3d menu diorama, Server-Selector. (Loading
+   screen intentionally skipped — Rust zone loads are synchronous + fast, so it'd only flash.)
 
 ---
 
