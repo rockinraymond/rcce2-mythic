@@ -3142,7 +3142,15 @@ impl App {
             if self.mode == Mode::Login {
                 let lkey = "menu:logo";
                 if !overlay.has_texture(lkey) {
-                    if let Some(im) = store.menu_logo_path().and_then(|p| rcce_data::texture::load(&p)) {
+                    if let Some(mut im) = store.menu_logo_path().and_then(|p| rcce_data::texture::load(&p)) {
+                        // Menu Logo.bmp is a 24-bit sprite with a black mask
+                        // (Blitz LoadSprite flag 4 = masked); key out near-black
+                        // pixels to alpha so the background is transparent.
+                        for px in im.rgba.chunks_exact_mut(4) {
+                            if px[0] < 16 && px[1] < 16 && px[2] < 16 {
+                                px[3] = 0;
+                            }
+                        }
                         overlay.register_texture(&gfx.device, &gfx.queue, lkey, im.width, im.height, &im.rgba);
                     }
                 }
