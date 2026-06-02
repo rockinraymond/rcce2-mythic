@@ -285,6 +285,26 @@ impl AssetStore {
             .unwrap_or(3)
     }
 
+    /// Path to a full-screen menu backdrop image under `Data/Textures/Menu/`
+    /// (MENU-SCENE-b), e.g. `EULA.PNG` / `Login.PNG` / `Menu.PNG`. `None` if the
+    /// project doesn't ship it. Tries the given name then a `.PNG`/`.png` swap so
+    /// callers don't have to match the on-disk case.
+    pub fn menu_backdrop_path(&self, name: &str) -> Option<PathBuf> {
+        let dir = self.data_root.join("Textures").join("Menu");
+        let direct = dir.join(name);
+        if direct.exists() {
+            return Some(direct);
+        }
+        let stem = name.rsplit_once('.').map(|(s, _)| s).unwrap_or(name);
+        for ext in ["PNG", "png"] {
+            let p = dir.join(format!("{stem}.{ext}"));
+            if p.exists() {
+                return Some(p);
+            }
+        }
+        None
+    }
+
     /// The optional EULA / license text from `Data/Game Data/EULA.txt` (MENU-13).
     /// `None` when the file is absent or contains only whitespace — in which case
     /// the gate is skipped, exactly like the engine. ref `MainMenu.bb:2908-2911`.
