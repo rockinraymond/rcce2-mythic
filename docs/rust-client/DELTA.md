@@ -55,8 +55,11 @@ that hurt out of proportion to their count.
    was the unhandled `P_ScriptInput`.)*
 3. ~~**No camera zoom of any kind.**~~ **FIXED** (CAM-3). `cam_dist` field + `MouseWheel` handler +
    `-`/`=` keys, clamped [5,50] via `zoom_step`, threaded into the third-person boom.
-4. **No client-side body yaw (`me_yaw`).** Turn keys, mouse-look, and movement never rotate the local
-   character; facing is purely server-echoed. Root cause behind 4+ DIVERGENT movement/camera rows.
+4. ~~**No client-side body yaw (`me_yaw`).**~~ **FIXED** (MOVE-FACE). The local body now predicts and
+   faces its movement direction every frame (`heading_from_dir`, degrees); also fixed a latent
+   degrees-as-radians unit bug in `first_person_view`/`snap_camera` (CAM-4/CAM-5). *(Turn keys still
+   steer the camera, not the body — the camera-relative scheme is intentional; movement-facing was the
+   load-bearing gap.)*
 5. **Can't melee or chat-attack at range; can't talk via several paths.** Outbound `P_AttackActor` exists
    but ranged-weapon `MaxRange` is MISSING (melee 4.5 hardcoded); item-use beyond `P_EatItem` MISSING.
 6. **Front-of-game shell absent:** no EULA, no loading screen, no menu music (`Menu.ogg`), no

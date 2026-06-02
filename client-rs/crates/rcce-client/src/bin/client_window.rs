@@ -666,6 +666,22 @@ const CAM_DIST_MIN: f32 = 5.0;
 const CAM_DIST_MAX: f32 = 50.0;
 const CAM_DIST_DEFAULT: f32 = 13.0;
 
+/// Body facing (yaw, **degrees**) for a movement direction `(dx, dz)` in world
+/// XZ (MOVE-1/3, blocker #4). Returns `fallback` when the direction is ~zero (so
+/// a stopped actor keeps its last facing). `me_yaw`/`a.yaw` are stored in degrees
+/// (the wire's `EntityYaw` unit) and the renderer applies `from_rotation_y(yaw
+/// .to_radians())`, which rotates the base `-Z` forward to `(-sin θ, -cos θ)`;
+/// so facing `(dx, dz)` ⇒ `atan2(-dx, -dz)` then to degrees. Pure — unit-tested.
+/// The server independently faces the actor toward its Dest (`PointEntity`), so
+/// this locally predicts that same heading immediately (the wire carries no yaw).
+fn heading_from_dir(dx: f32, dz: f32, fallback: f32) -> f32 {
+    if dx * dx + dz * dz > 1e-6 {
+        (-dx).atan2(-dz).to_degrees()
+    } else {
+        fallback
+    }
+}
+
 /// Apply a zoom delta to the boom length and clamp (CAM-3). `delta` is in world
 /// units: negative pulls the camera in (zoom toward the player), positive pushes
 /// out. Pure — unit-tested. ref `Interface3D.bb:643-657` (CamDist ∓ MZSpeed*1.5).
@@ -2027,8 +2043,13 @@ impl ApplicationHandler for App {
                     self.set_mouse_look(state == ElementState::Pressed);
                 } else if button == MouseButton::Middle && state == ElementState::Pressed {
                     // CAM-5: middle-click snaps the camera directly behind the
-                    // character (cam_yaw -> me_yaw, cam_pitch -> 0).
-                    let me_yaw = self.net.as_ref().map(|n| n.world.me_yaw).unwrap_or(self.cam_yaw);
+                    // character (cam_yaw -> me_yaw, cam_pitch -> 0). me_yaw is in
+                    // degrees (wire unit); cam_yaw is radians.
+                    let me_yaw = self
+                        .net
+                        .as_ref()
+                        .map(|n| n.world.me_yaw.to_radians())
+                        .unwrap_or(self.cam_yaw);
                     let (yaw, pitch) = snap_camera(me_yaw);
                     self.cam_yaw = yaw;
                     self.cam_pitch = pitch;
@@ -2967,9 +2988,13 @@ impl App {
         // RCCE_AUTOWALK forces forward movement (for headless verification of
         // the movement-send path without a keyboard).
         let auto = std::env::var_os("RCCE_AUTOWALK").is_some();
+        // RCCE_STRAFE forces strafe-right (blocker #4 facing verification): the
+        // body should turn to face world-right while the camera still looks
+        // forward, so its profile is visible — proving facing follows movement.
+        let strafe = std::env::var_os("RCCE_STRAFE").is_some();
         if self.keys_wasd[0] || auto { dir[0] += fwd[0]; dir[1] += fwd[1]; }
         if self.keys_wasd[2] { dir[0] -= fwd[0]; dir[1] -= fwd[1]; }
-        if self.keys_wasd[3] { dir[0] += right[0]; dir[1] += right[1]; }
+        if self.keys_wasd[3] || strafe { dir[0] += right[0]; dir[1] += right[1]; }
         if self.keys_wasd[1] { dir[0] -= right[0]; dir[1] -= right[1]; }
         // Click-to-move (MOVE-5): with no manual/auto input this frame, steer
         // toward a pending clicked ground point until within the Blitz
@@ -3071,6 +3096,15 @@ impl App {
             // echoes its authoritative position, which on_standard_update
             // applies back to me_x/z. A single stop packet on key-release.
             let (mx, my, mz) = (net.world.me_x, net.world.me_y, net.world.me_z);
+            // Blocker #4 (MOVE-1/3): predict the local body's facing from the
+            // steering direction every frame so the character turns immediately
+            // to face where it's walking. The P_StandardUpdate wire carries no
+            // yaw — the server faces the actor toward Dest (PointEntity) and the
+            // echo never updates me_yaw — so without this the body stays frozen
+            // at its spawn heading. Idle keeps the last facing (fallback).
+            if moving {
+                net.world.me_yaw = heading_from_dir(dir[0], dir[1], net.world.me_yaw);
+            }
             if moving && want_send {
                 let (nx, nz) = (dir[0] / mag, dir[1] / mag);
                 let p = movement_packet(mx + nx * 16.0, mz + nz * 16.0, my, mx, mz, run, false);
@@ -3156,7 +3190,7 @@ impl App {
                 self.last_dyn_hash = hash;
             }
             cam_target = [net.world.me_x, net.world.me_y, net.world.me_z];
-            cam_me_yaw = net.world.me_yaw;
+            cam_me_yaw = net.world.me_yaw.to_radians(); // degrees -> radians for the FP camera
             following = true;
         }
         if did_send {
@@ -3425,7 +3459,7 @@ impl App {
         // RCCE_CAMSNAP=<frame> is set.
         if let Ok(cv) = std::env::var("RCCE_CAMSNAP") {
             if let Ok(at) = cv.parse::<u64>() {
-                let me_yaw = self.net.as_ref().map(|n| n.world.me_yaw).unwrap_or(0.0);
+                let me_yaw = self.net.as_ref().map(|n| n.world.me_yaw.to_radians()).unwrap_or(0.0);
                 if self.frames == at {
                     self.cam_yaw = me_yaw + std::f32::consts::PI;
                     self.cam_pitch = 0.9;
@@ -5170,6 +5204,34 @@ mod tests {
         assert_eq!(zoom_step(45.0, 100.0), CAM_DIST_MAX); // clamp at max
         assert_eq!(zoom_step(CAM_DIST_MIN, -1.0), CAM_DIST_MIN); // already at floor
         assert_eq!(zoom_step(CAM_DIST_MAX, 1.0), CAM_DIST_MAX); // already at ceil
+    }
+
+    // Body facing prediction (blocker #4): yaw faces the movement direction;
+    // verify the round-trip yaw -> facing vector matches the input direction for
+    // each cardinal, and that a ~zero direction keeps the fallback.
+    #[test]
+    fn heading_faces_movement() {
+        // The renderer rotates the base -Z forward by from_rotation_y(deg.to_radians())
+        // → facing = (-sin θ, -cos θ). Round-trip the returned degrees and confirm
+        // it reproduces the input direction for each cardinal.
+        let facing = |deg: f32| {
+            let r = deg.to_radians();
+            (-r.sin(), -r.cos())
+        };
+        for (dx, dz) in [(0.0, 1.0), (0.0, -1.0), (1.0, 0.0), (-1.0, 0.0), (1.0, 1.0)] {
+            let yaw = heading_from_dir(dx, dz, 99.0);
+            let (fx, fz) = facing(yaw);
+            let mag = (dx * dx + dz * dz).sqrt();
+            assert!((fx - dx / mag).abs() < 1e-4, "x for ({dx},{dz})");
+            assert!((fz - dz / mag).abs() < 1e-4, "z for ({dx},{dz})");
+        }
+        // Spot-check exact degree values: +X ⇒ -90°, -Z ⇒ 0°, +Z ⇒ 180°.
+        assert!((heading_from_dir(1.0, 0.0, 0.0) - -90.0).abs() < 1e-3);
+        assert!((heading_from_dir(0.0, -1.0, 9.0) - 0.0).abs() < 1e-3);
+        assert!((heading_from_dir(0.0, 1.0, 0.0).abs() - 180.0).abs() < 1e-3);
+        // Near-zero direction keeps the fallback (stopped actor holds facing).
+        assert_eq!(heading_from_dir(0.0, 0.0, 1.234), 1.234);
+        assert_eq!(heading_from_dir(0.0005, -0.0005, 7.0), 7.0);
     }
 
     #[test]
