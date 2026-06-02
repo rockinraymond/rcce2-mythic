@@ -47,11 +47,12 @@ that hurt out of proportion to their count.
 
 ## 2. Top blockers (fix these first — highest impact per unit effort)
 
-1. **In-world ESC kills the client.** With any panel open, ESC falls through to `event_loop.exit()`
-   instead of closing the panel; dialogs have no close affordance → user is trapped or quits.
-   `client_window.rs:1819-1839`. *(This is the defect the user hit first-hand.)*
-2. **NPC dialog / script-input does nothing.** `P_ScriptInput` / `P_ProgressBar` server dialogs are
-   unhandled — clicking a fireball-skill option "disappears but nothing happens." Networking + UI both flag it.
+1. ~~**In-world ESC kills the client.**~~ **FIXED** (commit `834196c5`, UI-ESC). `esc_layer` precedence
+   fn closes the topmost open layer; only exits when nothing is open.
+2. ~~**NPC script-input / progress-bar does nothing.**~~ **FIXED** (TGT-8). `P_ScriptInput` (free-text
+   modal + reply) and `P_ProgressBar` (`C`/`U`/`D` + create-ack) now parse, render, and close via ESC.
+   *(The NPC **dialog** window — `P_Dialog` — was already DONE, TGT-5; the remaining stuck-window path
+   was the unhandled `P_ScriptInput`.)*
 3. **No camera zoom of any kind.** `dist = 13.0` hardcoded; no mouse-wheel handler, no keyboard zoom.
    (Both the rendering and input audits found ACCEPTANCE's "PARTIAL" overstated — it's MISSING.) `client_window.rs:3078`.
 4. **No client-side body yaw (`me_yaw`).** Turn keys, mouse-look, and movement never rotate the local

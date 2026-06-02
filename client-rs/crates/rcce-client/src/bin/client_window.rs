@@ -659,6 +659,8 @@ fn snap_camera(me_yaw: f32) -> (f32, f32) {
 #[derive(Debug, Clone, Copy, Default)]
 struct EscOpen {
     mouse_look: bool,
+    script_input: bool,
+    dialog: bool,
     context_menu: bool,
     trade: bool,
     spellbook: bool,
@@ -674,6 +676,8 @@ struct EscOpen {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum EscLayer {
     MouseLook,
+    ScriptInput,
+    Dialog,
     ContextMenu,
     Trade,
     Spellbook,
@@ -691,6 +695,10 @@ enum EscLayer {
 fn esc_layer(o: EscOpen) -> EscLayer {
     if o.mouse_look {
         EscLayer::MouseLook
+    } else if o.script_input {
+        EscLayer::ScriptInput
+    } else if o.dialog {
+        EscLayer::Dialog
     } else if o.context_menu {
         EscLayer::ContextMenu
     } else if o.trade {
@@ -1624,6 +1632,55 @@ impl ApplicationHandler for App {
                     }
                     return;
                 }
+                // Scripted text-input dialog (TGT-8): capture typing, Enter
+                // submits the reply, Esc cancels without replying.
+                if self.net.as_ref().map(|n| n.world.script_input.is_some()).unwrap_or(false) {
+                    if pressed {
+                        match event.physical_key {
+                            PhysicalKey::Code(KeyCode::Enter | KeyCode::NumpadEnter) => {
+                                if let Some(net) = self.net.as_mut() {
+                                    if let Some(si) = net.world.script_input.take() {
+                                        net.transport.send(
+                                            net.peer,
+                                            rcce_net::packet_id::SCRIPT_INPUT,
+                                            &rcce_client::net::script_input_reply(
+                                                si.script_handle,
+                                                &si.text,
+                                            ),
+                                            true,
+                                        );
+                                    }
+                                }
+                            }
+                            PhysicalKey::Code(KeyCode::Escape) => {
+                                if let Some(net) = self.net.as_mut() {
+                                    net.world.script_input = None;
+                                }
+                            }
+                            PhysicalKey::Code(KeyCode::Backspace) => {
+                                if let Some(net) = self.net.as_mut() {
+                                    if let Some(si) = net.world.script_input.as_mut() {
+                                        si.text.pop();
+                                    }
+                                }
+                            }
+                            _ => {
+                                if let Some(t) = event.text.as_ref() {
+                                    if let Some(net) = self.net.as_mut() {
+                                        if let Some(si) = net.world.script_input.as_mut() {
+                                            for c in t.chars() {
+                                                if !c.is_control() && si.text.chars().count() < 100 {
+                                                    si.text.push(c);
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    return;
+                }
                 if let PhysicalKey::Code(code) = event.physical_key {
                     match code {
                         // Open the chat line.
@@ -1876,14 +1933,23 @@ impl ApplicationHandler for App {
                             // Blocker #1 (DELTA.md): ESC closes the topmost open
                             // layer and only exits when nothing is open — never
                             // quits out from under an open panel/menu/dialog.
+                            let (dialog_open, script_input_open, trade_open) = self
+                                .net
+                                .as_ref()
+                                .map(|n| {
+                                    (
+                                        n.world.dialog.is_some(),
+                                        n.world.script_input.is_some(),
+                                        n.world.current_trade.is_some(),
+                                    )
+                                })
+                                .unwrap_or((false, false, false));
                             let open = EscOpen {
                                 mouse_look: self.mouse_look,
+                                script_input: script_input_open,
+                                dialog: dialog_open,
                                 context_menu: self.context_menu.is_some(),
-                                trade: self
-                                    .net
-                                    .as_ref()
-                                    .map(|n| n.world.current_trade.is_some())
-                                    .unwrap_or(false),
+                                trade: trade_open,
                                 spellbook: self.show_spellbook,
                                 inventory: self.show_inventory,
                                 quests: self.show_quests,
@@ -1892,6 +1958,16 @@ impl ApplicationHandler for App {
                             };
                             match esc_layer(open) {
                                 EscLayer::MouseLook => self.set_mouse_look(false),
+                                EscLayer::ScriptInput => {
+                                    if let Some(net) = self.net.as_mut() {
+                                        net.world.script_input = None;
+                                    }
+                                }
+                                EscLayer::Dialog => {
+                                    if let Some(net) = self.net.as_mut() {
+                                        net.world.dialog = None;
+                                    }
+                                }
                                 EscLayer::ContextMenu => self.context_menu = None,
                                 EscLayer::Trade => {
                                     if let Some(net) = self.net.as_mut() {
@@ -3375,6 +3451,37 @@ impl App {
                 }
             }
         }
+        // Headless script-input + progress-bar self-test (TGT-8): inject a
+        // synthetic P_ScriptInput dialog and a P_ProgressBar so both render
+        // without a scripted NPC. No-op unless RCCE_SCRIPTINPUTTEST=<frame> set.
+        if let Ok(dv) = std::env::var("RCCE_SCRIPTINPUTTEST") {
+            if let Ok(at) = dv.parse::<u64>() {
+                if self.frames == at {
+                    if let Some(net) = self.net.as_mut() {
+                        net.world.script_input = Some(rcce_client::world::ScriptInput {
+                            script_handle: 7,
+                            masked: false,
+                            title: "Name your blade".to_string(),
+                            prompt: "The smith waits. What shall this sword be called?"
+                                .to_string(),
+                            text: "Frostbite".to_string(),
+                        });
+                        net.world.progress_bars.push(rcce_client::world::ProgressBar {
+                            client_handle: 1,
+                            color: [0.2, 0.7, 1.0],
+                            x: 0.30,
+                            y: 0.80,
+                            w: 0.40,
+                            h: 0.035,
+                            max: 100,
+                            value: 64,
+                            text: "Forging...".to_string(),
+                        });
+                        println!("[scriptinputtest] frame {} injected dialog + progress bar", self.frames);
+                    }
+                }
+            }
+        }
         // Headless attack self-test (CBT-1): select the nearest living actor and
         // engage auto-attack so the combat loop is exercisable without a mouse.
         // No-op unless RCCE_ATTACK=<frame> is set.
@@ -3826,6 +3933,63 @@ impl App {
                         self.dialog_hitboxes.push((dx, ty, dw, oh));
                         ty += oh;
                     }
+                }
+
+                // Scripted progress bars (TGT-8 / P_ProgressBar): server-driven
+                // labelled bars at fractional screen coords.
+                for pb in &net.world.progress_bars {
+                    let (bx, by, bw, bh) = (pb.x * sw, pb.y * sh, pb.w * sw, pb.h * sh);
+                    let frac = if pb.max > 0 {
+                        (pb.value as f32 / pb.max as f32).clamp(0.0, 1.0)
+                    } else {
+                        0.0
+                    };
+                    overlay.rect(bx - 2.0, by - 2.0, bw + 4.0, bh + 4.0, [0.0, 0.0, 0.0, 0.6]);
+                    overlay.bar(bx, by, bw, bh, frac, [pb.color[0], pb.color[1], pb.color[2], 1.0]);
+                    if !pb.text.is_empty() {
+                        let tw = rcce_render::font::text_width(&pb.text, 1.0);
+                        overlay.text_shadow(
+                            bx + (bw - tw) * 0.5,
+                            by + (bh - 12.0) * 0.5,
+                            1.0,
+                            &pb.text,
+                            [1.0, 1.0, 1.0, 1.0],
+                        );
+                    }
+                }
+
+                // Scripted text-input dialog (TGT-8 / P_ScriptInput): a centred
+                // modal with the title, wrapped prompt, an editable field showing
+                // the (optionally masked) reply + caret, and submit/cancel hints.
+                if let Some(si) = &net.world.script_input {
+                    let (dw, dh) = (0.40 * sw, 0.22 * sh);
+                    let (dx, dy) = ((sw - dw) * 0.5, (sh - dh) * 0.5);
+                    overlay.rect(dx - 2.0, dy - 2.0, dw + 4.0, dh + 4.0, [0.6, 0.5, 0.2, 0.97]);
+                    overlay.rect(dx, dy, dw, dh, [0.05, 0.05, 0.08, 0.97]);
+                    overlay.text_shadow(dx + 10.0, dy + 8.0, 1.3, &si.title, [1.0, 0.92, 0.6, 1.0]);
+                    let max_chars = (((dw - 20.0) / 6.5) as usize).max(8);
+                    let mut ty = dy + 32.0;
+                    for wl in wrap_text(&si.prompt, max_chars) {
+                        overlay.text_shadow(dx + 10.0, ty, 1.0, &wl, [0.85, 0.85, 0.85, 1.0]);
+                        ty += 14.0;
+                    }
+                    // Input field.
+                    let (fx, fy, fw, fh) = (dx + 10.0, dy + dh - 52.0, dw - 20.0, 22.0);
+                    overlay.rect(fx, fy, fw, fh, [0.0, 0.0, 0.0, 0.6]);
+                    overlay.rect(fx, fy, fw, 1.0, [0.5, 0.5, 0.55, 0.9]);
+                    let shown: String = if si.masked {
+                        "*".repeat(si.text.chars().count())
+                    } else {
+                        si.text.clone()
+                    };
+                    overlay.text_shadow(fx + 4.0, fy + 5.0, 1.1, &format!("{shown}_"), [1.0, 1.0, 1.0, 1.0]);
+                    overlay.text_shadow(
+                        dx + 10.0,
+                        dy + dh - 22.0,
+                        0.85,
+                        "Enter = submit    Esc = cancel",
+                        [0.6, 0.6, 0.65, 1.0],
+                    );
                 }
 
                 // Projectiles (PRJ-1): a bright billboard at each projectile's
@@ -4771,6 +4935,8 @@ mod tests {
         // Transient overlays win over everything beneath them.
         let everything = EscOpen {
             mouse_look: true,
+            script_input: true,
+            dialog: true,
             context_menu: true,
             trade: true,
             spellbook: true,
@@ -4784,6 +4950,10 @@ mod tests {
         // Strict ordering: peel one layer at a time, top to bottom.
         let mut o = everything;
         o.mouse_look = false;
+        assert_eq!(esc_layer(o), EscLayer::ScriptInput);
+        o.script_input = false;
+        assert_eq!(esc_layer(o), EscLayer::Dialog);
+        o.dialog = false;
         assert_eq!(esc_layer(o), EscLayer::ContextMenu);
         o.context_menu = false;
         assert_eq!(esc_layer(o), EscLayer::Trade);

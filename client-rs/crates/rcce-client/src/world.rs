@@ -26,6 +26,37 @@ pub struct Dialog {
     pub options: Vec<String>,
 }
 
+/// A scripted free-text input dialog (`P_ScriptInput`, id 53). The server's
+/// `TextInput` script command opens this; the user types into `text` and
+/// submits (Enter / Accept), which sends `[4]scriptHandle + text` back. ESC
+/// cancels without replying. ref ClientNet.bb:1020-1024, Interface3D.bb:1594.
+#[derive(Debug, Clone, Default)]
+pub struct ScriptInput {
+    pub script_handle: u32,
+    /// Render the typed text masked (password-style) when set.
+    pub masked: bool,
+    pub title: String,
+    pub prompt: String,
+    /// The user's in-progress reply.
+    pub text: String,
+}
+
+/// A scripted progress bar (`P_ProgressBar`, id 51): a server-driven labelled
+/// bar at fractional screen coords. `client_handle` is what we echo on create
+/// so the server can address later update/delete. ref ClientNet.bb:151-177.
+#[derive(Debug, Clone, Default)]
+pub struct ProgressBar {
+    pub client_handle: u32,
+    pub color: [f32; 3],
+    pub x: f32,
+    pub y: f32,
+    pub w: f32,
+    pub h: f32,
+    pub max: u16,
+    pub value: u16,
+    pub text: String,
+}
+
 /// An in-flight projectile (`P_Projectile`, id 37). Spawns at the source actor,
 /// flies toward the target (homing → the target actor's live position, else a
 /// snapshot taken at spawn) and is removed on impact (within 2 units). Rendered
@@ -191,6 +222,17 @@ pub struct World {
     pub current_trade: Option<crate::trade::TradeWindow>,
     /// The open NPC dialog window, if any (P_Dialog). See [`Dialog`].
     pub dialog: Option<Dialog>,
+    /// The open scripted free-text input dialog, if any (P_ScriptInput). The
+    /// user types into `text` and submits; reply is `[4]scriptHandle + text`.
+    /// See [`ScriptInput`]. ref ClientNet.bb:1020-1024.
+    pub script_input: Option<ScriptInput>,
+    /// Scripted progress bars (P_ProgressBar "C"/"U"/"D"), keyed by the
+    /// client-allocated handle we echo back on create. See [`ProgressBar`].
+    pub progress_bars: Vec<ProgressBar>,
+    /// Monotonic allocator for progress-bar client handles (the Blitz client
+    /// returns its local gadget handle; we mint our own and the server keys
+    /// later U/D on it). Starts at 1 so 0 stays "none".
+    pub next_pbar_handle: u32,
     /// In-flight projectiles (P_Projectile). See [`Projectile`].
     pub projectiles: Vec<Projectile>,
     /// A pending screen flash (P_ScreenFlash), drained by the renderer.
@@ -260,6 +302,8 @@ impl World {
             pk::WEATHER_CHANGE => self.on_weather_change(&m.data),
             pk::OPEN_TRADING => self.current_trade = crate::trade::TradeWindow::parse(&m.data),
             pk::DIALOG => self.on_dialog(&m.data),
+            pk::SCRIPT_INPUT => self.on_script_input(&m.data),
+            pk::PROGRESS_BAR => self.on_progress_bar(&m.data),
             pk::PROJECTILE => self.on_projectile(&m.data),
             pk::SCREEN_FLASH => self.on_screen_flash(&m.data),
             pk::KNOWN_SPELL_UPDATE => self.on_known_spell_update(&m.data),
@@ -804,6 +848,90 @@ impl World {
         }
     }
 
+    /// `P_ScriptInput` (ClientNet.bb:1020-1024): a scripted free-text prompt.
+    /// Wire: `[4]scriptHandle [1]masked [2]titleLen [titleLen]title [..]prompt`.
+    /// Opens the input dialog; the user's reply goes back as
+    /// `[4]scriptHandle + text` (see `net::script_input_reply`).
+    fn on_script_input(&mut self, d: &[u8]) {
+        let mut r = MsgReader::new(d);
+        let (Some(script), Some(masked), Some(title_len)) = (r.u32(), r.u8(), r.u16()) else {
+            return;
+        };
+        let Some(title_b) = r.bytes(title_len as usize) else {
+            return;
+        };
+        let title = String::from_utf8_lossy(title_b).into_owned();
+        let prompt = String::from_utf8_lossy(r.rest()).into_owned();
+        self.script_input = Some(ScriptInput {
+            script_handle: script,
+            masked: masked != 0,
+            title,
+            prompt,
+            text: String::new(),
+        });
+    }
+
+    /// `P_ProgressBar` (ClientNet.bb:151-177): scripted progress bars.
+    /// - `"C"`: `[1]R [1]G [1]B [4]X [4]Y [4]W [4]H [4]serverToken [2]max [2]value [..]text`
+    ///   → create a bar, mint a client handle, reply `"C" + serverToken + clientHandle`.
+    /// - `"U"`: `[4]clientHandle [2]value` → update.
+    /// - `"D"`: `[4]clientHandle` → remove.
+    fn on_progress_bar(&mut self, d: &[u8]) {
+        let mut r = MsgReader::new(d);
+        match r.u8() {
+            Some(b'C') => {
+                let (Some(red), Some(green), Some(blue)) = (r.u8(), r.u8(), r.u8()) else {
+                    return;
+                };
+                let (Some(x), Some(y), Some(w), Some(h)) = (r.f32(), r.f32(), r.f32(), r.f32())
+                else {
+                    return;
+                };
+                let Some(server_token) = r.bytes(4).map(<[u8; 4]>::try_from).and_then(Result::ok)
+                else {
+                    return;
+                };
+                let (Some(max), Some(value)) = (r.u16(), r.u16()) else {
+                    return;
+                };
+                let text = String::from_utf8_lossy(r.rest()).into_owned();
+                self.next_pbar_handle = self.next_pbar_handle.max(1);
+                let handle = self.next_pbar_handle;
+                self.next_pbar_handle += 1;
+                self.progress_bars.push(ProgressBar {
+                    client_handle: handle,
+                    color: [red as f32 / 255.0, green as f32 / 255.0, blue as f32 / 255.0],
+                    x,
+                    y,
+                    w,
+                    h,
+                    max,
+                    value,
+                    text,
+                });
+                // Reply so the server can address later U/D to our handle.
+                let mut reply = vec![b'C'];
+                reply.extend_from_slice(&server_token);
+                reply.extend_from_slice(&handle.to_le_bytes());
+                self.pending_sends.push((pk::PROGRESS_BAR, reply));
+            }
+            Some(b'U') => {
+                let (Some(handle), Some(value)) = (r.u32(), r.u16()) else {
+                    return;
+                };
+                if let Some(b) = self.progress_bars.iter_mut().find(|b| b.client_handle == handle) {
+                    b.value = value;
+                }
+            }
+            Some(b'D') => {
+                if let Some(handle) = r.u32() {
+                    self.progress_bars.retain(|b| b.client_handle != handle);
+                }
+            }
+            _ => {}
+        }
+    }
+
     /// Resolve a runtime id to a world position (self or a tracked actor).
     fn actor_pos(&self, rid: u16) -> Option<[f32; 3]> {
         if rid == self.my_runtime_id {
@@ -1067,6 +1195,60 @@ mod tests {
         c.u8(b'C').u32(0x1122_3344);
         w.apply(&msg(pk::DIALOG, c.into_bytes()));
         assert!(w.dialog.is_none());
+    }
+
+    #[test]
+    fn script_input_parse_and_reply() {
+        let mut w = World::default();
+        // P_ScriptInput: [4]scriptHandle [1]masked [2]titleLen [title][prompt].
+        let mut p = MsgWriter::new();
+        p.u32(0xDEAD_BEEF).u8(1).u16(11).raw(b"Enter name:").raw(b"Your hero?");
+        w.apply(&msg(pk::SCRIPT_INPUT, p.into_bytes()));
+        let si = w.script_input.as_ref().expect("script input opened");
+        assert_eq!(si.script_handle, 0xDEAD_BEEF);
+        assert!(si.masked);
+        assert_eq!(si.title, "Enter name:");
+        assert_eq!(si.prompt, "Your hero?");
+        assert_eq!(si.text, "");
+        // Reply framing: [4]scriptHandle + raw text (no length prefix).
+        let reply = crate::net::script_input_reply(0xDEAD_BEEF, "Conan");
+        let mut exp = 0xDEAD_BEEFu32.to_le_bytes().to_vec();
+        exp.extend_from_slice(b"Conan");
+        assert_eq!(reply, exp);
+    }
+
+    #[test]
+    fn progress_bar_create_update_delete() {
+        let mut w = World::default();
+        // "C": R,G,B, X,Y,W,H f32, serverToken(4), max, value, text.
+        let mut p = MsgWriter::new();
+        p.u8(b'C').u8(200).u8(100).u8(50);
+        p.f32(0.3).f32(0.4).f32(0.4).f32(0.05);
+        p.raw(&[1, 2, 3, 4]); // server token, echoed back verbatim
+        p.u16(100).u16(25).raw(b"Casting...");
+        w.apply(&msg(pk::PROGRESS_BAR, p.into_bytes()));
+        assert_eq!(w.progress_bars.len(), 1);
+        let bar = &w.progress_bars[0];
+        let handle = bar.client_handle;
+        assert_eq!(handle, 1); // first handle minted
+        assert_eq!((bar.max, bar.value), (100, 25));
+        assert_eq!(bar.text, "Casting...");
+        // Create-ack: "C" + serverToken(4) + clientHandle(4 LE).
+        let mut exp = vec![b'C', 1, 2, 3, 4];
+        exp.extend_from_slice(&handle.to_le_bytes());
+        assert_eq!(w.pending_sends, vec![(pk::PROGRESS_BAR, exp)]);
+
+        // "U": advance value by client handle.
+        let mut u = MsgWriter::new();
+        u.u8(b'U').u32(handle).u16(75);
+        w.apply(&msg(pk::PROGRESS_BAR, u.into_bytes()));
+        assert_eq!(w.progress_bars[0].value, 75);
+
+        // "D": remove by client handle.
+        let mut dd = MsgWriter::new();
+        dd.u8(b'D').u32(handle);
+        w.apply(&msg(pk::PROGRESS_BAR, dd.into_bytes()));
+        assert!(w.progress_bars.is_empty());
     }
 
     #[test]

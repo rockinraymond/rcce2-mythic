@@ -91,6 +91,17 @@ pub fn dialog_option_packet(script_handle: u32, opt: u8) -> Vec<u8> {
     w.into_bytes()
 }
 
+/// `P_ScriptInput` reply (`Interface3D.bb:1595`): the dialog's script handle
+/// (u32) + the user's typed text (raw, no length prefix — the server reads the
+/// rest). Sent reliable when the user submits; ESC-cancel sends nothing.
+pub fn script_input_reply(script_handle: u32, text: &str) -> Vec<u8> {
+    let mut w = MsgWriter::new();
+    w.u32(script_handle);
+    let mut b = w.into_bytes();
+    b.extend_from_slice(text.as_bytes());
+    b
+}
+
 /// Number of vendor/inventory slots in a trade basket (client `Dim(31)`).
 const TRADE_SLOTS: usize = 32;
 
