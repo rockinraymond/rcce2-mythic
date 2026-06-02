@@ -125,6 +125,9 @@ struct App {
     center: [f32; 3],
     span: f32,
     ground_y: f32,
+    /// Terrain height field — actors sample it to stand on the ground (their
+    /// server Y is only a stale spawn height; `P_StandardUpdate` omits Y).
+    height_field: Option<rcce_client::terrain::HeightField>,
     /// Solid-prop occluder spheres (world centre, radius) for camera collision —
     /// buildings/rocks/props, excluding terrain and see-through foliage. The
     /// third-person boom shortens when it would pass through one.
@@ -317,6 +320,7 @@ impl App {
             center: [0.0; 3],
             span: 100.0,
             ground_y: 0.0,
+            height_field: None,
             cam_occluders: Vec::new(),
             fog_color: [0.45, 0.62, 0.82],
             fog_near: 1000.0,
@@ -817,6 +821,7 @@ fn build_actors(
     me_jump_offset: f32,
     hide_me: bool,
     me_fidget: Option<&'static [&'static str]>,
+    height: Option<&rcce_client::terrain::HeightField>,
 ) -> (
     Vec<Rc<B3dModel>>,
     Vec<Rc<Vec<Option<Image>>>>,
@@ -892,8 +897,25 @@ fn build_actors(
         // (half the mesh height, scaled) stops actors floating ~half a body
         // above the terrain; the previous `- min*scale` put the feet at `pos[1]`,
         // lifting the whole body.
+        // Seat the actor's feet on the sampled terrain height under its X/Z
+        // (the engine keeps actors grounded via gravity+collision; the server's
+        // actor Y is only a stale spawn height — `P_StandardUpdate` omits Y, so
+        // it drifts on varying terrain). `th - min*scale` puts the mesh's feet
+        // (model `min`) at the ground. Fall back to centring on the server Y when
+        // no ground triangle is under the actor (e.g. mid-air / off-mesh).
         let half_h = (max[1] - min[1]) * 0.5;
-        let trans = [pos[0], pos[1] - half_h * scale, pos[2]];
+        let ground = height.and_then(|h| h.height_at(pos[0], pos[2]));
+        let trans_y = match ground {
+            Some(th) => th - min[1] * scale,
+            None => pos[1] - half_h * scale,
+        };
+        let trans = [pos[0], trans_y, pos[2]];
+        if std::env::var("RCCE_SEATDIAG").is_ok() {
+            eprintln!(
+                "[seat] rid {rid} tmpl {tmpl} g{gender}: posY={:.2} ground={ground:?} min={:.1} max={:.1} scale={:.3} transY={:.2}",
+                pos[1], min[1], max[1], scale, trans[1]
+            );
+        }
         let yaw_rad = yaw.to_radians();
         let key_body = format!("{tmpl}:{gender}:{face}:{body}");
         let can_skin = !src.bones.is_empty() && src.bones.len() <= rcce_render::gpu::MAX_BONES;
@@ -1149,7 +1171,16 @@ fn register_gui_textures(overlay: &mut rcce_render::Overlay, device: &wgpu::Devi
 }
 
 #[allow(clippy::type_complexity)]
-fn load_zone_static(store: &mut AssetStore, view: &mut WorldView, gfx: &Gfx, data_root: &str, zone: &str) -> Option<([f32; 3], f32, f32, rcce_data::AreaEnv, Vec<([f32; 3], f32)>)> {
+type ZoneStatic = (
+    [f32; 3],
+    f32,
+    f32,
+    rcce_data::AreaEnv,
+    Vec<([f32; 3], f32)>,
+    rcce_client::terrain::HeightField,
+);
+
+fn load_zone_static(store: &mut AssetStore, view: &mut WorldView, gfx: &Gfx, data_root: &str, zone: &str) -> Option<ZoneStatic> {
     let path = std::path::Path::new(data_root).join("Areas").join(format!("{zone}.dat"));
     let bytes = std::fs::read(&path).map_err(|e| eprintln!("[client-window] {}: {e}", path.display())).ok()?;
     let scenery = AreaScenery::parse(&bytes).ok()?;
@@ -1299,11 +1330,40 @@ fn load_zone_static(store: &mut AssetStore, view: &mut WorldView, gfx: &Gfx, dat
         occluders.push((c, radius));
     }
 
+    // Ground height field for actor foot-seating (`terrain.rs`). Gather the
+    // world-space near-horizontal triangles of the walkable scenery (terrain +
+    // paths); masked foliage (grass/trees) is skipped. Actors sample this so
+    // they stand on the terrain instead of on a stale spawn Y.
+    let height_field = {
+        use glam::{Mat3, Mat4, Vec3};
+        let mut tris: Vec<[Vec3; 3]> = Vec::new();
+        for &(idx, pos, rot, scale) in &place {
+            let model = &models[idx];
+            let nrot = Mat3::from_mat4(
+                Mat4::from_rotation_y(rot[1]) * Mat4::from_rotation_x(rot[0]) * Mat4::from_rotation_z(rot[2]),
+            );
+            let (sv, tv) = (Vec3::from(scale), Vec3::from(pos));
+            for mesh in &model.meshes {
+                if mesh.texture_flag & 4 != 0 {
+                    continue; // masked = see-through foliage, not ground
+                }
+                let w = |i: u32| tv + nrot * (Vec3::from(mesh.positions[i as usize]) * sv);
+                for tri in mesh.indices.chunks_exact(3) {
+                    let (a, b, c) = (w(tri[0]), w(tri[1]), w(tri[2]));
+                    if rcce_client::terrain::HeightField::is_ground(a, b, c) {
+                        tris.push([a, b, c]);
+                    }
+                }
+            }
+        }
+        rcce_client::terrain::HeightField::build(tris, 8.0)
+    };
+
     println!(
-        "[client-window] zone '{zone}': {} objects, {} meshes, span {span:.0}, {} cam occluders",
-        place.len(), models.len(), occluders.len()
+        "[client-window] zone '{zone}': {} objects, {} meshes, span {span:.0}, {} cam occluders, ground {}",
+        place.len(), models.len(), occluders.len(), if height_field.is_empty() { "none" } else { "ok" }
     );
-    Some((center, span, min[1], scenery.env.clone(), occluders))
+    Some((center, span, min[1], scenery.env.clone(), occluders, height_field))
 }
 
 /// Result of loading a zone: camera framing + env + the decoded cloud textures
@@ -1316,19 +1376,21 @@ struct ZoneLoad {
     cloud_regular: Option<rcce_data::texture::Image>,
     cloud_storm: Option<rcce_data::texture::Image>,
     occluders: Vec<([f32; 3], f32)>,
+    height_field: rcce_client::terrain::HeightField,
 }
 
 /// Load a zone's scenery + sky/cloud/stars (via `load_zone_static`) and decode
 /// its cloud textures. The single primitive used by both the initial load and a
 /// live area-change reload.
 fn load_zone_full(store: &mut AssetStore, view: &mut WorldView, gfx: &Gfx, data_root: &str, zone: &str) -> Option<ZoneLoad> {
-    let (center, span, ground_y, env, occluders) = load_zone_static(store, view, gfx, data_root, zone)?;
+    let (center, span, ground_y, env, occluders, height_field) =
+        load_zone_static(store, view, gfx, data_root, zone)?;
     let load_img = |id: u16| -> Option<rcce_data::texture::Image> {
         (id != 65535).then(|| store.texture_path(id).and_then(|p| rcce_data::texture::load(&p))).flatten()
     };
     let cloud_regular = load_img(env.cloud_tex_id);
     let cloud_storm = load_img(env.storm_cloud_tex_id);
-    Some(ZoneLoad { center, span, ground_y, env, cloud_regular, cloud_storm, occluders })
+    Some(ZoneLoad { center, span, ground_y, env, cloud_regular, cloud_storm, occluders, height_field })
 }
 
 impl ApplicationHandler for App {
@@ -1360,6 +1422,7 @@ impl ApplicationHandler for App {
             self.center = z.center;
             self.span = z.span;
             self.ground_y = z.ground_y;
+            self.height_field = Some(z.height_field);
             self.cam_occluders = z.occluders;
             self.fog_color = z.env.fog_color;
             self.fog_near = z.env.fog_near;
@@ -2423,7 +2486,7 @@ impl App {
                 mw.me_z = char_anchor[2];
                 mw.me_yaw = 0.0; // faces +Z; the camera circles it
                 let (models, textures, place, keys, skinned) =
-                    build_actors(store, &mw, elapsed, self.gpu_skin, false, false, c.actor_id, false, false, 0.0, false, None);
+                    build_actors(store, &mw, elapsed, self.gpu_skin, false, false, c.actor_id, false, false, 0.0, false, None, None);
                 let instances: Vec<SceneInstance> = place
                     .iter()
                     .map(|&(idx, t, r, color, s)| SceneInstance {
@@ -2755,6 +2818,7 @@ impl App {
                     self.center = z.center;
                     self.span = z.span;
                     self.ground_y = z.ground_y;
+                    self.height_field = Some(z.height_field);
                     self.cam_occluders = z.occluders;
                     self.fog_color = z.env.fog_color;
                     self.fog_near = z.env.fog_near;
@@ -2861,7 +2925,7 @@ impl App {
             if self.gpu_skin || hash != self.last_dyn_hash {
                 let (models, textures, place, keys, skinned) = build_actors(
                     store, &net.world, elapsed, self.gpu_skin, moving, run, 0, me_attack, me_jumping,
-                    me_jump_offset, self.first_person, me_fidget,
+                    me_jump_offset, self.first_person, me_fidget, self.height_field.as_ref(),
                 );
                 // CPU drawables: attachments (+ bodies when GPU skinning is off).
                 let instances: Vec<SceneInstance> = place

@@ -10,6 +10,7 @@ pub mod floaters;
 pub mod login;
 pub mod net;
 pub mod radar;
+pub mod terrain;
 pub mod trade;
 pub mod weather;
 pub mod world;
