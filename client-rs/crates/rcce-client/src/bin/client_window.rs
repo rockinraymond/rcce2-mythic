@@ -42,6 +42,9 @@ enum Mode {
     /// (MENU-13). Accept → Login; Decline (Esc) → quit.
     Eula,
     Login,
+    /// Sound options screen (master volume + mute), reached from Login with `O`,
+    /// Esc returns to Login.
+    Options,
     CharSelect,
     InWorld,
 }
@@ -720,6 +723,11 @@ fn heading_from_dir(dx: f32, dz: f32, fallback: f32) -> f32 {
 /// out. Pure — unit-tested. ref `Interface3D.bb:643-657` (CamDist ∓ MZSpeed*1.5).
 fn zoom_step(dist: f32, delta: f32) -> f32 {
     (dist + delta).clamp(CAM_DIST_MIN, CAM_DIST_MAX)
+}
+
+/// Apply a volume delta and clamp to [0,1] for the Sound options screen. Pure.
+fn volume_step(vol: f32, delta: f32) -> f32 {
+    (vol + delta).clamp(0.0, 1.0)
 }
 
 /// Which UI layers are currently open, for ESC close-precedence. Pure snapshot
@@ -2319,8 +2327,32 @@ impl App {
                 KeyCode::PageDown => self.eula_scroll = self.eula_scroll.saturating_add(8),
                 _ => {}
             },
+            // Sound options screen: Left/Right (or -/=) adjust master volume, M
+            // mutes, Esc returns to Login. Wired straight to the audio engine.
+            Mode::Options => match code {
+                KeyCode::Escape | KeyCode::Enter | KeyCode::NumpadEnter => self.mode = Mode::Login,
+                KeyCode::ArrowLeft | KeyCode::Minus => {
+                    if let Some(a) = self.audio.as_mut() {
+                        let v = volume_step(a.master_volume(), -0.05);
+                        a.set_master_volume(v);
+                    }
+                }
+                KeyCode::ArrowRight | KeyCode::Equal => {
+                    if let Some(a) = self.audio.as_mut() {
+                        let v = volume_step(a.master_volume(), 0.05);
+                        a.set_master_volume(v);
+                    }
+                }
+                KeyCode::KeyM => {
+                    if let Some(a) = self.audio.as_mut() {
+                        a.toggle_mute();
+                    }
+                }
+                _ => {}
+            },
             Mode::Login => match code {
                 KeyCode::Enter | KeyCode::NumpadEnter => self.submit_login(),
+                KeyCode::F1 => self.mode = Mode::Options,
                 KeyCode::Tab | KeyCode::ArrowDown | KeyCode::ArrowUp => {
                     self.login_focus ^= 1;
                 }
@@ -2766,6 +2798,15 @@ impl App {
             // silent until the next session.
             self.menu_music_on = true;
         }
+        // Headless options-screen self-test: force Mode::Options for a capture.
+        // No-op unless RCCE_OPTIONSTEST=<frame> set.
+        if let Ok(v) = std::env::var("RCCE_OPTIONSTEST") {
+            if let Ok(at) = v.parse::<u64>() {
+                if self.frames >= at {
+                    self.mode = Mode::Options;
+                }
+            }
+        }
         // MENU-13: auto-accept the EULA under any headless hook so the existing
         // login/world capture paths aren't blocked by the new gate.
         if self.mode == Mode::Eula
@@ -2984,6 +3025,36 @@ impl App {
             overlay.text_shadow(px + pw - prompt.len() as f32 * 9.0 - 20.0, py + ph - 26.0, 1.0, prompt, [0.6, 0.92, 0.6, 1.0]);
             return;
         }
+        // Sound options screen (front-of-game shell): master volume bar + mute.
+        if self.mode == Mode::Options {
+            let (vol, muted) = self
+                .audio
+                .as_ref()
+                .map(|a| (a.master_volume(), a.is_muted()))
+                .unwrap_or((0.0, false));
+            let (pw, ph) = ((sw * 0.46).clamp(420.0, 720.0), sh * 0.40);
+            let (px, py) = ((sw - pw) * 0.5, (sh - ph) * 0.5);
+            overlay.rect(px, py, pw, ph, [0.05, 0.06, 0.10, 0.92]);
+            overlay.rect(px, py, pw, 3.0, [0.5, 0.55, 0.7, 0.95]);
+            overlay.rect(px, py + ph - 3.0, pw, 3.0, [0.5, 0.55, 0.7, 0.95]);
+            let title = "Sound Options";
+            overlay.text_shadow(px + (pw - title.len() as f32 * 9.0 * 1.5) * 0.5, py + 18.0, 1.5, title, [0.95, 0.88, 0.55, 1.0]);
+            let bx = px + 30.0;
+            let bw = pw - 60.0;
+            // Master volume label + bar + percentage.
+            overlay.text(bx, py + 70.0, 1.2, "Master Volume", [0.75, 0.82, 0.95, 1.0]);
+            let by = py + 92.0;
+            overlay.rect(bx - 2.0, by - 2.0, bw + 4.0, 22.0 + 4.0, [0.0, 0.0, 0.0, 0.5]);
+            overlay.bar(bx, by, bw, 22.0, vol, [0.35, 0.7, 1.0, 1.0]);
+            overlay.text(bx + bw - 54.0, by + 3.0, 1.2, &format!("{:>3}%", (vol * 100.0).round() as i32), [1.0, 1.0, 1.0, 1.0]);
+            // Mute state.
+            let mute_col = if muted { [1.0, 0.5, 0.4, 1.0] } else { [0.6, 0.85, 0.6, 1.0] };
+            overlay.text(bx, by + 44.0, 1.2, &format!("Mute: {}", if muted { "ON" } else { "off" }), mute_col);
+            // Hints.
+            overlay.text(bx, py + ph - 56.0, 1.0, "Left / Right  adjust volume", [0.6, 0.66, 0.8, 0.9]);
+            overlay.text(bx, py + ph - 38.0, 1.0, "M  toggle mute        Esc  back", [0.6, 0.66, 0.8, 0.9]);
+            return;
+        }
         let title = "RCCE2";
         let ts = 5.0;
         overlay.text_shadow(sw * 0.5 - title.len() as f32 * 9.0 * ts * 0.5, sh * 0.12, ts, title, [0.95, 0.85, 0.5, 1.0]);
@@ -3001,8 +3072,8 @@ impl App {
         let fs = 1.7;
 
         match self.mode {
-            // Eula is fully drawn + returned above; never reaches this panel match.
-            Mode::Eula => {}
+            // Eula + Options are fully drawn + returned above; never reach here.
+            Mode::Eula | Mode::Options => {}
             Mode::Login => {
                 let lbl = [0.7, 0.78, 0.92, 0.95];
                 let field_bg = |o: &mut rcce_render::Overlay, x, y, w, focused: bool| {
@@ -3033,7 +3104,7 @@ impl App {
                 if !self.login_msg.is_empty() {
                     overlay.text(fx, y, 1.1, &self.login_msg, [1.0, 0.7, 0.5, 1.0]);
                 }
-                let hint = "Tab switch field   Enter login   Esc quit";
+                let hint = "Tab switch field   Enter login   F1 sound options   Esc quit";
                 overlay.text(sw * 0.5 - hint.len() as f32 * 9.0 * 0.5, py + ph + 14.0, 1.0, hint, [0.6, 0.66, 0.8, 0.9]);
                 let srv = format!("server {}:{}", self.host, self.port);
                 overlay.text(px + pad, py + ph - 22.0, 0.95, &srv, [0.45, 0.5, 0.62, 0.8]);
@@ -5487,6 +5558,17 @@ mod tests {
 
     // Camera zoom (CAM-3): steps adjust the boom length and clamp to [5,50];
     // negative zooms in, positive out.
+    // Sound options master-volume step clamps to [0,1].
+    #[test]
+    fn volume_step_clamps() {
+        assert_eq!(volume_step(0.5, 0.05), 0.55);
+        assert_eq!(volume_step(0.5, -0.05), 0.45);
+        assert_eq!(volume_step(0.98, 0.05), 1.0); // clamp high
+        assert_eq!(volume_step(0.02, -0.05), 0.0); // clamp low
+        assert_eq!(volume_step(0.0, -0.1), 0.0);
+        assert_eq!(volume_step(1.0, 0.1), 1.0);
+    }
+
     #[test]
     fn zoom_step_clamps() {
         assert_eq!(zoom_step(13.0, -1.5), 11.5); // zoom in

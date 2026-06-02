@@ -66,8 +66,9 @@ that hurt out of proportion to their count.
    item image in a centred ESC-closeable modal (PNG-verified). Talk paths covered (chat send exists).
 6. **Front-of-game shell — substantially addressed.** Menu music (`Menu.ogg`) **DONE**; the **EULA /
    license screen DONE** (`Mode::Eula` — the user-flagged "license agreement on startup", PNG-verified).
-   Still open: Graphics/Control/Sound options menus, Set.b3d menu diorama, Server-Selector. (Loading
-   screen intentionally skipped — Rust zone loads are synchronous + fast, so it'd only flash.)
+   The **Sound options screen** is now **DONE** (`Mode::Options`, F1 from login — master volume bar +
+   mute, PNG-verified). Still open: Control (keybind) + Graphics options, Set.b3d menu diorama,
+   Server-Selector. (Loading screen intentionally skipped — Rust zone loads are synchronous + fast.)
 
 ---
 
