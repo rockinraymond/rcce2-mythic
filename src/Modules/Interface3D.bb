@@ -903,7 +903,7 @@ Function UpdateInterface()
 							GY_FreeGadget(WContextMenu)
 							WContextMenu = 0
 							EndIf
-							WContextMenu = GY_CreateWindowInter("Actions", GY_MouseX#, GY_MouseY#, 0.1, 0.08, True, True, False, CreateTexture(2, 2))
+							WContextMenu = GY_CreateWindowInter("Actions", GY_MouseX#, GY_MouseY#, 0.1, 0.04, True, True, False)
 							Y# = 0.0
 							; Interact button
 							Local interactLabel$ = "Interact"
@@ -916,20 +916,20 @@ Function UpdateInterface()
 								iG = 255
 								iB = 255
 							EndIf
-							BInteract = GY_CreateButton(WContextMenu, Y#, 0.0, 1.0, 0.33, interactLabel$, False, iR, iG, iB)
-							Y# = Y# + 0.33
+							BInteract = GY_CreateButton(WContextMenu, Y#, 0.0, 1.0, 0.66, interactLabel$, False, iR, iG, iB)
+							Y# = Y# + 0.66
 							; Attack button (only if target is attackable)
 							If AI\Aggressiveness < 3 And Me\FactionRatings[AI\HomeFaction] <= 150
-								BAttack = GY_CreateButton(WContextMenu, 0.0, Y#, 1.0, 0.33, "Attack", False, 255, 0, 0)
-								Y# = Y# + 0.33
+								BAttack = GY_CreateButton(WContextMenu, 0.0, Y#, 1.0, 0.66, "Attack", False, 255, 0, 0)
+								Y# = Y# + 0.66
 							EndIf
 							
 							; Examine button
-							BExamine = GY_CreateButton(WContextMenu, 0.0, Y#, 1.0, 0.33, "Examine", False, 255, 255, 255)
-							Y# = Y# + 0.33
+							BExamine = GY_CreateButton(WContextMenu, 0.0, Y#, 1.0, 0.66, "Examine", False, 255, 255, 255)
+							Y# = Y# + 0.66
 							; Trade Button
 							If AI\Actor\TradeMode > 0
-								BTrade = GY_CreateButton(WContextMenu, 0.0, Y#, 1.0, 0.33, "Trade", False, 0, 255, 0)
+								BTrade = GY_CreateButton(WContextMenu, 0.0, Y#, 1.0, 0.66, "Trade", False, 0, 255, 0)
 							EndIf
 						Else
 							CreateCharInteractionWindow(AI)
