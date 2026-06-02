@@ -273,6 +273,9 @@ pub struct B3dMesh {
     pub positions: Vec<[f32; 3]>,
     pub normals: Vec<[f32; 3]>,
     pub uvs: Vec<[f32; 2]>,
+    /// Per-vertex RGBA colors (`VRTS` flags&2). Empty when absent. Terrain splat
+    /// layers blend by the **alpha** channel; props rarely carry these.
+    pub colors: Vec<[f32; 4]>,
     /// Triangle vertex indices (3 per triangle).
     pub indices: Vec<u32>,
     /// Brush index this mesh defaults to (`-1` = none). Resolved into `texture`.
@@ -749,13 +752,14 @@ fn parse_mesh(r: &mut BlitzReader, end: usize, world: &Mat4) -> Result<Vec<B3dMe
     let mut positions = Vec::new();
     let mut normals = Vec::new();
     let mut uvs = Vec::new();
+    let mut colors = Vec::new();
     let mut groups: Vec<(i32, Vec<u32>)> = Vec::new();
 
     while r.position() + 8 <= end {
         let (tag, size) = chunk_header(r)?;
         let chunk_end = (r.position() + size).min(end);
         match &tag {
-            b"VRTS" => parse_vrts(r, chunk_end, world, &mut positions, &mut normals, &mut uvs)?,
+            b"VRTS" => parse_vrts(r, chunk_end, world, &mut positions, &mut normals, &mut uvs, &mut colors)?,
             b"TRIS" => {
                 let brush = r.read_int()?;
                 let mut indices = Vec::new();
@@ -782,6 +786,7 @@ fn parse_mesh(r: &mut BlitzReader, end: usize, world: &Mat4) -> Result<Vec<B3dMe
             positions: positions.clone(),
             normals: normals.clone(),
             uvs: uvs.clone(),
+            colors: colors.clone(),
             indices,
             brush_id,
             texture: None,
@@ -802,6 +807,7 @@ fn parse_vrts(
     positions: &mut Vec<[f32; 3]>,
     normals: &mut Vec<[f32; 3]>,
     uvs: &mut Vec<[f32; 2]>,
+    colors: &mut Vec<[f32; 4]>,
 ) -> Result<(), ReadError> {
     let flags = r.read_int()?;
     let tex_coord_sets = r.read_int()?.clamp(0, 8) as usize;
@@ -822,7 +828,7 @@ fn parse_vrts(
             normals.push(xform_dir(world, [nx, ny, nz]));
         }
         if has_color {
-            let _ = (r.read_float()?, r.read_float()?, r.read_float()?, r.read_float()?);
+            colors.push([r.read_float()?, r.read_float()?, r.read_float()?, r.read_float()?]);
         }
         let mut uv = [0.0f32; 2];
         for set in 0..tex_coord_sets {

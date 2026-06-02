@@ -282,16 +282,21 @@ impl WorldView {
                 occlusion_query_set: None,
             });
             self.sky.draw(&mut rp); // behind the world (far plane, no depth write)
+            // 1) Opaque pass: terrain base + props (everything except the splat
+            //    overlays). Depth write on.
             rp.set_pipeline(&self.pipeline.pipeline);
             rp.set_bind_group(0, &self.bind0, &[]);
             for d in self.statics.iter().chain(self.dynamics.iter()) {
+                if d.alpha {
+                    continue;
+                }
                 rp.set_bind_group(1, &d.tex_bind, &[]);
                 rp.set_vertex_buffer(0, d.vbuf.slice(..));
                 rp.set_index_buffer(d.ibuf.slice(..), wgpu::IndexFormat::Uint32);
                 rp.draw_indexed(0..d.n_idx, 0, 0..1);
             }
-            // GPU-skinned actors: same camera uniform (group 0), per-actor pose
-            // uniform (group 2). The vertex shader skins the static mesh.
+            // 2) GPU-skinned actors: same camera uniform (group 0), per-actor pose
+            //    uniform (group 2). The vertex shader skins the static mesh.
             if !self.skinned.is_empty() {
                 rp.set_pipeline(&self.skin.pipeline);
                 rp.set_bind_group(0, &self.bind0, &[]);
@@ -302,6 +307,20 @@ impl WorldView {
                     rp.set_index_buffer(sd.ibuf.slice(..), wgpu::IndexFormat::Uint32);
                     rp.draw_indexed(0..sd.n_idx, 0, 0..1);
                 }
+            }
+            // 3) Alpha pass: terrain splat overlays blended over the opaque base
+            //    by vertex alpha (paths fade into grass). LessEqual + no depth
+            //    write so they layer on the base but don't occlude the actors.
+            rp.set_pipeline(&self.pipeline.alpha_pipeline);
+            rp.set_bind_group(0, &self.bind0, &[]);
+            for d in self.statics.iter().chain(self.dynamics.iter()) {
+                if !d.alpha {
+                    continue;
+                }
+                rp.set_bind_group(1, &d.tex_bind, &[]);
+                rp.set_vertex_buffer(0, d.vbuf.slice(..));
+                rp.set_index_buffer(d.ibuf.slice(..), wgpu::IndexFormat::Uint32);
+                rp.draw_indexed(0..d.n_idx, 0, 0..1);
             }
         }
         queue.submit(Some(enc.finish()));

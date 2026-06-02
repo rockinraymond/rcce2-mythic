@@ -1222,8 +1222,23 @@ fn load_zone_static(store: &mut AssetStore, view: &mut WorldView, gfx: &Gfx, dat
                         .iter()
                         .map(|mm| format!("{:.1}x{:.1}", mm.uv_scale[0], mm.uv_scale[1]))
                         .collect();
+                    // Per-surface alpha profile: %opaque (a>0.9) / %transparent (a<0.1).
+                    let alpha: Vec<String> = m
+                        .meshes
+                        .iter()
+                        .map(|mm| {
+                            if mm.colors.is_empty() {
+                                "noVC".into()
+                            } else {
+                                let n = mm.colors.len() as f32;
+                                let op = mm.colors.iter().filter(|c| c[3] > 0.9).count() as f32 / n;
+                                let tr = mm.colors.iter().filter(|c| c[3] < 0.1).count() as f32 / n;
+                                format!("op{:.0}tr{:.0}", op * 100.0, tr * 100.0)
+                            }
+                        })
+                        .collect();
                     eprintln!(
-                        "[meshdiag] mesh {} tex {}: tris={tris} uv u[{umin:.1}..{umax:.1}] v[{vmin:.1}..{vmax:.1}] surfaces={} texs={texs:?} uv_scales={scales:?}",
+                        "[meshdiag] mesh {} tex {}: tris={tris} uv u[{umin:.1}..{umax:.1}] v[{vmin:.1}..{vmax:.1}] surfaces={} texs={texs:?} uv_scales={scales:?} alpha={alpha:?}",
                         s.mesh_id, s.texture_id, m.meshes.len()
                     );
                 }

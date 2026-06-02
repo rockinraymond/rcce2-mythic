@@ -29,7 +29,9 @@ pub struct Vertex {
     pub pos: [f32; 3],
     pub normal: [f32; 3],
     pub uv: [f32; 2],
-    pub color: [f32; 3],
+    /// RGBA vertex color. RGB modulates the texture (terrain splat tinting);
+    /// **alpha is the splat blend weight** for the alpha pass (1.0 = opaque).
+    pub color: [f32; 4],
 }
 
 /// Strength of the zone's directional light relative to its ambient floor.
@@ -96,10 +98,10 @@ struct VsOut {
     @builtin(position) clip: vec4<f32>,
     @location(0) normal: vec3<f32>,
     @location(1) uv: vec2<f32>,
-    @location(2) color: vec3<f32>,
+    @location(2) color: vec4<f32>,
     @location(3) world: vec3<f32>,
 };
-@vertex fn vs(@location(0) pos: vec3<f32>, @location(1) normal: vec3<f32>, @location(2) uv: vec2<f32>, @location(3) color: vec3<f32>) -> VsOut {
+@vertex fn vs(@location(0) pos: vec3<f32>, @location(1) normal: vec3<f32>, @location(2) uv: vec2<f32>, @location(3) color: vec4<f32>) -> VsOut {
     var o: VsOut;
     o.clip = u.mvp * vec4<f32>(pos, 1.0);
     o.normal = normal;
@@ -117,11 +119,12 @@ struct VsOut {
     // ambient is the floor; its directional light adds on top.
     let diff = abs(dot(N, L)) * u.light_intensity;
     let shade = u.ambient + vec3<f32>(diff);
-    let lit = c.rgb * in.color * shade;
+    let lit = c.rgb * in.color.rgb * shade;
     // Distance fog toward the sky/fog colour.
     let dist = distance(in.world, u.eye);
     let f = clamp((dist - u.fog_near) / max(u.fog_far - u.fog_near, 1.0), 0.0, 1.0);
-    return vec4<f32>(mix(lit, u.fog_color, f), 1.0);
+    // Alpha = texture-alpha × vertex-alpha (1.0 for opaque meshes → no blend).
+    return vec4<f32>(mix(lit, u.fog_color, f), c.a * in.color.a);
 }
 "#;
 
@@ -538,6 +541,11 @@ mod mip_tests {
 
 pub struct Pipeline {
     pub pipeline: wgpu::RenderPipeline,
+    /// Alpha-blended variant for terrain splat overlays: SrcAlpha blend, depth
+    /// test `LessEqual` (so co-planar overlays draw over the base), depth write
+    /// off (overlays don't occlude actors/each other). Drawn after the opaque
+    /// pass + actors.
+    pub alpha_pipeline: wgpu::RenderPipeline,
     pub bgl_uniform: wgpu::BindGroupLayout,
     pub bgl_texture: wgpu::BindGroupLayout,
     pub sampler: wgpu::Sampler,
@@ -611,7 +619,7 @@ impl Pipeline {
                 buffers: &[wgpu::VertexBufferLayout {
                     array_stride: std::mem::size_of::<Vertex>() as u64,
                     step_mode: wgpu::VertexStepMode::Vertex,
-                    attributes: &wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32x3, 2 => Float32x2, 3 => Float32x3],
+                    attributes: &wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32x3, 2 => Float32x2, 3 => Float32x4],
                 }],
             },
             fragment: Some(wgpu::FragmentState {
@@ -632,8 +640,46 @@ impl Pipeline {
             multiview: None,
             cache: None,
         });
+        // Alpha-blended overlay variant (terrain splat): same shader/layout, but
+        // SrcAlpha blending, depth test LessEqual + no depth write.
+        let alpha_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("scene-alpha"),
+            layout: Some(&layout),
+            vertex: wgpu::VertexState {
+                module: &shader,
+                entry_point: "vs",
+                compilation_options: Default::default(),
+                buffers: &[wgpu::VertexBufferLayout {
+                    array_stride: std::mem::size_of::<Vertex>() as u64,
+                    step_mode: wgpu::VertexStepMode::Vertex,
+                    attributes: &wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32x3, 2 => Float32x2, 3 => Float32x4],
+                }],
+            },
+            fragment: Some(wgpu::FragmentState {
+                module: &shader,
+                entry_point: "fs",
+                compilation_options: Default::default(),
+                targets: &[Some(wgpu::ColorTargetState {
+                    format: color_format,
+                    blend: Some(wgpu::BlendState::ALPHA_BLENDING),
+                    write_mask: wgpu::ColorWrites::ALL,
+                })],
+            }),
+            primitive: wgpu::PrimitiveState { cull_mode: None, ..Default::default() },
+            depth_stencil: Some(wgpu::DepthStencilState {
+                format: DEPTH_FORMAT,
+                depth_write_enabled: false,
+                depth_compare: wgpu::CompareFunction::LessEqual,
+                stencil: Default::default(),
+                bias: Default::default(),
+            }),
+            multisample: wgpu::MultisampleState::default(),
+            multiview: None,
+            cache: None,
+        });
         Pipeline {
             pipeline,
+            alpha_pipeline,
             bgl_uniform,
             bgl_texture,
             sampler,
@@ -949,6 +995,16 @@ pub struct Drawable {
     pub ibuf: Rc<wgpu::Buffer>,
     pub n_idx: u32,
     pub tex_bind: Rc<wgpu::BindGroup>,
+    /// True for terrain splat-overlay surfaces (partial vertex alpha) — drawn in
+    /// a second alpha-blended pass over the opaque base so paths blend into grass.
+    pub alpha: bool,
+}
+
+/// Whether a mesh is a splat overlay: it carries per-vertex colors and some are
+/// not fully opaque. The opaque base surface (alpha all 1) and colourless props
+/// render in the normal opaque pass.
+pub fn mesh_is_alpha_overlay(mesh: &B3dMesh) -> bool {
+    !mesh.colors.is_empty() && mesh.colors.iter().any(|c| c[3] < 0.99)
 }
 
 /// Cache of constant index (topology) buffers, keyed like [`TexCache`].
@@ -979,6 +1035,9 @@ fn bake_verts(device: &wgpu::Device, nrot: Mat3, scale: Vec3, trans: Vec3, color
     // it the 0..1 UVs stretch one texture across the whole ground (the smear).
     let (sx, sy) = (mesh.uv_scale[0], mesh.uv_scale[1]);
     let (tx, ty) = (mesh.uv_offset[0], mesh.uv_offset[1]);
+    // Per-vertex colors (terrain splat painting): RGB tints the texture, alpha is
+    // the blend weight (the alpha pass composites overlays over the opaque base).
+    let has_color = mesh.colors.len() == mesh.positions.len();
     let verts: Vec<Vertex> = mesh
         .positions
         .iter()
@@ -991,11 +1050,17 @@ fn bake_verts(device: &wgpu::Device, nrot: Mat3, scale: Vec3, trans: Vec3, color
             } else {
                 [0.0, 0.0]
             };
+            let col = if has_color {
+                let c = mesh.colors[i];
+                [color[0] * c[0], color[1] * c[1], color[2] * c[2], c[3]]
+            } else {
+                [color[0], color[1], color[2], 1.0]
+            };
             Vertex {
                 pos: world.into(),
                 normal: (nrot * normals[i]).into(),
                 uv,
-                color,
+                color: col,
             }
         })
         .collect();
@@ -1058,7 +1123,7 @@ pub fn build_actor_drawables_cached(
                 .entry(ckey)
                 .or_insert_with(|| Rc::new(pipeline.texture_bind(device, queue, tex)))
                 .clone();
-            drawables.push(Drawable { vbuf, ibuf, n_idx, tex_bind });
+            drawables.push(Drawable { vbuf, ibuf, n_idx, tex_bind, alpha: mesh_is_alpha_overlay(mesh) });
         }
     }
     drawables
@@ -1081,7 +1146,7 @@ pub fn build_drawables(
         let pad = (max - min).length().max(20.0) * 0.4;
         let (gx0, gx1) = (min.x - pad, max.x + pad);
         let (gz0, gz1) = (min.z - pad, max.z + pad);
-        let gcol = [0.13, 0.18, 0.14];
+        let gcol = [0.13, 0.18, 0.14, 1.0];
         let n = [0.0, 1.0, 0.0];
         let v = |x: f32, z: f32| Vertex { pos: [x, ground_y, z], normal: n, uv: [0.0, 0.0], color: gcol };
         let verts = [v(gx0, gz0), v(gx1, gz0), v(gx1, gz1), v(gx0, gz1)];
@@ -1101,6 +1166,7 @@ pub fn build_drawables(
             ibuf,
             n_idx: 6,
             tex_bind: Rc::new(pipeline.texture_bind(device, queue, None)),
+            alpha: false,
         });
     }
     drawables
@@ -1134,6 +1200,7 @@ fn build_instance_drawables(
                 ibuf,
                 n_idx,
                 tex_bind: Rc::new(pipeline.texture_bind(device, queue, tex)),
+                alpha: mesh_is_alpha_overlay(mesh),
             });
         }
     }
