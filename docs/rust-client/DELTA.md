@@ -1,0 +1,263 @@
+# Rust Client — Exhaustive Parity Delta vs Blitz `Client.exe`
+
+**Date:** 2026-06-01 · **Branch:** `coreyrdean/blissful-knuth-1accbd`
+**TARGET:** `bin/Client.exe` (BlitzForge — `src/Client.bb` + `src/Modules/*.bb`)
+**SUBJECT:** `bin/ClientRS.exe` (Rust/wgpu — `client-rs/crates/*`)
+
+This is a feature-by-feature audit of how far the Rust reimplementation is from the Blitz
+reference, produced by six parallel cross-codebase audits (one per subsystem). Every row cites
+the Blitz source behavior and the Rust evidence (file:line). Status legend:
+
+| Status | Meaning |
+|---|---|
+| **DONE** | Behavior matches the Blitz reference (verified against source + evidence). |
+| **PARTIAL** | Implemented but incomplete — missing sub-cases, wrong thresholds, or degraded fidelity. |
+| **DIVERGENT** | Implemented but behaves differently from the reference (often an intentional substitute). |
+| **MISSING** | Not implemented at all. |
+
+> Many MISSING rows are **content-gated** — they need a world feature (water volume, mountable
+> NPC, second connected player, scripted emote) that the starter `data/` project doesn't exercise.
+> Those are tagged **[content-gated]** and are *not* the same class of gap as a missing core system.
+
+---
+
+## 1. Scorecard
+
+| Subsystem | DONE | PARTIAL | DIVERGENT | MISSING | Features | Weighted parity¹ |
+|---|---:|---:|---:|---:|---:|---:|
+| Rendering | 16 | 13 | 4 | 22 | 55 | ~43% |
+| Networking (packets) | 46 | 2 | 1 | 28 | 77 | ~62% |
+| UI / HUD / Menus | 25 | 18 | 2 | 12 | 57 | ~61% |
+| Movement / Camera / Animation | 5 | 13 | 6 | 7 | 31 | ~44% |
+| Combat / Spells / Items / Inv / Trade | 22 | 16 | 7 | 27 | 72 | ~46% |
+| Audio / Weather / Input / Loc / Misc | 14 | 8 | 7 | 15 | 44 | ~46% |
+| **TOTAL** | **128** | **70** | **27** | **111** | **336** | **~51%** |
+
+¹ Weighted parity = (DONE·1 + PARTIAL·0.5 + DIVERGENT·0.25) / Features. A rough "how-much-of-the-target-behavior-exists" number; DIVERGENT scores low because the behavior is present but wrong.
+
+**Headline read:** the *plumbing* is strong — login, world-state replication, movement echo,
+the packet codec, and the core render path all work, which is why the client is playable. The
+distance to target is concentrated in (a) **environment richness** (water, 3D particle emitters,
+multitexture/lightmaps, sky bodies), (b) **the front-of-game shell** (EULA, loading screen,
+options/control-remap menus, menu music), (c) **interaction depth** (mouse-carry inventory, full
+trade, item-use beyond eating, ranged combat), and (d) a small set of **functional blockers**
+that hurt out of proportion to their count.
+
+---
+
+## 2. Top blockers (fix these first — highest impact per unit effort)
+
+1. **In-world ESC kills the client.** With any panel open, ESC falls through to `event_loop.exit()`
+   instead of closing the panel; dialogs have no close affordance → user is trapped or quits.
+   `client_window.rs:1819-1839`. *(This is the defect the user hit first-hand.)*
+2. **NPC dialog / script-input does nothing.** `P_ScriptInput` / `P_ProgressBar` server dialogs are
+   unhandled — clicking a fireball-skill option "disappears but nothing happens." Networking + UI both flag it.
+3. **No camera zoom of any kind.** `dist = 13.0` hardcoded; no mouse-wheel handler, no keyboard zoom.
+   (Both the rendering and input audits found ACCEPTANCE's "PARTIAL" overstated — it's MISSING.) `client_window.rs:3078`.
+4. **No client-side body yaw (`me_yaw`).** Turn keys, mouse-look, and movement never rotate the local
+   character; facing is purely server-echoed. Root cause behind 4+ DIVERGENT movement/camera rows.
+5. **Can't melee or chat-attack at range; can't talk via several paths.** Outbound `P_AttackActor` exists
+   but ranged-weapon `MaxRange` is MISSING (melee 4.5 hardcoded); item-use beyond `P_EatItem` MISSING.
+6. **Front-of-game shell absent:** no EULA, no loading screen, no menu music (`Menu.ogg`), no
+   Graphics/Control/Sound options, no Set.b3d menu diorama — the "feels lower quality" gap the user described.
+
+---
+
+## 3. Rendering (16 / 13 / 4 / 22)
+
+Headline structural gap: **`area.rs:163` only parses scenery placements.** Water volumes, ColBoxes,
+3D Emitters, LOD Terrains, and Sound blocks live in the same `.dat` and are **never read** — this one
+omission accounts for missing water, 3D particles, and LOD heightmap terrain simultaneously.
+
+| Feature | Blitz (src) | Status | Gap | Rust evidence |
+|---|---|---|---|---|
+| Textured terrain | LoadArea mesh + brush | DONE | Texscale tiling fixed (6a47f81d) | `world_view.rs`, `b3d.rs` |
+| Terrain vertex-alpha splat blend | FX_VERTEXALPHA overlays | DONE | Two-pass opaque+alpha (1166bb96) | `gpu.rs alpha_pipeline` |
+| Mipmaps + anisotropy | engine default | DONE | CPU mip chain + aniso 8 (80215326) | `gpu.rs texture_bind` |
+| Scenery placement | LoadArea scenery loop | DONE | — | `area.rs:163` |
+| Skinned animated actors | b3d BONE/KEYS/ANIM | DONE | CPU LBS; quat-conjugate fix | `b3d.rs`, scene |
+| Third-person camera (LH) | gxscene | DONE | Mirror fixed (08a499be) | `world_view.rs` |
+| Daylight default | Environment | DONE | Default phase fixed (e4c8957c) | `daynight.rs` |
+| Fog (day/night) | FogNear/Far | PARTIAL | Per-*weather* fog targets missing | `world_view.rs` |
+| Multitexture / lightmap / BUMPED stages | brush slots 2-8 | MISSING | b3d keeps only first brush slot | `b3d.rs resolve_textures` |
+| Water surface + reflection | Water volumes | MISSING | [content-gated] not parsed | `area.rs:163` |
+| 3D particle emitters | RP_ emitters | MISSING | Rust draws 2D screen rects | `weather.rs` |
+| LOD heightmap terrain | LOD Terrains block | MISSING | Not parsed | `area.rs:163` |
+| Shadows | shadow projection | MISSING | None | — |
+| MSAA / AA | engine | MISSING | None | `gpu.rs` |
+| Suns / moons / lens-flare / god-rays | sky bodies | MISSING | None | — |
+| Storm-cloud texture swap | EntityTexture | DONE | (also weather audit) | `client_window.rs:3004` |
+| Attachment anim-follow | bone-bound mesh | DIVERGENT | Binds to bind-pose joint, not animated | actor render |
+| Day/night clock | 60000/TimeFactor | DIVERGENT | Synthetic cosine, no server time/seasons | `daynight.rs` |
+
+*(Full 55-row table retained in audit transcript; condensed here to the load-bearing rows + every MISSING system.)*
+
+---
+
+## 4. Networking — packet coverage (46 / 2 / 1 / 28 of 77)
+
+Wire codec confirmed **little-endian both sides**; login flow fully covered. Gaps are concentrated
+in outbound interaction and inbound live-update packets.
+
+**Outbound MISSING (client can't initiate):**
+`P_ChatMessage` (talk / slash-commands), `P_AttackActor` *(present but range-limited)*,
+`P_ActionBarUpdate`, `P_Trade` / `P_UpdateTrading` (P2P trade), `P_ScriptInput` reply.
+
+**Inbound MISSING (server events ignored):**
+`P_AppearanceUpdate`, `P_AnimateActor`, `P_RepositionActor`, `P_Sound`, `P_Speech`, `P_Music`,
+`P_CreateEmitter`, `P_KickedPlayer`, `P_StatUpdate "R"`, `P_ScriptInput`, `P_ProgressBar`.
+
+| Class | Status | Notes |
+|---|---|---|
+| Login / char-select / enter-world | DONE | Full handshake, account, char CRUD |
+| P_StandardUpdate (move echo) | PARTIAL | 110ms throttle vs 200; WalkBack byte hardcoded false |
+| P_Projectile / P_AttackActor (in) | DONE | Decode correct |
+| P_Sound / P_Speech / P_Music (in) | MISSING | No dispatch case → silent combat/cast/speech |
+| P_AnimateActor / P_CreateEmitter (in) | MISSING | Scripted anim/particles ignored |
+| P_UpdateTrading | MISSING | Player-trade window never syncs |
+| Day/night time sync | DIVERGENT | Client-synthetic, ignores server clock |
+
+---
+
+## 5. UI / HUD / Menus (25 / 18 / 2 / 12)
+
+HUD at real `Interface.dat` coords (vitals/chat/minimap/buffs/action-bar/inventory-grid) — strong.
+Gaps are the front-of-game shell and modal dialogs.
+
+| Feature | Status | Gap |
+|---|---|---|
+| HUD layout at real coords | DONE | Matches Interface.dat (memory note) |
+| Inventory / quest / party / spellbook panels | DONE | PANEL TEMPLATE |
+| **In-world ESC** | DIVERGENT | **Kills client with any panel open — top blocker** |
+| **NPC dialog / P_ScriptInput** | MISSING | **Clicking option does nothing — top blocker** |
+| P_ProgressBar dialog | MISSING | No render |
+| EULA / license screen | MISSING | Front-of-game |
+| Loading screen | MISSING | Synchronous zone load |
+| Options menus (Graphics/Control/Sound/Other) | MISSING | No settings UI at all |
+| Menu backdrop art + Set.b3d diorama | MISSING | "lower quality" menu gap |
+| Server status / selector | MISSING | — |
+| Action bar slot-assign UI / paging | MISSING | Fires on number keys, no slots model |
+| Action bar key binding | DIVERGENT | Digits 1-9, reference uses F-keys / assignable |
+
+---
+
+## 6. Movement / Camera / Animation (5 / 13 / 6 / 7)
+
+Core architectural divergence: **Blitz projects a destination along the character's own yaw**;
+**Rust uses camera-relative WASD velocity** and never writes a local `me_yaw`. That single design
+choice produces most of the DIVERGENT ratings.
+
+| Feature | Status | Gap |
+|---|---|---|
+| Click-to-move + stop-at-2.0 | DONE | — |
+| Jump physics + P_Jump | DONE | — |
+| MMB snap-behind | DONE | — |
+| Idle fidget (1/1000) | DONE | 2 clips vs random range |
+| Local jump anim | DONE | — |
+| Forward/back/turn keys | DIVERGENT | Camera-relative, not dest-projection along body yaw |
+| Strafe A/D | DIVERGENT | *Added* behavior absent from target |
+| Local gravity / ground-Y | DIVERGENT | Terrain-sampled, not gravity sim |
+| Clip hysteresis (CurrentSeq) | DIVERGENT | Re-derives from elapsed each rebuild |
+| **Camera zoom** | MISSING | **No wheel/keyboard zoom; dist=13 hardcoded — top blocker** |
+| Camera follow-smoothing (CurveValue 6·Δ) | PARTIAL | Snaps each frame, no easing |
+| Camera scenery-collision LinePick | PARTIAL | Occluder spheres substitute |
+| First-person at Head joint + pitch ease | PARTIAL | Fixed eye height, no pitch ease |
+| Fly/swim up-down keys | MISSING | [content-gated] Space rebound to attack |
+| Swim / mounted-rider anims | MISSING | [content-gated] no water/mount state |
+| **P_AnimateActor (emote/scripted)** | MISSING | Remote scripted anims never play |
+| Seasons | MISSING | No season state |
+
+---
+
+## 7. Combat / Spells / Items / Inventory / Trade (22 / 16 / 7 / 27)
+
+| Feature | Status | Gap |
+|---|---|---|
+| Melee auto-attack loop | DONE | Faithful chase→swing→wait |
+| Attack-send P_AttackActor | DONE | RuntimeID LE u16 |
+| Projectile homing / impact / speed | DONE | Math matches |
+| Memorise / un-memorise (M/U) | DONE | SPL-4 |
+| Known-spells A/D/L | DONE | SPL-7 |
+| Equip + mesh attach | DONE | R_Hand/L_Hand |
+| Drop / pickup / durability | DONE | — |
+| 46-slot equip+backpack model | DONE | — |
+| **Ranged-weapon MaxRange** | MISSING | **Ranged classes can't attack at range — melee 4.5 hardcoded** |
+| **Item use beyond eat** | MISSING | Image-item + script-item (`P_ItemScript`) paths absent |
+| DamageInfoStyle chat-line ("You hit X for N") | MISSING | Only floating numbers |
+| Incoming/outgoing damage colour | DIVERGENT | Coloured by damage-type, not hit direction |
+| SpellCharge server contract | DIVERGENT | Client-only timer, ignores server SpellCharge[] |
+| RequireMemorise=false (cast known directly) | MISSING | Always assumes memorise required |
+| Cast from action-bar slots / F-keys | DIVERGENT | Digit keys → Nth memorised |
+| Own-cast visual FX | MISSING | [SPL-8] no own-cast effect |
+| Stack rules (Ctrl=all / Shift=1 / amount dialog) | MISSING | Fixed amount 1 |
+| Stack 16-bit ceiling | PARTIAL | Caps at 65535, not 32767 |
+| Mouse-carry inventory (cursor item, swap, split) | MISSING | Direct equip/drop only |
+| Trade — sell side / amounts / cost / P2P sync | MISSING | Buy-only; `P_UpdateTrading` unhandled |
+| Blood-spurt / parry / hit-react / death-msg | MISSING | Cosmetic combat feedback |
+| Attack anim by weapon type; remote attackers | PARTIAL | Generic clip; remote attackers don't animate |
+
+---
+
+## 8. Audio / Weather / Input / Localization / Misc (14 / 8 / 7 / 15)
+
+| Feature | Status | Gap |
+|---|---|---|
+| Zone music loop + free-prior | DONE | (zone-env driven) |
+| Volume / mute controls | DONE | `[` `]` `M` |
+| Weather rain/snow + storm audio | DONE | Wind loop + thunder |
+| Lightning + screen flash | DONE | ENV-5/6 |
+| Cloud texture swap | DONE | — |
+| **Live P_Music / P_Sound / P_Speech (in)** | MISSING | **No dispatch → combat/cast/speech silent, mid-zone music change ignored** |
+| **Sound zones (radius/3D/repeat/fade)** | MISSING | No SoundZone type at all (AUD-2 was PARTIAL — actually absent) |
+| **Menu music (Menu.ogg)** | MISSING | Absent (MENU-10 was PARTIAL — absent) |
+| Footstep selection | PARTIAL | Time cadence only; no gender/wet-dry/3D/underwater |
+| 3D audio attenuation/panning | MISSING | rodio 2D mono gain only |
+| Per-weather fog/cloud-alpha transitions | MISSING | Fog & Wind weather collapse to Clear |
+| Rain/snow particles | DIVERGENT | 2D screen-space, not 3D world emitters |
+| **Control-remap UI / controls.dat / invert-mouse** | MISSING | All keybinds hardcoded; several diverge from defaults (Jump=J not Space, view-mode/FP on different keys) |
+| **LS_* localization (227 strings)** | MISSING | UI hardcoded English; no Language.dat |
+| Chat slash-commands | DONE | Raw text forwarded |
+| FPS / polygon counter | MISSING | Bench-only stdout |
+| Screenshot key | DIVERGENT | Env-var only, no in-game hotkey |
+
+---
+
+## 9. What "reaching target" actually requires
+
+Grouped by effort class, in suggested order:
+
+**A. Functional blockers (small, high-impact):**
+ESC-closes-panel-not-client · NPC dialog (`P_ScriptInput`/`P_ProgressBar`) · camera zoom (wheel+keyboard) ·
+local `me_yaw` body rotation. *Days, not weeks. Unblocks core interaction + fixes the user-visible "stuck/quit" bug.*
+
+**B. Front-of-game shell:**
+EULA → loading screen → menu music + Set.b3d diorama → options menus (Graphics/Control/Sound) →
+control-remap + controls.dat. *Closes most of the "feels lower quality" gap.*
+
+**C. Environment richness (the `.dat` parser is the keystone):**
+Extend `area.rs` to parse Water / ColBoxes / Emitters / LOD Terrains / Sound blocks → unlocks water+reflection,
+3D particle emitters, sound zones, LOD terrain in one structural change. Then multitexture/lightmap brush
+slots, sky bodies, shadows.
+
+**D. Interaction depth:**
+Mouse-carry inventory (swap/split/amount-dialog) · full trade (sell/amounts/cost/`P_UpdateTrading`) ·
+item-use beyond eat (`P_ItemScript`, image items) · ranged-weapon MaxRange · inbound
+`P_Sound`/`P_Speech`/`P_Music`/`P_AnimateActor`/`P_CreateEmitter` dispatch · SpellCharge server contract.
+
+**E. Localization:** LS_* string table (227 entries) — mechanical but broad.
+
+**F. Content-gated [deferred]:** swim/fly/mount/underwater camera, 2-player trade sync, seasons —
+need world content the starter project lacks; verify when content exists.
+
+---
+
+## 10. Method & caveats
+
+- Six parallel cross-codebase audits, each citing Blitz source line + Rust evidence line.
+- Where this report and `ACCEPTANCE.md` disagree, the audits found ACCEPTANCE **optimistic** on:
+  CAM-3 zoom (MISSING not PARTIAL), AUD-1/2/4 audio (sound zones + inbound sound packets absent),
+  MENU-10 menu music (absent not PARTIAL), AUD-3 footsteps (no selection logic). Those rows should be downgraded.
+- "Weighted parity %" is a coarse aggregate, not a release gate. The honest one-line summary: **the client
+  is playable and the networking/world-replication core is largely correct, but it renders and plays at
+  roughly half the reference's feature surface — the deficit is breadth (environment, shell, interaction
+  depth), not a broken core.**
