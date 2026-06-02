@@ -60,10 +60,10 @@ that hurt out of proportion to their count.
    degrees-as-radians unit bug in `first_person_view`/`snap_camera` (CAM-4/CAM-5). *(Turn keys still
    steer the camera, not the body — the camera-relative scheme is intentional; movement-facing was the
    load-bearing gap.)*
-5. **Partly fixed.** Item-use beyond `P_EatItem` is now **DONE** (the Use button sends `P_ItemScript`
-   for non-edible items, with optional target — `packet_id::ITEM_SCRIPT=43`). Still open: ranged-weapon
-   `MaxRange` (melee 4.5 hardcoded; needs the discarded `wtype`/`range` retained in `ItemDef` + combat-loop
-   wiring), and the I_Image `WItemWindow` popup. Talk paths covered elsewhere (chat send exists).
+5. ~~**Item-use / ranged combat.**~~ **DONE.** Item-use beyond `P_EatItem` sends `P_ItemScript`
+   (`packet_id::ITEM_SCRIPT=43`); ranged-weapon `MaxRange` now works — `ItemDef` retains `wtype`/`range`
+   and the combat tick uses `effective_attack_range` (ranged → `range−0.5` when item-health > 0, else
+   melee). Only the I_Image `WItemWindow` popup remains from this blocker. Talk paths covered (chat send exists).
 6. **Front-of-game shell — partly addressed.** Menu music (`Menu.ogg`) is now **DONE** (loops in the
    menu, stops on enter-world; headless log-confirmed). Still open: EULA gate, loading screen during
    zone load, Graphics/Control/Sound options menus, Set.b3d menu diorama — the rest of the "lower

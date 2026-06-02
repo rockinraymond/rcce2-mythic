@@ -877,13 +877,26 @@ const MELEE_RANGE: f32 = 4.5;
 /// `CombatDelay`; this just paces our `P_AttackActor` sends.
 const COMBAT_DELAY_MS: u64 = 1500;
 
-fn combat_step(dist: f32, cooldown_ready: bool) -> CombatStep {
-    if dist > MELEE_RANGE {
+fn combat_step(dist: f32, range: f32, cooldown_ready: bool) -> CombatStep {
+    if dist > range {
         CombatStep::Chase
     } else if cooldown_ready {
         CombatStep::Swing
     } else {
         CombatStep::Wait
+    }
+}
+
+/// Effective attack reach (CBT-2 / blocker #5b). A ranged weapon (`wtype` ==
+/// `W_Ranged` = 3) with positive item-health attacks at `range - 0.5`, floored
+/// at the melee base so a tiny configured range never shortens reach; every
+/// other case (melee weapon, broken ranged weapon, no weapon) uses the melee
+/// base. Mirrors `ClientCombat.bb:37-42`. Pure — unit-tested.
+fn effective_attack_range(wtype: i16, weapon_range: f32, item_health: u8, melee_base: f32) -> f32 {
+    if wtype == 3 && item_health > 0 {
+        (weapon_range - 0.5).max(melee_base)
+    } else {
+        melee_base
     }
 }
 
@@ -3003,7 +3016,21 @@ impl App {
                 Some((rid, tx, tz, mx, mz)) => {
                     let dist = ((tx - mx).powi(2) + (tz - mz).powi(2)).sqrt();
                     let ready = self.last_attack.elapsed().as_millis() as u64 >= COMBAT_DELAY_MS;
-                    match combat_step(dist, ready) {
+                    // CBT-2 / blocker #5b: an equipped ranged weapon (slot 0,
+                    // wtype W_Ranged, item-health > 0) attacks at `range - 0.5`;
+                    // otherwise the melee base. Computed from the live inventory.
+                    let weapon = self.net.as_ref().and_then(|n| n.world.me_inventory.get(&0)).copied();
+                    let range = match weapon {
+                        Some(w) => {
+                            let (wt, wr) = store
+                                .item_def(w.item_id)
+                                .map(|d| (d.weapon_wtype, d.weapon_range))
+                                .unwrap_or((0, 0.0));
+                            effective_attack_range(wt, wr, w.health, MELEE_RANGE)
+                        }
+                        None => MELEE_RANGE,
+                    };
+                    match combat_step(dist, range, ready) {
                         CombatStep::Chase => self.move_target = Some([tx, tz]),
                         CombatStep::Wait => self.move_target = None,
                         CombatStep::Swing => {
@@ -5248,11 +5275,31 @@ mod tests {
     // range when the cooldown is ready, else wait for the cooldown.
     #[test]
     fn combat_step_decisions() {
-        assert_eq!(combat_step(10.0, true), CombatStep::Chase);
-        assert_eq!(combat_step(10.0, false), CombatStep::Chase);
-        assert_eq!(combat_step(3.0, true), CombatStep::Swing);
-        assert_eq!(combat_step(3.0, false), CombatStep::Wait);
-        assert_eq!(combat_step(MELEE_RANGE, true), CombatStep::Swing);
+        let r = MELEE_RANGE;
+        assert_eq!(combat_step(10.0, r, true), CombatStep::Chase);
+        assert_eq!(combat_step(10.0, r, false), CombatStep::Chase);
+        assert_eq!(combat_step(3.0, r, true), CombatStep::Swing);
+        assert_eq!(combat_step(3.0, r, false), CombatStep::Wait);
+        assert_eq!(combat_step(MELEE_RANGE, r, true), CombatStep::Swing);
+        // With a longer (ranged) reach, a far target is in range → Swing.
+        assert_eq!(combat_step(10.0, 19.5, true), CombatStep::Swing);
+        assert_eq!(combat_step(20.0, 19.5, true), CombatStep::Chase);
+    }
+
+    // Effective attack range (CBT-2 / blocker #5b): ranged weapon with health
+    // reaches range-0.5; broken ranged / melee / no weapon use the melee base.
+    #[test]
+    fn effective_range_ranged_vs_melee() {
+        // Ranged (wtype 3), health>0, reach 20 → 19.5.
+        assert_eq!(effective_attack_range(3, 20.0, 100, 4.5), 19.5);
+        // Ranged but broken (health 0) → melee base.
+        assert_eq!(effective_attack_range(3, 20.0, 0, 4.5), 4.5);
+        // Melee weapon (wtype 1) → melee base regardless of range field.
+        assert_eq!(effective_attack_range(1, 20.0, 100, 4.5), 4.5);
+        // No weapon (wtype 0) → melee base.
+        assert_eq!(effective_attack_range(0, 0.0, 0, 4.5), 4.5);
+        // A configured ranged reach shorter than melee is floored at melee.
+        assert_eq!(effective_attack_range(3, 3.0, 100, 4.5), 4.5);
     }
 
     // Camera zoom (CAM-3): steps adjust the boom length and clamp to [5,50];

@@ -37,6 +37,13 @@ pub struct ItemDef {
     pub mass: i16,
     /// Base melee/ranged damage for weapons (item_type 1), else 0.
     pub weapon_damage: i16,
+    /// Weapon type for weapons (item_type 1): 1 OneHand, 2 TwoHand, 3 Ranged
+    /// (`Items.bb` `W_*`). 0 for non-weapons. Drives the ranged attack-range gate.
+    pub weapon_wtype: i16,
+    /// Weapon reach in world units for weapons (item_type 1), else 0. Ranged
+    /// weapons attack at `range - 0.5` when their item-health is > 0
+    /// (`ClientCombat.bb:38-42`).
+    pub weapon_range: f32,
     /// Armour level for armour (item_type 2), else 0.
     pub armour_level: i16,
 }
@@ -92,17 +99,19 @@ impl ItemCatalog {
         }
         // ItemType-conditional tail (Items.bb:378-404).
         let mut weapon_damage = 0i16;
+        let mut weapon_wtype = 0i16;
+        let mut weapon_range = 0.0f32;
         let mut armour_level = 0i16;
         match item_type {
             1 => {
                 // Weapon: damage, dtype, wtype, rangedProjectile (4×i16),
                 // range f32, rangedAnimation string.
-                weapon_damage = r.read_short()?;
-                for _ in 0..3 {
-                    r.read_short()?;
-                }
-                r.read_float()?;
-                r.read_string(256)?;
+                weapon_damage = r.read_short()?; // damage
+                let _dtype = r.read_short()?; // damage type
+                weapon_wtype = r.read_short()?; // weapon type (W_Ranged = 3)
+                let _ranged_proj = r.read_short()?; // ranged projectile id
+                weapon_range = r.read_float()?; // reach in world units
+                r.read_string(256)?; // ranged animation
             }
             2 => {
                 armour_level = r.read_short()?; // ArmourLevel
@@ -128,6 +137,8 @@ impl ItemCatalog {
             stackable,
             mass,
             weapon_damage,
+            weapon_wtype,
+            weapon_range,
             armour_level,
         })
     }
@@ -273,11 +284,13 @@ mod tests {
         for _ in 0..40 {
             o.extend_from_slice(&5000i16.to_le_bytes());
         }
-        // weapon tail: damage,dtype,wtype,proj (4×i16), range f32, anim string
-        for _ in 0..4 {
-            o.extend_from_slice(&0i16.to_le_bytes());
-        }
-        o.extend_from_slice(&0f32.to_le_bytes());
+        // weapon tail: damage,dtype,wtype,proj (4×i16), range f32, anim string.
+        // Use a ranged bow (wtype 3) with reach 20.0 to exercise field retention.
+        o.extend_from_slice(&7i16.to_le_bytes()); // damage
+        o.extend_from_slice(&0i16.to_le_bytes()); // dtype
+        o.extend_from_slice(&3i16.to_le_bytes()); // wtype = W_Ranged
+        o.extend_from_slice(&0i16.to_le_bytes()); // ranged projectile
+        o.extend_from_slice(&20f32.to_le_bytes()); // range
         bstr(&mut o, "");
         bstr(&mut o, ""); // miscdata
         // a trailing second item to prove alignment held
@@ -289,6 +302,9 @@ mod tests {
         assert_eq!(cat.get(5).unwrap().item_type, 1);
         assert_eq!(cat.get(5).unwrap().mmesh, 77); // weapon mesh id parsed
         assert_eq!(cat.get(5).unwrap().slot_type, 1);
+        assert_eq!(cat.get(5).unwrap().weapon_damage, 7);
+        assert_eq!(cat.get(5).unwrap().weapon_wtype, 3); // W_Ranged retained
+        assert_eq!(cat.get(5).unwrap().weapon_range, 20.0); // reach retained
         assert_eq!(cat.get(6).unwrap().name, "Apple");
     }
 
