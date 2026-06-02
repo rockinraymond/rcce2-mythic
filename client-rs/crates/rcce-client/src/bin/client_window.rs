@@ -924,7 +924,19 @@ enum CombatStep {
 /// substring). The shipped data labels them "Default attack"/"Death 1"; Hit
 /// ranges are empty so there's no hit-react clip.
 const ATTACK_CLIP: &[&str] = &["Default attack", "Right hand attack", "Staff attack", "attack"];
-const DEATH_CLIP: &[&str] = &["Death 1", "Death", "death"];
+/// Per-actor death-clip name priority (CBT-6 death-anim variety). Humanoid sets
+/// ship two real death clips ("Death 1" 900-932, "Death 2" 933-959); alternate
+/// which is tried first by actor id so deaths aren't all identical, mirroring
+/// Blitz's `Rand(Anim_FirstDeath, Anim_LastDeath)`. Animals ship a single "Die"
+/// (the old `DEATH_CLIP` omitted it, so they played no death pose) — included as
+/// a fallback. First name that resolves in the actor's anim set wins.
+fn death_clip(rid: u16) -> &'static [&'static str] {
+    if rid % 2 == 0 {
+        &["Death 2", "Death 1", "Death", "Die", "death"]
+    } else {
+        &["Death 1", "Death 2", "Death", "Die", "death"]
+    }
+}
 /// The Player body's jump clip (set #0 `Jump` [32..55]). ANIM-7.
 const JUMP_CLIP: &[&str] = &["Jump"];
 /// Jump physics (MOVE-7), the literal Blitz constants: `Gravity# = 0.0125`,
@@ -1253,7 +1265,7 @@ fn build_actors(
         // CBT-3: a remote actor mid-attack (P_AttackActor 'Y'/broadcast) plays its
         // swing clip. Priority: dead > jump > attack > none.
         let combat = if !a.alive {
-            Some((DEATH_CLIP, true))
+            Some((death_clip(a.runtime_id), true))
         } else if jump_left.is_some() {
             Some((JUMP_CLIP, false))
         } else if world.attack_anims.contains_key(&a.runtime_id) {
@@ -5730,6 +5742,19 @@ mod tests {
 
     // Camera zoom (CAM-3): steps adjust the boom length and clamp to [5,50];
     // negative zooms in, positive out.
+    // Death-anim variety (CBT-6): alternates the first-tried humanoid death clip
+    // by actor id; both orderings still include the animal "Die" fallback.
+    #[test]
+    fn death_clip_alternates() {
+        assert_eq!(death_clip(2)[0], "Death 2"); // even id
+        assert_eq!(death_clip(3)[0], "Death 1"); // odd id
+        // Both contain "Death 1", "Death 2" and the animal "Die" fallback.
+        for rid in [2u16, 3] {
+            let c = death_clip(rid);
+            assert!(c.contains(&"Death 1") && c.contains(&"Death 2") && c.contains(&"Die"));
+        }
+    }
+
     // CBT-5 chat-line damage style: outgoing/incoming/miss composition + names.
     #[test]
     fn damage_line_composition() {
