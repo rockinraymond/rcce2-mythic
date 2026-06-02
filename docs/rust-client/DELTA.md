@@ -60,8 +60,10 @@ that hurt out of proportion to their count.
    degrees-as-radians unit bug in `first_person_view`/`snap_camera` (CAM-4/CAM-5). *(Turn keys still
    steer the camera, not the body — the camera-relative scheme is intentional; movement-facing was the
    load-bearing gap.)*
-5. **Can't melee or chat-attack at range; can't talk via several paths.** Outbound `P_AttackActor` exists
-   but ranged-weapon `MaxRange` is MISSING (melee 4.5 hardcoded); item-use beyond `P_EatItem` MISSING.
+5. **Partly fixed.** Item-use beyond `P_EatItem` is now **DONE** (the Use button sends `P_ItemScript`
+   for non-edible items, with optional target — `packet_id::ITEM_SCRIPT=43`). Still open: ranged-weapon
+   `MaxRange` (melee 4.5 hardcoded; needs the discarded `wtype`/`range` retained in `ItemDef` + combat-loop
+   wiring), and the I_Image `WItemWindow` popup. Talk paths covered elsewhere (chat send exists).
 6. **Front-of-game shell absent:** no EULA, no loading screen, no menu music (`Menu.ogg`), no
    Graphics/Control/Sound options, no Set.b3d menu diorama — the "feels lower quality" gap the user described.
 

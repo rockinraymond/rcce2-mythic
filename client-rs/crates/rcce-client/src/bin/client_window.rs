@@ -2457,19 +2457,33 @@ impl App {
                             }
                         }
                         InvAction::Eat => {
-                            // Only Potion (4) / Ingredient (5) are edible.
+                            // Faithful to Blitz UseItem (Interface3D.bb:4138-4216):
+                            // Potion (4) / Ingredient (5) are eaten (P_EatItem);
+                            // every other type runs its Use script (P_ItemScript)
+                            // with the selected target when one exists. Equipment
+                            // (weapon/armour) is equipped via Shift-click elsewhere;
+                            // here the script send still fires, matching the server
+                            // contract (it tolerates items with no Use script).
                             let edible = self
                                 .store
                                 .as_ref()
                                 .and_then(|s| s.item_def(item_id))
                                 .map(|d| d.item_type == 4 || d.item_type == 5)
                                 .unwrap_or(false);
-                            if edible {
-                                if let Some(net) = self.net.as_mut() {
+                            let target = self.target;
+                            if let Some(net) = self.net.as_mut() {
+                                if edible {
                                     net.transport.send(
                                         net.peer,
                                         rcce_net::packet_id::EAT_ITEM,
                                         &rcce_client::net::eat_item_packet(slot, 1),
+                                        true,
+                                    );
+                                } else {
+                                    net.transport.send(
+                                        net.peer,
+                                        rcce_net::packet_id::ITEM_SCRIPT,
+                                        &rcce_client::net::item_script_packet(slot, target),
                                         true,
                                     );
                                 }

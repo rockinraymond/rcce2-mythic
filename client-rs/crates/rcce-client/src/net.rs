@@ -164,6 +164,21 @@ pub fn eat_item_packet(slot: u8, amount: u16) -> Vec<u8> {
     w.into_bytes()
 }
 
+/// Build a `P_ItemScript` use request (`Interface3D.bb:4160,4208-4216` UseItem):
+/// inventory slot u8, plus the selected target's RuntimeID u16 when one exists.
+/// The server runs the item's `Use` script (with the optional target actor); the
+/// server-side handler tolerates a missing/`Null` target, so an untargeted use
+/// just omits the 2 bytes (matching the stale-handle pattern). Sent reliable.
+/// Covers I_Image and I_Other/I_Ring — everything `UseItem` routes past eating.
+pub fn item_script_packet(slot: u8, target: Option<u16>) -> Vec<u8> {
+    let mut w = MsgWriter::new();
+    w.u8(slot);
+    if let Some(rid) = target {
+        w.u16(rid);
+    }
+    w.into_bytes()
+}
+
 /// Build a `P_OpenTrading` close (`Interface3D.bb:2303`): an empty body tells
 /// the server the trade window was dismissed. Sent reliable.
 pub fn trade_close_packet() -> Vec<u8> {
@@ -222,6 +237,15 @@ mod tests {
         // P_EatItem body: slot u8 + amount u16 (LE), no sub-type char.
         assert_eq!(eat_item_packet(20, 1), vec![20, 1, 0]);
         assert_eq!(eat_item_packet(45, 0x0102), vec![45, 0x02, 0x01]);
+    }
+
+    #[test]
+    fn item_script_layout() {
+        // Untargeted use: just the slot byte (server tolerates no target).
+        assert_eq!(item_script_packet(20, None), vec![20]);
+        // Targeted use: slot u8 + target RuntimeID u16 (LE).
+        assert_eq!(item_script_packet(20, Some(0x0102)), vec![20, 0x02, 0x01]);
+        assert_eq!(item_script_packet(45, Some(7)), vec![45, 7, 0]);
     }
 
     #[test]
