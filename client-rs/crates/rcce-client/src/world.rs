@@ -556,11 +556,27 @@ impl World {
     }
 
     /// `P_ActorDead` (ClientNet.bb:1071): RuntimeID(u16) of the actor that died.
+    /// `P_ActorDead` (ClientNet.bb:1071): `[2]deadRID [+ [2]killerRID]`. Marks the
+    /// actor dead (it holds the death pose via `DEATH_CLIP`) and — faithful to the
+    /// engine — emits a green "You killed <name>!" chat line **only when the local
+    /// player is the killer** (CBT-6). Third-party deaths are silent, as in Blitz.
     fn on_actor_dead(&mut self, d: &[u8]) {
-        if let Some(rid) = MsgReader::new(d).u16() {
-            if let Some(a) = self.actors.get_mut(&rid) {
-                a.alive = false;
-            }
+        let mut r = MsgReader::new(d);
+        let Some(rid) = r.u16() else { return };
+        let killer = r.u16();
+        let name = self
+            .actors
+            .get(&rid)
+            .map(|a| {
+                let n = a.name.trim();
+                if n.is_empty() { "Someone".to_string() } else { n.to_string() }
+            })
+            .unwrap_or_else(|| "Someone".to_string());
+        if let Some(a) = self.actors.get_mut(&rid) {
+            a.alive = false;
+        }
+        if killer == Some(self.my_runtime_id) {
+            self.chat.push((format!("You killed {name}!"), [0.3, 1.0, 0.3, 1.0]));
         }
     }
 
@@ -1332,6 +1348,42 @@ mod tests {
         dd.u8(b'D').u32(handle);
         w.apply(&msg(pk::PROGRESS_BAR, dd.into_bytes()));
         assert!(w.progress_bars.is_empty());
+    }
+
+    #[test]
+    fn actor_dead_kill_message() {
+        let mut w = World { my_runtime_id: 1, ..Default::default() };
+        w.actors.insert(9, Actor { runtime_id: 9, name: "Goblin".into(), alive: true, ..Default::default() });
+        w.actors.insert(8, Actor { runtime_id: 8, alive: true, ..Default::default() }); // unnamed
+
+        // I (rid 1) killed the Goblin (rid 9): green "You killed Goblin!".
+        let mut k = MsgWriter::new();
+        k.u16(9).u16(1);
+        w.apply(&msg(pk::ACTOR_DEAD, k.into_bytes()));
+        assert!(!w.actors[&9].alive);
+        assert_eq!(w.chat.last().unwrap().0, "You killed Goblin!");
+
+        // Unnamed actor killed by me → fallback name.
+        let mut k2 = MsgWriter::new();
+        k2.u16(8).u16(1);
+        w.apply(&msg(pk::ACTOR_DEAD, k2.into_bytes()));
+        assert_eq!(w.chat.last().unwrap().0, "You killed Someone!");
+
+        // A death I didn't cause (killer 7 ≠ me) → marked dead, no chat line.
+        w.actors.insert(5, Actor { runtime_id: 5, name: "Rat".into(), alive: true, ..Default::default() });
+        let before = w.chat.len();
+        let mut k3 = MsgWriter::new();
+        k3.u16(5).u16(7);
+        w.apply(&msg(pk::ACTOR_DEAD, k3.into_bytes()));
+        assert!(!w.actors[&5].alive);
+        assert_eq!(w.chat.len(), before); // no message for third-party deaths
+
+        // No killer field at all → dead, no message.
+        let mut k4 = MsgWriter::new();
+        k4.u16(9);
+        let before2 = w.chat.len();
+        w.apply(&msg(pk::ACTOR_DEAD, k4.into_bytes()));
+        assert_eq!(w.chat.len(), before2);
     }
 
     #[test]
