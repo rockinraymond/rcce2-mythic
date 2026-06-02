@@ -1769,9 +1769,10 @@ impl ApplicationHandler for App {
     fn window_event(&mut self, event_loop: &ActiveEventLoop, _id: WindowId, event: WindowEvent) {
         match event {
             WindowEvent::CloseRequested => {
-                if let Some(net) = self.net.as_mut() {
-                    net.transport.disconnect(net.peer);
-                }
+                // Disconnect BOTH the in-world and any menu connection so the
+                // server clears the account session. Explicit — do not rely on
+                // Drop, which winit's event_loop.exit() may skip on Windows.
+                self.shutdown_net();
                 event_loop.exit();
             }
             WindowEvent::Resized(size) => {
@@ -2192,7 +2193,10 @@ impl ApplicationHandler for App {
                                 EscLayer::Quests => self.show_quests = false,
                                 EscLayer::Party => self.show_party = false,
                                 EscLayer::Target => self.target = None,
-                                EscLayer::ExitGame => event_loop.exit(),
+                                EscLayer::ExitGame => {
+                                    self.shutdown_net();
+                                    event_loop.exit();
+                                }
                             }
                         }
                         _ => {}
@@ -2237,6 +2241,20 @@ impl ApplicationHandler for App {
             }
             WindowEvent::RedrawRequested => {
                 self.render();
+                // Headless clean-quit self-test: at RCCE_QUITAT=<frame>, quit via
+                // the SAME path as an in-world Esc (shutdown_net + event_loop.exit,
+                // NOT process::exit) so the graceful-disconnect-on-quit can be
+                // verified end-to-end (re-login after must succeed).
+                if let Ok(qv) = std::env::var("RCCE_QUITAT") {
+                    if let Ok(at) = qv.parse::<u64>() {
+                        if self.frames >= at {
+                            println!("[quitat] frame {} clean-quit via event_loop.exit", self.frames);
+                            self.shutdown_net();
+                            event_loop.exit();
+                            return;
+                        }
+                    }
+                }
                 if let Some(w) = &self.window {
                     w.request_redraw();
                 }
@@ -2426,7 +2444,10 @@ impl App {
             // PageUp/PageDown scroll the license text.
             Mode::Eula => match code {
                 KeyCode::Enter | KeyCode::NumpadEnter => self.mode = Mode::Login,
-                KeyCode::Escape => event_loop.exit(),
+                KeyCode::Escape => {
+                    self.shutdown_net();
+                    event_loop.exit();
+                }
                 KeyCode::PageUp => self.eula_scroll = self.eula_scroll.saturating_sub(8),
                 KeyCode::PageDown => self.eula_scroll = self.eula_scroll.saturating_add(8),
                 _ => {}
@@ -2472,7 +2493,10 @@ impl App {
                     let f = if self.login_focus == 0 { &mut self.login_user } else { &mut self.login_pass };
                     f.pop();
                 }
-                KeyCode::Escape => event_loop.exit(),
+                KeyCode::Escape => {
+                    self.shutdown_net();
+                    event_loop.exit();
+                }
                 _ => {
                     if let Some(t) = text {
                         let f = if self.login_focus == 0 { &mut self.login_user } else { &mut self.login_pass };
