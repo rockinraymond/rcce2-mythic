@@ -1730,6 +1730,13 @@ impl ApplicationHandler for App {
             .ok()
             .and_then(|s| s.parse::<u8>().ok())
             .unwrap_or_else(|| store.damage_info_style());
+        // MENU-12: pre-fill the account field from Last Username.dat unless
+        // RCCE_USER pinned it (env override wins, so headless paths are unaffected).
+        if std::env::var_os("RCCE_USER").is_none() {
+            if let Some(name) = store.last_username() {
+                self.login_user = name;
+            }
+        }
         self.store = Some(store);
         self.gfx = Some(gfx);
         self.view = Some(view);
@@ -2299,6 +2306,10 @@ impl App {
                     String::new()
                 };
                 self.mode = Mode::CharSelect;
+                // MENU-12: remember the account for next launch's pre-fill.
+                if let Some(s) = self.store.as_ref() {
+                    s.save_last_username(creds.username.trim());
+                }
             }
             Err(e) => self.login_msg = e,
         }

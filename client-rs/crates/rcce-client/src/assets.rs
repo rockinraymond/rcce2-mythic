@@ -12,6 +12,13 @@ use rcce_data::{
     MeshCatalog, MoneyConfig, MusicCatalog, SoundCatalog, TextureCatalog,
 };
 
+/// Parse the account name from `Last Username.dat` contents (MENU-12): the first
+/// line, trimmed (line 2 is an obfuscated password we ignore). `None` if empty.
+pub fn parse_last_username(raw: &str) -> Option<String> {
+    let name = raw.lines().next().unwrap_or("").trim().to_string();
+    (!name.is_empty()).then_some(name)
+}
+
 pub struct AssetStore {
     data_root: PathBuf,
     actors: ActorCatalog,
@@ -283,6 +290,27 @@ impl AssetStore {
             .ok()
             .and_then(|b| b.get(2).copied())
             .unwrap_or(3)
+    }
+
+    /// The remembered account name from `Data/Last Username.dat` (MENU-12): the
+    /// first line of the file (line 2 is an obfuscated password we don't restore).
+    /// `None` if absent/empty. ref `MainMenu.bb:728-733`.
+    pub fn last_username(&self) -> Option<String> {
+        let raw = std::fs::read_to_string(self.data_root.join("Last Username.dat")).ok()?;
+        parse_last_username(&raw)
+    }
+
+    /// Persist the account `name` to `Data/Last Username.dat` (MENU-12), preserving
+    /// the existing obfuscated-password line 2 when present so the Blitz client's
+    /// own pre-fill isn't disrupted (the Rust client doesn't reimplement `Encrypt$`,
+    /// so it never restores the password). Best-effort; errors are ignored.
+    pub fn save_last_username(&self, name: &str) {
+        let path = self.data_root.join("Last Username.dat");
+        let pw_line = std::fs::read_to_string(&path)
+            .ok()
+            .and_then(|s| s.lines().nth(1).map(str::to_string))
+            .unwrap_or_default();
+        let _ = std::fs::write(&path, format!("{name}\n{pw_line}\n"));
     }
 
     /// Path to a full-screen menu backdrop image under `Data/Textures/Menu/`
@@ -622,6 +650,15 @@ impl AssetStore {
 mod tests {
     use super::*;
     use rcce_data::AnimClip;
+
+    #[test]
+    fn last_username_parses_first_line() {
+        // Real file shape: name line + obfuscated password line (CRLF).
+        assert_eq!(parse_last_username("will\r\n\x16\x16KOSUN\r\n").as_deref(), Some("will"));
+        assert_eq!(parse_last_username("  Corey \nsecret").as_deref(), Some("Corey"));
+        assert_eq!(parse_last_username(""), None);
+        assert_eq!(parse_last_username("\n\n"), None); // blank first line
+    }
 
     #[test]
     fn clip_frame_loops_within_range() {
