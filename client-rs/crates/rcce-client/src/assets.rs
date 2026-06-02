@@ -275,6 +275,16 @@ impl AssetStore {
         p.exists().then_some(p)
     }
 
+    /// `DamageInfoStyle` from `Data/Game Data/Combat.dat` (CBT-5): byte 2, after
+    /// the 2-byte `CombatDelay`. 3 = floating numbers (default), 2 = chat lines.
+    /// Falls back to 3 when the file is absent/too short. ref `ClientCombat.bb:84-88`.
+    pub fn damage_info_style(&self) -> u8 {
+        std::fs::read(self.data_root.join("Game Data").join("Combat.dat"))
+            .ok()
+            .and_then(|b| b.get(2).copied())
+            .unwrap_or(3)
+    }
+
     /// The optional EULA / license text from `Data/Game Data/EULA.txt` (MENU-13).
     /// `None` when the file is absent or contains only whitespace — in which case
     /// the gate is skipped, exactly like the engine. ref `MainMenu.bb:2908-2911`.

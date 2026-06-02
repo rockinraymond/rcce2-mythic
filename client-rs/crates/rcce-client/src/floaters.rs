@@ -98,7 +98,7 @@ mod tests {
     use super::*;
 
     fn ev(target: u16, damage: u16) -> CombatEvent {
-        CombatEvent { target, damage, damage_type: 0 }
+        CombatEvent { target, attacker: 0, damage, damage_type: 0 }
     }
 
     #[test]

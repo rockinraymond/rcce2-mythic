@@ -132,6 +132,9 @@ pub fn parse_quest_status(raw: &[u8]) -> (String, [f32; 4], bool) {
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct CombatEvent {
     pub target: u16,
+    /// Who dealt the hit (CBT-5 chat-line style needs the attacker's name for
+    /// incoming hits). `my_runtime_id` for the local player's own swings.
+    pub attacker: u16,
     pub damage: u16,
     /// Damage-type index (maps to a name via Damage.dat).
     pub damage_type: u8,
@@ -594,10 +597,11 @@ impl World {
         let Some(rid) = r.u16() else { return };
         match sub {
             b'H' => {
-                // RID is the target I hit.
+                // RID is the target I hit (I am the attacker).
                 let (Some(raw_dmg), Some(dtype)) = (r.u16(), r.u8()) else { return };
                 self.combat_events.push(CombatEvent {
                     target: rid,
+                    attacker: self.my_runtime_id,
                     damage: raw_dmg.saturating_sub(1),
                     damage_type: dtype,
                 });
@@ -608,6 +612,7 @@ impl World {
                 if let (Some(raw_dmg), Some(dtype)) = (r.u16(), r.u8()) {
                     self.combat_events.push(CombatEvent {
                         target: self.my_runtime_id,
+                        attacker: rid,
                         damage: raw_dmg.saturating_sub(1),
                         damage_type: dtype,
                     });
@@ -1738,7 +1743,7 @@ mod tests {
         w.apply(&msg(pk::ATTACK_ACTOR, pkt(|p| { p.u8(b'H').u16(50).u16(11).u8(2); })));
         assert_eq!(
             w.combat_events.last().copied(),
-            Some(CombatEvent { target: 50, damage: 10, damage_type: 2 })
+            Some(CombatEvent { target: 50, attacker: w.my_runtime_id, damage: 10, damage_type: 2 })
         );
 
         // P_NameChange: rid 50, name "Boss", tag "[Elite]".

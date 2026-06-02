@@ -193,7 +193,7 @@ choice produces most of the DIVERGENT ratings.
 | 46-slot equip+backpack model | DONE | — |
 | **Ranged-weapon MaxRange** | MISSING | **Ranged classes can't attack at range — melee 4.5 hardcoded** |
 | **Item use beyond eat** | MISSING | Image-item + script-item (`P_ItemScript`) paths absent |
-| DamageInfoStyle chat-line ("You hit X for N") | MISSING | Only floating numbers |
+| DamageInfoStyle chat-line ("You hit X for N") | DONE | `Combat.dat` style byte; style 2 → green/red/blue chat lines (out/in/miss), suppresses floaters; live-PNG-verified |
 | Incoming/outgoing damage colour | DIVERGENT | Coloured by damage-type, not hit direction |
 | SpellCharge server contract | DIVERGENT | Client-only timer, ignores server SpellCharge[] |
 | RequireMemorise=false (cast known directly) | MISSING | Always assumes memorise required |

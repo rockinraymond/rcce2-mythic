@@ -256,6 +256,12 @@ struct App {
     bubbles: std::collections::HashMap<u16, (String, [f32; 4], f32)>,
     /// Floating combat-damage numbers (drained from world.combat_events).
     floaters: rcce_client::floaters::Floaters,
+    /// Damage display style (CBT-5): 3 = floating numbers (default), 2 = chat
+    /// lines. From Combat.dat / RCCE_DMGSTYLE. `combat_chat_consumed` is the
+    /// next unprocessed index into the append-only `combat_events` log (mirrors
+    /// the floaters' `consumed` cursor) so each hit makes exactly one chat line.
+    damage_info_style: u8,
+    combat_chat_consumed: usize,
     /// Audio output (zone music). `None` when there's no audio device.
     audio: Option<rcce_client::audio::Audio>,
     /// Character sheet (gold/level/inventory/spells) from login's P_FetchCharacter.
@@ -420,6 +426,8 @@ impl App {
             flash: None,
             bubbles: std::collections::HashMap::new(),
             floaters: rcce_client::floaters::Floaters::new(),
+            damage_info_style: 3,
+            combat_chat_consumed: 0,
             audio: rcce_client::audio::Audio::new(),
             sheet: None,
             show_inventory: false,
@@ -757,6 +765,34 @@ fn zoom_step(dist: f32, delta: f32) -> f32 {
 /// Apply a volume delta and clamp to [0,1] for the Sound options screen. Pure.
 fn volume_step(vol: f32, delta: f32) -> f32 {
     (vol + delta).clamp(0.0, 1.0)
+}
+
+/// Compose a chat-line for one combat event under DamageInfoStyle 2 (CBT-5),
+/// mirroring `ClientCombat.bb:150-168`. Incoming (`target == me`): "<who> hits
+/// you …" (red) or "… misses!" (blue); outgoing: "You hit <who> …" (green) or
+/// "You attack <who> and miss!" (blue). `name_of` resolves a rid to a name. Pure.
+fn compose_damage_line(
+    target: u16,
+    attacker: u16,
+    damage: u16,
+    me: u16,
+    name_of: impl Fn(u16) -> String,
+) -> (String, [f32; 4]) {
+    if target == me {
+        let who = name_of(attacker);
+        if damage > 0 {
+            (format!("{who} hits you for {damage} damage!"), [1.0, 0.4, 0.4, 1.0])
+        } else {
+            (format!("{who} attacks you and misses!"), [0.5, 0.6, 1.0, 1.0])
+        }
+    } else {
+        let who = name_of(target);
+        if damage > 0 {
+            (format!("You hit {who} for {damage} damage!"), [0.4, 1.0, 0.4, 1.0])
+        } else {
+            (format!("You attack {who} and miss!"), [0.5, 0.6, 1.0, 1.0])
+        }
+    }
 }
 
 /// Which UI layers are currently open, for ESC close-precedence. Pure snapshot
@@ -1688,6 +1724,12 @@ impl ApplicationHandler for App {
         let mut overlay = rcce_render::Overlay::new(&gfx.device, format);
         register_gui_textures(&mut overlay, &gfx.device, &gfx.queue, &data_root);
         self.overlay = Some(overlay);
+        // CBT-5: damage display style from Combat.dat (3=floaters, 2=chat lines),
+        // with an RCCE_DMGSTYLE override for headless testing.
+        self.damage_info_style = std::env::var("RCCE_DMGSTYLE")
+            .ok()
+            .and_then(|s| s.parse::<u8>().ok())
+            .unwrap_or_else(|| store.damage_info_style());
         self.store = Some(store);
         self.gfx = Some(gfx);
         self.view = Some(view);
@@ -3376,8 +3418,35 @@ impl App {
             for (ptype, data) in net.world.pending_sends.drain(..) {
                 net.transport.send(net.peer, ptype, &data, true);
             }
-            // Spawn floating damage numbers for any new combat hits, expire old.
-            self.floaters.ingest(&net.world.combat_events, elapsed);
+            // Combat-damage feedback (CBT-4/CBT-5). DamageInfoStyle 2 = chat
+            // lines, 3 = floating numbers. Faithful to the engine, show ONE
+            // style — so style 2 drains new combat events to chat lines and skips
+            // the floaters; any other value uses floaters (the default).
+            if self.damage_info_style == 2 {
+                let me = net.world.my_runtime_id;
+                let total = net.world.combat_events.len();
+                if self.combat_chat_consumed > total {
+                    self.combat_chat_consumed = 0; // log reset; restart
+                }
+                for i in self.combat_chat_consumed..total {
+                    let ev = net.world.combat_events[i];
+                    let (line, col) = compose_damage_line(ev.target, ev.attacker, ev.damage, me, |rid| {
+                        net.world
+                            .actors
+                            .get(&rid)
+                            .map(|a| {
+                                let n = a.name.trim();
+                                if n.is_empty() { "Someone".to_string() } else { n.to_string() }
+                            })
+                            .unwrap_or_else(|| "Someone".to_string())
+                    });
+                    net.world.chat.push((line, col));
+                }
+                self.combat_chat_consumed = total;
+            } else {
+                // Spawn floating damage numbers for any new combat hits, expire old.
+                self.floaters.ingest(&net.world.combat_events, elapsed);
+            }
             self.floaters.tick(elapsed);
             // Advance in-flight projectiles (PRJ-1). prev_elapsed is updated
             // later (weather), so this read gives the same per-frame dt.
@@ -5623,6 +5692,33 @@ mod tests {
 
     // Camera zoom (CAM-3): steps adjust the boom length and clamp to [5,50];
     // negative zooms in, positive out.
+    // CBT-5 chat-line damage style: outgoing/incoming/miss composition + names.
+    #[test]
+    fn damage_line_composition() {
+        let me = 1u16;
+        let name = |rid: u16| match rid {
+            7 => "Goblin".to_string(),
+            _ => "Someone".to_string(),
+        };
+        // Outgoing hit: target 7, attacker me.
+        let (l, c) = compose_damage_line(7, me, 5, me, name);
+        assert_eq!(l, "You hit Goblin for 5 damage!");
+        assert_eq!(c, [0.4, 1.0, 0.4, 1.0]); // green
+        // Incoming hit: target me, attacker 7.
+        let (l, c) = compose_damage_line(me, 7, 3, me, name);
+        assert_eq!(l, "Goblin hits you for 3 damage!");
+        assert_eq!(c, [1.0, 0.4, 0.4, 1.0]); // red
+        // Outgoing miss (damage 0).
+        let (l, _) = compose_damage_line(7, me, 0, me, name);
+        assert_eq!(l, "You attack Goblin and miss!");
+        // Incoming miss.
+        let (l, _) = compose_damage_line(me, 7, 0, me, name);
+        assert_eq!(l, "Goblin attacks you and misses!");
+        // Unknown attacker name falls back.
+        let (l, _) = compose_damage_line(me, 99, 2, me, name);
+        assert_eq!(l, "Someone hits you for 2 damage!");
+    }
+
     // Sound options master-volume step clamps to [0,1].
     #[test]
     fn volume_step_clamps() {
