@@ -654,6 +654,62 @@ fn snap_camera(me_yaw: f32) -> (f32, f32) {
     (me_yaw, 0.0)
 }
 
+/// Which UI layers are currently open, for ESC close-precedence. Pure snapshot
+/// so the ordering can be unit-tested without the live App (SPL-7 lesson).
+#[derive(Debug, Clone, Copy, Default)]
+struct EscOpen {
+    mouse_look: bool,
+    context_menu: bool,
+    trade: bool,
+    spellbook: bool,
+    inventory: bool,
+    quests: bool,
+    party: bool,
+    target: bool,
+}
+
+/// The single thing ESC dismisses this press. Topmost-first; `ExitGame` only when
+/// nothing is open. This is blocker #1 from DELTA.md — previously ESC fell through
+/// to `event_loop.exit()` with any panel open, trapping or quitting the player.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum EscLayer {
+    MouseLook,
+    ContextMenu,
+    Trade,
+    Spellbook,
+    Inventory,
+    Quests,
+    Party,
+    Target,
+    ExitGame,
+}
+
+/// Pure ESC precedence. Order mirrors Blitz `Interface3D.bb:412-413` (close the
+/// frontmost window, only quit when the field is clear): transient overlays
+/// (mouse-look, context menu) first, then modal/trade, then the toggled panels
+/// in open-priority order, then the target selection, then exit.
+fn esc_layer(o: EscOpen) -> EscLayer {
+    if o.mouse_look {
+        EscLayer::MouseLook
+    } else if o.context_menu {
+        EscLayer::ContextMenu
+    } else if o.trade {
+        EscLayer::Trade
+    } else if o.spellbook {
+        EscLayer::Spellbook
+    } else if o.inventory {
+        EscLayer::Inventory
+    } else if o.quests {
+        EscLayer::Quests
+    } else if o.party {
+        EscLayer::Party
+    } else if o.target {
+        EscLayer::Target
+    } else {
+        EscLayer::ExitGame
+    }
+}
+
 /// Whether a click `dt_ms` after the previous one and `dist_px` away counts as a
 /// double-click (MOVE-6): close in both time (<350 ms) and space (<12 px). Pure.
 fn is_double_click(dt_ms: u128, dist_px: f32) -> bool {
@@ -1816,26 +1872,44 @@ impl ApplicationHandler for App {
                                 a.adjust_master_volume(0.1);
                             }
                         }
-                        KeyCode::Escape => {
-                            let trade_open = self
-                                .net
-                                .as_ref()
-                                .map(|n| n.world.current_trade.is_some())
-                                .unwrap_or(false);
-                            if self.mouse_look {
-                                self.set_mouse_look(false);
-                            } else if trade_open {
-                                if let Some(net) = self.net.as_mut() {
-                                    net.transport.send(
-                                        net.peer,
-                                        rcce_net::packet_id::OPEN_TRADING,
-                                        &rcce_client::net::trade_close_packet(),
-                                        true,
-                                    );
-                                    net.world.current_trade = None;
+                        KeyCode::Escape if pressed => {
+                            // Blocker #1 (DELTA.md): ESC closes the topmost open
+                            // layer and only exits when nothing is open — never
+                            // quits out from under an open panel/menu/dialog.
+                            let open = EscOpen {
+                                mouse_look: self.mouse_look,
+                                context_menu: self.context_menu.is_some(),
+                                trade: self
+                                    .net
+                                    .as_ref()
+                                    .map(|n| n.world.current_trade.is_some())
+                                    .unwrap_or(false),
+                                spellbook: self.show_spellbook,
+                                inventory: self.show_inventory,
+                                quests: self.show_quests,
+                                party: self.show_party,
+                                target: self.target.is_some(),
+                            };
+                            match esc_layer(open) {
+                                EscLayer::MouseLook => self.set_mouse_look(false),
+                                EscLayer::ContextMenu => self.context_menu = None,
+                                EscLayer::Trade => {
+                                    if let Some(net) = self.net.as_mut() {
+                                        net.transport.send(
+                                            net.peer,
+                                            rcce_net::packet_id::OPEN_TRADING,
+                                            &rcce_client::net::trade_close_packet(),
+                                            true,
+                                        );
+                                        net.world.current_trade = None;
+                                    }
                                 }
-                            } else {
-                                event_loop.exit();
+                                EscLayer::Spellbook => self.show_spellbook = false,
+                                EscLayer::Inventory => self.show_inventory = false,
+                                EscLayer::Quests => self.show_quests = false,
+                                EscLayer::Party => self.show_party = false,
+                                EscLayer::Target => self.target = None,
+                                EscLayer::ExitGame => event_loop.exit(),
                             }
                         }
                         _ => {}
@@ -4685,6 +4759,56 @@ mod tests {
         // Off-screen clamp keeps the whole menu visible.
         let edge = ContextMenu::build(9, false, 1279.0, 799.0, 1280.0, 800.0);
         assert!(edge.x + CTX_W <= 1280.0 && edge.y + CTX_ROW * 4.0 <= 800.0);
+    }
+
+    // ESC close-precedence (DELTA blocker #1): ESC dismisses the topmost open
+    // layer and only exits when the field is clear.
+    #[test]
+    fn esc_precedence() {
+        // Nothing open -> quit.
+        assert_eq!(esc_layer(EscOpen::default()), EscLayer::ExitGame);
+
+        // Transient overlays win over everything beneath them.
+        let everything = EscOpen {
+            mouse_look: true,
+            context_menu: true,
+            trade: true,
+            spellbook: true,
+            inventory: true,
+            quests: true,
+            party: true,
+            target: true,
+        };
+        assert_eq!(esc_layer(everything), EscLayer::MouseLook);
+
+        // Strict ordering: peel one layer at a time, top to bottom.
+        let mut o = everything;
+        o.mouse_look = false;
+        assert_eq!(esc_layer(o), EscLayer::ContextMenu);
+        o.context_menu = false;
+        assert_eq!(esc_layer(o), EscLayer::Trade);
+        o.trade = false;
+        assert_eq!(esc_layer(o), EscLayer::Spellbook);
+        o.spellbook = false;
+        assert_eq!(esc_layer(o), EscLayer::Inventory);
+        o.inventory = false;
+        assert_eq!(esc_layer(o), EscLayer::Quests);
+        o.quests = false;
+        assert_eq!(esc_layer(o), EscLayer::Party);
+        o.party = false;
+        assert_eq!(esc_layer(o), EscLayer::Target);
+        o.target = false;
+        assert_eq!(esc_layer(o), EscLayer::ExitGame);
+
+        // A single open panel closes itself, does NOT exit (the actual bug).
+        assert_eq!(
+            esc_layer(EscOpen { inventory: true, ..Default::default() }),
+            EscLayer::Inventory
+        );
+        assert_eq!(
+            esc_layer(EscOpen { target: true, ..Default::default() }),
+            EscLayer::Target
+        );
     }
 
     // Storm lightning (ENV-5): fires only while storming and once due.

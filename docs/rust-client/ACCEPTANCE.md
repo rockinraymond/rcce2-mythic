@@ -113,6 +113,7 @@ Anim constants are slot indices into a per-AnimSet table (`Anim_Idle=125, Anim_W
 | TGT-7 | Cycle-target key (`T`) selects the next living NPC, wrapping | DONE | `next_target`+`living_npc_rids` (`client_window.rs`); test `cycle_target_wraps`; live `RCCE_CYCLE=150` candidates=[3,4]→rid 3, target panel renders | unit + live PNG |
 | TGT-8 | Free-text input dialog (`TextInput`) and timed `P_ProgressBar` prompts render and reply | MISSING | ref `Interface3D.bb:1587-1599`, `ClientNet.bb:151-167` | live (scripted) |
 | TGT-9 | Pick-up a dropped item in range (`<25`): `P_InventoryUpdate "P" [4]serverHandle [1]slot`; "No inventory space" otherwise | DONE | ref `Interface3D.bb:911-914`; world loot handling | live |
+| UI-ESC | ESC closes the **topmost open layer** (mouse-look → context menu → trade → spellbook → inventory → quests → party → target) and only **exits the client** when nothing is open — never quits out from under an open panel | DONE ✅ | DELTA blocker #1. Was `client_window.rs:1819` falling through to `event_loop.exit()` with any panel open (trapping/quitting the player). Now a pure `esc_layer(EscOpen)` precedence fn drives the handler; ESC is `pressed`-gated. ref `Interface3D.bb:412-413` (close frontmost window, quit only when field clear) | unit test `esc_precedence` (full peel-order + "single panel closes itself, not ExitGame") green; no synthetic-keypress headless hook exists so no PNG — state-machine fix, unit test is the correct evidence tier (SPL-7 lesson) |
 
 ---
 
