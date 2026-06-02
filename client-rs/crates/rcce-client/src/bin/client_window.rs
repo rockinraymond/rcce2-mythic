@@ -718,6 +718,16 @@ fn snap_camera(me_yaw: f32) -> (f32, f32) {
     (me_yaw, 0.0)
 }
 
+/// Centred menu-window rect at the 625×447 frame aspect (MENU-SCENE-b). The
+/// EULA / Login window-frame PNGs are drawn here (NOT full-screen), so the 3D
+/// menu scene shows around them — they are window graphics, not backdrops.
+fn menu_window_rect(sw: f32, sh: f32, wfrac: f32) -> (f32, f32, f32, f32) {
+    let aspect = 625.0 / 447.0;
+    let ww = (sw * wfrac).min(sh * 0.86 * aspect);
+    let wh = ww / aspect;
+    ((sw - ww) * 0.5, (sh - wh) * 0.5, ww, wh)
+}
+
 /// The interactive client's initial menu screen (MENU-13): the EULA gate when
 /// the project ships license text, otherwise straight to the login screen. Pure.
 fn initial_menu_mode(eula_present: bool) -> Mode {
@@ -3100,29 +3110,48 @@ impl App {
     fn draw_menu_overlay(&mut self, elapsed: f32, sw: f32, sh: f32) {
         let Some(overlay) = self.overlay.as_mut() else { return };
         overlay.clear();
-        // MENU-SCENE-b: the pure-2D menu screens (EULA / Options / Controls) get a
-        // dedicated full-screen backdrop image instead of the orbiting zone sky.
-        // (Login / CharSelect keep the 3D character scene — backdrop-behind-3D is
-        // a separate change.)
-        let backdrop = match self.mode {
+        // MENU-SCENE-b: EULA / Login draw their dedicated WINDOW-FRAME image at
+        // window size (NOT full-screen) — these are bordered window graphics with
+        // a baked title bar, so the 3D menu scene shows around them. The game logo
+        // sits above the login window. Options/Controls draw their own sized panel
+        // (the project ships no dedicated frame art for them).
+        // The login window is compact (Blitz frames it small with the logo above
+        // and the 3D scene around); EULA is larger (it holds the license text).
+        let wfrac = if self.mode == Mode::Login { 0.50 } else { 0.80 };
+        let (wx, mut wy, ww, wh) = menu_window_rect(sw, sh, wfrac);
+        // Drop the login window so the game logo fits above it.
+        if self.mode == Mode::Login {
+            wy = ((sh - wh) * 0.5 + sh * 0.08).min(sh - wh - 8.0);
+        }
+        let frame = match self.mode {
             Mode::Eula => Some("EULA.PNG"),
-            // Login has no 3D character (only CharSelect does), so a 2D backdrop
-            // sits cleanly behind the login panel. CharSelect keeps its 3D char.
-            Mode::Login | Mode::Options | Mode::Controls => Some("Login.PNG"),
+            Mode::Login => Some("Login.PNG"),
             _ => None,
         };
-        if let Some(name) = backdrop {
-            if let (Some(gfx), Some(store)) = (self.gfx.as_ref(), self.store.as_ref()) {
-                let key = format!("backdrop:{name}");
-                if !overlay.has_texture(&key) {
-                    if let Some(im) =
-                        store.menu_backdrop_path(name).and_then(|p| rcce_data::texture::load(&p))
-                    {
-                        overlay.register_texture(&gfx.device, &gfx.queue, &key, im.width, im.height, &im.rgba);
+        if let (Some(name), Some(gfx), Some(store)) = (frame, self.gfx.as_ref(), self.store.as_ref()) {
+            let key = format!("menuwin:{name}");
+            if !overlay.has_texture(&key) {
+                if let Some(im) = store.menu_backdrop_path(name).and_then(|p| rcce_data::texture::load(&p)) {
+                    overlay.register_texture(&gfx.device, &gfx.queue, &key, im.width, im.height, &im.rgba);
+                }
+            }
+            if overlay.has_texture(&key) {
+                overlay.image(wx, wy, ww, wh, &key, [1.0, 1.0, 1.0, 1.0]);
+            }
+            // Game logo (256×128, 2:1) centred above the login window (MENU-1).
+            if self.mode == Mode::Login {
+                let lkey = "menu:logo";
+                if !overlay.has_texture(lkey) {
+                    if let Some(im) = store.menu_logo_path().and_then(|p| rcce_data::texture::load(&p)) {
+                        overlay.register_texture(&gfx.device, &gfx.queue, lkey, im.width, im.height, &im.rgba);
                     }
                 }
-                if overlay.has_texture(&key) {
-                    overlay.image(0.0, 0.0, sw, sh, &key, [1.0, 1.0, 1.0, 1.0]);
+                if overlay.has_texture(lkey) {
+                    let lw = (ww * 0.72).min(sw * 0.46);
+                    let lh = lw * 0.5;
+                    let lx = (sw - lw) * 0.5;
+                    let ly = (wy - lh - 6.0).max(4.0);
+                    overlay.image(lx, ly, lw, lh, lkey, [1.0, 1.0, 1.0, 1.0]);
                 }
             }
         }
@@ -3130,16 +3159,13 @@ impl App {
         // login/character UI. Wrapped text + PageUp/PageDown scroll + Accept/Decline.
         if self.mode == Mode::Eula {
             let text = self.eula_text.clone().unwrap_or_default();
-            let (pw, ph) = (sw * 0.74, sh * 0.84);
-            let (px, py) = ((sw - pw) * 0.5, (sh - ph) * 0.5);
-            // Semi-transparent so the MENU-SCENE-b backdrop art shows through.
-            overlay.rect(px, py, pw, ph, [0.03, 0.04, 0.07, 0.62]);
-            overlay.rect(px, py, pw, 3.0, [0.5, 0.55, 0.7, 0.95]);
-            overlay.rect(px, py + ph - 3.0, pw, 3.0, [0.5, 0.55, 0.7, 0.95]);
-            let title = "End User License Agreement";
-            overlay.text_shadow(px + (pw - title.len() as f32 * 9.0 * 1.4) * 0.5, py + 14.0, 1.4, title, [0.95, 0.88, 0.55, 1.0]);
-            // Wrap each source line to the panel width.
-            let max_chars = (((pw - 40.0) / 7.0) as usize).max(20);
+            // Text lives INSIDE the EULA.PNG window frame's body (below its baked
+            // "License Agreement" title bar) — the frame is drawn above.
+            let bx = wx + ww * 0.035;
+            let body_top = wy + wh * 0.13;
+            let body_bottom = wy + wh * 0.85;
+            let body_w = ww * 0.93;
+            let max_chars = (((body_w - 10.0) / 7.0) as usize).max(20);
             let mut lines: Vec<String> = Vec::new();
             for para in text.split('\n') {
                 if para.trim().is_empty() {
@@ -3148,19 +3174,18 @@ impl App {
                     lines.extend(wrap_text(para, max_chars));
                 }
             }
-            let body_top = py + 50.0;
             let line_h = 15.0;
-            let visible = (((py + ph - 44.0) - body_top) / line_h).max(1.0) as usize;
+            let visible = ((body_bottom - body_top) / line_h).max(1.0) as usize;
             let start = self.eula_scroll.min(lines.len().saturating_sub(1));
             for (i, wl) in lines.iter().skip(start).take(visible).enumerate() {
-                overlay.text(px + 20.0, body_top + i as f32 * line_h, 1.0, wl, [0.85, 0.86, 0.9, 1.0]);
+                overlay.text(bx, body_top + i as f32 * line_h, 1.0, wl, [0.88, 0.89, 0.92, 1.0]);
             }
             if lines.len() > visible {
                 let more = format!("[{}-{}/{} · PgUp/PgDn]", start + 1, (start + visible).min(lines.len()), lines.len());
-                overlay.text(px + 20.0, py + ph - 24.0, 0.85, &more, [0.5, 0.55, 0.65, 0.9]);
+                overlay.text(bx, wy + wh * 0.89, 0.85, &more, [0.55, 0.6, 0.7, 0.9]);
             }
             let prompt = "Accept (Enter)     Decline (Esc)";
-            overlay.text_shadow(px + pw - prompt.len() as f32 * 9.0 - 20.0, py + ph - 26.0, 1.0, prompt, [0.6, 0.92, 0.6, 1.0]);
+            overlay.text_shadow(wx + ww - prompt.len() as f32 * 9.0 - 18.0, wy + wh * 0.89, 1.0, prompt, [0.5, 0.95, 0.5, 1.0]);
             return;
         }
         // Sound options screen (front-of-game shell): master volume bar + mute.
@@ -3213,6 +3238,46 @@ impl App {
             overlay.text(col_a, py + ph - 26.0, 1.0, "Esc / Tab  back", [0.6, 0.66, 0.8, 0.9]);
             return;
         }
+        // Login fields INSIDE the Login.PNG window frame's body (below its baked
+        // "Account Login" title bar). The frame + game logo are drawn above; the
+        // 3D menu scene shows around the window.
+        if self.mode == Mode::Login {
+            let lbl = [0.72, 0.8, 0.95, 0.95];
+            let fs = 1.6;
+            let field_bg = |o: &mut rcce_render::Overlay, x, y, w, focused: bool| {
+                o.rect(x, y, w, 30.0, [0.10, 0.12, 0.18, 0.95]);
+                let c = if focused { [0.9, 0.8, 0.4, 1.0] } else { [0.3, 0.34, 0.45, 1.0] };
+                o.rect(x, y + 30.0, w, 2.0, c);
+            };
+            let fx = wx + ww * 0.10;
+            let fw = ww * 0.80;
+            let mut y = wy + wh * 0.20;
+            overlay.text(fx, y, 1.1, "ACCOUNT", lbl);
+            y += 18.0;
+            field_bg(overlay, fx, y, fw, self.login_focus == 0);
+            overlay.text(fx + 8.0, y + 7.0, fs, &self.login_user, [1.0, 1.0, 1.0, 1.0]);
+            if self.login_focus == 0 && (elapsed * 2.0) as i32 % 2 == 0 {
+                overlay.text(fx + 8.0 + self.login_user.chars().count() as f32 * 9.0 * fs, y + 7.0, fs, "_", [1.0, 1.0, 1.0, 1.0]);
+            }
+            y += 52.0;
+            overlay.text(fx, y, 1.1, "PASSWORD", lbl);
+            y += 18.0;
+            field_bg(overlay, fx, y, fw, self.login_focus == 1);
+            let masked: String = "*".repeat(self.login_pass.chars().count());
+            overlay.text(fx + 8.0, y + 7.0, fs, &masked, [1.0, 1.0, 1.0, 1.0]);
+            if self.login_focus == 1 && (elapsed * 2.0) as i32 % 2 == 0 {
+                overlay.text(fx + 8.0 + masked.chars().count() as f32 * 9.0 * fs, y + 7.0, fs, "_", [1.0, 1.0, 1.0, 1.0]);
+            }
+            y += 50.0;
+            if !self.login_msg.is_empty() {
+                overlay.text(fx, y, 1.05, &self.login_msg, [1.0, 0.7, 0.5, 1.0]);
+            }
+            let srv = format!("server {}:{}", self.host, self.port);
+            overlay.text(fx, wy + wh * 0.88, 0.9, &srv, [0.5, 0.55, 0.65, 0.85]);
+            let hint = "Tab switch field   Enter login   F1 sound options   Esc quit";
+            overlay.text(sw * 0.5 - hint.len() as f32 * 9.0 * 0.5, wy + wh + 12.0, 1.0, hint, [0.6, 0.66, 0.8, 0.9]);
+            return;
+        }
         let title = "RCCE2";
         let ts = 5.0;
         overlay.text_shadow(sw * 0.5 - title.len() as f32 * 9.0 * ts * 0.5, sh * 0.12, ts, title, [0.95, 0.85, 0.5, 1.0]);
@@ -3227,46 +3292,10 @@ impl App {
         overlay.rect(px, py, pw, 2.5, [0.45, 0.5, 0.65, 0.95]);
         overlay.rect(px, py + ph - 2.5, pw, 2.5, [0.45, 0.5, 0.65, 0.95]);
         let pad = 26.0;
-        let fs = 1.7;
 
         match self.mode {
-            // Eula + Options + Controls are fully drawn + returned above.
-            Mode::Eula | Mode::Options | Mode::Controls => {}
-            Mode::Login => {
-                let lbl = [0.7, 0.78, 0.92, 0.95];
-                let field_bg = |o: &mut rcce_render::Overlay, x, y, w, focused: bool| {
-                    o.rect(x, y, w, 30.0, [0.10, 0.12, 0.18, 1.0]);
-                    let c = if focused { [0.9, 0.8, 0.4, 1.0] } else { [0.3, 0.34, 0.45, 1.0] };
-                    o.rect(x, y + 30.0, w, 2.0, c);
-                };
-                let fx = px + pad;
-                let fw = pw - pad * 2.0;
-                let mut y = py + pad + 6.0;
-                overlay.text(fx, y, 1.1, "ACCOUNT", lbl);
-                y += 18.0;
-                field_bg(overlay, fx, y, fw, self.login_focus == 0);
-                overlay.text(fx + 8.0, y + 7.0, fs, &self.login_user, [1.0, 1.0, 1.0, 1.0]);
-                if self.login_focus == 0 && (elapsed * 2.0) as i32 % 2 == 0 {
-                    overlay.text(fx + 8.0 + self.login_user.chars().count() as f32 * 9.0 * fs, y + 7.0, fs, "_", [1.0, 1.0, 1.0, 1.0]);
-                }
-                y += 56.0;
-                overlay.text(fx, y, 1.1, "PASSWORD", lbl);
-                y += 18.0;
-                field_bg(overlay, fx, y, fw, self.login_focus == 1);
-                let masked: String = "*".repeat(self.login_pass.chars().count());
-                overlay.text(fx + 8.0, y + 7.0, fs, &masked, [1.0, 1.0, 1.0, 1.0]);
-                if self.login_focus == 1 && (elapsed * 2.0) as i32 % 2 == 0 {
-                    overlay.text(fx + 8.0 + masked.chars().count() as f32 * 9.0 * fs, y + 7.0, fs, "_", [1.0, 1.0, 1.0, 1.0]);
-                }
-                y += 58.0;
-                if !self.login_msg.is_empty() {
-                    overlay.text(fx, y, 1.1, &self.login_msg, [1.0, 0.7, 0.5, 1.0]);
-                }
-                let hint = "Tab switch field   Enter login   F1 sound options   Esc quit";
-                overlay.text(sw * 0.5 - hint.len() as f32 * 9.0 * 0.5, py + ph + 14.0, 1.0, hint, [0.6, 0.66, 0.8, 0.9]);
-                let srv = format!("server {}:{}", self.host, self.port);
-                overlay.text(px + pad, py + ph - 22.0, 0.95, &srv, [0.45, 0.5, 0.62, 0.8]);
-            }
+            // Eula + Options + Controls + Login are fully drawn + returned above.
+            Mode::Eula | Mode::Options | Mode::Controls | Mode::Login => {}
             Mode::CharSelect => {
                 let fx = px + pad;
                 overlay.text(fx, py + pad, 1.6, "SELECT CHARACTER", [0.85, 0.9, 1.0, 1.0]);

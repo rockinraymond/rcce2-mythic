@@ -333,6 +333,13 @@ impl AssetStore {
         None
     }
 
+    /// Path to the game logo sprite `Data/Textures/Menu Logo.bmp` (MENU-1), shown
+    /// above the login window. `None` if absent. ref `MainMenu.bb:441`.
+    pub fn menu_logo_path(&self) -> Option<PathBuf> {
+        let p = self.data_root.join("Textures").join("Menu Logo.bmp");
+        p.exists().then_some(p)
+    }
+
     /// The optional EULA / license text from `Data/Game Data/EULA.txt` (MENU-13).
     /// `None` when the file is absent or contains only whitespace — in which case
     /// the gate is skipped, exactly like the engine. ref `MainMenu.bb:2908-2911`.
