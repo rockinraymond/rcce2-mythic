@@ -456,7 +456,18 @@ impl App {
             login_transport: None,
             login_peer: 0,
             login_user: std::env::var("RCCE_USER").unwrap_or_else(|_| "rustbot".to_string()),
-            login_pass: "rustpass".to_string(),
+            // Interactive login starts with an EMPTY password (the user types it).
+            // The "rustpass" dev default was pre-filling the field, so an
+            // interactive login sent the wrong password for any non-rustbot
+            // account. Keep the default only for the headless paths (RCCE_USER /
+            // RCCE_PASS set), which log in as rustbot/rustpass.
+            login_pass: std::env::var("RCCE_PASS").unwrap_or_else(|_| {
+                if std::env::var_os("RCCE_USER").is_some() {
+                    "rustpass".to_string()
+                } else {
+                    String::new()
+                }
+            }),
             login_focus: 0,
             login_md5: String::new(),
             login_msg: String::new(),

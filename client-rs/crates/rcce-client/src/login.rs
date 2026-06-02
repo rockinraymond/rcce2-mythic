@@ -65,7 +65,12 @@ fn verify_list<T: Transport>(t: &mut T, peer: i32, user: &str, md5: &str) -> Res
     match sentinel(&m) {
         'Y' => Ok(parse_char_list(&m.data[1..])),
         'B' => Err("account banned".into()),
-        'L' | 'P' => Err("account already online".into()),
+        // 'L' = a session is already active. 'P' is the server's GENERIC
+        // auth-failure code (wrong password / no account / truncated /
+        // throttled — "auth before disclosure", ServerNet.bb:2441) and must NOT
+        // be shown as "already online" — that was the bug that made a rejected
+        // password read as a stuck session.
+        'L' => Err("account already online".into()),
         _ => Err("wrong username or password".into()),
     }
 }
