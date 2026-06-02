@@ -8,6 +8,15 @@ This is a feature-by-feature audit of how far the Rust reimplementation is from 
 reference, produced by six parallel cross-codebase audits (one per subsystem). Every row cites
 the Blitz source behavior and the Rust evidence (file:line). Status legend:
 
+> **Regression verification — 2026-06-02 (after 18 parity commits, head `7933be13`).** Fresh
+> `cargo build --release -p rcce-client`: **zero warnings**. Tests: **148 green** (42 rcce-data +
+> 80 rcce-client lib + 26 client-window bin). Full boot sequence captured headless and read,
+> no regressions: **EULA** (`EULA.PNG` backdrop + license text + Accept/Decline), **Login**
+> (`Login.PNG` backdrop + account field), **Sound Options** (volume bar + mute + Tab→Controls),
+> **Controls** (full keybind reference), **in-world** (textured terrain, both actors grounded &
+> correctly-facing, full HUD). The original user-reported defects — mirrored world, smeared
+> terrain, floating actors, no blending, stuck dialog / ESC-kills-client — are all resolved.
+
 | Status | Meaning |
 |---|---|
 | **DONE** | Behavior matches the Blitz reference (verified against source + evidence). |
