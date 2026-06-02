@@ -259,6 +259,13 @@ impl AssetStore {
         path.exists().then_some(path)
     }
 
+    /// Path to the looping menu track `Data/Music/Menu.ogg` (MENU-10), or `None`
+    /// if the starter project doesn't ship it. ref `MainMenu.bb:99-103`.
+    pub fn menu_music_path(&self) -> Option<std::path::PathBuf> {
+        let p = self.data_root.join("Music").join("Menu.ogg");
+        p.exists().then_some(p)
+    }
+
     /// First `Music.dat` entry that resolves to a file on disk, as `(id, path)`.
     /// Used to exercise the music pipeline when no zone sets `LoadingMusicID`.
     pub fn any_music(&self) -> Option<(u16, std::path::PathBuf)> {

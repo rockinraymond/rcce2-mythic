@@ -64,8 +64,10 @@ that hurt out of proportion to their count.
    for non-edible items, with optional target — `packet_id::ITEM_SCRIPT=43`). Still open: ranged-weapon
    `MaxRange` (melee 4.5 hardcoded; needs the discarded `wtype`/`range` retained in `ItemDef` + combat-loop
    wiring), and the I_Image `WItemWindow` popup. Talk paths covered elsewhere (chat send exists).
-6. **Front-of-game shell absent:** no EULA, no loading screen, no menu music (`Menu.ogg`), no
-   Graphics/Control/Sound options, no Set.b3d menu diorama — the "feels lower quality" gap the user described.
+6. **Front-of-game shell — partly addressed.** Menu music (`Menu.ogg`) is now **DONE** (loops in the
+   menu, stops on enter-world; headless log-confirmed). Still open: EULA gate, loading screen during
+   zone load, Graphics/Control/Sound options menus, Set.b3d menu diorama — the rest of the "lower
+   quality" gap.
 
 ---
 

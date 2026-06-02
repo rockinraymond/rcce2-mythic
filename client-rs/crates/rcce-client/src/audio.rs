@@ -195,6 +195,14 @@ impl Audio {
         }
     }
 
+    /// Stop and drop the current music track (rodio frees the sink on drop).
+    /// Used on the menu→world transition so menu music doesn't bleed into a zone
+    /// that ships no `LoadingMusicID` (MENU-10).
+    pub fn stop_music(&mut self) {
+        self.music = None;
+        self.current_music = None;
+    }
+
     /// Fire-and-forget a one-shot sound (footstep, UI blip). The sink detaches
     /// and frees itself when the clip finishes. Silently no-ops on failure.
     pub fn play_oneshot(&self, path: &Path, volume: f32) {

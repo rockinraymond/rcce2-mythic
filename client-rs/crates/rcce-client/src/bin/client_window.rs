@@ -281,6 +281,9 @@ struct App {
     /// the dedicated menu scene (void + posed character). Cleared so entering
     /// the world forces a fresh zone reload (MENU-SCENE).
     menu_scene_init: bool,
+    /// Whether the looping menu track (Menu.ogg) is currently playing (MENU-10).
+    /// Guards the once-only start in `render_menu` and the stop on enter-world.
+    menu_music_on: bool,
 
     // ---- Login / character-select menu state (Mode::Login / CharSelect) ----
     /// Current screen.
@@ -344,6 +347,7 @@ impl App {
             last_ground_click: now,
             last_ground_pos: [0.0, 0.0],
             menu_scene_init: false,
+            menu_music_on: false,
             run: false,
             cam_yaw: 0.0,
             cam_pitch: 0.25,
@@ -665,6 +669,10 @@ fn snap_camera(me_yaw: f32) -> (f32, f32) {
 const CAM_DIST_MIN: f32 = 5.0;
 const CAM_DIST_MAX: f32 = 50.0;
 const CAM_DIST_DEFAULT: f32 = 13.0;
+
+/// Reserved music id for the looping menu track (MENU-10), distinct from any
+/// zone `LoadingMusicID` so the zone-music switch on enter-world replaces it.
+const MENU_MUSIC_ID: u16 = 65534;
 
 /// Body facing (yaw, **degrees**) for a movement direction `(dx, dz)` in world
 /// XZ (MOVE-1/3, blocker #4). Returns `fallback` when the direction is ~zero (so
@@ -2121,6 +2129,14 @@ impl App {
         self.sheet = outcome.sheet;
         self.net = Some(Net { transport, world, peer: outcome.peer, updates: 0 });
         self.mode = Mode::InWorld;
+        // MENU-10: stop the menu track so it doesn't bleed into a zone that ships
+        // no music; the zone's own LoadingMusicID starts on the next render.
+        if self.menu_music_on {
+            if let Some(a) = self.audio.as_mut() {
+                a.stop_music();
+            }
+            self.menu_music_on = false;
+        }
     }
 
     /// Login screen submit: open the menu connection, create/verify the account,
@@ -2666,6 +2682,22 @@ impl App {
     /// loaded zone as a backdrop, with the menu UI drawn over it.
     fn render_menu(&mut self) {
         let elapsed = self.start.elapsed().as_secs_f32();
+        // MENU-10: loop Data/Music/Menu.ogg while in the menu, once. Skips
+        // gracefully if the starter project doesn't ship the file. Stopped on
+        // enter-world (see enter_selected) so zone music takes over.
+        if !self.menu_music_on {
+            if let (Some(store), Some(audio)) = (self.store.as_ref(), self.audio.as_mut()) {
+                if let Some(path) = store.menu_music_path() {
+                    if audio.play_music_looped(&path, 0.5, MENU_MUSIC_ID) {
+                        println!("[audio] menu music: {}", path.display());
+                    }
+                }
+            }
+            // Set the guard regardless so we don't retry the (possibly missing)
+            // file every frame; a present file is now looping, an absent one stays
+            // silent until the next session.
+            self.menu_music_on = true;
+        }
         // Headless test hook: enter the world from character select on the first
         // menu frame (the actual menu->world path), so it's verifiable end-to-end.
         if self.frames == 0
