@@ -45,9 +45,38 @@ enum Mode {
     /// Sound options screen (master volume + mute), reached from Login with `O`,
     /// Esc returns to Login.
     Options,
+    /// Read-only keybind reference, reached from the Options screen with Tab.
+    Controls,
     CharSelect,
     InWorld,
 }
+
+/// The in-world key bindings, shown on the `Mode::Controls` reference screen
+/// (MENU-OPT). Kept in sync with the `WindowEvent::KeyboardInput` match below —
+/// these are the literal bindings, not invented. `(action, key)`.
+const KEYBINDS: &[(&str, &str)] = &[
+    ("Move", "W A S D  /  Arrows"),
+    ("Turn camera", "Q  E"),
+    ("Run", "Shift (hold)"),
+    ("Jump", "J"),
+    ("Attack nearest", "Space  /  F"),
+    ("Mouse-look (toggle)", "Tab"),
+    ("First-person (toggle)", "V"),
+    ("Snap camera behind", "Middle-click"),
+    ("Zoom in / out", "=  /  -   ·  Wheel"),
+    ("Cycle target", "T"),
+    ("Interact with target", "R"),
+    ("Examine target", "X"),
+    ("Inventory", "I"),
+    ("Spellbook", "K"),
+    ("Quest log", "L"),
+    ("Party", "P"),
+    ("Open chat", "Enter"),
+    ("Chat scrollback", "PageUp / PageDown"),
+    ("Volume down / up", "[  /  ]"),
+    ("Mute", "M"),
+    ("Close panel / quit", "Esc"),
+];
 
 struct Gfx {
     surface: wgpu::Surface<'static>,
@@ -2329,8 +2358,16 @@ impl App {
             },
             // Sound options screen: Left/Right (or -/=) adjust master volume, M
             // mutes, Esc returns to Login. Wired straight to the audio engine.
+            // Keybind reference: Esc/Tab returns to the Sound options screen.
+            Mode::Controls => match code {
+                KeyCode::Escape | KeyCode::Tab | KeyCode::Enter | KeyCode::NumpadEnter => {
+                    self.mode = Mode::Options
+                }
+                _ => {}
+            },
             Mode::Options => match code {
                 KeyCode::Escape | KeyCode::Enter | KeyCode::NumpadEnter => self.mode = Mode::Login,
+                KeyCode::Tab => self.mode = Mode::Controls,
                 KeyCode::ArrowLeft | KeyCode::Minus => {
                     if let Some(a) = self.audio.as_mut() {
                         let v = volume_step(a.master_volume(), -0.05);
@@ -2807,6 +2844,14 @@ impl App {
                 }
             }
         }
+        // Headless controls-reference self-test: force Mode::Controls for a shot.
+        if let Ok(v) = std::env::var("RCCE_CONTROLSTEST") {
+            if let Ok(at) = v.parse::<u64>() {
+                if self.frames >= at {
+                    self.mode = Mode::Controls;
+                }
+            }
+        }
         // MENU-13: auto-accept the EULA under any headless hook so the existing
         // login/world capture paths aren't blocked by the new gate.
         if self.mode == Mode::Eula
@@ -3052,7 +3097,27 @@ impl App {
             overlay.text(bx, by + 44.0, 1.2, &format!("Mute: {}", if muted { "ON" } else { "off" }), mute_col);
             // Hints.
             overlay.text(bx, py + ph - 56.0, 1.0, "Left / Right  adjust volume", [0.6, 0.66, 0.8, 0.9]);
-            overlay.text(bx, py + ph - 38.0, 1.0, "M  toggle mute        Esc  back", [0.6, 0.66, 0.8, 0.9]);
+            overlay.text(bx, py + ph - 38.0, 1.0, "M  toggle mute     Tab  controls     Esc  back", [0.6, 0.66, 0.8, 0.9]);
+            return;
+        }
+        // Keybind reference screen (read-only): two columns action | key.
+        if self.mode == Mode::Controls {
+            let (pw, ph) = ((sw * 0.6).clamp(520.0, 860.0), (sh * 0.84).min(KEYBINDS.len() as f32 * 22.0 + 110.0));
+            let (px, py) = ((sw - pw) * 0.5, (sh - ph) * 0.5);
+            overlay.rect(px, py, pw, ph, [0.05, 0.06, 0.10, 0.93]);
+            overlay.rect(px, py, pw, 3.0, [0.5, 0.55, 0.7, 0.95]);
+            overlay.rect(px, py + ph - 3.0, pw, 3.0, [0.5, 0.55, 0.7, 0.95]);
+            let title = "Controls";
+            overlay.text_shadow(px + (pw - title.len() as f32 * 9.0 * 1.5) * 0.5, py + 16.0, 1.5, title, [0.95, 0.88, 0.55, 1.0]);
+            let col_a = px + 30.0;
+            let col_b = px + pw * 0.5 + 10.0;
+            let mut y = py + 54.0;
+            for (action, key) in KEYBINDS {
+                overlay.text(col_a, y, 1.05, action, [0.72, 0.8, 0.95, 1.0]);
+                overlay.text(col_b, y, 1.05, key, [1.0, 0.96, 0.8, 1.0]);
+                y += 22.0;
+            }
+            overlay.text(col_a, py + ph - 26.0, 1.0, "Esc / Tab  back", [0.6, 0.66, 0.8, 0.9]);
             return;
         }
         let title = "RCCE2";
@@ -3072,8 +3137,8 @@ impl App {
         let fs = 1.7;
 
         match self.mode {
-            // Eula + Options are fully drawn + returned above; never reach here.
-            Mode::Eula | Mode::Options => {}
+            // Eula + Options + Controls are fully drawn + returned above.
+            Mode::Eula | Mode::Options | Mode::Controls => {}
             Mode::Login => {
                 let lbl = [0.7, 0.78, 0.92, 0.95];
                 let field_bg = |o: &mut rcce_render::Overlay, x, y, w, focused: bool| {
