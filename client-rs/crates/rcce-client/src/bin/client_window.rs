@@ -761,6 +761,9 @@ fn initial_menu_mode(eula_present: bool) -> Mode {
 const CAM_DIST_MIN: f32 = 5.0;
 const CAM_DIST_MAX: f32 = 50.0;
 const CAM_DIST_DEFAULT: f32 = 13.0;
+/// Minimum clearance (world units) the camera eye keeps above the terrain at its
+/// own X/Z, so the boom doesn't sink into a hill behind the player.
+const CAM_GROUND_CLEARANCE: f32 = 1.5;
 /// Menu-camera framing the character against the `Set.b3d` backdrop, matching
 /// Blitz (MainMenu.bb:2023). `ANGLE` (radians) ≈ π looks +Z *into* the furnished
 /// room rather than out at the banner wall; `DIST` is the pull-back; `EYE_H` /
@@ -3968,9 +3971,17 @@ impl App {
             }
             // Follow the SMOOTHED player render position (MOVE-SMOOTH) — the body
             // renders there too, so camera + body move in lockstep and there's no
-            // relative jitter. The smoothing (and teleport snap) now lives in
-            // World::interpolate / me_render, so the camera just tracks it.
-            cam_target = [net.world.me_render_x, net.world.me_y, net.world.me_render_z];
+            // relative jitter. The Y tracks the TERRAIN under the player (the body
+            // is seated on the height field, and P_StandardUpdate omits Y so me_y
+            // is a stale spawn height) — otherwise the camera stays at the spawn
+            // elevation and clips through hills the player walks up.
+            let (mrx, mrz) = (net.world.me_render_x, net.world.me_render_z);
+            let cam_y = self
+                .height_field
+                .as_ref()
+                .and_then(|h| h.height_at(mrx, mrz))
+                .unwrap_or(net.world.me_y);
+            cam_target = [mrx, cam_y, mrz];
             // Headless inspection: RCCE_CAMAT="x,y,z" points the camera at a fixed
             // world spot (e.g. a water plane) for a screenshot without walking there.
             if let Ok(s) = std::env::var("RCCE_CAMAT") {
@@ -4119,7 +4130,13 @@ impl App {
             // a building occluder, so the camera never clips into / through a
             // wall. Matches the reference client's zoom-in-on-obstruction.
             let dist = camera_boom(look, dir, dist, &self.cam_occluders).max(2.5);
-            let eye = [look[0] + dir[0] * dist, look[1] + dir[1] * dist, look[2] + dir[2] * dist];
+            let mut eye = [look[0] + dir[0] * dist, look[1] + dir[1] * dist, look[2] + dir[2] * dist];
+            // Keep the eye above the terrain at its own X/Z — the boom only avoids
+            // building occluders, so walking up a hill would otherwise sink the
+            // camera into the slope behind the player. Lift it to clear the ground.
+            if let Some(ty) = self.height_field.as_ref().and_then(|h| h.height_at(eye[0], eye[2])) {
+                eye[1] = eye[1].max(ty + CAM_GROUND_CLEARANCE);
+            }
             (eye, look)
         } else {
             let ang = elapsed * 0.3;
