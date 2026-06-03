@@ -178,7 +178,7 @@ choice produces most of the DIVERGENT ratings.
 | Local gravity / ground-Y | DIVERGENT | Terrain-sampled, not gravity sim |
 | Clip hysteresis (CurrentSeq) | DIVERGENT | Re-derives from elapsed each rebuild |
 | **Camera zoom** | MISSING | **No wheel/keyboard zoom; dist=13 hardcoded — top blocker** |
-| Camera follow-smoothing (CurveValue 6·Δ) | PARTIAL | Snaps each frame, no easing |
+| Camera follow-smoothing (CurveValue 6·Δ) | DONE | Exponential glide of focus toward player (rate 6, frame-rate-independent); snaps on >30u jumps (spawn/warp). The local player pos is server-echo-only (~9 Hz, no prediction) so a hard follow stepped; smoothing the camera focus removes the low-frame-rate look. |
 | Camera scenery-collision LinePick | PARTIAL | Occluder spheres substitute |
 | First-person at Head joint + pitch ease | PARTIAL | Fixed eye height, no pitch ease |
 | Fly/swim up-down keys | MISSING | [content-gated] Space rebound to attack |

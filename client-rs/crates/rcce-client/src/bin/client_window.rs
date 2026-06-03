@@ -198,6 +198,11 @@ struct App {
     /// `-`/`=` keys, clamped to [`CAM_DIST_MIN`, `CAM_DIST_MAX`]; fed as the
     /// boom's max distance (camera collision may pull it in further).
     cam_dist: f32,
+    /// Smoothed camera focus point — glides toward the player each frame so the
+    /// camera follows continuously instead of snapping to the discrete
+    /// server-echo position (Blitz `CurveValue` follow smoothing). `None` until
+    /// the first follow frame; snaps (no glide) on large jumps (spawn / warp).
+    cam_follow: Option<[f32; 3]>,
     /// Mouse-look active: cursor grabbed/hidden, mouse motion drives yaw/pitch.
     /// Toggled with Tab; off by default so the headless/autowalk path and the
     /// arrow/Q-E discrete turn keep working unchanged.
@@ -405,6 +410,7 @@ impl App {
             cam_yaw: 0.0,
             cam_pitch: 0.25,
             cam_dist: CAM_DIST_DEFAULT,
+            cam_follow: None,
             mouse_look: false,
             last_move: now,
             was_moving: false,
@@ -755,6 +761,17 @@ fn initial_menu_mode(eula_present: bool) -> Mode {
 const CAM_DIST_MIN: f32 = 5.0;
 const CAM_DIST_MAX: f32 = 50.0;
 const CAM_DIST_DEFAULT: f32 = 13.0;
+/// Camera follow-smoothing rate (Blitz `CurveValue(..., 6.0)` on the camera
+/// focus). The local player position only advances on discrete server echoes
+/// (`P_StandardUpdate` ~9 Hz, no client-side prediction), so a hard follow looks
+/// like low-frame-rate stepping. Exponential smoothing toward the player at this
+/// rate (time constant ~1/6 s) glides the camera between echoes. Larger = tighter
+/// follow / less smoothing; smaller = floatier.
+const CAM_FOLLOW_RATE: f32 = 6.0;
+/// Squared distance (world units) above which the camera focus snaps instead of
+/// gliding — spawn, zone warp, or any teleport, so the camera doesn't sweep
+/// across the world.
+const CAM_SNAP_DIST_SQ: f32 = 30.0 * 30.0;
 
 /// Reserved music id for the looping menu track (MENU-10), distinct from any
 /// zone `LoadingMusicID` so the zone-music switch on enter-world replaces it.
@@ -2836,14 +2853,23 @@ impl App {
     /// network world. The 'R'/'X' keys then interact with / examine the target.
     fn world_pick(&mut self, sw: f32, sh: f32, cx: f32, cy: f32) {
         const PICK_RADIUS: f32 = 48.0;
+        // Project each actor at the SAME height the body is rendered: feet on the
+        // sampled terrain height under its X/Z (see build_actors seating), plus a
+        // chest offset. The raw server `a.y` is only a stale spawn/collision-pivot
+        // height — P_StandardUpdate omits Y — so projecting `a.y + 3.0` put the
+        // pick target above/below the visible body and clicks fell through to
+        // click-to-move. Sampling the terrain keeps the pick aligned with the body.
+        let hf = self.height_field.as_ref();
         let pick = self.net.as_ref().and_then(|net| {
-            // Aim at roughly chest height so the pick matches the body.
             let actors: Vec<(u16, [f32; 3])> = net
                 .world
                 .actors
                 .values()
                 .filter(|a| a.alive)
-                .map(|a| (a.runtime_id, [a.x, a.y + 3.0, a.z]))
+                .map(|a| {
+                    let gy = hf.and_then(|h| h.height_at(a.x, a.z)).unwrap_or(a.y);
+                    (a.runtime_id, [a.x, gy + 3.0, a.z])
+                })
                 .collect();
             actor_at(cx, cy, &actors, &self.vp, sw, sh, PICK_RADIUS)
         });
@@ -3473,7 +3499,10 @@ impl App {
         // borrowing `net`). Camera-space basis: forward = into-screen, right.
         let (sy, cy) = self.cam_yaw.sin_cos();
         let fwd = [-sy, -cy];
-        let right = [cy, -sy];
+        // `right` is forward rotated -90° about Y so that D strafes screen-right
+        // and A screen-left. The naive `[cy, -sy]` is the +90° rotation, which
+        // inverted both keys (A walked right, D walked left); negating fixes it.
+        let right = [-cy, sy];
         let mut dir = [0.0f32, 0.0];
         // RCCE_AUTOWALK forces forward movement (for headless verification of
         // the movement-send path without a keyboard).
@@ -3723,7 +3752,31 @@ impl App {
                 }
                 self.last_dyn_hash = hash;
             }
-            cam_target = [net.world.me_x, net.world.me_y, net.world.me_z];
+            // CAM follow-smoothing: glide the focus toward the player instead of
+            // snapping to each discrete server-echo position (which reads as
+            // low-frame-rate stepping). Frame-rate-independent exponential lerp;
+            // snap on a large jump (spawn / zone warp) so the camera doesn't sweep.
+            let goal = [net.world.me_x, net.world.me_y, net.world.me_z];
+            let dt = (elapsed - self.prev_elapsed).clamp(0.0, 0.1);
+            cam_target = match self.cam_follow {
+                Some(prev) => {
+                    let jump = (goal[0] - prev[0]).powi(2)
+                        + (goal[1] - prev[1]).powi(2)
+                        + (goal[2] - prev[2]).powi(2);
+                    if jump > CAM_SNAP_DIST_SQ {
+                        goal
+                    } else {
+                        let k = 1.0 - (-CAM_FOLLOW_RATE * dt).exp();
+                        [
+                            prev[0] + (goal[0] - prev[0]) * k,
+                            prev[1] + (goal[1] - prev[1]) * k,
+                            prev[2] + (goal[2] - prev[2]) * k,
+                        ]
+                    }
+                }
+                None => goal,
+            };
+            self.cam_follow = Some(cam_target);
             cam_me_yaw = net.world.me_yaw.to_radians(); // degrees -> radians for the FP camera
             following = true;
         }
