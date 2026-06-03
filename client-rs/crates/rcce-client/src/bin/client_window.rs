@@ -3092,7 +3092,10 @@ impl App {
                             scale: [s, s, s],
                             color: [1.0, 1.0, 1.0],
                         };
-                        view.set_scene(&gfx.device, &gfx.queue, std::slice::from_ref(&inst), 0.0);
+                        // NAN ground_y: skip the green terrain ground plane — the
+                        // set carries its own floor; the plane only showed as a
+                        // green void past the set's floor edge.
+                        view.set_scene(&gfx.device, &gfx.queue, std::slice::from_ref(&inst), f32::NAN);
                         let n_lm = lightmaps.iter().filter(|l| l.is_some()).count();
                         println!("[client-window] menu set: {} meshes, scale {s}, {n_lm} lightmapped", model.meshes.len());
                     }

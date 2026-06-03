@@ -1186,8 +1186,10 @@ pub fn build_actor_drawables_cached(
 }
 
 /// Bake every (instance, mesh) into a world-space [`Drawable`] (positions
-/// transformed by the instance's rot/scale/translation). A ground plane spanning
-/// the instances is appended (untextured, tinted).
+/// transformed by the instance's rot/scale/translation). A dark ground plane
+/// spanning the instances is appended (untextured, tinted) as the terrain base —
+/// pass a non-finite `ground_y` (e.g. `f32::NAN`) to skip it for interior scenes
+/// (the menu set) that carry their own floor and shouldn't show a green base.
 pub fn build_drawables(
     device: &wgpu::Device,
     queue: &wgpu::Queue,
@@ -1197,8 +1199,8 @@ pub fn build_drawables(
 ) -> Vec<Drawable> {
     let (mut drawables, min, max) = build_instance_drawables(device, queue, pipeline, instances);
 
-    // Ground plane spanning the instances.
-    if min.x <= max.x {
+    // Ground plane spanning the instances (skipped when ground_y is non-finite).
+    if min.x <= max.x && ground_y.is_finite() {
         let pad = (max - min).length().max(20.0) * 0.4;
         let (gx0, gx1) = (min.x - pad, max.x + pad);
         let (gz0, gz1) = (min.z - pad, max.z + pad);
