@@ -1,0 +1,11 @@
+Using "RC_Core.rcm"
+; Define entry function 'Main'
+
+Function Main()
+setattribute(actor(), "Armor Bonus", 1)
+setattribute(actor(), "Stealth Mod", 1)
+
+
+
+
+End Function

@@ -1,0 +1,61 @@
+Using "RC_Core.rcm"
+; Define entry function 'Main'
+
+Function Main()
+
+Player = Actor()
+Chest = ContextActor()
+
+ChestLevel = ActorLevel(Chest)
+ChestLock = Attribute(Chest, "Armor Bonus")
+ChestTrap = Attribute(Chest, "Attack Bonus")
+;Stealth Mod Checks if Trap has been discovered or not
+
+D = OpenDialog(Player, Chest, "Treasure Chest")
+	DialogOutput(Player, D, "You look down at the sealed wooden chest...", 255, 255, 255)
+	If ChestLock > 0
+		DialogOutput(Player, D, "It is locked...", 255, 255, 0)
+	EndIf
+	If Attribute(Chest, "Stealth Mod") > 0
+		DialogOutput(Player, D, "It is booby-trapped...", 255, 0, 0)
+	EndIf
+
+	DialogOutput(Player, D, "What would you like to do?", 255, 255, 255)
+
+	Options$ = ""
+	If ChestLock > 0
+		Options$ = Options$ + "Pick Lock|"
+	Else
+		Options$ = Options$ + "Open|"
+	EndIf
+
+	If (Attribute(Chest, "Stealth Mod") > 0)
+		Options$ = Options$ + "Disarm Trap|"
+	Else
+		Options$ = Options$ + "Search for Traps|"
+	EndIf
+
+	Options$ = Options$ + "Close"
+	
+	Result = DialogInput(Player, D, Options$, "|")
+			
+		If Result = 1
+			DialogOutput(Player, D, "Open or Pick lock!", 0, 255, 0)
+			DialogInput(Player, D, "Goodbye")
+			CloseDialog(Player, D)
+		ElseIf Result = 2
+			DialogOutput(Player, D, "Something with Traps", 255, 0 , 0)
+			DialogInput(Player, D, "Goodbye")
+			CloseDialog(Player, D)
+		Else
+			CloseDialog(Player, D)
+		EndIf
+Return
+
+End Function
+
+Function Examine()
+
+	Output(Actor(), "A wooden chest containing treasure!")
+	
+End Function
