@@ -819,6 +819,39 @@ fn heading_from_dir(dx: f32, dz: f32, fallback: f32) -> f32 {
     }
 }
 
+/// Unproject a screen pixel to the world XZ where the camera ray hits the
+/// **terrain** (not a flat plane). Click-to-move landed short/long because
+/// `unproject_ground` intersects a flat plane at the stale `me_y`, while the
+/// clicked ground is at a different elevation. Iterate: intersect the plane at
+/// the current height guess, sample the real terrain there, re-intersect at that
+/// height — converges to the ray/terrain crossing. `start_y` is the first guess
+/// (the terrain under the player, else the zone ground).
+fn unproject_terrain(
+    vp: &[f32; 16],
+    sw: f32,
+    sh: f32,
+    cx: f32,
+    cy: f32,
+    hf: Option<&rcce_client::terrain::HeightField>,
+    start_y: f32,
+) -> Option<[f32; 2]> {
+    let mut plane_y = start_y;
+    let mut hit = rcce_render::unproject_ground(vp, sw, sh, cx, cy, plane_y)?;
+    for _ in 0..8 {
+        match hf.and_then(|h| h.height_at(hit[0], hit[2])) {
+            Some(ty) => {
+                if (ty - plane_y).abs() < 0.05 {
+                    break; // converged onto the terrain
+                }
+                plane_y = ty;
+                hit = rcce_render::unproject_ground(vp, sw, sh, cx, cy, plane_y)?;
+            }
+            None => break, // off the height field — keep the last plane hit
+        }
+    }
+    Some([hit[0], hit[2]])
+}
+
 /// Apply a zoom delta to the boom length and clamp (CAM-3). `delta` is in world
 /// units: negative pulls the camera in (zoom toward the player), positive pushes
 /// out. Pure — unit-tested. ref `Interface3D.bb:643-657` (CamDist ∓ MZSpeed*1.5).
@@ -3003,9 +3036,13 @@ impl App {
             self.move_running = is_double_click(dt, dist);
             self.last_ground_click = now;
             self.last_ground_pos = [cx, cy];
-            let plane_y = self.net.as_ref().map(|n| n.world.me_y).unwrap_or(self.ground_y);
-            if let Some(g) = rcce_render::unproject_ground(&self.vp, sw, sh, cx, cy, plane_y) {
-                self.move_target = Some([g[0], g[2]]);
+            let start_y = self
+                .net
+                .as_ref()
+                .and_then(|n| self.height_field.as_ref().and_then(|h| h.height_at(n.world.me_render_x, n.world.me_render_z)))
+                .unwrap_or(self.ground_y);
+            if let Some(g) = unproject_terrain(&self.vp, sw, sh, cx, cy, self.height_field.as_ref(), start_y) {
+                self.move_target = Some(g);
             }
         }
     }
@@ -4156,13 +4193,17 @@ impl App {
             if let Ok(at) = cm.parse::<u64>() {
                 if self.frames == at && self.move_target.is_none() {
                     let (sw, sh) = (gfx.config.width as f32, gfx.config.height as f32);
-                    let plane_y = self.net.as_ref().map(|n| n.world.me_y).unwrap_or(self.ground_y);
-                    if let Some(g) = rcce_render::unproject_ground(&vp, sw, sh, sw * 0.5, sh * 0.80, plane_y) {
-                        self.move_target = Some([g[0], g[2]]);
+                    let start_y = self
+                        .net
+                        .as_ref()
+                        .and_then(|n| self.height_field.as_ref().and_then(|h| h.height_at(n.world.me_render_x, n.world.me_render_z)))
+                        .unwrap_or(self.ground_y);
+                    if let Some(g) = unproject_terrain(&vp, sw, sh, sw * 0.5, sh * 0.80, self.height_field.as_ref(), start_y) {
+                        self.move_target = Some(g);
                         let me = self.net.as_ref().map(|n| (n.world.me_x, n.world.me_z)).unwrap_or((0.0, 0.0));
                         println!(
-                            "[clickmove] frame {} me=({:.1},{:.1}) -> target=({:.1},{:.1})",
-                            self.frames, me.0, me.1, g[0], g[2]
+                            "[clickmove] frame {} me=({:.1},{:.1}) -> target=({:.1},{:.1}) start_y={start_y:.1}",
+                            self.frames, me.0, me.1, g[0], g[1]
                         );
                     }
                 }
@@ -4175,11 +4216,15 @@ impl App {
             if let Ok(at) = dr.parse::<u64>() {
                 if self.frames == at {
                     let (sw, sh) = (gfx.config.width as f32, gfx.config.height as f32);
-                    let plane_y = self.net.as_ref().map(|n| n.world.me_y).unwrap_or(self.ground_y);
-                    if let Some(g) = rcce_render::unproject_ground(&vp, sw, sh, sw * 0.5, sh * 0.80, plane_y) {
-                        self.move_target = Some([g[0], g[2]]);
+                    let start_y = self
+                        .net
+                        .as_ref()
+                        .and_then(|n| self.height_field.as_ref().and_then(|h| h.height_at(n.world.me_render_x, n.world.me_render_z)))
+                        .unwrap_or(self.ground_y);
+                    if let Some(g) = unproject_terrain(&vp, sw, sh, sw * 0.5, sh * 0.80, self.height_field.as_ref(), start_y) {
+                        self.move_target = Some(g);
                         self.move_running = true;
-                        println!("[dblrun] frame {} double-click RUN target=({:.1},{:.1})", self.frames, g[0], g[2]);
+                        println!("[dblrun] frame {} double-click RUN target=({:.1},{:.1})", self.frames, g[0], g[1]);
                     }
                 }
             }
@@ -6206,6 +6251,21 @@ mod tests {
         assert_eq!(zoom_step(45.0, 100.0), CAM_DIST_MAX); // clamp at max
         assert_eq!(zoom_step(CAM_DIST_MIN, -1.0), CAM_DIST_MIN); // already at floor
         assert_eq!(zoom_step(CAM_DIST_MAX, 1.0), CAM_DIST_MAX); // already at ceil
+    }
+
+    #[test]
+    fn unproject_terrain_converges_from_wrong_guess() {
+        // Flat terrain at y=10; the click-to-move raycast should land on it even
+        // when started from a stale guess (the old bug: a stale me_y plane gave a
+        // short target). Converging means it matches a direct unproject at y=10.
+        let hf = rcce_client::terrain::HeightField::flat(10.0);
+        let vp = rcce_render::view_proj([0.0, 40.0, 30.0], [0.0, 10.0, 0.0], 1.6);
+        let (sw, sh, cx, cy) = (1280.0, 800.0, 640.0, 560.0);
+        let direct = rcce_render::unproject_ground(&vp, sw, sh, cx, cy, 10.0).unwrap();
+        // Start from a very wrong height (0.0) — must still converge to the y=10 hit.
+        let g = unproject_terrain(&vp, sw, sh, cx, cy, Some(&hf), 0.0).unwrap();
+        assert!((g[0] - direct[0]).abs() < 0.1, "x: {} vs {}", g[0], direct[0]);
+        assert!((g[1] - direct[2]).abs() < 0.1, "z: {} vs {}", g[1], direct[2]);
     }
 
     // Body facing prediction (blocker #4): yaw faces the movement direction;
