@@ -151,6 +151,13 @@ pub struct Actor {
     pub y: f32,
     pub z: f32,
     pub yaw: f32,
+    /// Smoothed render position/facing — eased toward `x`/`z` and the
+    /// movement-derived heading each frame (see [`World::interpolate`]) so actors
+    /// glide between the ~9 Hz `P_StandardUpdate` echoes instead of teleporting.
+    /// The body renders at these; `x`/`z`/`yaw` stay the authoritative state.
+    pub render_x: f32,
+    pub render_z: f32,
+    pub render_yaw: f32,
     pub dest_x: f32,
     pub dest_z: f32,
     pub is_running: bool,
@@ -196,6 +203,14 @@ pub struct World {
     pub me_y: f32,
     pub me_z: f32,
     pub me_yaw: f32,
+    /// Smoothed render position for the local player (eased toward `me_x`/`me_z`),
+    /// so the body and the camera following it glide between server echoes instead
+    /// of snapping. `me_yaw` is already client-driven per frame, so it's not eased.
+    pub me_render_x: f32,
+    pub me_render_z: f32,
+    /// Cleared until the first authoritative position arrives, so interpolation
+    /// snaps (not glides) into the spawn/zone position.
+    pub me_render_init: bool,
     /// Local player's appearance (from our own P_NewActor).
     pub me_gender: u8,
     pub me_face_tex: u8,
@@ -301,7 +316,61 @@ pub struct DroppedItem {
     pub z: f32,
 }
 
+/// Render-interpolation easing rate (per second) for actor positions/facings.
+/// Time constant ~1/12 s — fast enough to track the ~9 Hz server echoes with a
+/// small lag, slow enough to smooth the ~110 ms steps into continuous motion.
+pub const ACTOR_SMOOTH_RATE: f32 = 12.0;
+/// Position jump (world units) above which interpolation snaps instead of
+/// gliding — a teleport / zone warp shouldn't slide the actor across the map.
+const ACTOR_SNAP_DIST: f32 = 30.0;
+
+/// Ease `cur` toward `target` by factor `k`, snapping on a large jump.
+fn ease_pos(cur: &mut f32, target: f32, k: f32) {
+    if (target - *cur).abs() > ACTOR_SNAP_DIST {
+        *cur = target;
+    } else {
+        *cur += (target - *cur) * k;
+    }
+}
+
+/// Ease an angle (degrees) toward `target` along the shortest arc.
+fn ease_yaw(cur: &mut f32, target: f32, k: f32) {
+    let mut d = (target - *cur) % 360.0;
+    if d > 180.0 {
+        d -= 360.0;
+    } else if d < -180.0 {
+        d += 360.0;
+    }
+    *cur += d * k;
+}
+
 impl World {
+    /// Ease render positions/facings toward the authoritative state so actors
+    /// glide between the discrete `P_StandardUpdate` echoes (the server sends no
+    /// in-between frames; without this they teleport ~9×/s). Call once per frame
+    /// before building actors. `dt` = frame delta seconds (clamped). Remote-actor
+    /// facing is derived from the travel direction (`dest − pos`) since the wire
+    /// update omits yaw — this is also what gives NPCs (e.g. the stag) rotation.
+    pub fn interpolate(&mut self, dt: f32) {
+        let k = 1.0 - (-ACTOR_SMOOTH_RATE * dt.clamp(0.0, 0.1)).exp();
+        if !self.me_render_init {
+            self.me_render_x = self.me_x;
+            self.me_render_z = self.me_z;
+            self.me_render_init = true;
+        }
+        ease_pos(&mut self.me_render_x, self.me_x, k);
+        ease_pos(&mut self.me_render_z, self.me_z, k);
+        for a in self.actors.values_mut() {
+            ease_pos(&mut a.render_x, a.x, k);
+            ease_pos(&mut a.render_z, a.z, k);
+            let (dx, dz) = (a.dest_x - a.x, a.dest_z - a.z);
+            if dx * dx + dz * dz > 1.0 {
+                let target = (-dx).atan2(-dz).to_degrees();
+                ease_yaw(&mut a.render_yaw, target, k);
+            }
+        }
+    }
+
     /// Apply one received message, mutating state. Unknown types are ignored.
     pub fn apply(&mut self, m: &RecvMessage) {
         match m.msg_type {
@@ -408,6 +477,10 @@ impl World {
             self.me_y = y;
             self.me_z = z;
             self.me_yaw = yaw;
+            // Snap the render position to spawn (interpolation glides from here on).
+            self.me_render_x = x;
+            self.me_render_z = z;
+            self.me_render_init = true;
             self.me_gender = gender;
             self.me_face_tex = face_tex;
             self.me_body_tex = body_tex;
@@ -429,6 +502,9 @@ impl World {
                 y,
                 z,
                 yaw,
+                render_x: x,
+                render_z: z,
+                render_yaw: yaw,
                 dest_x: x,
                 dest_z: z,
                 alive: true,

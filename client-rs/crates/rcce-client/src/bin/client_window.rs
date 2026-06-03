@@ -198,11 +198,6 @@ struct App {
     /// `-`/`=` keys, clamped to [`CAM_DIST_MIN`, `CAM_DIST_MAX`]; fed as the
     /// boom's max distance (camera collision may pull it in further).
     cam_dist: f32,
-    /// Smoothed camera focus point — glides toward the player each frame so the
-    /// camera follows continuously instead of snapping to the discrete
-    /// server-echo position (Blitz `CurveValue` follow smoothing). `None` until
-    /// the first follow frame; snaps (no glide) on large jumps (spawn / warp).
-    cam_follow: Option<[f32; 3]>,
     /// Mouse-look active: cursor grabbed/hidden, mouse motion drives yaw/pitch.
     /// Toggled with Tab; off by default so the headless/autowalk path and the
     /// arrow/Q-E discrete turn keep working unchanged.
@@ -410,7 +405,6 @@ impl App {
             cam_yaw: 0.0,
             cam_pitch: 0.25,
             cam_dist: CAM_DIST_DEFAULT,
-            cam_follow: None,
             mouse_look: false,
             last_move: now,
             was_moving: false,
@@ -790,17 +784,6 @@ const MENU_CHAR_Y: f32 = 2.4;
 /// The set origin is `char - SCALE * RUG` so the character stays on the rug at
 /// any scale.
 const MENU_SET_RUG: [f32; 3] = [8.0, 0.0, 8.16667];
-/// Camera follow-smoothing rate (Blitz `CurveValue(..., 6.0)` on the camera
-/// focus). The local player position only advances on discrete server echoes
-/// (`P_StandardUpdate` ~9 Hz, no client-side prediction), so a hard follow looks
-/// like low-frame-rate stepping. Exponential smoothing toward the player at this
-/// rate (time constant ~1/6 s) glides the camera between echoes. Larger = tighter
-/// follow / less smoothing; smaller = floatier.
-const CAM_FOLLOW_RATE: f32 = 6.0;
-/// Squared distance (world units) above which the camera focus snaps instead of
-/// gliding — spawn, zone warp, or any teleport, so the camera doesn't sweep
-/// across the world.
-const CAM_SNAP_DIST_SQ: f32 = 30.0 * 30.0;
 
 /// Reserved music id for the looping menu track (MENU-10), distinct from any
 /// zone `LoadingMusicID` so the zone-music switch on enter-world replaces it.
@@ -1317,7 +1300,7 @@ fn build_actors(
         me_fidget.map(|f| (f, false))
     };
     if !hide_me {
-        push(store, &mut models, &mut textures, &mut place, &mut keys, &mut skinned, me_template, world.me_gender, world.me_face_tex, world.me_body_tex, world.me_hair, world.me_beard, me_weapon, me_shield, weapon_override, world.my_runtime_id, me_moving, me_running, me_combat, [world.me_x, world.me_y + me_jump_offset, world.me_z], world.me_yaw, [0.85, 0.95, 0.85]);
+        push(store, &mut models, &mut textures, &mut place, &mut keys, &mut skinned, me_template, world.me_gender, world.me_face_tex, world.me_body_tex, world.me_hair, world.me_beard, me_weapon, me_shield, weapon_override, world.my_runtime_id, me_moving, me_running, me_combat, [world.me_render_x, world.me_y + me_jump_offset, world.me_render_z], world.me_yaw, [0.85, 0.95, 0.85]);
     }
     for a in world.actors.values() {
         let dx = a.dest_x - a.x;
@@ -1346,7 +1329,7 @@ fn build_actors(
                 (phase * std::f32::consts::PI).sin() * JUMP_REMOTE_APEX
             })
             .unwrap_or(0.0);
-        push(store, &mut models, &mut textures, &mut place, &mut keys, &mut skinned, a.template_id, a.gender, a.face_tex, a.body_tex, a.hair, a.beard, a.equipped[0], a.equipped[1], weapon_override, a.runtime_id, moving, a.is_running, combat, [a.x, a.y + y_off, a.z], a.yaw, color);
+        push(store, &mut models, &mut textures, &mut place, &mut keys, &mut skinned, a.template_id, a.gender, a.face_tex, a.body_tex, a.hair, a.beard, a.equipped[0], a.equipped[1], weapon_override, a.runtime_id, moving, a.is_running, combat, [a.render_x, a.y + y_off, a.render_z], a.render_yaw, color);
     }
     (models, textures, place, keys, skinned)
 }
@@ -1359,8 +1342,11 @@ fn dyn_hash(world: &World, elapsed: f32, me_moving: bool, me_running: bool, me_a
     let mut h = std::collections::hash_map::DefaultHasher::new();
     ((elapsed * 12.0) as u64).hash(&mut h);
     world.my_runtime_id.hash(&mut h);
-    ((world.me_x * 2.0) as i32).hash(&mut h);
-    ((world.me_z * 2.0) as i32).hash(&mut h);
+    // Key on the SMOOTHED render position at fine granularity so the CPU-skin
+    // rebuild tracks the per-frame interpolation (smooth movement) while moving,
+    // and stabilises (throttled to the elapsed term) once converged/idle.
+    ((world.me_render_x * 16.0) as i32).hash(&mut h);
+    ((world.me_render_z * 16.0) as i32).hash(&mut h);
     (world.me_yaw as i32).hash(&mut h);
     // Include the local player's locomotion + attack state so the CPU-throttled
     // rebuild picks up walk/run/idle/attack transitions promptly (ANIM-1/ANIM-8).
@@ -1372,9 +1358,9 @@ fn dyn_hash(world: &World, elapsed: f32, me_moving: bool, me_running: bool, me_a
     for rid in rids {
         let a = &world.actors[&rid];
         rid.hash(&mut h);
-        ((a.x * 2.0) as i32).hash(&mut h);
-        ((a.z * 2.0) as i32).hash(&mut h);
-        (a.yaw as i32).hash(&mut h);
+        ((a.render_x * 16.0) as i32).hash(&mut h);
+        ((a.render_z * 16.0) as i32).hash(&mut h);
+        (a.render_yaw as i32).hash(&mut h);
         a.is_running.hash(&mut h);
         a.alive.hash(&mut h); // death pose (ANIM-8)
         // Remote jump phase (ANIM-7) — quantised so the hop animates under the
@@ -3165,6 +3151,10 @@ impl App {
                 mw.me_x = char_anchor[0];
                 mw.me_y = char_anchor[1];
                 mw.me_z = char_anchor[2];
+                // Static menu pose: render position = position (no interpolation).
+                mw.me_render_x = char_anchor[0];
+                mw.me_render_z = char_anchor[2];
+                mw.me_render_init = true;
                 mw.me_yaw = 0.0; // faces +Z; the camera circles it
                 // Seat on the set's floor height field (built at scene init) so
                 // the feet rest on the rug instead of a guessed anchor Y.
@@ -3759,6 +3749,11 @@ impl App {
             // later (weather), so this read gives the same per-frame dt.
             let proj_dt = (elapsed - self.prev_elapsed).clamp(0.0, 0.1);
             net.world.tick_projectiles(proj_dt);
+            // Glide actor render positions/facings toward the authoritative state
+            // so the local player and NPCs move smoothly between the ~9 Hz server
+            // echoes instead of teleporting (and remote actors turn to face their
+            // travel direction). MOVE-SMOOTH.
+            net.world.interpolate(proj_dt);
             // Remote jump-anim timers (ANIM-7) + the local jump arc (MOVE-7).
             net.world.tick_jumps(proj_dt);
             // Remote attack-swing timers (CBT-3).
@@ -3894,31 +3889,11 @@ impl App {
                 }
                 self.last_dyn_hash = hash;
             }
-            // CAM follow-smoothing: glide the focus toward the player instead of
-            // snapping to each discrete server-echo position (which reads as
-            // low-frame-rate stepping). Frame-rate-independent exponential lerp;
-            // snap on a large jump (spawn / zone warp) so the camera doesn't sweep.
-            let goal = [net.world.me_x, net.world.me_y, net.world.me_z];
-            let dt = (elapsed - self.prev_elapsed).clamp(0.0, 0.1);
-            cam_target = match self.cam_follow {
-                Some(prev) => {
-                    let jump = (goal[0] - prev[0]).powi(2)
-                        + (goal[1] - prev[1]).powi(2)
-                        + (goal[2] - prev[2]).powi(2);
-                    if jump > CAM_SNAP_DIST_SQ {
-                        goal
-                    } else {
-                        let k = 1.0 - (-CAM_FOLLOW_RATE * dt).exp();
-                        [
-                            prev[0] + (goal[0] - prev[0]) * k,
-                            prev[1] + (goal[1] - prev[1]) * k,
-                            prev[2] + (goal[2] - prev[2]) * k,
-                        ]
-                    }
-                }
-                None => goal,
-            };
-            self.cam_follow = Some(cam_target);
+            // Follow the SMOOTHED player render position (MOVE-SMOOTH) — the body
+            // renders there too, so camera + body move in lockstep and there's no
+            // relative jitter. The smoothing (and teleport snap) now lives in
+            // World::interpolate / me_render, so the camera just tracks it.
+            cam_target = [net.world.me_render_x, net.world.me_y, net.world.me_render_z];
             cam_me_yaw = net.world.me_yaw.to_radians(); // degrees -> radians for the FP camera
             following = true;
         }
@@ -4671,7 +4646,17 @@ impl App {
                     if !a.alive {
                         continue;
                     }
-                    if let Some((px, py)) = rcce_render::project(&vp, [a.x, a.y + 5.5, a.z], sw, sh) {
+                    // Project at the actor's RENDERED position: the smoothed
+                    // render x/z, and the terrain-seated feet Y (the body stands on
+                    // height_at(x,z), not the raw server `a.y` collision pivot —
+                    // projecting a.y floated the nameplate/reticle high above the
+                    // body). Falls back to a.y where there's no ground sample.
+                    let gy = self
+                        .height_field
+                        .as_ref()
+                        .and_then(|h| h.height_at(a.render_x, a.render_z))
+                        .unwrap_or(a.y);
+                    if let Some((px, py)) = rcce_render::project(&vp, [a.render_x, gy + 5.5, a.render_z], sw, sh) {
                         let frac = if a.health_max > 0 {
                             a.health as f32 / a.health_max as f32
                         } else {
@@ -4694,8 +4679,8 @@ impl App {
                             // actor's screen extent (feet -> head), the on-screen
                             // analogue of the Blitz ActorSelectEN ground decal.
                             if let (Some((fx, fy)), Some((hx, hy))) = (
-                                rcce_render::project(&vp, [a.x, a.y, a.z], sw, sh),
-                                rcce_render::project(&vp, [a.x, a.y + 7.0, a.z], sw, sh),
+                                rcce_render::project(&vp, [a.render_x, gy, a.render_z], sw, sh),
+                                rcce_render::project(&vp, [a.render_x, gy + 6.0, a.render_z], sw, sh),
                             ) {
                                 let cxp = (fx + hx) * 0.5;
                                 let (top, bot) = (hy.min(fy), hy.max(fy));

@@ -178,7 +178,9 @@ choice produces most of the DIVERGENT ratings.
 | Local gravity / ground-Y | DIVERGENT | Terrain-sampled, not gravity sim |
 | Clip hysteresis (CurrentSeq) | DIVERGENT | Re-derives from elapsed each rebuild |
 | **Camera zoom** | MISSING | **No wheel/keyboard zoom; dist=13 hardcoded — top blocker** |
-| Camera follow-smoothing (CurveValue 6·Δ) | DONE | Exponential glide of focus toward player (rate 6, frame-rate-independent); snaps on >30u jumps (spawn/warp). The local player pos is server-echo-only (~9 Hz, no prediction) so a hard follow stepped; smoothing the camera focus removes the low-frame-rate look. |
+| Actor movement smoothing (interpolation) | DONE | Positions are server-echo-only (~9 Hz, no prediction), so actors teleported between echoes. `World::interpolate(dt)` eases each actor's + the local player's **render** position toward the authoritative x/z each frame (rate 12, snap on >30u teleport); the body renders at the smoothed position and the camera tracks the local player's smoothed position (so camera + body move in lockstep — no rubberband). `dyn_hash` keys on the render position at ×16 so the CPU-skin rebuild tracks the per-frame glide while moving and stays throttled when idle. ~60 fps maintained. Supersedes the earlier camera-only follow-smoothing. |
+| Remote actor facing (rotation) | DONE | `P_StandardUpdate` omits yaw, so NPCs (e.g. the stag) never turned. `render_yaw` is now eased toward the travel heading (`-dx atan2 -dz` from `dest − pos`) while moving. |
+| Nameplate / target reticle height | DONE | Projected the raw server `a.y` (collision pivot, well above the body) so the HP bar / name / selection reticle floated high over the actor. Now project the terrain-seated feet (`height_at(render_x, render_z)`) at the smoothed render x/z, matching the rendered body. |
 | Camera scenery-collision LinePick | PARTIAL | Occluder spheres substitute |
 | First-person at Head joint + pitch ease | PARTIAL | Fixed eye height, no pitch ease |
 | Fly/swim up-down keys | MISSING | [content-gated] Space rebound to attack |
