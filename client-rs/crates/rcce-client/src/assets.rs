@@ -49,7 +49,12 @@ pub fn clip_frame(clip: &AnimClip, fps: f32, elapsed: f32) -> f32 {
         return clip.start as f32;
     }
     let advanced = elapsed * fps.max(0.001) * clip.speed.max(0.001);
-    clip.start as f32 + advanced.rem_euclid(len + 1.0)
+    // Wrap over `len`, NOT `len + 1`: the frame stays within [start, end), so the
+    // skeleton never interpolates the clip's last keyframe against the *next*
+    // clip's first keyframe (which is what the +1 did — a one-frame wrong pose
+    // every loop, the "snap"). The keyframe bracket is global, so it can't blend
+    // end→start; keeping the frame inside the clip avoids the cross-clip blend.
+    clip.start as f32 + advanced.rem_euclid(len)
 }
 
 /// A head attachment (hair or beard): its model + textures, plus the mesh
