@@ -158,6 +158,15 @@ pub struct Actor {
     pub render_x: f32,
     pub render_z: f32,
     pub render_yaw: f32,
+    /// Estimated authoritative velocity (units/sec), derived from successive
+    /// `P_StandardUpdate` positions — the render position extrapolates along this
+    /// between echoes so motion is continuous (and auto-matches the server's
+    /// actual speed, whatever the Speed stat is).
+    pub vx: f32,
+    pub vz: f32,
+    /// Last authoritative position the velocity estimate was taken from.
+    pub echo_x: f32,
+    pub echo_z: f32,
     pub dest_x: f32,
     pub dest_z: f32,
     pub is_running: bool,
@@ -211,6 +220,12 @@ pub struct World {
     /// Cleared until the first authoritative position arrives, so interpolation
     /// snaps (not glides) into the spawn/zone position.
     pub me_render_init: bool,
+    /// Local player's estimated authoritative velocity + last-sampled position
+    /// (see [`Actor::vx`]).
+    pub me_vx: f32,
+    pub me_vz: f32,
+    pub me_echo_x: f32,
+    pub me_echo_z: f32,
     /// Local player's appearance (from our own P_NewActor).
     pub me_gender: u8,
     pub me_face_tex: u8,
@@ -316,16 +331,23 @@ pub struct DroppedItem {
     pub z: f32,
 }
 
-/// Render-interpolation easing rate (per second) for actor positions/facings.
-/// Time constant ~1/12 s — fast enough to track the ~9 Hz server echoes with a
-/// small lag, slow enough to smooth the ~110 ms steps into continuous motion.
-pub const ACTOR_SMOOTH_RATE: f32 = 12.0;
-/// Position jump (world units) above which interpolation snaps instead of
-/// gliding — a teleport / zone warp shouldn't slide the actor across the map.
+/// Assumed interval (seconds) between server position echoes — the client sends
+/// movement every ~110 ms and the server echoes in response. Used to turn
+/// successive `P_StandardUpdate` positions into a velocity estimate.
+const ECHO_INTERVAL: f32 = 0.11;
+/// Reconciliation rate (per second) easing the render position toward the
+/// authoritative position — corrects extrapolation drift. The dt-form of a Blitz
+/// `CurveValue`. Gentle: the velocity extrapolation is the primary, continuous
+/// motion; this only nudges out accumulated error.
+pub const RECON_RATE: f32 = 5.0;
+/// Facing turn rate (per second) toward the travel heading.
+const YAW_RATE: f32 = 9.0;
+/// Position jump (world units) above which we snap instead of gliding — a
+/// teleport / zone warp shouldn't slide the actor across the map.
 const ACTOR_SNAP_DIST: f32 = 30.0;
 
 /// Ease `cur` toward `target` by factor `k`, snapping on a large jump.
-fn ease_pos(cur: &mut f32, target: f32, k: f32) {
+fn recon(cur: &mut f32, target: f32, k: f32) {
     if (target - *cur).abs() > ACTOR_SNAP_DIST {
         *cur = target;
     } else {
@@ -344,31 +366,87 @@ fn ease_yaw(cur: &mut f32, target: f32, k: f32) {
     *cur += d * k;
 }
 
+/// Largest plausible move speed (units/sec) — clamps the velocity estimate so a
+/// spawn/teleport jump (a huge one-frame position delta) doesn't fling the
+/// extrapolation; real teleports snap via `recon` instead.
+const MAX_VEL: f32 = 30.0;
+
+/// Refresh the velocity estimate `(vx, vz)` whenever a new authoritative
+/// position `(ax, az)` has arrived (differs from the last sample `(ex, ez)`):
+/// `v = (a - e) / ECHO_INTERVAL`, clamped and lightly smoothed (echo timing
+/// varies, so the raw estimate is jittery).
+fn update_velocity(vx: &mut f32, vz: &mut f32, ex: &mut f32, ez: &mut f32, ax: f32, az: f32) {
+    if (ax - *ex).abs() > 1e-3 || (az - *ez).abs() > 1e-3 {
+        let (mut nvx, mut nvz) = ((ax - *ex) / ECHO_INTERVAL, (az - *ez) / ECHO_INTERVAL);
+        let mag = (nvx * nvx + nvz * nvz).sqrt();
+        if mag > MAX_VEL {
+            nvx = nvx / mag * MAX_VEL;
+            nvz = nvz / mag * MAX_VEL;
+        }
+        *vx = *vx * 0.4 + nvx * 0.6;
+        *vz = *vz * 0.4 + nvz * 0.6;
+        *ex = ax;
+        *ez = az;
+    }
+}
+
 impl World {
-    /// Ease render positions/facings toward the authoritative state so actors
-    /// glide between the discrete `P_StandardUpdate` echoes (the server sends no
-    /// in-between frames; without this they teleport ~9×/s). Call once per frame
-    /// before building actors. `dt` = frame delta seconds (clamped). Remote-actor
-    /// facing is derived from the travel direction (`dest − pos`) since the wire
-    /// update omits yaw — this is also what gives NPCs (e.g. the stag) rotation.
-    pub fn interpolate(&mut self, dt: f32) {
-        let k = 1.0 - (-ACTOR_SMOOTH_RATE * dt.clamp(0.0, 0.1)).exp();
+    /// Smooth remote-actor motion (Blitz `UpdateActorInstances` parity, by way of
+    /// velocity extrapolation): estimate each actor's velocity from successive
+    /// `P_StandardUpdate` positions, extrapolate the render position along it
+    /// between echoes (continuous motion at the server's true speed — no
+    /// teleporting and no need for the Speed stat), reconcile toward the
+    /// authoritative position, and face the travel direction. Actors within 2.0
+    /// of their destination are stopped (Blitz's deadzone). `dt` = frame seconds.
+    pub fn tick_remote_movement(&mut self, dt: f32) {
+        let dt = dt.clamp(0.0, 0.1);
+        let k = 1.0 - (-RECON_RATE * dt).exp();
+        let ky = 1.0 - (-YAW_RATE * dt).exp();
+        for a in self.actors.values_mut() {
+            update_velocity(&mut a.vx, &mut a.vz, &mut a.echo_x, &mut a.echo_z, a.x, a.z);
+            let (ddx, ddz) = (a.dest_x - a.render_x, a.dest_z - a.render_z);
+            if ddx * ddx + ddz * ddz > 4.0 {
+                a.render_x += a.vx * dt;
+                a.render_z += a.vz * dt;
+                if a.vx * a.vx + a.vz * a.vz > 1.0 {
+                    ease_yaw(&mut a.render_yaw, (-a.vx).atan2(-a.vz).to_degrees(), ky);
+                }
+            } else {
+                // Within the destination deadzone → stopped; don't coast.
+                a.vx = 0.0;
+                a.vz = 0.0;
+            }
+            recon(&mut a.render_x, a.x, k);
+            recon(&mut a.render_z, a.z, k);
+        }
+    }
+
+    /// Local-player motion: extrapolate the render position in the input
+    /// direction at the server's estimated speed (so it starts the instant the
+    /// player presses a key and moves at the right rate), then reconcile to the
+    /// server echo. When the input stops, coasting stops immediately (the input
+    /// tells us, unlike a remote actor) and the render settles onto the server
+    /// position. `me_yaw` is already client-driven, so facing isn't touched.
+    pub fn predict_me(&mut self, dt: f32, dir: [f32; 2], moving: bool) {
+        let dt = dt.clamp(0.0, 0.1);
         if !self.me_render_init {
             self.me_render_x = self.me_x;
             self.me_render_z = self.me_z;
             self.me_render_init = true;
         }
-        ease_pos(&mut self.me_render_x, self.me_x, k);
-        ease_pos(&mut self.me_render_z, self.me_z, k);
-        for a in self.actors.values_mut() {
-            ease_pos(&mut a.render_x, a.x, k);
-            ease_pos(&mut a.render_z, a.z, k);
-            let (dx, dz) = (a.dest_x - a.x, a.dest_z - a.z);
-            if dx * dx + dz * dz > 1.0 {
-                let target = (-dx).atan2(-dz).to_degrees();
-                ease_yaw(&mut a.render_yaw, target, k);
-            }
+        update_velocity(&mut self.me_vx, &mut self.me_vz, &mut self.me_echo_x, &mut self.me_echo_z, self.me_x, self.me_z);
+        let k = 1.0 - (-RECON_RATE * dt).exp();
+        if moving {
+            let speed = (self.me_vx * self.me_vx + self.me_vz * self.me_vz).sqrt();
+            let mag = (dir[0] * dir[0] + dir[1] * dir[1]).sqrt().max(1e-6);
+            self.me_render_x += dir[0] / mag * speed * dt;
+            self.me_render_z += dir[1] / mag * speed * dt;
+        } else {
+            self.me_vx = 0.0;
+            self.me_vz = 0.0;
         }
+        recon(&mut self.me_render_x, self.me_x, k);
+        recon(&mut self.me_render_z, self.me_z, k);
     }
 
     /// Apply one received message, mutating state. Unknown types are ignored.
@@ -467,7 +545,9 @@ impl World {
         let hair = clamp4(r.u16());
         let body_tex = clamp4(r.u16());
         let beard = clamp4(r.u16());
-        // Speed (value, max) then Health (value, max).
+        // Speed (value, max) then Health (value, max). Speed is unused — the
+        // render speed is estimated from successive positions instead (the spawn
+        // Speed value is 0 here; the real value arrives via P_StatUpdate).
         let _speed = (r.u16(), r.u16());
         let health = r.u16().unwrap_or(0) as i16;
         let health_max = r.u16().unwrap_or(0) as i16;
@@ -481,6 +561,10 @@ impl World {
             self.me_render_x = x;
             self.me_render_z = z;
             self.me_render_init = true;
+            self.me_echo_x = x;
+            self.me_echo_z = z;
+            self.me_vx = 0.0;
+            self.me_vz = 0.0;
             self.me_gender = gender;
             self.me_face_tex = face_tex;
             self.me_body_tex = body_tex;
@@ -505,6 +589,10 @@ impl World {
                 render_x: x,
                 render_z: z,
                 render_yaw: yaw,
+                vx: 0.0,
+                vz: 0.0,
+                echo_x: x,
+                echo_z: z,
                 dest_x: x,
                 dest_z: z,
                 alive: true,
