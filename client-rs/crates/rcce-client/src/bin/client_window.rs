@@ -781,8 +781,10 @@ const MENU_CAM_LAT: f32 = -2.0;
 const MENU_SET_SCALE: f32 = 1.0;
 const MENU_SET_Y: f32 = 0.0;
 /// Character anchor Y in the menu — lifts the center-anchored body so its feet
-/// rest on the rug (≈ half the character's world height). `RCCE_CHARY` overrides.
-const MENU_CHAR_Y: f32 = 0.6;
+/// rest on the rug (≈ half the character's world height). At 0.6 the feet sat
+/// ~0.15 below the rug and the floor clipped the lower legs; 1.0 seats them on
+/// the rug clear of clipping. `RCCE_CHARY` overrides.
+const MENU_CHAR_Y: f32 = 1.0;
 /// Set-model coordinates of the rug spot the character stands on, derived from
 /// the Blitz scale-30 placement (`(char(30,_,100) - origin(-210,_,-145)) / 30`).
 /// The set origin is `char - SCALE * RUG` so the character stays on the rug at
