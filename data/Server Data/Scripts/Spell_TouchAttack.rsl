@@ -271,7 +271,7 @@ Function ArcaneEquipmentCheck(Player)
             If ItemWeaponType(PlayerWeapon) = 3 
                 Result = 0
             EndIf
-            If (ZZITEMWEAPONCLASS(PlayerWeapon) > 0) AND (ZZITEMWEAPONCLASS(PlayerWeapon) < 7)
+            If (ZZITEMWEAPONCLASS(PlayerWeapon) = 1) OR ((ZZITEMWEAPONCLASS(PlayerWeapon) > 2) AND (ZZITEMWEAPONCLASS(PlayerWeapon) < 7))
                 Result = 0
             EndIf
     End Select
