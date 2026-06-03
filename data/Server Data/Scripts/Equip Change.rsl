@@ -27,8 +27,8 @@ Function Main()
 	ApplyAttributeBonus(Player, "Carry Weight Mod")
 
 
-	ApplyAttributeBonus(Player, "Long Blades")
-	ApplyAttributeBonus(Player, "Short Blades")
+	ApplyAttributeBonus(Player, "Swords")
+	ApplyAttributeBonus(Player, "Daggers")
 	ApplyAttributeBonus(Player, "Axes")
 	ApplyAttributeBonus(Player, "Blunt Weapons")
 	ApplyAttributeBonus(Player, "Polearms/Spears")

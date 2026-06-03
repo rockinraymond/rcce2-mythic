@@ -488,8 +488,8 @@ End Function
 Function GetWeaponClass$(I.Item)
 
 	Select I\WeaponClass
-		Case WC_Sword : Return "Long Blade"
-		Case WC_Dagger : Return "Short Blade"
+		Case WC_Sword : Return "Sword"
+		Case WC_Dagger : Return "Dagger"
 		Case WC_Axe : Return "Axe"
 		Case WC_Blunt : Return "Blunt"
 		Case WC_Bow : Return "Bow"
