@@ -768,7 +768,7 @@ const CAM_DIST_DEFAULT: f32 = 13.0;
 /// the world-X strafe that pushes the character screen-right (window on the
 /// left). Each is overridable at runtime via the matching `RCCE_MENU*` var.
 const MENU_CAM_ANGLE: f32 = std::f32::consts::PI;
-const MENU_CAM_DIST: f32 = 6.0;
+const MENU_CAM_DIST: f32 = 7.0;
 const MENU_CAM_EYE_H: f32 = 1.2;
 const MENU_CAM_TGT_H: f32 = 0.9;
 const MENU_CAM_LAT: f32 = -2.0;
@@ -780,11 +780,11 @@ const MENU_CAM_LAT: f32 = -2.0;
 /// menu-set load). Override at runtime with `RCCE_SETSCALE` / `RCCE_SETY`.
 const MENU_SET_SCALE: f32 = 1.0;
 const MENU_SET_Y: f32 = 0.0;
-/// Character anchor Y in the menu — lifts the center-anchored body so its feet
-/// rest on the rug (≈ half the character's world height). At 0.6 the feet sat
-/// ~0.15 below the rug and the floor clipped the lower legs; 1.0 seats them on
-/// the rug clear of clipping. `RCCE_CHARY` overrides.
-const MENU_CHAR_Y: f32 = 1.0;
+/// Character anchor Y in the menu — now only the camera's vertical focus base
+/// (the body is seated on the set floor via the height field, not this value).
+/// Tuned so the camera frames the seated character full-body with headroom above
+/// the head. `RCCE_CHARY` overrides.
+const MENU_CHAR_Y: f32 = 2.4;
 /// Set-model coordinates of the rug spot the character stands on, derived from
 /// the Blitz scale-30 placement (`(char(30,_,100) - origin(-210,_,-145)) / 30`).
 /// The set origin is `char - SCALE * RUG` so the character stays on the rug at
@@ -3098,6 +3098,45 @@ impl App {
                         // set carries its own floor; the plane only showed as a
                         // green void past the set's floor edge.
                         view.set_scene(&gfx.device, &gfx.queue, std::slice::from_ref(&inst), f32::NAN);
+                        // Build a height field from the set's floor so the
+                        // character seats its feet ON the rug (height_at(char x,z)),
+                        // instead of guessing an anchor Y — the set's floor is well
+                        // below Y=0 (mesh min ~ -1.3 world), so a fixed anchor sank
+                        // the feet through it. Reuses self.height_field (the world
+                        // overwrites it on enter; the menu doesn't otherwise use it).
+                        {
+                            use glam::Vec3;
+                            let sv = Vec3::splat(s);
+                            let tv = Vec3::new(
+                                char_anchor[0] - s * MENU_SET_RUG[0],
+                                oy,
+                                char_anchor[2] - s * MENU_SET_RUG[2],
+                            );
+                            let mut tris: Vec<[Vec3; 3]> = Vec::new();
+                            for mesh in &model.meshes {
+                                if mesh.texture_flag & 4 != 0 {
+                                    continue; // masked = see-through, not floor
+                                }
+                                let w = |i: u32| tv + Vec3::from(mesh.positions[i as usize]) * sv;
+                                for tri in mesh.indices.chunks_exact(3) {
+                                    let (a, b, c) = (w(tri[0]), w(tri[1]), w(tri[2]));
+                                    if rcce_client::terrain::HeightField::is_ground(a, b, c) {
+                                        tris.push([a, b, c]);
+                                    }
+                                }
+                            }
+                            // The rug is the LOWEST ground surface under the
+                            // character (the ceiling vault / tables are higher, and
+                            // height_at returns the highest). Seat on a flat field
+                            // at that Y so the feet rest on the rug.
+                            let full = rcce_client::terrain::HeightField::build(tris, 2.0);
+                            let rug_y = full.lowest_at(char_anchor[0], char_anchor[2]);
+                            println!("[client-window] menu floor under character: {rug_y:?}");
+                            self.height_field = Some(match rug_y {
+                                Some(y) => rcce_client::terrain::HeightField::flat(y),
+                                None => full,
+                            });
+                        }
                         let n_lm = lightmaps.iter().filter(|l| l.is_some()).count();
                         println!("[client-window] menu set: {} meshes, scale {s}, {n_lm} lightmapped", model.meshes.len());
                     }
@@ -3127,8 +3166,10 @@ impl App {
                 mw.me_y = char_anchor[1];
                 mw.me_z = char_anchor[2];
                 mw.me_yaw = 0.0; // faces +Z; the camera circles it
+                // Seat on the set's floor height field (built at scene init) so
+                // the feet rest on the rug instead of a guessed anchor Y.
                 let (models, textures, place, keys, skinned) =
-                    build_actors(store, &mw, elapsed, self.gpu_skin, false, false, c.actor_id, false, false, 0.0, false, None, None);
+                    build_actors(store, &mw, elapsed, self.gpu_skin, false, false, c.actor_id, false, false, 0.0, false, None, self.height_field.as_ref());
                 let instances: Vec<SceneInstance> = place
                     .iter()
                     .map(|&(idx, t, r, color, s)| SceneInstance {

@@ -20,6 +20,10 @@ pub struct HeightField {
     tris: Vec<[Vec3; 3]>,
     grid: HashMap<(i32, i32), Vec<u32>>,
     cell: f32,
+    /// When set, `height_at` returns this constant everywhere (a flat floor) —
+    /// used to seat the menu character on the set's rug at a known Y without the
+    /// set's other horizontal surfaces (ceiling vaults, tables) interfering.
+    flat: Option<f32>,
 }
 
 impl HeightField {
@@ -39,21 +43,45 @@ impl HeightField {
                 }
             }
         }
-        HeightField { tris, grid, cell }
+        HeightField { tris, grid, cell, flat: None }
+    }
+
+    /// A flat field that reports `y` at every `(x, z)`.
+    pub fn flat(y: f32) -> HeightField {
+        HeightField { tris: Vec::new(), grid: HashMap::new(), cell: 1.0, flat: Some(y) }
     }
 
     pub fn is_empty(&self) -> bool {
-        self.tris.is_empty()
+        self.flat.is_none() && self.tris.is_empty()
     }
 
     /// Highest ground Y at `(x, z)`, or `None` if no ground triangle covers it.
     pub fn height_at(&self, x: f32, z: f32) -> Option<f32> {
+        if let Some(y) = self.flat {
+            return Some(y);
+        }
         let key = ((x / self.cell).floor() as i32, (z / self.cell).floor() as i32);
         let ids = self.grid.get(&key)?;
         let mut best: Option<f32> = None;
         for &i in ids {
             if let Some(y) = tri_height(&self.tris[i as usize], x, z) {
                 best = Some(best.map_or(y, |b| b.max(y)));
+            }
+        }
+        best
+    }
+
+    /// Lowest ground Y at `(x, z)`, or `None` if no ground triangle covers it.
+    /// The set's rug is its lowest horizontal surface under the character (the
+    /// ceiling vault / tables sit above it), so the menu seats the character on
+    /// this rather than `height_at` (which returns the highest).
+    pub fn lowest_at(&self, x: f32, z: f32) -> Option<f32> {
+        let key = ((x / self.cell).floor() as i32, (z / self.cell).floor() as i32);
+        let ids = self.grid.get(&key)?;
+        let mut best: Option<f32> = None;
+        for &i in ids {
+            if let Some(y) = tri_height(&self.tris[i as usize], x, z) {
+                best = Some(best.map_or(y, |b| b.min(y)));
             }
         }
         best
