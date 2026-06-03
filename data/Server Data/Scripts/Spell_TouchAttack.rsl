@@ -252,19 +252,20 @@ Function ArcaneEquipmentCheck(Player)
             If (ZZITEMARMORCLASS(PlayerChest) = 3) OR (ZZITEMARMORCLASS(PlayerChest) = 2) OR (ZZITEMARMORCLASS(PlayerChest) = 1)
                 Result = 0
             EndIf
-            If (ZZITEMARMORCLASS(PlayerChest) = 3) OR (ZZITEMARMORCLASS(PlayerChest) = 2) OR (ZZITEMARMORCLASS(PlayerChest) = 1)
+            If (ZZITEMARMORCLASS(PlayerHat) = 3) OR (ZZITEMARMORCLASS(PlayerHat) = 2) OR (ZZITEMARMORCLASS(PlayerHat) = 1)
                 Result = 0
             EndIf
-            If (ZZITEMARMORCLASS(PlayerChest) = 3) OR (ZZITEMARMORCLASS(PlayerChest) = 2) OR (ZZITEMARMORCLASS(PlayerChest) = 1)
+            If (ZZITEMARMORCLASS(PlayerLegs) = 3) OR (ZZITEMARMORCLASS(PlayerLegs) = 2) OR (ZZITEMARMORCLASS(PlayerLegs) = 1)
                 Result = 0
             EndIf
-            If (ZZITEMARMORCLASS(PlayerChest) = 3) OR (ZZITEMARMORCLASS(PlayerChest) = 2) OR (ZZITEMARMORCLASS(PlayerChest) = 1)
+            If (ZZITEMARMORCLASS(PlayerHands) = 3) OR (ZZITEMARMORCLASS(PlayerHands) = 2) OR (ZZITEMARMORCLASS(PlayerHands) = 1)
                 Result = 0
             EndIf
-            If (ZZITEMARMORCLASS(PlayerChest) = 3) OR (ZZITEMARMORCLASS(PlayerChest) = 2) OR (ZZITEMARMORCLASS(PlayerChest) = 1)
+            If (ZZITEMARMORCLASS(PlayerFeet) = 3) OR (ZZITEMARMORCLASS(PlayerFeet) = 2) OR (ZZITEMARMORCLASS(PlayerFeet) = 1)
                 Result = 0
             EndIf
-            If (ZZITEMARMORCLASS(PlayerChest) = 3) OR (ZZITEMARMORCLASS(PlayerChest) = 2) OR (ZZITEMARMORCLASS(PlayerChest) = 1)
+            If (ZZITEMARMORCLASS(PlayerBelt) = 3) OR (ZZITEMARMORCLASS(PlayerBelt) = 2) OR (ZZITEMARMORCLASS(PlayerBelt) = 1)
+                Result = 0
                 Result = 0
             EndIf
             If ItemWeaponType(PlayerWeapon) = 3 
