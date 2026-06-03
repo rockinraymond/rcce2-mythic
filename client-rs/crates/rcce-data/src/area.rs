@@ -79,10 +79,28 @@ impl Default for AreaEnv {
     }
 }
 
+/// A water surface placed in the zone (GUE water tool). A horizontal textured,
+/// alpha-blended, tinted plane centred at `pos`, spanning `scale_x`×`scale_z`.
+/// Wire layout (after the scenery list, ClientAreas.bb:546): `tex_id(i16)` ·
+/// `tex_scale(f32)` · `x/y/z(f32×3)` · `scale_x/scale_z(f32×2)` · `rgb(u8×3)` ·
+/// `opacity(u8, 0..100)`.
+#[derive(Debug, Default, Clone, Copy)]
+pub struct WaterPlane {
+    pub tex_id: u16,
+    pub tex_scale: f32,
+    pub pos: [f32; 3],
+    pub scale_x: f32,
+    pub scale_z: f32,
+    pub color: [f32; 3],
+    /// 0..1 (the wire 0..100 opacity / 100).
+    pub opacity: f32,
+}
+
 #[derive(Debug, Default, Clone)]
 pub struct AreaScenery {
     pub env: AreaEnv,
     pub sceneries: Vec<SceneryPlacement>,
+    pub waters: Vec<WaterPlane>,
 }
 
 /// Byte offset of the `Sceneries` count (fixed header prefix length).
@@ -160,7 +178,35 @@ impl AreaScenery {
                 texture_id,
             });
         }
-        Ok(AreaScenery { env, sceneries })
+
+        // Water surfaces (ClientAreas.bb:546) — immediately follow the scenery
+        // list. Best-effort: a truncated/old area file without the block just
+        // yields no water (parse errors stop the loop rather than failing).
+        let mut waters = Vec::new();
+        if let Ok(n) = r.read_short_u() {
+            for _ in 0..n {
+                let tex_id = match r.read_short_u() {
+                    Ok(v) => v,
+                    Err(_) => break,
+                };
+                let tex_scale = r.read_float().unwrap_or(1.0);
+                let pos = [
+                    r.read_float().unwrap_or(0.0),
+                    r.read_float().unwrap_or(0.0),
+                    r.read_float().unwrap_or(0.0),
+                ];
+                let scale_x = r.read_float().unwrap_or(0.0);
+                let scale_z = r.read_float().unwrap_or(0.0);
+                let color = [
+                    r.read_byte().unwrap_or(255) as f32 / 255.0,
+                    r.read_byte().unwrap_or(255) as f32 / 255.0,
+                    r.read_byte().unwrap_or(255) as f32 / 255.0,
+                ];
+                let opacity = (r.read_byte().unwrap_or(100) as f32 / 100.0).clamp(0.0, 1.0);
+                waters.push(WaterPlane { tex_id, tex_scale, pos, scale_x, scale_z, color, opacity });
+            }
+        }
+        Ok(AreaScenery { env, sceneries, waters })
     }
 }
 

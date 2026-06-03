@@ -1473,6 +1473,41 @@ type ZoneStatic = (
     rcce_client::terrain::HeightField,
 );
 
+/// A flat water surface as a one-quad [`B3dModel`] (GUE water tool). The quad is
+/// a unit plane in XZ centred at origin (scaled to the plane size by the
+/// instance); UVs tile the water texture `tex_scale` times per world unit
+/// (Blitz `ScaleTexture`, ClientAreas.bb:563); the per-vertex colour carries the
+/// tint RGB + opacity, so `opacity < 1` routes it through the alpha-blend pass
+/// (`mesh_is_alpha_overlay`) and the shader tints the texture by the RGB.
+fn water_quad(w: &rcce_data::WaterPlane) -> B3dModel {
+    // Blitz builds the plane with UVs 0..ScaleX (one tile/unit) then
+    // `ScaleTexture(TexScale)`, which enlarges the texture → DIVIDES the tiling.
+    // So the texture repeats `ScaleX / TexScale` times across the plane.
+    let ts = if w.tex_scale.abs() > 1e-4 { w.tex_scale } else { 1.0 };
+    let (tu, tv) = (w.scale_x / ts, w.scale_z / ts);
+    // No RGB tint: Blitz never applies EntityColor to the water entity (the
+    // area-file R/G/B is editor-only, like ServerWater) — it shows the texture at
+    // full colour with alpha = opacity. White vertex colour + opacity alpha.
+    let col = [1.0, 1.0, 1.0, w.opacity];
+    B3dModel {
+        meshes: vec![rcce_data::B3dMesh {
+            positions: vec![[-0.5, 0.0, -0.5], [0.5, 0.0, -0.5], [0.5, 0.0, 0.5], [-0.5, 0.0, 0.5]],
+            normals: vec![[0.0, 1.0, 0.0]; 4],
+            uvs: vec![[0.0, 0.0], [tu, 0.0], [tu, tv], [0.0, tv]],
+            uvs2: Vec::new(),
+            colors: vec![col; 4],
+            indices: vec![0, 1, 2, 0, 2, 3],
+            brush_id: -1,
+            texture: None,
+            texture_flag: 0,
+            uv_scale: [1.0, 1.0],
+            uv_offset: [0.0, 0.0],
+            lightmap: None,
+        }],
+        ..Default::default()
+    }
+}
+
 fn load_zone_static(store: &mut AssetStore, view: &mut WorldView, gfx: &Gfx, data_root: &str, zone: &str) -> Option<ZoneStatic> {
     let path = std::path::Path::new(data_root).join("Areas").join(format!("{zone}.dat"));
     let bytes = std::fs::read(&path).map_err(|e| eprintln!("[client-window] {}: {e}", path.display())).ok()?;
@@ -1547,6 +1582,42 @@ fn load_zone_static(store: &mut AssetStore, view: &mut WorldView, gfx: &Gfx, dat
         for k in 0..3 {
             min[k] = min[k].min(s.pos[k]);
             max[k] = max[k].max(s.pos[k]);
+        }
+    }
+    // Water surfaces (GUE water tool) — flat textured/tinted/alpha quads, added
+    // as scenery instances so they render in the same pass. Opacity<1 blends via
+    // the vertex-colour alpha; the texture tiles per the plane's TexScale.
+    let mut n_water = 0;
+    for w in &scenery.waters {
+        if w.scale_x <= 0.0 || w.scale_z <= 0.0 {
+            continue;
+        }
+        let Some(img) = store.texture_path(w.tex_id).and_then(|p| rcce_data::texture::load(&p)) else {
+            continue;
+        };
+        // RCCE_WATERDEBUG: render the plane bright opaque cyan to confirm it's
+        // drawing and where (vs. hidden under terrain / too subtle).
+        let wq = if std::env::var_os("RCCE_WATERDEBUG").is_some() {
+            let mut dbg = *w;
+            dbg.color = [0.0, 1.0, 1.0];
+            dbg.opacity = 1.0;
+            water_quad(&dbg)
+        } else {
+            water_quad(w)
+        };
+        let idx = models.len();
+        models.push(std::rc::Rc::new(wq));
+        textures.push(vec![Some(img)]);
+        place.push((idx, w.pos, [0.0, 0.0, 0.0], [w.scale_x, 1.0, w.scale_z]));
+        n_water += 1;
+    }
+    if !scenery.waters.is_empty() {
+        println!("[client-window] zone '{zone}': {} water plane(s), {n_water} drawn", scenery.waters.len());
+        for w in &scenery.waters {
+            println!(
+                "  water @({:.0},{:.1},{:.0}) size {:.0}x{:.0} tex {} tscale {:.3} rgb({:.2},{:.2},{:.2}) a{:.2}",
+                w.pos[0], w.pos[1], w.pos[2], w.scale_x, w.scale_z, w.tex_id, w.tex_scale, w.color[0], w.color[1], w.color[2], w.opacity
+            );
         }
     }
     if place.is_empty() {
@@ -3894,6 +3965,14 @@ impl App {
             // relative jitter. The smoothing (and teleport snap) now lives in
             // World::interpolate / me_render, so the camera just tracks it.
             cam_target = [net.world.me_render_x, net.world.me_y, net.world.me_render_z];
+            // Headless inspection: RCCE_CAMAT="x,y,z" points the camera at a fixed
+            // world spot (e.g. a water plane) for a screenshot without walking there.
+            if let Ok(s) = std::env::var("RCCE_CAMAT") {
+                let p: Vec<f32> = s.split(',').filter_map(|t| t.trim().parse().ok()).collect();
+                if p.len() == 3 {
+                    cam_target = [p[0], p[1], p[2]];
+                }
+            }
             cam_me_yaw = net.world.me_yaw.to_radians(); // degrees -> radians for the FP camera
             following = true;
         }
@@ -3997,7 +4076,8 @@ impl App {
             // Orbit behind the player: yaw places the camera on the -forward
             // side, pitch raises it. `dist` is the boom length (CAM-3 zoom).
             let dist = self.cam_dist;
-            let (sp, cp) = self.cam_pitch.sin_cos();
+            let pitch = std::env::var("RCCE_CAMPITCH").ok().and_then(|s| s.trim().parse().ok()).unwrap_or(self.cam_pitch);
+            let (sp, cp) = pitch.sin_cos();
             let look = [cam_target[0], cam_target[1] + 3.5, cam_target[2]];
             // Boom direction (pivot -> desired eye), unit length.
             let dir = [sy * cp, sp, cy * cp];

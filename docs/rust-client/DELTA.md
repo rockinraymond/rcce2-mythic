@@ -99,7 +99,7 @@ omission accounts for missing water, 3D particles, and LOD heightmap terrain sim
 | Daylight default | Environment | DONE | Default phase fixed (e4c8957c) | `daynight.rs` |
 | Fog (day/night) | FogNear/Far | PARTIAL | Per-*weather* fog targets missing | `world_view.rs` |
 | Multitexture / lightmap / BUMPED stages | brush slots 2-8 | MISSING | b3d keeps only first brush slot | `b3d.rs resolve_textures` |
-| Water surface + reflection | Water volumes | MISSING | [content-gated] not parsed | `area.rs:163` |
+| Water surface | Water planes | DONE | `area.rs` now parses the water block after the scenery list (`WaterPlane`: tex/scale/pos/size/rgb/opacity, ClientAreas.bb:546); each renders as a flat textured, alpha-blended quad (`water_quad`) seated at its Y, UVs tiled `size/TexScale` (Blitz `ScaleTexture`). No RGB tint — Blitz never `EntityColor`s the water entity, so the surface is the texture at `opacity` alpha. Reflection/refraction + wave subdivision not done (cosmetic). | `area.rs` / `load_zone_static` |
 | 3D particle emitters | RP_ emitters | MISSING | Rust draws 2D screen rects | `weather.rs` |
 | LOD heightmap terrain | LOD Terrains block | MISSING | Not parsed | `area.rs:163` |
 | Shadows | shadow projection | MISSING | None | — |
