@@ -462,3 +462,11 @@ Item ID: 115
 Item Name: Platemail Armor +3
 Range: 0.0
 
+Item ID: 116
+Item Name: Lockpick
+Range: 0.0
+
+Item ID: 117
+Item Name: Trap Disarming Kit
+Range: 0.0
+

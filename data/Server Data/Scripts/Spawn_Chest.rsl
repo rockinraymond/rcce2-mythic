@@ -3,7 +3,8 @@ Using "RC_Core.rcm"
 
 Function Main()
 setattribute(actor(), "Armor Bonus", 1)
-setattribute(actor(), "Stealth Mod", 1)
+setattribute(actor(), "Attack Bonus", 1)
+;setattribute(actor(), "Stealth Mod", 1)
 
 
 

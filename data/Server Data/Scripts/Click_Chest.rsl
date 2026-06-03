@@ -6,56 +6,322 @@ Function Main()
 Player = Actor()
 Chest = ContextActor()
 
-ChestLevel = ActorLevel(Chest)
-ChestLock = Attribute(Chest, "Armor Bonus")
-ChestTrap = Attribute(Chest, "Attack Bonus")
-;Stealth Mod Checks if Trap has been discovered or not
+
 
 D = OpenDialog(Player, Chest, "Treasure Chest")
-	DialogOutput(Player, D, "You look down at the sealed wooden chest...", 255, 255, 255)
-	If ChestLock > 0
-		DialogOutput(Player, D, "It is locked...", 255, 255, 0)
-	EndIf
-	If Attribute(Chest, "Stealth Mod") > 0
-		DialogOutput(Player, D, "It is booby-trapped...", 255, 0, 0)
-	EndIf
-
-	DialogOutput(Player, D, "What would you like to do?", 255, 255, 255)
-
-	Options$ = ""
-	If ChestLock > 0
-		Options$ = Options$ + "Pick Lock|"
-	Else
-		Options$ = Options$ + "Open|"
-	EndIf
-
-	If (Attribute(Chest, "Stealth Mod") > 0)
-		Options$ = Options$ + "Disarm Trap|"
-	Else
-		Options$ = Options$ + "Search for Traps|"
-	EndIf
-
-	Options$ = Options$ + "Close"
+	DialogIsOpen = 1
 	
-	Result = DialogInput(Player, D, Options$, "|")
+	Repeat
+		ChestLevel = ActorLevel(Chest)
+		ChestLock = Attribute(Chest, "Armor Bonus")
+		ChestTrap = Attribute(Chest, "Attack Bonus")
+		DiscoveredTrap = Attribute(Chest, "Stealth Mod")
+		;Stealth Mod Checks if Trap has been discovered or not
+		DialogOutput(Player, D, "You look down at the sealed wooden chest...", 255, 255, 255)
+		If ChestLock > 0
+			DialogOutput(Player, D, "It is locked...", 255, 255, 0)
+		EndIf
+		If DiscoveredTrap > 0
+			If ChestTrap > 0
+				DialogOutput(Player, D, "It is booby-trapped...", 255, 0, 0)
+			Else
+				DialogOutput(Player, D, "The trap has been disarmed...", 175, 255, 175)
+			EndIf
+		EndIf
+		
+		DialogOutput(Player, D, "What would you like to do?", 255, 255, 255)
+
+		Options$ = ""
+		If ChestLock > 0
+			Options$ = Options$ + "Pick Lock|"
+		Else
+			Options$ = Options$ + "Open|"
+		EndIf
+
+		If (DiscoveredTrap > 0)
+			If ChestTrap > 0
+				Options$ = Options$ + "Disarm Trap|"
+			EndIf
+		Else
+			Options$ = Options$ + "Search for Traps|"
+		EndIf
+
+		Options$ = Options$ + "Close"
+		
+		Result = DialogInput(Player, D, Options$, "|")
 			
 		If Result = 1
-			DialogOutput(Player, D, "Open or Pick lock!", 0, 255, 0)
-			DialogInput(Player, D, "Goodbye")
-			CloseDialog(Player, D)
+			If ChestLock > 0
+				If EquipmentCheck(Player) = 1
+					If HasItem(Player, "Lockpick", 1)
+						PickLock(Player, Chest, D)
+					Else
+						DialogOutput(Player, D, "You do not have any lock picks!", 255, 150, 0)
+					EndIf
+				Else
+					DialogOutput(Player, D, "Your worn equipment prevents you from picking locks!", 255, 150, 0)
+				EndIf
+			Else
+				DialogOutput(Player, D, "Opening Chest", 0, 255, 0)
+			EndIf
 		ElseIf Result = 2
-			DialogOutput(Player, D, "Something with Traps", 255, 0 , 0)
-			DialogInput(Player, D, "Goodbye")
-			CloseDialog(Player, D)
+				If (DiscoveredTrap > 0)
+					If (ChestTrap = 0)
+						DialogIsOpen = 0
+					Else
+						If EquipmentCheck(Player) = 1
+							If HasItem(Player, "Trap Disarming Kit", 1)
+								DisarmTrap(Player, Chest, D)
+							Else
+								DialogOutput(Player, D, "You do not have the tools needed to disarm traps!", 255, 150, 0)
+							EndIf
+						Else
+							DialogOutput(Player, D, "Your worn equipment prevents you from disarming traps!", 255, 150, 0)
+						EndIf
+					EndIf
+				Else
+					If EquipmentCheck(Player) = 1
+						SearchForTrap(Player, Chest, D)
+					Else
+						DialogOutput(Player, D, "Your worn equipment prevents you from searching for traps!", 255, 150, 0)
+					EndIf
+				EndIf
 		Else
-			CloseDialog(Player, D)
+			DialogIsOpen = 0
 		EndIf
+	Until DialogIsOpen = 0
+	CloseDialog(Player, D)
 Return
 
 End Function
+
+Function PickLock(Player, Chest, D)
+
+	PlayerLockPickSkill = Attribute(Player, "Lockpicking")
+	PlayerDexMod = AbilityBonus(Attribute(Player, "Dexterity")) * 5
+	ChestLevelMod = ActorLevel(Chest) * 5
+
+	PickChance = PlayerLockPickSkill - ChestLevelMod
+
+	DialogOutput(Player, D, "You try picking the lock...", 255, 255, 255)
+	;create progress bar
+	lockPickTime = (100 - PlayerLockPickSkill) + ChestLevelMod - PlayerDexMod
+	Bar = CreateProgressBar(Player,100,255,0,.4,.8,.2,.04,lockPickTime,0,"Lock Picking")
+	Repeat
+	UpdateProgressBar(Player,bar,i)
+    DoEvents(100)
+    i =  i + 1
+    If(Attribute(Player, "Health") < 0)
+        Output(Player, "You cannot pick locks when you are dead",255, 255, 0)
+        DeleteProgressBar(Player,Bar)
+		CloseDialog(Player, D)
+        Return
+    EndIf
+	Until i = lockPickTime
+	DeleteProgressBar(Player,Bar)
+
+	;roll for success
+	PickRoll = Rand(1,100) - PlayerDexMod
+
+	;pass or fail
+	If PickRoll <= PickChance
+		DialogOutput(Player, D, "You successfully pick the lock!", 0, 255, 0)
+		SetAttribute(Chest, "Armor Bonus", 0)
+		ZZADDSKILLXP(Player, "Lockpicking", ChestLevelMod * 7)
+		Return
+	Else
+		DialogOutput(Player, D, "You fail to pick the lock, and your pick breaks!", 255, 0, 0)
+		GiveItem(Player,"Lockpick",-1)
+		ZZADDSKILLXP(Player, "Lockpicking", ChestLevelMod)
+		Return
+	EndIf
+End Function
+
+Function DisarmTrap(Player, Chest, D)
+
+	PlayerDisarmSkill = Attribute(Player, "Trap Disarming")
+	PlayerDexMod = AbilityBonus(Attribute(Player, "Dexterity")) * 5
+	ChestLevelMod = ActorLevel(Chest) * 5
+	
+
+	DisarmChance = PlayerDisarmSkill - ChestLevelMod
+
+	DialogOutput(Player, D, "You try disarming the trap...", 255, 255, 255)
+	;create progress bar
+	disarmTime = (100 - PlayerDisarmSkill) + ChestLevelMod - PlayerDexMod
+	Bar = CreateProgressBar(Player,255,100,0,.4,.8,.2,.04,disarmTime,0,"Disarming Trap")
+	Repeat
+	UpdateProgressBar(Player,bar,i)
+    DoEvents(100)
+    i =  i + 1
+    If(Attribute(Player, "Health") < 0)
+        Output(Player, "You cannot disarm traps when you are dead",255, 255, 0)
+        DeleteProgressBar(Player,Bar)
+		CloseDialog(Player, D)
+        Return
+    EndIf
+	Until i = disarmTime
+	DeleteProgressBar(Player,Bar)
+
+	;roll for success
+	DisarmRoll = Rand(1,100) - PlayerDexMod
+
+	;pass or fail
+	If DisarmRoll <= DisarmChance
+		DialogOutput(Player, D, "You successfully disarm the trap!", 0, 255, 0)
+		SetAttribute(Chest, "Attack Bonus", 0)
+		ZZADDSKILLXP(Player, "Trap Disarming", ChestLevelMod * 9)
+		Return
+	Else
+		DialogOutput(Player, D, "You fail to disarm the trap!", 255, 0, 0)
+		;add possibility to set trap off
+		ZZADDSKILLXP(Player, "Trap Disarming", ChestLevelMod)
+		Return
+	EndIf
+End Function
+
+Function SearchForTrap(Player, Chest, D)
+
+	PlayerDisarmSkill = Attribute(Player, "Trap Disarming")
+	PlayerDexMod = AbilityBonus(Attribute(Player, "Wisdom")) * 5
+	ChestLevelMod = ActorLevel(Chest) * 5
+	ChestTrap = Attribute(Chest, "Attack Bonus")
+
+	DisarmChance = PlayerDisarmSkill
+
+	DialogOutput(Player, D, "You search for traps...", 255, 255, 255)
+	;create progress bar
+	searchTime = (100 - PlayerDisarmSkill) - PlayerDexMod
+	Bar = CreateProgressBar(Player,200,200,0,.4,.8,.2,.04,searchTime,0,"Searching for Traps")
+	Repeat
+	UpdateProgressBar(Player,bar,i)
+    DoEvents(100)
+    i =  i + 1
+    If(Attribute(Player, "Health") < 0)
+        Output(Player, "You search for traps when you are dead",255, 255, 0)
+        DeleteProgressBar(Player,Bar)
+		CloseDialog(Player, D)
+        Return
+    EndIf
+	Until i = searchTime
+	DeleteProgressBar(Player,Bar)
+
+	;roll for success
+	DisarmRoll = Rand(1,100) - PlayerDexMod
+
+	;pass or fail
+	If (ChestTrap > 0)
+		If DisarmRoll <= DisarmChance
+			DialogOutput(Player, D, "You discover a trap!", 255, 255, 0)
+			SetAttribute(Chest, "Stealth Mod", 1)
+			ZZADDSKILLXP(Player, "Trap Disarming", ChestLevelMod * 7)
+			Return
+		Else
+			DialogOutput(Player, D, "You do not find any traps.", 255, 255, 255)
+			;add possibility to set trap off
+			Return
+		EndIf
+	Else
+		DialogOutput(Player, D, "You do not find any traps.", 255, 255, 255)
+		Return
+	EndIf
+End Function
+
+Function EquipmentCheck(Player)
+    Result = 1
+    
+    ;Actor Equipment
+    PlayerWeapon = ActorWeapon(Player)
+    PlayerShield = ActorShield(Player)
+    PlayerChest = ActorChest(Player)
+    PlayerHat = ActorHat(Player)
+    PlayerLegs = ActorLegs(Player)
+    PlayerHands = ActorHands(Player)
+    PlayerFeet = ActorFeet(Player)
+    PlayerBelt = ActorBelt(Player)
+
+	PlayerRace$ = Race(Player)
+
+    If PlayerShield > 0
+        Result = 0
+    EndIf
+	If (ZZITEMARMORCLASS(PlayerChest) = 3) OR (ZZITEMARMORCLASS(PlayerChest) = 2)
+		Result = 0
+	EndIf
+	If (ZZITEMARMORCLASS(PlayerHat) = 3) OR (ZZITEMARMORCLASS(PlayerHat) = 2)
+		Result = 0
+	EndIf
+	If (ZZITEMARMORCLASS(PlayerLegs) = 3) OR (ZZITEMARMORCLASS(PlayerLegs) = 2)
+		Result = 0
+	EndIf
+	If (ZZITEMARMORCLASS(PlayerHands) = 3) OR (ZZITEMARMORCLASS(PlayerHands) = 2)
+		Result = 0
+	EndIf
+	If (ZZITEMARMORCLASS(PlayerFeet) = 3) OR (ZZITEMARMORCLASS(PlayerFeet) = 2)
+		Result = 0
+	EndIf
+	If (ZZITEMARMORCLASS(PlayerBelt) = 3) OR (ZZITEMARMORCLASS(PlayerBelt) = 2)
+		Result = 0
+	EndIf
+	If (ItemWeaponType(PlayerWeapon) = 3)
+		Result = 0
+	EndIf
+	If (ItemWeaponType(PlayerWeapon) = 2) And ((PlayerRace$ = "Gnome") Or (PlayerRace$ = "Halfling"))
+		Result = 0
+	EndIf
+    Return Result
+
+End Function
+
 
 Function Examine()
 
 	Output(Actor(), "A wooden chest containing treasure!")
 	
 End Function
+
+Function AbilityBonus(SkillLevel%)
+    Select SkillLevel
+    case 3
+    return -3
+    case 4
+    return -2
+    case 5
+    return -2
+    case 6
+    return -1
+    case 7 
+    return -1
+    case 8
+    return -1
+    case 13 
+    return 1
+    case 14
+    return 1
+    case 15
+    return 1
+    case 16
+    return 2
+    case 17
+    return 2
+    case 18
+    return 3
+    Case 19
+    Return 3
+    Case 20
+    Return 4
+    Case 21
+    Return 4
+    Case 22
+    Return 4
+    Case 23
+    Return 4
+    Case 24
+    Return 4
+    Case 25
+    Return 5
+    default 
+    return 0
+    End Select
+End Function
+
