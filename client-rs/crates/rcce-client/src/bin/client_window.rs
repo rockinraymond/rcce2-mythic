@@ -163,6 +163,10 @@ struct App {
     /// Terrain height field — actors sample it to stand on the ground (their
     /// server Y is only a stale spawn height; `P_StandardUpdate` omits Y).
     height_field: Option<rcce_client::terrain::HeightField>,
+    /// Zone water planes (params + texture) + the current scroll offset — rebuilt
+    /// per frame so the surface texture scrolls (Blitz `PositionTexture`).
+    water_planes: Vec<(rcce_data::WaterPlane, rcce_data::Image)>,
+    water_scroll: [f32; 2],
     /// Solid-prop occluder spheres (world centre, radius) for camera collision —
     /// buildings/rocks/props, excluding terrain and see-through foliage. The
     /// third-person boom shortens when it would pass through one.
@@ -378,6 +382,8 @@ impl App {
             span: 100.0,
             ground_y: 0.0,
             height_field: None,
+            water_planes: Vec::new(),
+            water_scroll: [0.0, 0.0],
             cam_occluders: Vec::new(),
             fog_color: [0.45, 0.62, 0.82],
             fog_near: 1000.0,
@@ -784,6 +790,11 @@ const MENU_CHAR_Y: f32 = 2.4;
 /// The set origin is `char - SCALE * RUG` so the character stays on the rug at
 /// any scale.
 const MENU_SET_RUG: [f32; 3] = [8.0, 0.0, 8.16667];
+/// Water texture scroll rate (UV units/sec). Blitz scrolls `U += Δ·0.00025`,
+/// `V += Δ·0.0007` per frame (`Environment3D.bb:270`) where `Δ = 30/fps`, i.e.
+/// `0.0075` / `0.021` UV-units/sec — a gentle diagonal drift.
+const WATER_SCROLL_U: f32 = 0.0075;
+const WATER_SCROLL_V: f32 = 0.021;
 
 /// Reserved music id for the looping menu track (MENU-10), distinct from any
 /// zone `LoadingMusicID` so the zone-music switch on enter-world replaces it.
@@ -1471,6 +1482,7 @@ type ZoneStatic = (
     rcce_data::AreaEnv,
     Vec<([f32; 3], f32)>,
     rcce_client::terrain::HeightField,
+    Vec<(rcce_data::WaterPlane, rcce_data::Image)>,
 );
 
 /// A flat water surface as a one-quad [`B3dModel`] (GUE water tool). The quad is
@@ -1479,7 +1491,7 @@ type ZoneStatic = (
 /// (Blitz `ScaleTexture`, ClientAreas.bb:563); the per-vertex colour carries the
 /// tint RGB + opacity, so `opacity < 1` routes it through the alpha-blend pass
 /// (`mesh_is_alpha_overlay`) and the shader tints the texture by the RGB.
-fn water_quad(w: &rcce_data::WaterPlane) -> B3dModel {
+fn water_quad(w: &rcce_data::WaterPlane, scroll: [f32; 2]) -> B3dModel {
     // Blitz builds the plane with UVs 0..ScaleX (one tile/unit) then
     // `ScaleTexture(TexScale)`, which enlarges the texture → DIVIDES the tiling.
     // So the texture repeats `ScaleX / TexScale` times across the plane.
@@ -1501,7 +1513,8 @@ fn water_quad(w: &rcce_data::WaterPlane) -> B3dModel {
             texture: None,
             texture_flag: 0,
             uv_scale: [1.0, 1.0],
-            uv_offset: [0.0, 0.0],
+            // Scrolling offset (Blitz PositionTexture(U, V)) — animates the surface.
+            uv_offset: scroll,
             lightmap: None,
         }],
         ..Default::default()
@@ -1584,10 +1597,10 @@ fn load_zone_static(store: &mut AssetStore, view: &mut WorldView, gfx: &Gfx, dat
             max[k] = max[k].max(s.pos[k]);
         }
     }
-    // Water surfaces (GUE water tool) — flat textured/tinted/alpha quads, added
-    // as scenery instances so they render in the same pass. Opacity<1 blends via
-    // the vertex-colour alpha; the texture tiles per the plane's TexScale.
-    let mut n_water = 0;
+    // Water surfaces (GUE water tool): collect the plane params + texture so the
+    // render loop can rebuild them per frame with a scrolling UV offset (animated
+    // surface, Blitz PositionTexture). Not added to the static scene.
+    let mut waters: Vec<(rcce_data::WaterPlane, rcce_data::Image)> = Vec::new();
     for w in &scenery.waters {
         if w.scale_x <= 0.0 || w.scale_z <= 0.0 {
             continue;
@@ -1595,22 +1608,9 @@ fn load_zone_static(store: &mut AssetStore, view: &mut WorldView, gfx: &Gfx, dat
         let Some(img) = store.texture_path(w.tex_id).and_then(|p| rcce_data::texture::load(&p)) else {
             continue;
         };
-        // RCCE_WATERDEBUG: render the plane bright opaque cyan to confirm it's
-        // drawing and where (vs. hidden under terrain / too subtle).
-        let wq = if std::env::var_os("RCCE_WATERDEBUG").is_some() {
-            let mut dbg = *w;
-            dbg.color = [0.0, 1.0, 1.0];
-            dbg.opacity = 1.0;
-            water_quad(&dbg)
-        } else {
-            water_quad(w)
-        };
-        let idx = models.len();
-        models.push(std::rc::Rc::new(wq));
-        textures.push(vec![Some(img)]);
-        place.push((idx, w.pos, [0.0, 0.0, 0.0], [w.scale_x, 1.0, w.scale_z]));
-        n_water += 1;
+        waters.push((*w, img));
     }
+    let n_water = waters.len();
     if !scenery.waters.is_empty() {
         println!("[client-window] zone '{zone}': {} water plane(s), {n_water} drawn", scenery.waters.len());
         for w in &scenery.waters {
@@ -1743,7 +1743,7 @@ fn load_zone_static(store: &mut AssetStore, view: &mut WorldView, gfx: &Gfx, dat
         "[client-window] zone '{zone}': {} objects, {} meshes, span {span:.0}, {} cam occluders, ground {}",
         place.len(), models.len(), occluders.len(), if height_field.is_empty() { "none" } else { "ok" }
     );
-    Some((center, span, min[1], scenery.env.clone(), occluders, height_field))
+    Some((center, span, min[1], scenery.env.clone(), occluders, height_field, waters))
 }
 
 /// Result of loading a zone: camera framing + env + the decoded cloud textures
@@ -1757,20 +1757,21 @@ struct ZoneLoad {
     cloud_storm: Option<rcce_data::texture::Image>,
     occluders: Vec<([f32; 3], f32)>,
     height_field: rcce_client::terrain::HeightField,
+    waters: Vec<(rcce_data::WaterPlane, rcce_data::Image)>,
 }
 
 /// Load a zone's scenery + sky/cloud/stars (via `load_zone_static`) and decode
 /// its cloud textures. The single primitive used by both the initial load and a
 /// live area-change reload.
 fn load_zone_full(store: &mut AssetStore, view: &mut WorldView, gfx: &Gfx, data_root: &str, zone: &str) -> Option<ZoneLoad> {
-    let (center, span, ground_y, env, occluders, height_field) =
+    let (center, span, ground_y, env, occluders, height_field, waters) =
         load_zone_static(store, view, gfx, data_root, zone)?;
     let load_img = |id: u16| -> Option<rcce_data::texture::Image> {
         (id != 65535).then(|| store.texture_path(id).and_then(|p| rcce_data::texture::load(&p))).flatten()
     };
     let cloud_regular = load_img(env.cloud_tex_id);
     let cloud_storm = load_img(env.storm_cloud_tex_id);
-    Some(ZoneLoad { center, span, ground_y, env, cloud_regular, cloud_storm, occluders, height_field })
+    Some(ZoneLoad { center, span, ground_y, env, cloud_regular, cloud_storm, occluders, height_field, waters })
 }
 
 impl ApplicationHandler for App {
@@ -1803,6 +1804,7 @@ impl ApplicationHandler for App {
             self.span = z.span;
             self.ground_y = z.ground_y;
             self.height_field = Some(z.height_field);
+            self.water_planes = z.waters;
             self.cam_occluders = z.occluders;
             self.fog_color = z.env.fog_color;
             self.fog_near = z.env.fog_near;
@@ -3763,6 +3765,7 @@ impl App {
                     self.span = z.span;
                     self.ground_y = z.ground_y;
                     self.height_field = Some(z.height_field);
+                    self.water_planes = z.waters;
                     self.cam_occluders = z.occluders;
                     self.fog_color = z.env.fog_color;
                     self.fog_near = z.env.fog_near;
@@ -3983,6 +3986,34 @@ impl App {
             self.last_move = Instant::now();
         }
         self.was_moving = moving;
+
+        // Animate the zone's water surfaces: advance the scroll offset and rebuild
+        // the water quads with it (Blitz PositionTexture(U, V) on the water texture).
+        // Uses the gfx/view bound at the top of the world render path.
+        if !self.water_planes.is_empty() {
+            let dt = (elapsed - self.prev_elapsed).clamp(0.0, 0.1);
+            self.water_scroll[0] = (self.water_scroll[0] + WATER_SCROLL_U * dt).rem_euclid(1.0);
+            self.water_scroll[1] = (self.water_scroll[1] + WATER_SCROLL_V * dt).rem_euclid(1.0);
+            let scroll = self.water_scroll;
+            let models: Vec<B3dModel> = self.water_planes.iter().map(|(w, _)| water_quad(w, scroll)).collect();
+            let texs: Vec<Vec<Option<Image>>> =
+                self.water_planes.iter().map(|(_, img)| vec![Some(img.clone())]).collect();
+            let instances: Vec<SceneInstance> = self
+                .water_planes
+                .iter()
+                .enumerate()
+                .map(|(i, (w, _))| SceneInstance {
+                    model: &models[i],
+                    textures: &texs[i][..],
+                    lightmaps: &[],
+                    translation: w.pos,
+                    rot: [0.0, 0.0, 0.0],
+                    scale: [w.scale_x, 1.0, w.scale_z],
+                    color: [1.0, 1.0, 1.0],
+                })
+                .collect();
+            view.set_water(&gfx.device, &gfx.queue, &instances);
+        }
 
         // Footstep one-shots while the local player moves (faster when running).
         if let Some(idx) = self.footsteps.tick(elapsed, moving && following, self.run) {

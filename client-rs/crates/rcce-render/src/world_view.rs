@@ -51,6 +51,9 @@ pub struct WorldView {
     depth: wgpu::TextureView,
     /// Static geometry (terrain/scenery), uploaded once.
     statics: Vec<Drawable>,
+    /// Water surfaces — rebuilt per frame with a scrolling UV offset so the
+    /// surface animates (Blitz `PositionTexture(U, V)`). Drawn in the alpha pass.
+    water: Vec<Drawable>,
     /// Per-frame geometry (actors), rebuilt as they move/animate.
     dynamics: Vec<Drawable>,
     /// Cached actor texture binds (keyed by appearance) so per-frame rebuilds
@@ -112,6 +115,7 @@ impl WorldView {
             bind0,
             depth: make_depth(device, w, h),
             statics: Vec::new(),
+            water: Vec::new(),
             dynamics: Vec::new(),
             tex_cache: TexCache::new(),
             idx_cache: IndexCache::new(),
@@ -201,8 +205,14 @@ impl WorldView {
         );
     }
 
+    /// Replace the water surfaces (rebuilt per frame so their scrolling UV offset
+    /// animates). No ground plane (`f32::NAN`).
+    pub fn set_water(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, instances: &[SceneInstance]) {
+        self.water = gpu::build_drawables(device, queue, &self.pipeline, instances, f32::NAN);
+    }
+
     pub fn drawable_count(&self) -> usize {
-        self.statics.len() + self.dynamics.len() + self.skinned.len()
+        self.statics.len() + self.water.len() + self.dynamics.len() + self.skinned.len()
     }
 
     pub fn resize(&mut self, device: &wgpu::Device, w: u32, h: u32) {
@@ -317,6 +327,13 @@ impl WorldView {
                 if !d.alpha {
                     continue;
                 }
+                rp.set_bind_group(1, &d.tex_bind, &[]);
+                rp.set_vertex_buffer(0, d.vbuf.slice(..));
+                rp.set_index_buffer(d.ibuf.slice(..), wgpu::IndexFormat::Uint32);
+                rp.draw_indexed(0..d.n_idx, 0, 0..1);
+            }
+            // 4) Water surfaces (alpha-blended, scrolling), over terrain + splats.
+            for d in &self.water {
                 rp.set_bind_group(1, &d.tex_bind, &[]);
                 rp.set_vertex_buffer(0, d.vbuf.slice(..));
                 rp.set_index_buffer(d.ibuf.slice(..), wgpu::IndexFormat::Uint32);
