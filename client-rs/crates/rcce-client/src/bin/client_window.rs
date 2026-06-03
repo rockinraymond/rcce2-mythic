@@ -761,10 +761,33 @@ fn initial_menu_mode(eula_present: bool) -> Mode {
 const CAM_DIST_MIN: f32 = 5.0;
 const CAM_DIST_MAX: f32 = 50.0;
 const CAM_DIST_DEFAULT: f32 = 13.0;
-/// Fixed menu-camera orbit angle (radians) framing the character against the
-/// `Set.b3d` backdrop. Chosen so the camera looks into the set rather than out
-/// its open back. Override at runtime with `RCCE_MENUANG` for tuning.
-const MENU_CAM_ANGLE: f32 = 0.0;
+/// Menu-camera framing the character against the `Set.b3d` backdrop, matching
+/// Blitz (MainMenu.bb:2023). `ANGLE` (radians) ≈ π looks +Z *into* the furnished
+/// room rather than out at the banner wall; `DIST` is the pull-back; `EYE_H` /
+/// `TGT_H` are the eye and look-at heights above the character's base; `LAT` is
+/// the world-X strafe that pushes the character screen-right (window on the
+/// left). Each is overridable at runtime via the matching `RCCE_MENU*` var.
+const MENU_CAM_ANGLE: f32 = std::f32::consts::PI;
+const MENU_CAM_DIST: f32 = 5.0;
+const MENU_CAM_EYE_H: f32 = 1.0;
+const MENU_CAM_TGT_H: f32 = 0.9;
+const MENU_CAM_LAT: f32 = -2.5;
+/// Menu `Set.b3d` scale + floor height. Blitz uses `ScaleEntity 30`, but the RCCE
+/// Rust pipeline runs at a much smaller world scale (actor render scale ~0.05),
+/// so the literal 30 over-scales the set ~20× relative to the character. Tuned
+/// empirically so the rug/furniture are proportional to the character. The set
+/// origin is derived from this scale to keep the character on the rug (see the
+/// menu-set load). Override at runtime with `RCCE_SETSCALE` / `RCCE_SETY`.
+const MENU_SET_SCALE: f32 = 1.0;
+const MENU_SET_Y: f32 = 0.0;
+/// Character anchor Y in the menu — lifts the center-anchored body so its feet
+/// rest on the rug (≈ half the character's world height). `RCCE_CHARY` overrides.
+const MENU_CHAR_Y: f32 = 0.6;
+/// Set-model coordinates of the rug spot the character stands on, derived from
+/// the Blitz scale-30 placement (`(char(30,_,100) - origin(-210,_,-145)) / 30`).
+/// The set origin is `char - SCALE * RUG` so the character stays on the rug at
+/// any scale.
+const MENU_SET_RUG: [f32; 3] = [8.0, 0.0, 8.16667];
 /// Camera follow-smoothing rate (Blitz `CurveValue(..., 6.0)` on the camera
 /// focus). The local player position only advances on discrete server echoes
 /// (`P_StandardUpdate` ~9 Hz, no client-side prediction), so a hard follow looks
@@ -3020,11 +3043,18 @@ impl App {
         };
         let (sw, sh) = (w as f32, h.max(1) as f32);
 
-        // Dedicated 3D menu scene (MENU-SCENE): the selected character posed at
-        // a fixed gallery anchor against a dark-blue void — NOT a spectator
-        // orbit of the gameplay zone. Mirrors MainMenu.bb: char at world
-        // (30, ground, 100) playing Idle, camera circling the torso.
-        let char_anchor = [30.0f32, 0.0, 100.0];
+        // Live-tunable menu params (set scale/height + camera framing). Baked
+        // defaults in the MENU_* consts; RCCE_* envs override for visual tuning.
+        let envf = |k: &str, d: f32| {
+            std::env::var(k).ok().and_then(|s| s.parse::<f32>().ok()).unwrap_or(d)
+        };
+
+        // Dedicated 3D menu scene (MENU-SCENE): the selected character posed in
+        // the Set.b3d diorama playing Idle, framed by the menu camera. Mirrors
+        // MainMenu.bb (char at world (30, _, 100)). The Y lifts the center-anchored
+        // body so its feet sit on the rug (no terrain height field in the menu, so
+        // build_actors centers it at Y=0 — RCCE_CHARY / MENU_CHAR_Y compensates).
+        let char_anchor = [30.0f32, envf("RCCE_CHARY", MENU_CHAR_Y), 100.0];
         if let (Some(gfx), Some(view), Some(store)) =
             (self.gfx.as_ref(), self.view.as_mut(), self.store.as_mut())
         {
@@ -3043,16 +3073,25 @@ impl App {
                 // Falls back to the bare void if the asset is missing/unparseable.
                 match store.mesh_by_path("Character Set/Set.b3d") {
                     Some((model, textures)) => {
+                        // Origin derived from the scale so the character stays on
+                        // the rug (model-space MENU_SET_RUG) at any scale:
+                        // origin = char_anchor - scale * RUG.
+                        let s = envf("RCCE_SETSCALE", MENU_SET_SCALE);
+                        let oy = envf("RCCE_SETY", MENU_SET_Y);
                         let inst = SceneInstance {
                             model: &model,
                             textures: &textures[..],
-                            translation: [-210.0, 0.0, -145.0],
+                            translation: [
+                                char_anchor[0] - s * MENU_SET_RUG[0],
+                                oy,
+                                char_anchor[2] - s * MENU_SET_RUG[2],
+                            ],
                             rot: [0.0, 0.0, 0.0],
-                            scale: [30.0, 30.0, 30.0],
+                            scale: [s, s, s],
                             color: [1.0, 1.0, 1.0],
                         };
                         view.set_scene(&gfx.device, &gfx.queue, std::slice::from_ref(&inst), 0.0);
-                        println!("[client-window] menu set: {} meshes", model.meshes.len());
+                        println!("[client-window] menu set: {} meshes, scale {s}", model.meshes.len());
                     }
                     None => {
                         view.set_scene(&gfx.device, &gfx.queue, &[], 0.0);
@@ -3116,19 +3155,21 @@ impl App {
             }
         }
 
-        // Camera: frames the character against the menu set. Blitz uses a fixed
-        // gallery angle (PointEntity GPP + MoveEntity offset), not a full orbit —
-        // a 360° spin swings past the open back of the set. Pin to a front-facing
-        // angle. RCCE_MENUANG (radians) overrides it for tuning.
-        let ang = std::env::var("RCCE_MENUANG")
-            .ok()
-            .and_then(|s| s.parse::<f32>().ok())
-            .unwrap_or(MENU_CAM_ANGLE);
-        let dist = 13.0;
-        let target = [char_anchor[0], char_anchor[1] + 3.5, char_anchor[2]];
+        // Camera framing the character against the menu set, matching Blitz
+        // (MainMenu.bb:2023): the camera sits behind a pivot at the character's
+        // chest, looks +Z *into* the furnished room (table / rug / column), and
+        // strafes sideways so the character sits screen-right with the window on
+        // the left. ang≈π looks into the room (not at the banner wall behind).
+        // All five params are env-overridable (RCCE_MENU*) for live tuning.
+        let ang = envf("RCCE_MENUANG", MENU_CAM_ANGLE);
+        let dist = envf("RCCE_MENUDIST", MENU_CAM_DIST);
+        let eye_h = envf("RCCE_MENUEYEH", MENU_CAM_EYE_H);
+        let tgt_h = envf("RCCE_MENUTGTH", MENU_CAM_TGT_H);
+        let lat = envf("RCCE_MENULAT", MENU_CAM_LAT);
+        let target = [char_anchor[0] + lat, char_anchor[1] + tgt_h, char_anchor[2]];
         let eye = [
-            char_anchor[0] + dist * ang.sin(),
-            char_anchor[1] + 4.5,
+            char_anchor[0] + lat + dist * ang.sin(),
+            char_anchor[1] + eye_h,
             char_anchor[2] + dist * ang.cos(),
         ];
         let vp = rcce_render::view_proj(eye, target, sw / sh);
