@@ -768,10 +768,10 @@ const CAM_DIST_DEFAULT: f32 = 13.0;
 /// the world-X strafe that pushes the character screen-right (window on the
 /// left). Each is overridable at runtime via the matching `RCCE_MENU*` var.
 const MENU_CAM_ANGLE: f32 = std::f32::consts::PI;
-const MENU_CAM_DIST: f32 = 5.0;
-const MENU_CAM_EYE_H: f32 = 1.0;
+const MENU_CAM_DIST: f32 = 6.0;
+const MENU_CAM_EYE_H: f32 = 1.2;
 const MENU_CAM_TGT_H: f32 = 0.9;
-const MENU_CAM_LAT: f32 = -2.5;
+const MENU_CAM_LAT: f32 = -2.0;
 /// Menu `Set.b3d` scale + floor height. Blitz uses `ScaleEntity 30`, but the RCCE
 /// Rust pipeline runs at a much smaller world scale (actor render scale ~0.05),
 /// so the literal 30 over-scales the set ~20× relative to the character. Tuned
@@ -3173,15 +3173,25 @@ impl App {
             char_anchor[2] + dist * ang.cos(),
         ];
         let vp = rcce_render::view_proj(eye, target, sw / sh);
-        // Dark-blue fog (Blitz CameraFogColor 0,51,102 = (0,0.2,0.4),
-        // CameraFogRange 300,5200) so the near set + character are crisp and only
-        // the far set walls haze toward the blue clear.
-        let fog = [0.0f32, 0.2, 0.4];
-        let clear = wgpu::Color { r: 0.0, g: 0.2, b: 0.4, a: 1.0 };
-        let menu_fog_near = 300.0f32;
-        let menu_fog_far = 5200.0f32;
-        let menu_ambient = [0.9f32, 0.9, 0.9];
-        let menu_light = [0.3f32, -1.0, 0.4];
+        // Interior lighting. The flat 0.9 white ambient washed the room out; the
+        // Set.b3d's real richness is a baked lightmap (cset_lightmap.png, the
+        // brushes' 2nd texture slot) that the renderer doesn't yet sample — that
+        // is a separate multitexture feature (see DELTA). Until then, approximate
+        // depth with a lower, slightly warm ambient plus a frontal key light so
+        // the character and walls aren't flat. Dark near-neutral background
+        // (interior — no blue sky) so the void past the floor edge doesn't read as
+        // a teal triangle; minimal fog since the room is small. All env-tunable.
+        let bg = envf("RCCE_MENUBG", 0.05);
+        let amb = envf("RCCE_MENUAMB", 0.62);
+        let lx = envf("RCCE_MENULX", 0.25);
+        let ly = envf("RCCE_MENULY", -0.5);
+        let lz = envf("RCCE_MENULZ", 1.0);
+        let fog = [bg, bg * 0.92, bg * 0.85];
+        let clear = wgpu::Color { r: bg as f64, g: (bg * 0.92) as f64, b: (bg * 0.85) as f64, a: 1.0 };
+        let menu_fog_near = 200.0f32;
+        let menu_fog_far = 40000.0f32;
+        let menu_ambient = [amb, amb * 0.95, amb * 0.85];
+        let menu_light = [lx, ly, lz];
 
         // Build the overlay command list first (a `&mut self` call, so no other
         // borrow of `self` may be live), then render world + overlay together.
@@ -3431,10 +3441,13 @@ impl App {
         let sub = "RealmCrafter Community Edition";
         overlay.text_shadow(sw * 0.5 - sub.len() as f32 * 9.0 * 1.3 * 0.5, sh * 0.12 + 9.0 * ts + 6.0, 1.3, sub, [0.8, 0.85, 0.95, 0.9]);
 
-        let pw = (sw * 0.46).clamp(420.0, 760.0);
-        let ph = sh * 0.42;
-        let px = (sw - pw) * 0.5;
-        let py = sh * 0.34;
+        // Char-select roster panel: flush-left and tall, mirroring the Blitz
+        // layout (the 3D character fills the open right area). Only CharSelect
+        // reaches here — the other modes draw + return above.
+        let pw = (sw * 0.30).clamp(300.0, 520.0);
+        let ph = sh * 0.66;
+        let px = sw * 0.025;
+        let py = sh * 0.17;
         overlay.rect(px, py, pw, ph, [0.05, 0.06, 0.10, 0.86]);
         overlay.rect(px, py, pw, 2.5, [0.45, 0.5, 0.65, 0.95]);
         overlay.rect(px, py + ph - 2.5, pw, 2.5, [0.45, 0.5, 0.65, 0.95]);
