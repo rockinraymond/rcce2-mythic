@@ -273,6 +273,9 @@ pub struct B3dMesh {
     pub positions: Vec<[f32; 3]>,
     pub normals: Vec<[f32; 3]>,
     pub uvs: Vec<[f32; 2]>,
+    /// Second texture-coordinate set (`VRTS` tex_coord_set 1), used by the
+    /// lightmap. Empty when the mesh has only one UV set. Aligns to `positions`.
+    pub uvs2: Vec<[f32; 2]>,
     /// Per-vertex RGBA colors (`VRTS` flags&2). Empty when absent. Terrain splat
     /// layers blend by the **alpha** channel; props rarely carry these.
     pub colors: Vec<[f32; 4]>,
@@ -294,6 +297,10 @@ pub struct B3dMesh {
     pub uv_scale: [f32; 2],
     /// Texcoord offset `(u,v)` from the resolved texture's `TEXS` transform.
     pub uv_offset: [f32; 2],
+    /// Lightmap texture filename (the brush's **second** non-empty texture slot),
+    /// a baked light bake the renderer multiplies onto the base colour. `None`
+    /// when the mesh isn't lightmapped (the common case).
+    pub lightmap: Option<String>,
 }
 
 /// A parsed `.b3d` model: all meshes, flattened (node translation applied).
@@ -537,8 +544,9 @@ impl B3dModel {
             let Some(brush) = self.brushes.get(mesh.brush_id as usize) else {
                 continue;
             };
-            // First non-empty texture slot.
-            if let Some(&tex_id) = brush.iter().find(|&&t| t >= 0) {
+            // Non-empty texture slots in order: slot 0 = base, slot 1 = lightmap.
+            let mut slots = brush.iter().copied().filter(|&t| t >= 0);
+            if let Some(tex_id) = slots.next() {
                 if let Some(name) = self.textures.get(tex_id as usize) {
                     mesh.texture = Some(name.clone());
                 }
@@ -547,6 +555,12 @@ impl B3dModel {
                 // tile it like the engine's `ScaleTexture` (terrain crispness).
                 mesh.uv_scale = self.tex_scales.get(tex_id as usize).copied().unwrap_or([1.0, 1.0]);
                 mesh.uv_offset = self.tex_offsets.get(tex_id as usize).copied().unwrap_or([0.0, 0.0]);
+            }
+            // Second non-empty slot is the baked lightmap (sampled with uvs2).
+            if let Some(lm_id) = slots.next() {
+                if let Some(name) = self.textures.get(lm_id as usize) {
+                    mesh.lightmap = Some(name.clone());
+                }
             }
         }
     }
@@ -752,6 +766,7 @@ fn parse_mesh(r: &mut BlitzReader, end: usize, world: &Mat4) -> Result<Vec<B3dMe
     let mut positions = Vec::new();
     let mut normals = Vec::new();
     let mut uvs = Vec::new();
+    let mut uvs2 = Vec::new();
     let mut colors = Vec::new();
     let mut groups: Vec<(i32, Vec<u32>)> = Vec::new();
 
@@ -759,7 +774,7 @@ fn parse_mesh(r: &mut BlitzReader, end: usize, world: &Mat4) -> Result<Vec<B3dMe
         let (tag, size) = chunk_header(r)?;
         let chunk_end = (r.position() + size).min(end);
         match &tag {
-            b"VRTS" => parse_vrts(r, chunk_end, world, &mut positions, &mut normals, &mut uvs, &mut colors)?,
+            b"VRTS" => parse_vrts(r, chunk_end, world, &mut positions, &mut normals, &mut uvs, &mut uvs2, &mut colors)?,
             b"TRIS" => {
                 let brush = r.read_int()?;
                 let mut indices = Vec::new();
@@ -786,6 +801,7 @@ fn parse_mesh(r: &mut BlitzReader, end: usize, world: &Mat4) -> Result<Vec<B3dMe
             positions: positions.clone(),
             normals: normals.clone(),
             uvs: uvs.clone(),
+            uvs2: uvs2.clone(),
             colors: colors.clone(),
             indices,
             brush_id,
@@ -793,6 +809,7 @@ fn parse_mesh(r: &mut BlitzReader, end: usize, world: &Mat4) -> Result<Vec<B3dMe
             texture_flag: 0,
             uv_scale: [1.0, 1.0],
             uv_offset: [0.0, 0.0],
+            lightmap: None,
         });
     }
     Ok(out)
@@ -807,6 +824,7 @@ fn parse_vrts(
     positions: &mut Vec<[f32; 3]>,
     normals: &mut Vec<[f32; 3]>,
     uvs: &mut Vec<[f32; 2]>,
+    uvs2: &mut Vec<[f32; 2]>,
     colors: &mut Vec<[f32; 4]>,
 ) -> Result<(), ReadError> {
     let flags = r.read_int()?;
@@ -830,17 +848,26 @@ fn parse_vrts(
         if has_color {
             colors.push([r.read_float()?, r.read_float()?, r.read_float()?, r.read_float()?]);
         }
+        // Keep set 0 (base UV) and set 1 (lightmap UV); ignore any further sets.
         let mut uv = [0.0f32; 2];
+        let mut uv2 = [0.0f32; 2];
         for set in 0..tex_coord_sets {
             for comp in 0..tex_coord_set_size {
                 let v = r.read_float()?;
-                if set == 0 && comp < 2 {
-                    uv[comp] = v;
+                if comp < 2 {
+                    if set == 0 {
+                        uv[comp] = v;
+                    } else if set == 1 {
+                        uv2[comp] = v;
+                    }
                 }
             }
         }
         if tex_coord_sets > 0 {
             uvs.push(uv);
+        }
+        if tex_coord_sets > 1 {
+            uvs2.push(uv2);
         }
     }
     Ok(())

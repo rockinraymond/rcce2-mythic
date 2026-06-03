@@ -1569,6 +1569,7 @@ fn load_zone_static(store: &mut AssetStore, view: &mut WorldView, gfx: &Gfx, dat
         .map(|&(idx, pos, rot, scale)| SceneInstance {
             model: &models[idx],
             textures: &textures[idx],
+            lightmaps: &[],
             translation: pos,
             rot,
             scale,
@@ -3072,7 +3073,7 @@ impl App {
                 // set is positioned +35 in Y too to keep the char on its floor.
                 // Falls back to the bare void if the asset is missing/unparseable.
                 match store.mesh_by_path("Character Set/Set.b3d") {
-                    Some((model, textures)) => {
+                    Some((model, textures, lightmaps)) => {
                         // Origin derived from the scale so the character stays on
                         // the rug (model-space MENU_SET_RUG) at any scale:
                         // origin = char_anchor - scale * RUG.
@@ -3081,6 +3082,7 @@ impl App {
                         let inst = SceneInstance {
                             model: &model,
                             textures: &textures[..],
+                            lightmaps: &lightmaps[..],
                             translation: [
                                 char_anchor[0] - s * MENU_SET_RUG[0],
                                 oy,
@@ -3091,7 +3093,8 @@ impl App {
                             color: [1.0, 1.0, 1.0],
                         };
                         view.set_scene(&gfx.device, &gfx.queue, std::slice::from_ref(&inst), 0.0);
-                        println!("[client-window] menu set: {} meshes, scale {s}", model.meshes.len());
+                        let n_lm = lightmaps.iter().filter(|l| l.is_some()).count();
+                        println!("[client-window] menu set: {} meshes, scale {s}, {n_lm} lightmapped", model.meshes.len());
                     }
                     None => {
                         view.set_scene(&gfx.device, &gfx.queue, &[], 0.0);
@@ -3126,6 +3129,7 @@ impl App {
                     .map(|&(idx, t, r, color, s)| SceneInstance {
                         model: &models[idx],
                         textures: &textures[idx][..],
+                        lightmaps: &[],
                         translation: t,
                         rot: r,
                         scale: s,
@@ -3819,6 +3823,7 @@ impl App {
                     .map(|&(idx, t, r, color, s)| SceneInstance {
                         model: &models[idx],
                         textures: &textures[idx][..],
+                        lightmaps: &[],
                         translation: t,
                         rot: r,
                         scale: s,

@@ -153,6 +153,7 @@ fn main() {
         .map(|&(idx, t, r, s)| rcce_render::SceneInstance {
             model: &models[idx],
             textures: &textures[idx],
+            lightmaps: &[],
             translation: t,
             rot: r,
             scale: s,

@@ -662,7 +662,10 @@ impl AssetStore {
     /// not in the numeric `Meshes.dat` catalog `mesh_model` indexes. Returns
     /// `None` if the file is missing or unparseable so the caller can fall back
     /// to the bare void.
-    pub fn mesh_by_path(&self, rel: &str) -> Option<(Rc<B3dModel>, Vec<Option<Image>>)> {
+    pub fn mesh_by_path(
+        &self,
+        rel: &str,
+    ) -> Option<(Rc<B3dModel>, Vec<Option<Image>>, Vec<Option<Image>>)> {
         let rel = rel.replace('\\', "/");
         let path = self.data_root.join("Meshes").join(&rel);
         let bytes = std::fs::read(&path).ok()?;
@@ -685,7 +688,19 @@ impl AssetStore {
                     .and_then(|p| texture::load_with_flags(&p, m.texture_flag))
             })
             .collect();
-        Some((model, textures))
+        // Baked lightmaps (the brushes' 2nd texture slot), if any. Loaded plain
+        // (no texture_flag — lightmaps aren't masked) and never color-keyed.
+        let lightmaps: Vec<Option<Image>> = model
+            .meshes
+            .iter()
+            .map(|m| {
+                m.lightmap
+                    .as_ref()
+                    .and_then(|name| texture::find_texture(&roots, name))
+                    .and_then(|p| texture::load(&p))
+            })
+            .collect();
+        Some((model, textures, lightmaps))
     }
 }
 

@@ -29,6 +29,10 @@ pub struct Vertex {
     pub pos: [f32; 3],
     pub normal: [f32; 3],
     pub uv: [f32; 2],
+    /// Second UV set, for the lightmap sample. `[0,0]` when the mesh has no
+    /// lightmap (the bound lightmap is then a 1×1 grey no-op, so the value is
+    /// irrelevant).
+    pub uv2: [f32; 2],
     /// RGBA vertex color. RGB modulates the texture (terrain splat tinting);
     /// **alpha is the splat blend weight** for the alpha pass (1.0 = opaque).
     pub color: [f32; 4],
@@ -94,20 +98,26 @@ struct U {
 @group(0) @binding(0) var<uniform> u: U;
 @group(1) @binding(0) var tex: texture_2d<f32>;
 @group(1) @binding(1) var samp: sampler;
+// Baked lightmap (the brush's 2nd texture slot), sampled with the 2nd UV set.
+// Meshes with no lightmap bind a 1×1 grey 0.5 default, so `lm * 2.0` = 1.0 and
+// they're unaffected; real lightmaps apply Blitz-style multiply2x.
+@group(1) @binding(2) var lmtex: texture_2d<f32>;
 struct VsOut {
     @builtin(position) clip: vec4<f32>,
     @location(0) normal: vec3<f32>,
     @location(1) uv: vec2<f32>,
     @location(2) color: vec4<f32>,
     @location(3) world: vec3<f32>,
+    @location(4) uv2: vec2<f32>,
 };
-@vertex fn vs(@location(0) pos: vec3<f32>, @location(1) normal: vec3<f32>, @location(2) uv: vec2<f32>, @location(3) color: vec4<f32>) -> VsOut {
+@vertex fn vs(@location(0) pos: vec3<f32>, @location(1) normal: vec3<f32>, @location(2) uv: vec2<f32>, @location(3) uv2: vec2<f32>, @location(4) color: vec4<f32>) -> VsOut {
     var o: VsOut;
     o.clip = u.mvp * vec4<f32>(pos, 1.0);
     o.normal = normal;
     o.uv = uv;
     o.color = color;
     o.world = pos;
+    o.uv2 = uv2;
     return o;
 }
 @fragment fn fs(in: VsOut) -> @location(0) vec4<f32> {
@@ -119,7 +129,9 @@ struct VsOut {
     // ambient is the floor; its directional light adds on top.
     let diff = abs(dot(N, L)) * u.light_intensity;
     let shade = u.ambient + vec3<f32>(diff);
-    let lit = c.rgb * in.color.rgb * shade;
+    // Baked lightmap (1.0 for non-lightmapped meshes via the grey default).
+    let lm = textureSample(lmtex, samp, in.uv2).rgb * 2.0;
+    let lit = c.rgb * in.color.rgb * shade * lm;
     // Distance fog toward the sky/fog colour.
     let dist = distance(in.world, u.eye);
     let f = clamp((dist - u.fog_near) / max(u.fog_far - u.fog_near, 1.0), 0.0, 1.0);
@@ -585,6 +597,18 @@ impl Pipeline {
                     ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
                     count: None,
                 },
+                // Lightmap texture (binding 2) — sampled with `samp`. A 1×1 grey
+                // default for non-lightmapped meshes.
+                wgpu::BindGroupLayoutEntry {
+                    binding: 2,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Texture {
+                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                        view_dimension: wgpu::TextureViewDimension::D2,
+                        multisampled: false,
+                    },
+                    count: None,
+                },
             ],
         });
         // Trilinear + anisotropic filtering (the real client runs aniso x4).
@@ -619,7 +643,7 @@ impl Pipeline {
                 buffers: &[wgpu::VertexBufferLayout {
                     array_stride: std::mem::size_of::<Vertex>() as u64,
                     step_mode: wgpu::VertexStepMode::Vertex,
-                    attributes: &wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32x3, 2 => Float32x2, 3 => Float32x4],
+                    attributes: &wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32x3, 2 => Float32x2, 3 => Float32x2, 4 => Float32x4],
                 }],
             },
             fragment: Some(wgpu::FragmentState {
@@ -652,7 +676,7 @@ impl Pipeline {
                 buffers: &[wgpu::VertexBufferLayout {
                     array_stride: std::mem::size_of::<Vertex>() as u64,
                     step_mode: wgpu::VertexStepMode::Vertex,
-                    attributes: &wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32x3, 2 => Float32x2, 3 => Float32x4],
+                    attributes: &wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32x3, 2 => Float32x2, 3 => Float32x2, 4 => Float32x4],
                 }],
             },
             fragment: Some(wgpu::FragmentState {
@@ -686,16 +710,18 @@ impl Pipeline {
         }
     }
 
-    /// Upload an `Image` (or a 1x1 white fallback) as a texture bind group.
-    pub fn texture_bind(
-        &self,
+    /// Upload an `Image` (or a 1×1 fallback of `default_rgba`) as a mipped
+    /// RGBA8 texture and return its view. The texture is kept alive by the view
+    /// (wgpu views retain their texture), so it survives into the bind group.
+    fn upload_tex(
         device: &wgpu::Device,
         queue: &wgpu::Queue,
         img: Option<&Image>,
-    ) -> wgpu::BindGroup {
+        default_rgba: [u8; 4],
+    ) -> wgpu::TextureView {
         let (w, h, data): (u32, u32, Vec<u8>) = match img {
             Some(i) if i.width > 0 && i.height > 0 => (i.width, i.height, i.rgba.clone()),
-            _ => (1, 1, vec![255, 255, 255, 255]),
+            _ => (1, 1, default_rgba.to_vec()),
         };
         // Build a full RGBA8 mip chain (level 0 = source) so the trilinear +
         // anisotropic sampler has something to sample — without mips, distant
@@ -729,13 +755,39 @@ impl Pipeline {
             );
         }
         // Default view spans all mip levels.
-        let view = tex.create_view(&Default::default());
+        tex.create_view(&Default::default())
+    }
+
+    /// Upload an `Image` (or a 1×1 white fallback) as a texture bind group, with
+    /// no lightmap (the common case — non-lightmapped meshes get a grey default).
+    pub fn texture_bind(
+        &self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        img: Option<&Image>,
+    ) -> wgpu::BindGroup {
+        self.texture_bind_lm(device, queue, img, None)
+    }
+
+    /// As [`texture_bind`](Self::texture_bind), plus an optional baked lightmap
+    /// (the brush's 2nd texture slot). Absent → a 1×1 grey 0.5 so the shader's
+    /// `lm * 2.0` resolves to 1.0 (no effect).
+    pub fn texture_bind_lm(
+        &self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        img: Option<&Image>,
+        lightmap: Option<&Image>,
+    ) -> wgpu::BindGroup {
+        let view = Self::upload_tex(device, queue, img, [255, 255, 255, 255]);
+        let lm_view = Self::upload_tex(device, queue, lightmap, [128, 128, 128, 255]);
         device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: None,
             layout: &self.bgl_texture,
             entries: &[
                 wgpu::BindGroupEntry { binding: 0, resource: wgpu::BindingResource::TextureView(&view) },
                 wgpu::BindGroupEntry { binding: 1, resource: wgpu::BindingResource::Sampler(&self.sampler) },
+                wgpu::BindGroupEntry { binding: 2, resource: wgpu::BindingResource::TextureView(&lm_view) },
             ],
         })
     }
@@ -1030,6 +1082,7 @@ fn bake_mesh(
 fn bake_verts(device: &wgpu::Device, nrot: Mat3, scale: Vec3, trans: Vec3, color: [f32; 3], mesh: &B3dMesh) -> wgpu::Buffer {
     let normals = mesh_normals(mesh);
     let has_uv = mesh.uvs.len() == mesh.positions.len();
+    let has_uv2 = mesh.uvs2.len() == mesh.positions.len();
     // Texcoord transform from the texture's TEXS scale/offset (engine
     // `ScaleTexture`): u' = u*sx + tx. Terrain textures tile via this — without
     // it the 0..1 UVs stretch one texture across the whole ground (the smear).
@@ -1050,6 +1103,8 @@ fn bake_verts(device: &wgpu::Device, nrot: Mat3, scale: Vec3, trans: Vec3, color
             } else {
                 [0.0, 0.0]
             };
+            // Lightmap UV (raw — no TEXS transform; the lightmap owns the 2nd set).
+            let uv2 = if has_uv2 { mesh.uvs2[i] } else { [0.0, 0.0] };
             let col = if has_color {
                 let c = mesh.colors[i];
                 [color[0] * c[0], color[1] * c[1], color[2] * c[2], c[3]]
@@ -1060,6 +1115,7 @@ fn bake_verts(device: &wgpu::Device, nrot: Mat3, scale: Vec3, trans: Vec3, color
                 pos: world.into(),
                 normal: (nrot * normals[i]).into(),
                 uv,
+                uv2,
                 color: col,
             }
         })
@@ -1148,7 +1204,7 @@ pub fn build_drawables(
         let (gz0, gz1) = (min.z - pad, max.z + pad);
         let gcol = [0.13, 0.18, 0.14, 1.0];
         let n = [0.0, 1.0, 0.0];
-        let v = |x: f32, z: f32| Vertex { pos: [x, ground_y, z], normal: n, uv: [0.0, 0.0], color: gcol };
+        let v = |x: f32, z: f32| Vertex { pos: [x, ground_y, z], normal: n, uv: [0.0, 0.0], uv2: [0.0, 0.0], color: gcol };
         let verts = [v(gx0, gz0), v(gx1, gz0), v(gx1, gz1), v(gx0, gz1)];
         let idx: [u32; 6] = [0, 1, 2, 0, 2, 3];
         let vbuf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
@@ -1195,11 +1251,12 @@ fn build_instance_drawables(
             }
             let (vbuf, ibuf, n_idx) = bake_mesh(device, nrot, scale, trans, inst.color, mesh);
             let tex = inst.textures.get(mi).and_then(|t| t.as_ref());
+            let lm = inst.lightmaps.get(mi).and_then(|t| t.as_ref());
             drawables.push(Drawable {
                 vbuf,
                 ibuf,
                 n_idx,
-                tex_bind: Rc::new(pipeline.texture_bind(device, queue, tex)),
+                tex_bind: Rc::new(pipeline.texture_bind_lm(device, queue, tex, lm)),
                 alpha: mesh_is_alpha_overlay(mesh),
             });
         }

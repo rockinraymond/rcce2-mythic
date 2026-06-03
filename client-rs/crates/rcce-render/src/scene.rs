@@ -17,6 +17,10 @@ use crate::gpu::{self, Pipeline, Uniforms};
 pub struct SceneInstance<'a> {
     pub model: &'a B3dModel,
     pub textures: &'a [Option<Image>],
+    /// Per-mesh baked lightmaps (aligns to `model.meshes`), multiplied onto the
+    /// base texture. Pass `&[]` for non-lightmapped instances (actors, most
+    /// scenery) — each mesh then gets a grey no-op default.
+    pub lightmaps: &'a [Option<Image>],
     pub translation: [f32; 3],
     /// Pitch, yaw, roll in radians (X, Y, Z). Actors use `[0, yaw, 0]`;
     /// scenery carries all three from the area file.

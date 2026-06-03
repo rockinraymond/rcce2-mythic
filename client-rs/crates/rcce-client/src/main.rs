@@ -260,6 +260,7 @@ fn main() {
         .map(|&(idx, pos, rot, color, scale)| rcce_render::SceneInstance {
             model: &models[idx],
             textures: &textures[idx],
+            lightmaps: &[],
             translation: pos,
             rot,
             scale,
