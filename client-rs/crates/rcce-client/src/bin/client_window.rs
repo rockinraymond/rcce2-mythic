@@ -3866,11 +3866,22 @@ impl App {
             // MOVE-SMOOTH (Blitz UpdateActorInstances parity): dead-reckon actors
             // toward their destination at the real move speed + gently reconcile
             // to the server echo, instead of teleporting between ~9 Hz updates.
-            // Remote actors (server-estimated velocity) + facing:
-            net.world.tick_remote_movement(proj_dt);
-            // Local player: extrapolate in the input direction at the server's
-            // estimated speed (instant response), reconciling to the server echo.
-            net.world.predict_me(proj_dt, dir, moving);
+            // Time-based render interpolation for every actor + the local player
+            // (MOVE-SMOOTH): the body renders at `now - RENDER_DELAY` interpolated
+            // across the buffered server positions — smooth regardless of frame or
+            // echo-cadence jitter, no velocity guessing.
+            let rz_before = net.world.me_render_z;
+            net.world.tick_movement(elapsed, proj_dt);
+            // RCCE_MOVEDIAG: per-frame trace — me_z (server), me_render_z, the
+            // frame's render delta, and the sample count. A smooth render shows a
+            // steady delta proportional to dt.
+            if std::env::var_os("RCCE_MOVEDIAG").is_some() && moving {
+                let w = &net.world;
+                println!(
+                    "[movediag] f{} dt={:.4} me_z={:.2} rz={:.2} d_rz={:+.3} samples={}",
+                    self.frames, proj_dt, w.me_z, w.me_render_z, w.me_render_z - rz_before, w.me_samples.len()
+                );
+            }
             // Remote jump-anim timers (ANIM-7) + the local jump arc (MOVE-7).
             net.world.tick_jumps(proj_dt);
             // Remote attack-swing timers (CBT-3).
@@ -5916,11 +5927,11 @@ impl App {
             let (rx, rz, spd) = self
                 .net
                 .as_ref()
-                .map(|n| (n.world.me_render_x, n.world.me_render_z, (n.world.me_vx * n.world.me_vx + n.world.me_vz * n.world.me_vz).sqrt()))
+                .map(|n| (n.world.me_render_x, n.world.me_render_z, n.world.me_samples.len() as f32))
                 .unwrap_or((0.0, 0.0, 0.0));
             let draws = self.view.as_ref().map(|v| v.drawable_count()).unwrap_or(0);
             println!(
-                "[client-window] frame {} (~{fps:.0} fps), {actors} actor(s), {draws} drawables, {ups} packets, me=({:.1},{:.1},{:.1}) render=({:.1},{:.1}) spd={spd:.1}",
+                "[client-window] frame {} (~{fps:.0} fps), {actors} actor(s), {draws} drawables, {ups} packets, me=({:.1},{:.1},{:.1}) render=({:.1},{:.1}) samples={spd:.0}",
                 self.frames, pos.0, pos.1, pos.2, rx, rz
             );
             self.last_log = Instant::now();

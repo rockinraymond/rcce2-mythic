@@ -158,18 +158,10 @@ pub struct Actor {
     pub render_x: f32,
     pub render_z: f32,
     pub render_yaw: f32,
-    /// Estimated authoritative velocity (units/sec), derived from successive
-    /// `P_StandardUpdate` positions — the render position extrapolates along this
-    /// between echoes so motion is continuous (and auto-matches the server's
-    /// actual speed, whatever the Speed stat is).
-    pub vx: f32,
-    pub vz: f32,
-    /// Last authoritative position the velocity estimate was taken from, and the
-    /// time accrued since (the real echo interval, so the velocity estimate and
-    /// the server-position extrapolation use the actual cadence).
-    pub echo_x: f32,
-    pub echo_z: f32,
-    pub t_echo: f32,
+    /// Buffered authoritative positions `[time, x, z]` for time-based render
+    /// interpolation — the body renders at `now - RENDER_DELAY` interpolated
+    /// across these (see [`World::tick_movement`]).
+    pub samples: Vec<[f32; 3]>,
     pub dest_x: f32,
     pub dest_z: f32,
     pub is_running: bool,
@@ -223,13 +215,9 @@ pub struct World {
     /// Cleared until the first authoritative position arrives, so interpolation
     /// snaps (not glides) into the spawn/zone position.
     pub me_render_init: bool,
-    /// Local player's estimated authoritative velocity + last-sampled position
-    /// (see [`Actor::vx`]).
-    pub me_vx: f32,
-    pub me_vz: f32,
-    pub me_echo_x: f32,
-    pub me_echo_z: f32,
-    pub me_t_echo: f32,
+    /// Local player's buffered authoritative positions `[time, x, z]` for
+    /// time-based render interpolation (see [`World::tick_movement`]).
+    pub me_samples: Vec<[f32; 3]>,
     /// Local player's appearance (from our own P_NewActor).
     pub me_gender: u8,
     pub me_face_tex: u8,
@@ -335,31 +323,27 @@ pub struct DroppedItem {
     pub z: f32,
 }
 
-/// Reconciliation rate (per second) easing the render position toward the
-/// *extrapolated* server position. Moderately tight — the target itself moves
-/// smoothly (it's the extrapolation), so this just tracks it and smooths the
-/// per-echo prediction error without surging.
-pub const RECON_RATE: f32 = 12.0;
+/// Render interpolation delay (seconds). The render position is the buffered
+/// authoritative positions sampled at `now - RENDER_DELAY`, so it interpolates
+/// between two real samples — smooth regardless of frame timing or echo-cadence
+/// jitter, with no velocity guessing. ~1× the ~9 Hz echo interval: small enough
+/// the lag is slight, large enough to bracket the updates. (Env-tunable.)
+pub const RENDER_DELAY: f32 = 0.13;
 /// Facing turn rate (per second) toward the travel heading.
 const YAW_RATE: f32 = 9.0;
-/// Position jump (world units) above which we snap instead of gliding — a
-/// teleport / zone warp shouldn't slide the actor across the map.
+/// Position jump (world units) above which a new sample is a teleport: the
+/// buffer is reset so the render snaps there instead of sliding across the map.
 const ACTOR_SNAP_DIST: f32 = 30.0;
-/// Largest plausible move speed (units/sec) — clamps the velocity estimate so a
-/// spawn/teleport jump doesn't fling the extrapolation; real teleports snap.
-const MAX_VEL: f32 = 30.0;
-/// Cap (seconds) on how far past the last echo to extrapolate the server
-/// position. If echoes pause (the actor stopped, or a hitch), the extrapolation
-/// holds rather than coasting away.
-const MAX_EXTRAP: f32 = 0.25;
+/// Seconds to extrapolate past the newest sample when `now - delay` runs ahead
+/// of it (a hitch / paused echoes), before holding.
+const MAX_EXTRAP: f32 = 0.18;
+/// Max buffered samples per entity (~1 s of history at ~9 Hz).
+const MAX_SAMPLES: usize = 12;
 
-/// Ease `cur` toward `target` by factor `k`, snapping on a large jump.
-fn recon(cur: &mut f32, target: f32, k: f32) {
-    if (target - *cur).abs() > ACTOR_SNAP_DIST {
-        *cur = target;
-    } else {
-        *cur += (target - *cur) * k;
-    }
+/// Effective render delay — `RENDER_DELAY`, overridable at runtime with
+/// `RCCE_RENDERDELAY` (seconds) for tuning the smoothness/lag trade-off.
+fn render_delay() -> f32 {
+    std::env::var("RCCE_RENDERDELAY").ok().and_then(|s| s.parse().ok()).unwrap_or(RENDER_DELAY)
 }
 
 /// Ease an angle (degrees) toward `target` along the shortest arc.
@@ -373,91 +357,92 @@ fn ease_yaw(cur: &mut f32, target: f32, k: f32) {
     *cur += d * k;
 }
 
-/// Advance the per-echo timer and, when a new authoritative position `(ax, az)`
-/// arrives, recompute the velocity over the **real** interval that elapsed
-/// (`v = (a - e) / t_echo`) — not a guessed constant, which had the estimate
-/// ~1.5× off. Clamped + lightly smoothed (echo cadence jitters).
-fn update_velocity(
-    vx: &mut f32, vz: &mut f32, ex: &mut f32, ez: &mut f32, t_echo: &mut f32, ax: f32, az: f32, dt: f32,
-) {
-    *t_echo += dt;
-    if (ax - *ex).abs() > 1e-3 || (az - *ez).abs() > 1e-3 {
-        let interval = (*t_echo).max(0.02);
-        let (mut nvx, mut nvz) = ((ax - *ex) / interval, (az - *ez) / interval);
-        let mag = (nvx * nvx + nvz * nvz).sqrt();
-        if mag > MAX_VEL {
-            nvx = nvx / mag * MAX_VEL;
-            nvz = nvz / mag * MAX_VEL;
+/// Append `[now, x, z]` to a position buffer when the authoritative position has
+/// changed; reset the buffer on a teleport-sized jump (so the render snaps, not
+/// slides); drop the oldest when full.
+fn push_sample(buf: &mut Vec<[f32; 3]>, now: f32, x: f32, z: f32) {
+    if let Some(&[_, lx, lz]) = buf.last() {
+        let d2 = (lx - x) * (lx - x) + (lz - z) * (lz - z);
+        if d2 > ACTOR_SNAP_DIST * ACTOR_SNAP_DIST {
+            buf.clear(); // teleport — start a fresh trail so we snap
+        } else if (lx - x).abs() < 1e-3 && (lz - z).abs() < 1e-3 {
+            return; // no movement → no new sample
         }
-        *vx = *vx * 0.4 + nvx * 0.6;
-        *vz = *vz * 0.4 + nvz * 0.6;
-        *ex = ax;
-        *ez = az;
-        *t_echo = 0.0;
+    }
+    buf.push([now, x, z]);
+    if buf.len() > MAX_SAMPLES {
+        buf.remove(0);
     }
 }
 
-impl World {
-    /// Smooth remote-actor motion (Blitz `UpdateActorInstances` parity). The key
-    /// to *continuous* motion (vs the surge-stall of reconciling toward the stale
-    /// echo): reconcile the render position toward the **extrapolated** server
-    /// position `echo + v·t_echo` — a smoothly moving target — rather than the
-    /// frozen-between-echoes echo. Velocity comes from successive
-    /// `P_StandardUpdate` positions over the real interval; facing follows it;
-    /// actors within 2.0 of their destination are stopped (Blitz's deadzone).
-    pub fn tick_remote_movement(&mut self, dt: f32) {
-        let dt = dt.clamp(0.0, 0.1);
-        let k = 1.0 - (-RECON_RATE * dt).exp();
-        let ky = 1.0 - (-YAW_RATE * dt).exp();
-        for a in self.actors.values_mut() {
-            update_velocity(&mut a.vx, &mut a.vz, &mut a.echo_x, &mut a.echo_z, &mut a.t_echo, a.x, a.z, dt);
-            let (ddx, ddz) = (a.dest_x - a.x, a.dest_z - a.z);
-            if ddx * ddx + ddz * ddz <= 4.0 {
-                // Within the destination deadzone → stopped; don't coast.
-                a.vx = 0.0;
-                a.vz = 0.0;
-            }
-            let t_ex = a.t_echo.min(MAX_EXTRAP);
-            let (sx, sz) = (a.echo_x + a.vx * t_ex, a.echo_z + a.vz * t_ex);
-            recon(&mut a.render_x, sx, k);
-            recon(&mut a.render_z, sz, k);
-            if a.vx * a.vx + a.vz * a.vz > 1.0 {
-                ease_yaw(&mut a.render_yaw, (-a.vx).atan2(-a.vz).to_degrees(), ky);
-            }
+/// Sample the buffered trail at time `t`: lerp between the two samples that
+/// bracket `t`; before the first, hold it; past the last, extrapolate from the
+/// final pair (capped at `MAX_EXTRAP`). Returns `(x, z, vx, vz)` — the velocity
+/// of the active segment, for facing.
+fn interp_at(buf: &[[f32; 3]], t: f32) -> Option<(f32, f32, f32, f32)> {
+    let n = buf.len();
+    if n == 0 {
+        return None;
+    }
+    if n == 1 || t <= buf[0][0] {
+        return Some((buf[0][1], buf[0][2], 0.0, 0.0));
+    }
+    let last = buf[n - 1];
+    if t >= last[0] {
+        let p = buf[n - 2];
+        let seg = (last[0] - p[0]).max(1e-3);
+        let (vx, vz) = ((last[1] - p[1]) / seg, (last[2] - p[2]) / seg);
+        let ahead = (t - last[0]).min(MAX_EXTRAP);
+        return Some((last[1] + vx * ahead, last[2] + vz * ahead, vx, vz));
+    }
+    for i in 0..n - 1 {
+        let (a, b) = (buf[i], buf[i + 1]);
+        if t >= a[0] && t <= b[0] {
+            let seg = (b[0] - a[0]).max(1e-3);
+            let f = (t - a[0]) / seg;
+            let (vx, vz) = ((b[1] - a[1]) / seg, (b[2] - a[2]) / seg);
+            return Some((a[1] + (b[1] - a[1]) * f, a[2] + (b[2] - a[2]) * f, vx, vz));
         }
     }
+    Some((last[1], last[2], 0.0, 0.0))
+}
 
-    /// Local-player motion: extrapolate the render position in the **input**
-    /// direction at the server's estimated speed (instant response, right rate),
-    /// then reconcile toward the *extrapolated* server position (smooth target →
-    /// no surge-stall). Coasting stops the instant the input releases.
-    pub fn predict_me(&mut self, dt: f32, dir: [f32; 2], moving: bool) {
-        let dt = dt.clamp(0.0, 0.1);
-        if !self.me_render_init {
+impl World {
+    /// Smooth all actor motion by **time-based interpolation** — the standard
+    /// networked-movement approach, robust to frame-time and echo-cadence jitter
+    /// (which surge-stalled the velocity-extrapolation attempts). Each
+    /// authoritative position is buffered with its arrival time `now`; the body
+    /// renders at `now - RENDER_DELAY`, interpolating between the two buffered
+    /// samples that bracket it. No velocity estimate, no prediction/reconcile
+    /// fight. Facing follows the interpolated motion. `dt` is only for the yaw
+    /// ease. Applies to the local player and every actor alike.
+    pub fn tick_movement(&mut self, now: f32, dt: f32) {
+        let t = now - render_delay();
+        let ky = 1.0 - (-YAW_RATE * dt.clamp(0.0, 0.1)).exp();
+        let first = self.me_samples.is_empty();
+        push_sample(&mut self.me_samples, now, self.me_x, self.me_z);
+        self.me_render_init = true;
+        if first {
             self.me_render_x = self.me_x;
             self.me_render_z = self.me_z;
-            self.me_render_init = true;
+        } else if let Some((x, z, _, _)) = interp_at(&self.me_samples, t) {
+            self.me_render_x = x;
+            self.me_render_z = z;
         }
-        update_velocity(
-            &mut self.me_vx, &mut self.me_vz, &mut self.me_echo_x, &mut self.me_echo_z, &mut self.me_t_echo,
-            self.me_x, self.me_z, dt,
-        );
-        if !moving {
-            self.me_vx = 0.0;
-            self.me_vz = 0.0;
+        for a in self.actors.values_mut() {
+            let first = a.samples.is_empty();
+            push_sample(&mut a.samples, now, a.x, a.z);
+            if first {
+                a.render_x = a.x;
+                a.render_z = a.z;
+            } else if let Some((x, z, vx, vz)) = interp_at(&a.samples, t) {
+                a.render_x = x;
+                a.render_z = z;
+                if vx * vx + vz * vz > 0.5 {
+                    ease_yaw(&mut a.render_yaw, (-vx).atan2(-vz).to_degrees(), ky);
+                }
+            }
         }
-        let speed = (self.me_vx * self.me_vx + self.me_vz * self.me_vz).sqrt();
-        if moving {
-            let mag = (dir[0] * dir[0] + dir[1] * dir[1]).sqrt().max(1e-6);
-            self.me_render_x += dir[0] / mag * speed * dt;
-            self.me_render_z += dir[1] / mag * speed * dt;
-        }
-        // Reconcile toward the extrapolated server position (gentler than remotes
-        // so the input prediction stays responsive).
-        let t_ex = self.me_t_echo.min(MAX_EXTRAP);
-        let k = 1.0 - (-(RECON_RATE * 0.5) * dt).exp();
-        recon(&mut self.me_render_x, self.me_echo_x + self.me_vx * t_ex, k);
-        recon(&mut self.me_render_z, self.me_echo_z + self.me_vz * t_ex, k);
     }
 
     /// Apply one received message, mutating state. Unknown types are ignored.
@@ -572,11 +557,7 @@ impl World {
             self.me_render_x = x;
             self.me_render_z = z;
             self.me_render_init = true;
-            self.me_echo_x = x;
-            self.me_echo_z = z;
-            self.me_t_echo = 0.0;
-            self.me_vx = 0.0;
-            self.me_vz = 0.0;
+            self.me_samples.clear(); // fresh trail at spawn (snaps, then interpolates)
             self.me_gender = gender;
             self.me_face_tex = face_tex;
             self.me_body_tex = body_tex;
@@ -601,11 +582,7 @@ impl World {
                 render_x: x,
                 render_z: z,
                 render_yaw: yaw,
-                vx: 0.0,
-                vz: 0.0,
-                echo_x: x,
-                echo_z: z,
-                t_echo: 0.0,
+                samples: Vec::new(),
                 dest_x: x,
                 dest_z: z,
                 alive: true,
