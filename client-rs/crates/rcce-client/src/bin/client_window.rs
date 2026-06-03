@@ -761,6 +761,10 @@ fn initial_menu_mode(eula_present: bool) -> Mode {
 const CAM_DIST_MIN: f32 = 5.0;
 const CAM_DIST_MAX: f32 = 50.0;
 const CAM_DIST_DEFAULT: f32 = 13.0;
+/// Fixed menu-camera orbit angle (radians) framing the character against the
+/// `Set.b3d` backdrop. Chosen so the camera looks into the set rather than out
+/// its open back. Override at runtime with `RCCE_MENUANG` for tuning.
+const MENU_CAM_ANGLE: f32 = 0.0;
 /// Camera follow-smoothing rate (Blitz `CurveValue(..., 6.0)` on the camera
 /// focus). The local player position only advances on discrete server echoes
 /// (`P_StandardUpdate` ~9 Hz, no client-side prediction), so a hard follow looks
@@ -3024,10 +3028,37 @@ impl App {
         if let (Some(gfx), Some(view), Some(store)) =
             (self.gfx.as_ref(), self.view.as_mut(), self.store.as_mut())
         {
-            // Replace the startup gameplay-zone geometry once, and force a fresh
-            // zone reload when the player enters the world (loaded_zone cleared).
+            // Replace the startup gameplay-zone geometry once with the menu
+            // backdrop, and force a fresh zone reload when the player enters the
+            // world (loaded_zone cleared).
             if !self.menu_scene_init {
-                view.set_scene(&gfx.device, &gfx.queue, &[], 0.0);
+                // MENU-SET: the character-creation "set" — the same
+                // Data\Meshes\Character Set\Set.b3d the Blitz menu loads in
+                // EULAScreen and keeps behind every menu screen (EULA / login /
+                // char select). Blitz: PositionEntity Set, -210,-35,-145 +
+                // ScaleEntity 30 (MainMenu.bb:2924), with the preview char seated
+                // at (30,-35,100) (MainMenu.bb:1727). The Rust menu anchors the
+                // char at (30,0,100), i.e. the Blitz frame raised +35 in Y, so the
+                // set is positioned +35 in Y too to keep the char on its floor.
+                // Falls back to the bare void if the asset is missing/unparseable.
+                match store.mesh_by_path("Character Set/Set.b3d") {
+                    Some((model, textures)) => {
+                        let inst = SceneInstance {
+                            model: &model,
+                            textures: &textures[..],
+                            translation: [-210.0, 0.0, -145.0],
+                            rot: [0.0, 0.0, 0.0],
+                            scale: [30.0, 30.0, 30.0],
+                            color: [1.0, 1.0, 1.0],
+                        };
+                        view.set_scene(&gfx.device, &gfx.queue, std::slice::from_ref(&inst), 0.0);
+                        println!("[client-window] menu set: {} meshes", model.meshes.len());
+                    }
+                    None => {
+                        view.set_scene(&gfx.device, &gfx.queue, &[], 0.0);
+                        println!("[client-window] menu set: Set.b3d unavailable, bare void");
+                    }
+                }
                 self.loaded_zone = String::new();
                 self.menu_scene_init = true;
             }
@@ -3085,9 +3116,14 @@ impl App {
             }
         }
 
-        // Camera: a slow turntable circling the character's torso (the Blitz
-        // menu gallery framing), not the zone centre.
-        let ang = elapsed * 0.4;
+        // Camera: frames the character against the menu set. Blitz uses a fixed
+        // gallery angle (PointEntity GPP + MoveEntity offset), not a full orbit —
+        // a 360° spin swings past the open back of the set. Pin to a front-facing
+        // angle. RCCE_MENUANG (radians) overrides it for tuning.
+        let ang = std::env::var("RCCE_MENUANG")
+            .ok()
+            .and_then(|s| s.parse::<f32>().ok())
+            .unwrap_or(MENU_CAM_ANGLE);
         let dist = 13.0;
         let target = [char_anchor[0], char_anchor[1] + 3.5, char_anchor[2]];
         let eye = [
@@ -3096,12 +3132,13 @@ impl App {
             char_anchor[2] + dist * ang.cos(),
         ];
         let vp = rcce_render::view_proj(eye, target, sw / sh);
-        // Dark-blue fogged void (CameraFogColor 0,51,102); near/far set wide so
-        // the nearby character isn't fogged.
+        // Dark-blue fog (Blitz CameraFogColor 0,51,102 = (0,0.2,0.4),
+        // CameraFogRange 300,5200) so the near set + character are crisp and only
+        // the far set walls haze toward the blue clear.
         let fog = [0.0f32, 0.2, 0.4];
         let clear = wgpu::Color { r: 0.0, g: 0.2, b: 0.4, a: 1.0 };
-        let menu_fog_near = 60.0f32;
-        let menu_fog_far = 6000.0f32;
+        let menu_fog_near = 300.0f32;
+        let menu_fog_far = 5200.0f32;
         let menu_ambient = [0.9f32, 0.9, 0.9];
         let menu_light = [0.3f32, -1.0, 0.4];
 

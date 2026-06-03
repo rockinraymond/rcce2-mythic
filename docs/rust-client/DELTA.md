@@ -153,7 +153,7 @@ Gaps are the front-of-game shell and modal dialogs.
 | EULA / license screen | MISSING | Front-of-game |
 | Loading screen | MISSING | Synchronous zone load |
 | Options menus (Graphics/Control/Sound/Other) | MISSING | No settings UI at all |
-| Menu backdrop art + Set.b3d diorama | PARTIAL | EULA/Login/Options/Controls draw their real backdrop PNGs (DONE); CharSelect-behind-3D + Set.b3d diorama remain |
+| Menu backdrop art + Set.b3d diorama | DONE | EULA/Login/Options/Controls draw their real backdrop PNGs; the `Data\Meshes\Character Set\Set.b3d` diorama (32 meshes) now renders as the 3D backdrop behind every menu screen — Blitz transform (`-210,-35,-145` ×30, raised +35Y into the Rust char frame), Blitz fog (`0,51,102`, range 300/5200), fixed front-facing camera angle framing the heraldic-banner hall (`MENU_CAM_ANGLE`, override `RCCE_MENUANG`). Remaining polish: CharSelect char is centered behind the window panel (window-left / char-right layout + char zoom is a menu-overlay follow-up, not a Set issue). |
 | Server status / selector | MISSING | — |
 | Action bar slot-assign UI / paging | MISSING | Fires on number keys, no slots model |
 | Action bar key binding | DIVERGENT | Digits 1-9, reference uses F-keys / assignable |

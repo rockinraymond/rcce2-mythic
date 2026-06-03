@@ -651,6 +651,42 @@ impl AssetStore {
         self.cache.insert(mesh_id, result.clone());
         result
     }
+
+    /// Load a standalone mesh by its path relative to the project `Meshes` dir
+    /// (e.g. `"Character Set/Set.b3d"`), resolving each of its meshes' embedded
+    /// textures the same way scenery does — searching the mesh's own directory
+    /// first, then the shared `Textures` / `Meshes` trees. Returns the parsed
+    /// model plus a per-mesh-indexed texture vector ready for a `SceneInstance`.
+    ///
+    /// Used for the menu backdrop (`Data\Meshes\Character Set\Set.b3d`), which is
+    /// not in the numeric `Meshes.dat` catalog `mesh_model` indexes. Returns
+    /// `None` if the file is missing or unparseable so the caller can fall back
+    /// to the bare void.
+    pub fn mesh_by_path(&self, rel: &str) -> Option<(Rc<B3dModel>, Vec<Option<Image>>)> {
+        let rel = rel.replace('\\', "/");
+        let path = self.data_root.join("Meshes").join(&rel);
+        let bytes = std::fs::read(&path).ok()?;
+        let model = Rc::new(B3dModel::parse(&bytes).ok()?);
+
+        let mut roots = Vec::new();
+        if let Some(dir) = path.parent() {
+            roots.push(dir.to_path_buf());
+        }
+        roots.push(self.data_root.join("Textures"));
+        roots.push(self.data_root.join("Meshes"));
+
+        let textures: Vec<Option<Image>> = model
+            .meshes
+            .iter()
+            .map(|m| {
+                m.texture
+                    .as_ref()
+                    .and_then(|name| texture::find_texture(&roots, name))
+                    .and_then(|p| texture::load_with_flags(&p, m.texture_flag))
+            })
+            .collect();
+        Some((model, textures))
+    }
 }
 
 #[cfg(test)]
