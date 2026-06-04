@@ -124,9 +124,10 @@ impl Gfx {
             view_formats: vec![],
         };
         surface.configure(&device, &config);
+        let info = adapter.get_info();
         println!(
-            "[client-window] {}x{} via {} ({:?})",
-            config.width, config.height, adapter.get_info().name, format
+            "[client-window] {}x{} via {} [{:?}] ({:?})",
+            config.width, config.height, info.name, info.backend, format
         );
         (Gfx { surface, device, queue, config }, format)
     }
