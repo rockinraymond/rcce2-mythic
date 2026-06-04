@@ -3783,7 +3783,9 @@ impl App {
         let moving = mag > 0.01;
         let want_send = self.last_move.elapsed().as_millis() >= 110;
         // MOVE-6: a double-click move runs; Shift-run always wins.
-        let run = move_run(self.run, self.move_target.is_some(), self.move_running);
+        // RCCE_RUN forces running for headless diagnosis of the run-speed path.
+        let run = move_run(self.run, self.move_target.is_some(), self.move_running)
+            || std::env::var_os("RCCE_RUN").is_some();
 
         // Pump the network, send movement, and rebuild animated actors.
         let mut cam_target = self.center;
@@ -3871,15 +3873,29 @@ impl App {
             // across the buffered server positions — smooth regardless of frame or
             // echo-cadence jitter, no velocity guessing.
             let rz_before = net.world.me_render_z;
-            net.world.tick_movement(elapsed, proj_dt);
+            net.world.tick_movement(elapsed, proj_dt, dir, moving);
             // RCCE_MOVEDIAG: per-frame trace — me_z (server), me_render_z, the
             // frame's render delta, and the sample count. A smooth render shows a
             // steady delta proportional to dt.
             if std::env::var_os("RCCE_MOVEDIAG").is_some() && moving {
                 let w = &net.world;
+                let n = w.me_samples.len();
+                // Echo gap + per-echo distance of the latest two samples, and
+                // whether `now - delay` is extrapolating past the newest sample.
+                let (gap, ddist, extrap) = if n >= 2 {
+                    let a = w.me_samples[n - 2];
+                    let b = w.me_samples[n - 1];
+                    let g = b[0] - a[0];
+                    let d = ((b[1] - a[1]).powi(2) + (b[2] - a[2]).powi(2)).sqrt();
+                    let rd: f32 = std::env::var("RCCE_RENDERDELAY").ok().and_then(|s| s.parse().ok()).unwrap_or(0.13);
+                    (g, d, (elapsed - rd) > b[0])
+                } else {
+                    (0.0, 0.0, false)
+                };
                 println!(
-                    "[movediag] f{} dt={:.4} me_z={:.2} rz={:.2} d_rz={:+.3} samples={}",
-                    self.frames, proj_dt, w.me_z, w.me_render_z, w.me_render_z - rz_before, w.me_samples.len()
+                    "[movediag] f{} dt={:.4} me_z={:.2} rz={:.2} d_rz={:+.3} n={} gap={:.3} ddist={:.2} {}",
+                    self.frames, proj_dt, w.me_z, w.me_render_z, w.me_render_z - rz_before, n, gap, ddist,
+                    if extrap { "EXTRAP" } else { "interp" }
                 );
             }
             // Remote jump-anim timers (ANIM-7) + the local jump arc (MOVE-7).

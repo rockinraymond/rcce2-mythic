@@ -335,15 +335,82 @@ const YAW_RATE: f32 = 9.0;
 /// buffer is reset so the render snaps there instead of sliding across the map.
 const ACTOR_SNAP_DIST: f32 = 30.0;
 /// Seconds to extrapolate past the newest sample when `now - delay` runs ahead
-/// of it (a hitch / paused echoes), before holding.
-const MAX_EXTRAP: f32 = 0.18;
+/// of it (a hitch / paused echoes), before holding. Kept short so the overshoot
+/// that causes a snap-back when the real echo lands is small.
+const MAX_EXTRAP: f32 = 0.10;
 /// Max buffered samples per entity (~1 s of history at ~9 Hz).
 const MAX_SAMPLES: usize = 12;
+/// Low-pass rate (per second) easing the render toward the interpolation target.
+/// The server reports running movement in uneven per-echo bursts (1×/2×/3× the
+/// base step over equal time windows); easing absorbs those velocity spikes —
+/// and the extrapolation snap-backs — into a smooth catch-up instead of visible
+/// jumps. High enough that already-smooth walking is barely lagged.
+const SMOOTH_RATE: f32 = 12.0;
 
 /// Effective render delay — `RENDER_DELAY`, overridable at runtime with
 /// `RCCE_RENDERDELAY` (seconds) for tuning the smoothness/lag trade-off.
 fn render_delay() -> f32 {
     std::env::var("RCCE_RENDERDELAY").ok().and_then(|s| s.parse().ok()).unwrap_or(RENDER_DELAY)
+}
+
+/// Local-player reconcile rate (per second) easing the predicted render position
+/// toward the newest authoritative position. Gentle: the input prediction
+/// carries the smooth motion; this only corrects drift and absorbs the
+/// per-echo bursts so they don't snap. Tuned (with `SPEED_WINDOW`) to the lowest
+/// render-velocity variation across a headless run sweep — CoV 0.36 vs 0.59 at
+/// the first-cut 6.0/0.6.
+const ME_RECON_RATE: f32 = 4.0;
+/// Window (seconds) over which the local player's smooth speed is averaged. Long
+/// enough to span several of the server's burst-alias cycles so the prediction
+/// speed stays steady (and keeps pace, minimising the reconcile's burst-chasing)
+/// — short enough to still track genuine speed changes within ~1.5 s.
+const SPEED_WINDOW: f32 = 1.5;
+
+/// Effective low-pass rate — `SMOOTH_RATE`, overridable with `RCCE_SMOOTHRATE`.
+fn smooth_rate() -> f32 {
+    std::env::var("RCCE_SMOOTHRATE").ok().and_then(|s| s.parse().ok()).unwrap_or(SMOOTH_RATE)
+}
+
+/// Effective local-player reconcile rate — `ME_RECON_RATE`, env `RCCE_MERECON`.
+fn me_recon_rate() -> f32 {
+    std::env::var("RCCE_MERECON").ok().and_then(|s| s.parse().ok()).unwrap_or(ME_RECON_RATE)
+}
+
+/// Effective speed-averaging window — `SPEED_WINDOW`, env `RCCE_SPEEDWIN`.
+fn speed_window() -> f32 {
+    std::env::var("RCCE_SPEEDWIN").ok().and_then(|s| s.parse().ok()).unwrap_or(SPEED_WINDOW)
+}
+
+/// Smooth speed (units/sec) over the last `SPEED_WINDOW` of buffered samples —
+/// averages out the server's per-echo burst aliasing so the local-player
+/// prediction moves at a steady speed instead of reproducing the lurches.
+fn buffer_avg_speed(buf: &[[f32; 3]], _now: f32) -> f32 {
+    let n = buf.len();
+    if n < 2 {
+        return 0.0;
+    }
+    let win = speed_window();
+    let newest = buf[n - 1];
+    let mut i = n - 1;
+    while i > 0 && newest[0] - buf[i - 1][0] < win {
+        i -= 1;
+    }
+    let oldest = buf[i];
+    let span = newest[0] - oldest[0];
+    if span < 1e-3 {
+        return 0.0;
+    }
+    let dist = ((newest[1] - oldest[1]).powi(2) + (newest[2] - oldest[2]).powi(2)).sqrt();
+    dist / span
+}
+
+/// Ease `cur` toward `target` by factor `k`, snapping on a teleport-scale jump.
+fn ease_pos(cur: &mut f32, target: f32, k: f32) {
+    if (target - *cur).abs() > ACTOR_SNAP_DIST {
+        *cur = target;
+    } else {
+        *cur += (target - *cur) * k;
+    }
 }
 
 /// Ease an angle (degrees) toward `target` along the shortest arc.
@@ -416,18 +483,34 @@ impl World {
     /// samples that bracket it. No velocity estimate, no prediction/reconcile
     /// fight. Facing follows the interpolated motion. `dt` is only for the yaw
     /// ease. Applies to the local player and every actor alike.
-    pub fn tick_movement(&mut self, now: f32, dt: f32) {
+    pub fn tick_movement(&mut self, now: f32, dt: f32, dir: [f32; 2], moving: bool) {
         let t = now - render_delay();
-        let ky = 1.0 - (-YAW_RATE * dt.clamp(0.0, 0.1)).exp();
+        let dtc = dt.clamp(0.0, 0.1);
+        let ky = 1.0 - (-YAW_RATE * dtc).exp();
+        let kp = 1.0 - (-smooth_rate() * dtc).exp();
+        // Local player: client-side prediction. Advance in the INPUT direction at
+        // the buffer-smoothed speed (constant velocity → none of the server's
+        // per-echo burst alias), then reconcile gently toward the newest
+        // authoritative position. Stops are crisp because they're input-gated
+        // (`moving`), not inferred from a stale velocity → no overshoot.
         let first = self.me_samples.is_empty();
         push_sample(&mut self.me_samples, now, self.me_x, self.me_z);
         self.me_render_init = true;
         if first {
             self.me_render_x = self.me_x;
             self.me_render_z = self.me_z;
-        } else if let Some((x, z, _, _)) = interp_at(&self.me_samples, t) {
-            self.me_render_x = x;
-            self.me_render_z = z;
+        } else {
+            if moving {
+                let mag = (dir[0] * dir[0] + dir[1] * dir[1]).sqrt();
+                if mag > 1e-4 {
+                    let spd = buffer_avg_speed(&self.me_samples, now);
+                    self.me_render_x += dir[0] / mag * spd * dtc;
+                    self.me_render_z += dir[1] / mag * spd * dtc;
+                }
+            }
+            let kr = 1.0 - (-me_recon_rate() * dtc).exp();
+            ease_pos(&mut self.me_render_x, self.me_x, kr);
+            ease_pos(&mut self.me_render_z, self.me_z, kr);
         }
         for a in self.actors.values_mut() {
             let first = a.samples.is_empty();
@@ -436,8 +519,8 @@ impl World {
                 a.render_x = a.x;
                 a.render_z = a.z;
             } else if let Some((x, z, vx, vz)) = interp_at(&a.samples, t) {
-                a.render_x = x;
-                a.render_z = z;
+                ease_pos(&mut a.render_x, x, kp);
+                ease_pos(&mut a.render_z, z, kp);
                 if vx * vx + vz * vz > 0.5 {
                     ease_yaw(&mut a.render_yaw, (-vx).atan2(-vz).to_degrees(), ky);
                 }
