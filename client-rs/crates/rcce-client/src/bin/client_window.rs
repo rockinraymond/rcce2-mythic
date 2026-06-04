@@ -1231,13 +1231,15 @@ fn build_actors(
         };
         let scale = store.actor_render_scale(tmpl, gender).unwrap_or(0.05);
         let tex = store.actor_textures_rc(tmpl, gender, face, body);
-        // Joint positions + bounds come from the bind-pose source model
-        // (joint_pos returns the bind-pose joint, so attachments don't need the
-        // posed body — letting the body go to the GPU skinning path).
+        // Joint positions at the CURRENT animation frame (bounds from bind pose).
+        // Attachments parent to the *animated* joint so hair/weapon/shield track
+        // the head/hands as the body moves, instead of floating at the rest pose
+        // (the body itself can still take the GPU skinning path). One short bone
+        // forward-pass per joint — negligible for the ~dozens of bones here.
         let (min, max) = src.bounds();
-        let head = src.joint_pos("Head").unwrap_or([0.0, 0.0, 0.0]);
-        let hand = src.joint_pos("R_Hand");
-        let l_hand = src.joint_pos("L_Hand");
+        let head = src.joint_pos_at("Head", frame).unwrap_or([0.0, 0.0, 0.0]);
+        let hand = src.joint_pos_at("R_Hand", frame);
+        let l_hand = src.joint_pos_at("L_Hand", frame);
         // Stand the actor on ITS OWN authoritative Y (from P_NewActor /
         // P_ChangeArea spawn; P_StandardUpdate carries only X/Z). The server's
         // actor Y is the COLLISION-PIVOT height, and the engine seats the body

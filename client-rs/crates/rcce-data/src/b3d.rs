@@ -343,6 +343,37 @@ impl B3dModel {
             .map(|b| [b.bind_world[3], b.bind_world[7], b.bind_world[11]])
     }
 
+    /// **Animated** model-space position of the named joint at `frame` — the
+    /// joint's world translation in the same posed hierarchy the body is skinned
+    /// with. Falls back to the bind pose when `frame` is `None` or the joint
+    /// (and its ancestors) carry no keyframes. Unlike [`joint_pos`] (always the
+    /// bind pose), this lets head/hand attachments — hair, weapon, shield —
+    /// *track* the animation instead of floating at the rest position.
+    pub fn joint_pos_at(&self, name: &str, frame: Option<f32>) -> Option<[f32; 3]> {
+        let target = self.bones.iter().position(|b| b.name.eq_ignore_ascii_case(name))?;
+        // Bones precede their children, so a single forward pass over 0..=target
+        // resolves every ancestor before it's needed.
+        let mut world = vec![IDENTITY; target + 1];
+        for i in 0..=target {
+            let b = &self.bones[i];
+            let local = match frame {
+                Some(f) if !b.keys.is_empty() => {
+                    let t = sample_v3(&b.keys, f, KeyChan::Pos, b.local_t);
+                    let s = sample_v3(&b.keys, f, KeyChan::Scale, b.local_s);
+                    let r = sample_quat(&b.keys, f, b.local_r);
+                    trs(t, r, s)
+                }
+                _ => b.local_bind,
+            };
+            world[i] = match b.parent {
+                Some(p) => mat_mul(&world[p], &local),
+                None => local,
+            };
+        }
+        let w = &world[target];
+        Some([w[3], w[7], w[11]])
+    }
+
     /// Total skin-weight count across all bones (diagnostic).
     pub fn weight_count(&self) -> usize {
         self.bones.iter().map(|b| b.weights.len()).sum()
@@ -905,6 +936,39 @@ mod mat_tests {
                 assert!((gpu[k] - cpu[k]).abs() < 1e-4, "p{p:?} k{k}: gpu {} cpu {}", gpu[k], cpu[k]);
             }
         }
+    }
+
+    #[test]
+    fn joint_pos_at_follows_animation() {
+        // Root -> Head. Head's bind sits at (0,10,0); a Pos key animates it to
+        // (5,10,0). joint_pos_at must return the bind for None and the animated
+        // position for a frame — the fix that stops hair/weapons floating.
+        let head_bind = trs([0.0, 10.0, 0.0], [1.0, 0.0, 0.0, 0.0], [1.0, 1.0, 1.0]);
+        let mk = |name: &str, parent, local_bind, keys| B3dBone {
+            name: name.into(),
+            parent,
+            local_bind,
+            local_t: [0.0; 3],
+            local_r: [1.0, 0.0, 0.0, 0.0],
+            local_s: [1.0; 3],
+            bind_world: local_bind,
+            inverse_bind: IDENTITY,
+            weights: Vec::new(),
+            keys,
+        };
+        let key = |p: [f32; 3]| B3dKey { frame: 0, position: Some(p), scale: None, rotation: None };
+        let model = B3dModel {
+            bones: vec![
+                mk("Root", None, IDENTITY, Vec::new()),
+                mk("Head", Some(0), head_bind, vec![key([5.0, 10.0, 0.0]), B3dKey { frame: 2, ..key([5.0, 10.0, 0.0]) }]),
+            ],
+            ..Default::default()
+        };
+        let bind = model.joint_pos_at("Head", None).unwrap();
+        assert!(bind[0].abs() < 1e-5 && (bind[1] - 10.0).abs() < 1e-5, "bind {bind:?}");
+        let anim = model.joint_pos_at("Head", Some(0.0)).unwrap();
+        assert!((anim[0] - 5.0).abs() < 1e-5, "animated head should track to x=5, got {anim:?}");
+        assert!(model.joint_pos_at("Missing", None).is_none());
     }
 
     #[test]
