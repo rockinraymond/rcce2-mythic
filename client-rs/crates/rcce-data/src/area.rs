@@ -96,11 +96,34 @@ pub struct WaterPlane {
     pub opacity: f32,
 }
 
+/// A Blitz LOD terrain patch (`CreateTerrain`), the ground system used by older
+/// forks (e.g. Mythic Realms 1.26) instead of a scenery ground mesh. Writer:
+/// `SaveArea` (ClientAreas.bb:935). Per patch: `base_tex(i16)` · `detail_tex(i16)`
+/// · `grid(i32 = N)` · **`(N+1)²` height floats** (row-major, x outer, z inner) ·
+/// `x/y/z(f32×3)` · `pitch/yaw/roll(f32×3)` · `scale_x/y/z(f32×3)` ·
+/// `detail_scale(f32)` · `detail(i32)` · `morph(u8)` · `shading(u8)`. The local
+/// grid spans `[0,N]×[0,N]` (1 unit/cell) before the entity transform.
+#[derive(Debug, Default, Clone)]
+pub struct TerrainPatch {
+    pub base_tex_id: u16,
+    pub detail_tex_id: u16,
+    /// `TerrainSize` N; the grid is `(N+1)×(N+1)` vertices.
+    pub grid: u32,
+    /// `(N+1)²` heights, indexed `x*(N+1) + z`.
+    pub heights: Vec<f32>,
+    pub pos: [f32; 3],
+    /// Pitch, yaw, roll in degrees (RotateEntity order).
+    pub rot: [f32; 3],
+    pub scale: [f32; 3],
+    pub detail_tex_scale: f32,
+}
+
 #[derive(Debug, Default, Clone)]
 pub struct AreaScenery {
     pub env: AreaEnv,
     pub sceneries: Vec<SceneryPlacement>,
     pub waters: Vec<WaterPlane>,
+    pub terrains: Vec<TerrainPatch>,
 }
 
 /// Byte offset of the `Sceneries` count (fixed header prefix length).
@@ -206,7 +229,64 @@ impl AreaScenery {
                 waters.push(WaterPlane { tex_id, tex_scale, pos, scale_x, scale_z, color, opacity });
             }
         }
-        Ok(AreaScenery { env, sceneries, waters })
+
+        // Collision boxes, emitters, then the Blitz LOD terrains (SaveArea order,
+        // ClientAreas.bb:900-957). Skip the first two — they carry no client
+        // visuals here — to land on the terrain block. All best-effort: a
+        // truncated/older file without these blocks just yields no terrain.
+        let mut terrains = Vec::new();
+        let parsed = (|| -> Result<(), ReadError> {
+            // Collision boxes: 9 floats each.
+            let n_col = r.read_short_u()?;
+            for _ in 0..n_col {
+                for _ in 0..9 {
+                    r.read_float()?;
+                }
+            }
+            // Emitters: ConfigName(str) · tex(i16) · 6 floats each.
+            let n_emit = r.read_short_u()?;
+            for _ in 0..n_emit {
+                r.read_string(260)?;
+                r.read_short_u()?;
+                for _ in 0..6 {
+                    r.read_float()?;
+                }
+            }
+            // Terrains.
+            let n_terr = r.read_short_u()?;
+            for _ in 0..n_terr {
+                let base_tex_id = r.read_short_u()?;
+                let detail_tex_id = r.read_short_u()?;
+                let grid = r.read_int()? as u32;
+                let verts = (grid as usize + 1) * (grid as usize + 1);
+                let mut heights = Vec::with_capacity(verts);
+                for _ in 0..verts {
+                    heights.push(r.read_float()?);
+                }
+                let pos = [r.read_float()?, r.read_float()?, r.read_float()?];
+                let rot = [r.read_float()?, r.read_float()?, r.read_float()?];
+                let scale = [r.read_float()?, r.read_float()?, r.read_float()?];
+                let detail_tex_scale = r.read_float()?;
+                let _detail = r.read_int()?;
+                let _morph = r.read_byte()?;
+                let _shading = r.read_byte()?;
+                terrains.push(TerrainPatch {
+                    base_tex_id,
+                    detail_tex_id,
+                    grid,
+                    heights,
+                    pos,
+                    rot,
+                    scale,
+                    detail_tex_scale,
+                });
+            }
+            Ok(())
+        })();
+        // A mid-block parse error leaves whatever terrains fully decoded so far.
+        let _ = parsed;
+
+        Ok(AreaScenery { env, sceneries, waters, terrains })
     }
 }
 
@@ -216,6 +296,53 @@ mod tests {
 
     fn approx(a: [f32; 3], b: [f32; 3]) -> bool {
         (0..3).all(|i| (a[i] - b[i]).abs() < 1e-4)
+    }
+
+    // Synthetic area with empty scenery/water/colbox/emitter then ONE LOD terrain
+    // — exercises the terrain field parse (and the colbox/emitter skip) that real
+    // current zones can't (they ship zero terrains). Bytes laid out per SaveArea.
+    #[test]
+    fn parse_synthetic_terrain() {
+        let mut d = vec![0u8; 41]; // zeroed 41-byte header (env reads → zeros)
+        let u16 = |d: &mut Vec<u8>, v: u16| d.extend_from_slice(&v.to_le_bytes());
+        let i32 = |d: &mut Vec<u8>, v: i32| d.extend_from_slice(&v.to_le_bytes());
+        let f32 = |d: &mut Vec<u8>, v: f32| d.extend_from_slice(&v.to_le_bytes());
+        for _ in 0..4 {
+            u16(&mut d, 0); // scenery, water, colboxes, emitters: all empty
+        }
+        u16(&mut d, 1); // one terrain
+        u16(&mut d, 5); // base tex
+        u16(&mut d, 65535); // detail tex (none)
+        i32(&mut d, 2); // grid N=2 → (N+1)²=9 heights
+        let heights = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0];
+        for h in heights {
+            f32(&mut d, h);
+        }
+        for v in [10.0, -1.0, 20.0] {
+            f32(&mut d, v); // pos
+        }
+        for v in [0.0, 90.0, 0.0] {
+            f32(&mut d, v); // pitch/yaw/roll
+        }
+        for v in [4.0, 1.0, 4.0] {
+            f32(&mut d, v); // scale
+        }
+        f32(&mut d, 8.0); // detail tex scale
+        i32(&mut d, 1); // detail
+        d.push(1); // morph
+        d.push(0); // shading
+
+        let area = AreaScenery::parse(&d).expect("parse");
+        assert_eq!(area.terrains.len(), 1);
+        let t = &area.terrains[0];
+        assert_eq!(t.base_tex_id, 5);
+        assert_eq!(t.detail_tex_id, 65535);
+        assert_eq!(t.grid, 2);
+        assert_eq!(t.heights, heights);
+        assert!(approx(t.pos, [10.0, -1.0, 20.0]));
+        assert!(approx(t.rot, [0.0, 90.0, 0.0]));
+        assert!(approx(t.scale, [4.0, 1.0, 4.0]));
+        assert_eq!(t.detail_tex_scale, 8.0);
     }
 
     #[test]

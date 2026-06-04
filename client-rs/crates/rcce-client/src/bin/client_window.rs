@@ -1577,6 +1577,56 @@ fn water_quad(w: &rcce_data::WaterPlane, scroll: [f32; 2]) -> B3dModel {
     }
 }
 
+/// Build a renderable grid mesh from a Blitz LOD [`TerrainPatch`] (`CreateTerrain`)
+/// — `(N+1)²` vertices at local `(x, height, z)` for `x,z in 0..=N`, two triangles
+/// per cell. The caller applies the patch's entity transform; the local grid spans
+/// `[0,N]×[0,N]` (1 unit/cell, origin at the corner) to match `CreateTerrain`
+/// before `PositionEntity`/`ScaleEntity`. UV tiles once per cell — the exact
+/// tiling density is the lone cosmetic unknown until verified against a real
+/// terrain (current rcce2 zones ship none). Winding is irrelevant (backface cull
+/// is off).
+fn terrain_model(t: &rcce_data::TerrainPatch) -> B3dModel {
+    let n = t.grid as usize;
+    let stride = n + 1;
+    let vcount = stride * stride;
+    let mut positions = Vec::with_capacity(vcount);
+    let mut uvs = Vec::with_capacity(vcount);
+    for x in 0..=n {
+        for z in 0..=n {
+            let h = t.heights.get(x * stride + z).copied().unwrap_or(0.0);
+            positions.push([x as f32, h, z as f32]);
+            uvs.push([x as f32, z as f32]);
+        }
+    }
+    let mut indices = Vec::with_capacity(n * n * 6);
+    for x in 0..n {
+        for z in 0..n {
+            let i = (x * stride + z) as u32;
+            let ix = ((x + 1) * stride + z) as u32;
+            let iz = (x * stride + z + 1) as u32;
+            let ixz = ((x + 1) * stride + z + 1) as u32;
+            indices.extend_from_slice(&[i, ix, ixz, i, ixz, iz]);
+        }
+    }
+    B3dModel {
+        meshes: vec![rcce_data::B3dMesh {
+            normals: vec![[0.0, 1.0, 0.0]; vcount],
+            colors: vec![[1.0, 1.0, 1.0, 1.0]; vcount],
+            positions,
+            uvs,
+            uvs2: Vec::new(),
+            indices,
+            brush_id: -1,
+            texture: None,
+            texture_flag: 0,
+            uv_scale: [1.0, 1.0],
+            uv_offset: [0.0, 0.0],
+            lightmap: None,
+        }],
+        ..Default::default()
+    }
+}
+
 fn load_zone_static(store: &mut AssetStore, view: &mut WorldView, gfx: &Gfx, data_root: &str, zone: &str) -> Option<ZoneStatic> {
     let path = std::path::Path::new(data_root).join("Areas").join(format!("{zone}.dat"));
     let bytes = std::fs::read(&path).map_err(|e| eprintln!("[client-window] {}: {e}", path.display())).ok()?;
@@ -1675,6 +1725,37 @@ fn load_zone_static(store: &mut AssetStore, view: &mut WorldView, gfx: &Gfx, dat
             continue;
         };
         waters.push((*w, img));
+    }
+    // Blitz LOD terrains (CreateTerrain): older forks (e.g. Mythic Realms 1.26)
+    // build the ground from these instead of a scenery mesh. Render each as a grid
+    // mesh at its entity transform (yaw negated like scenery); pushed into `place`
+    // here so it also feeds the camera-occluder filter (skipped — too large) and
+    // the height field (its near-horizontal tris seat actors) below.
+    for t in &scenery.terrains {
+        if t.grid == 0 || t.heights.is_empty() {
+            continue;
+        }
+        let tex = store.texture_path(t.base_tex_id).and_then(|p| rcce_data::texture::load(&p));
+        let idx = models.len();
+        models.push(std::rc::Rc::new(terrain_model(t)));
+        textures.push(vec![tex]);
+        let rot = [t.rot[0].to_radians(), -t.rot[1].to_radians(), t.rot[2].to_radians()];
+        place.push((idx, t.pos, rot, t.scale));
+        // Expand the zone bounds (camera framing / centre) to the terrain footprint.
+        let n = t.grid as f32;
+        for [cx, cz] in [[0.0, 0.0], [n, 0.0], [0.0, n], [n, n]] {
+            let wx = t.pos[0] + cx * t.scale[0];
+            let wz = t.pos[2] + cz * t.scale[2];
+            min[0] = min[0].min(wx);
+            max[0] = max[0].max(wx);
+            min[2] = min[2].min(wz);
+            max[2] = max[2].max(wz);
+        }
+        min[1] = min[1].min(t.pos[1]);
+        max[1] = max[1].max(t.pos[1]);
+    }
+    if !scenery.terrains.is_empty() {
+        println!("[client-window] zone '{zone}': {} LOD terrain(s) drawn", scenery.terrains.len());
     }
     let n_water = waters.len();
     if !scenery.waters.is_empty() {
@@ -6016,6 +6097,30 @@ mod tests {
         assert!((r[2] - (-45f32).to_radians()).abs() < 1e-6, "roll preserved");
         // Zero stays zero (no spurious offset for axis-aligned props).
         assert_eq!(scenery_rot_radians([0.0, 0.0, 0.0]), [0.0, 0.0, 0.0]);
+    }
+
+    // A LOD terrain patch (grid N=2) builds a (N+1)² vertex grid with 2 triangles
+    // per cell, heights mapped at index x*(N+1)+z, local positions (x,h,z).
+    #[test]
+    fn terrain_model_grid_geometry() {
+        let t = rcce_data::TerrainPatch {
+            base_tex_id: 0,
+            detail_tex_id: 65535,
+            grid: 2,
+            heights: vec![0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0],
+            pos: [0.0; 3],
+            rot: [0.0; 3],
+            scale: [1.0; 3],
+            detail_tex_scale: 1.0,
+        };
+        let m = terrain_model(&t);
+        let mesh = &m.meshes[0];
+        assert_eq!(mesh.positions.len(), 9, "(N+1)² verts");
+        assert_eq!(mesh.indices.len(), 2 * 2 * 6, "N² cells × 2 tris × 3 idx");
+        assert_eq!(mesh.positions[5], [1.0, 5.0, 2.0], "vertex (x=1,z=2) = height 5");
+        assert!(mesh.indices.iter().all(|&i| (i as usize) < mesh.positions.len()), "indices in range");
+        assert_eq!(mesh.colors.len(), 9);
+        assert_eq!(mesh.uvs.len(), 9);
     }
 
     // The Actions context menu: NPCs get Interact/Attack/Examine/Trade; players

@@ -20,7 +20,7 @@ pub mod texture;
 
 pub use actors::{ActorCatalog, ActorTemplate};
 pub use anim::{AnimClip, AnimSet, AnimSetCatalog};
-pub use area::{AreaEnv, AreaScenery, SceneryPlacement, WaterPlane};
+pub use area::{AreaEnv, AreaScenery, SceneryPlacement, TerrainPatch, WaterPlane};
 pub use b3d::{B3dAnim, B3dBone, B3dKey, B3dMesh, B3dModel};
 pub use texture::Image;
 pub use catalog::{
@@ -347,6 +347,17 @@ mod tests {
                 area.sceneries.len(),
                 area.sceneries.first().map(|s| (s.mesh_id, s.pos))
             );
+            // LOD-terrain parse rides on a correct colbox/emitter skip: a
+            // misaligned skip yields a garbage terrain count, so a sane count is
+            // itself the alignment check. Each patch's grid must be exactly
+            // (N+1)².
+            assert!(area.terrains.len() < 4096, "{zone}: implausible terrain count {}", area.terrains.len());
+            for t in &area.terrains {
+                assert_eq!(t.heights.len(), (t.grid as usize + 1).pow(2), "{zone}: terrain grid mismatch");
+                assert!(t.heights.iter().all(|h| h.is_finite()), "{zone}: non-finite terrain height");
+                assert!(t.pos.iter().all(|c| c.is_finite()) && t.rot.iter().all(|c| c.is_finite()), "{zone}: non-finite terrain xform");
+            }
+            eprintln!("{zone}: {} water plane(s), {} LOD terrain(s)", area.waters.len(), area.terrains.len());
             // Sky texture resolution (for the skydome port).
             let sky = area.env.sky_tex_id;
             let sky_file = std::fs::read(root.join("data/Game Data/Textures.dat"))
