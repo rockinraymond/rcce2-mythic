@@ -1136,7 +1136,10 @@ fn bake_indices(device: &wgpu::Device, mesh: &B3dMesh) -> wgpu::Buffer {
     })
 }
 
-/// Instance rotation matrix (Y·X·Z) from `rot` radians.
+/// Instance rotation matrix (Y·X·Z) from `rot` radians `[pitch, yaw, roll]`,
+/// matching Blitz `RotateEntity`'s yaw·pitch·roll order. The caller supplies
+/// `rot` already in the render frame (e.g. scenery negates yaw for the
+/// left-handed view — see `scenery_rot_radians`).
 fn inst_nrot(rot: [f32; 3]) -> Mat3 {
     Mat3::from_mat4(
         Mat4::from_rotation_y(rot[1]) * Mat4::from_rotation_x(rot[0]) * Mat4::from_rotation_z(rot[2]),

@@ -799,6 +799,23 @@ const MENU_SET_RUG: [f32; 3] = [8.0, 0.0, 8.16667];
 const WATER_SCROLL_U: f32 = 0.0075;
 const WATER_SCROLL_V: f32 = 0.021;
 
+/// Convert a scenery placement's stored Blitz `[pitch, yaw, roll]` (degrees) to
+/// the renderer's rotation radians, **negating yaw**.
+///
+/// The world renders left-handed (`perspective_lh`/`look_at_lh`, chosen so the
+/// path/NPC layout matches Blitz). glam's `from_rotation_y` is a right-handed
+/// rotation, so a stored Blitz yaw applied directly turns scenery the wrong way
+/// — fences and props face mirrored, not aligned. Negating yaw matches Blitz's
+/// `RotateEntity`; pitch and roll are already correct in this frame (confirmed
+/// by an in-client A/B sweep: only the yaw-negated variant matched Blitz).
+///
+/// Actor bodies are *not* affected: their facing is computed locally from
+/// movement direction (`heading_from_dir`) and calibrated independently, so they
+/// never consume a stored Blitz yaw through this path.
+fn scenery_rot_radians(deg: [f32; 3]) -> [f32; 3] {
+    [deg[0].to_radians(), -deg[1].to_radians(), deg[2].to_radians()]
+}
+
 /// Reserved music id for the looping menu track (MENU-10), distinct from any
 /// zone `LoadingMusicID` so the zone-music switch on enter-world replaces it.
 const MENU_MUSIC_ID: u16 = 65534;
@@ -1571,7 +1588,10 @@ fn load_zone_static(store: &mut AssetStore, view: &mut WorldView, gfx: &Gfx, dat
         let idx = match dedup.get(&key) {
             Some(&i) => i,
             None => {
-                let Some(m) = store.mesh_model(s.mesh_id) else { continue };
+                let Some(m) = store.mesh_model(s.mesh_id) else {
+                    println!("[meshskip] mesh_id {} failed to load (scenery dropped)", s.mesh_id);
+                    continue;
+                };
                 let tex = store.scenery_textures(s.mesh_id, s.texture_id);
                 if std::env::var("RCCE_MESHDIAG").is_ok() {
                     let (mut umin, mut umax, mut vmin, mut vmax) =
@@ -1626,7 +1646,14 @@ fn load_zone_static(store: &mut AssetStore, view: &mut WorldView, gfx: &Gfx, dat
                 i
             }
         };
-        let rot = [s.rot[0].to_radians(), s.rot[1].to_radians(), s.rot[2].to_radians()];
+        let rot = scenery_rot_radians(s.rot);
+        if std::env::var_os("RCCE_SCENDIAG").is_some() {
+            let fname = store.mesh_filename(s.mesh_id).unwrap_or("?").to_string();
+            println!(
+                "[scendiag] mesh={} '{fname}' pos=({:.1},{:.1},{:.1}) pyr=({:.1},{:.1},{:.1}) scale=({:.2},{:.2},{:.2})",
+                s.mesh_id, s.pos[0], s.pos[1], s.pos[2], s.rot[0], s.rot[1], s.rot[2], s.scale[0], s.scale[1], s.scale[2]
+            );
+        }
         place.push((idx, s.pos, rot, s.scale));
         for k in 0..3 {
             min[k] = min[k].min(s.pos[k]);
@@ -4188,6 +4215,12 @@ impl App {
             let pitch = std::env::var("RCCE_CAMPITCH").ok().and_then(|s| s.trim().parse().ok()).unwrap_or(self.cam_pitch);
             let (sp, cp) = pitch.sin_cos();
             let look = [cam_target[0], cam_target[1] + 3.5, cam_target[2]];
+            // RCCE_CAMYAW overrides the orbit yaw (radians) for headless framing.
+            let (sy, cy) = std::env::var("RCCE_CAMYAW")
+                .ok()
+                .and_then(|s| s.trim().parse::<f32>().ok())
+                .map(|a| a.sin_cos())
+                .unwrap_or((sy, cy));
             // Boom direction (pivot -> desired eye), unit length.
             let dir = [sy * cp, sp, cy * cp];
             // Camera collision: march the boom outward and stop before it enters
@@ -5969,6 +6002,18 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // Scenery rotation maps Blitz [pitch,yaw,roll] degrees to render radians with
+    // yaw negated (left-handed view) and pitch/roll preserved.
+    #[test]
+    fn scenery_rot_negates_yaw_only() {
+        let r = scenery_rot_radians([30.0, 90.0, -45.0]);
+        assert!((r[0] - 30f32.to_radians()).abs() < 1e-6, "pitch preserved");
+        assert!((r[1] - (-90f32).to_radians()).abs() < 1e-6, "yaw negated");
+        assert!((r[2] - (-45f32).to_radians()).abs() < 1e-6, "roll preserved");
+        // Zero stays zero (no spurious offset for axis-aligned props).
+        assert_eq!(scenery_rot_radians([0.0, 0.0, 0.0]), [0.0, 0.0, 0.0]);
+    }
 
     // The Actions context menu: NPCs get Interact/Attack/Examine/Trade; players
     // get Interact/Examine only. Hit-testing maps a click to the right row and

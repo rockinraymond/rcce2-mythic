@@ -333,7 +333,9 @@ fn load_zone_scenery(
                 i
             }
         };
-        let rot = [s.rot[0].to_radians(), s.rot[1].to_radians(), s.rot[2].to_radians()];
+        // Negate yaw for the left-handed render frame (see client_window's
+        // `scenery_rot_radians`); pitch/roll are correct as-is.
+        let rot = [s.rot[0].to_radians(), -s.rot[1].to_radians(), s.rot[2].to_radians()];
         placements.push((idx, s.pos, rot, [1.0, 1.0, 1.0], s.scale));
         added += 1;
     }

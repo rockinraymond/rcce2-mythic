@@ -636,6 +636,11 @@ impl AssetStore {
         })
     }
 
+    /// Catalog filename for a mesh id (diagnostics).
+    pub fn mesh_filename(&self, mesh_id: u16) -> Option<&str> {
+        self.meshes.get(mesh_id).map(|e| e.filename.as_str())
+    }
+
     /// A model by mesh-catalog id, cached (including negative cache for misses).
     pub fn mesh_model(&mut self, mesh_id: u16) -> Option<Rc<B3dModel>> {
         if let Some(cached) = self.cache.get(&mesh_id) {
