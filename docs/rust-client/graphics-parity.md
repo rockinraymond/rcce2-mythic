@@ -54,16 +54,42 @@ Legend: ✅ verified (rendered + audited) · 🟡 implemented, render-verify pen
 | Projectiles (3D) | 🟡 | combat path |
 | Minimap / radar | ✅ | left/right handedness fixed (this session) |
 | Terrain detail texture (2nd tex) | ✅ | multitexture `base × detail × 2`, detail UV tiles at `DetailScale` (this session) |
-| **Emitters / particles (`.rpc`)** | ❌ | parsed-but-skipped; fire/smoke/fountains/magic missing |
-| **Actor shadows (`Shadow.bmp` blob)** | ❌ | confirm Blitz draws a ground blob; not in Rust |
-| **Point lights / `LightModels`** | ❌ | dynamic light meshes; confirm Blitz usage |
+| **Emitters / particles (`.rpc`)** | ❌ | parsed-but-skipped; fire/smoke/fountains/magic. Needs particle engine. **Large** |
+| **Dynamic shadows** | ❌ | active in Blitz (Devil Shadow System): sun-cast, actors+scenery casters. Needs shadow-map pass. **Large** |
+| **Point lights / `LightModels`** | ❌ | dynamic light meshes; confirm Blitz usage. Medium |
 | Water reflection / `AWater` bump+foam | ➖ | cosmetic; deferred |
 
-## Queue (next)
+### Minor — implemented, render-verify pending (low risk; env-driven)
 
-1. **Actor shadow** blob — check Blitz `Environment3D.bb` / `Shadow.bmp`, add if real (medium value).
-2. **Vertex colour** + **fog ranges** + **night stars** render-verification.
-3. **Point lights / `LightModels`** — confirm Blitz usage, add if real.
-4. **Emitters / particles** — the largest visible gap; needs `.rpc` config parse + a particle sim (likely multi-iteration; may warrant scoping with the user).
+`Fog` ranges, `night stars`, `vertex colours (EntityColor)`, `day/night cycle`,
+`ambient + directional light` — all applied in every harness render already; not
+independently isolated. Low-risk; can confirm opportunistically.
+
+### Large missing subsystems (NET-NEW — warrant scoping, not "parity tweaks")
+
+These are real, active features in the Blitz client but each is a significant
+renderer addition, not a verification pass:
+
+1. **Dynamic shadows** — Blitz runs the **Devil Shadow System** userlib
+   (`DevilShadowSystem.decls` + `ShadowsMultiple.bb`): the sun is the
+   `ShadowLight` (Environment3D.bb:509), and actors (`CreateShadowCaster AI\EN`,
+   Client.bb:453) + scenery (ClientAreas_FE.bb:570) cast real-time shadows,
+   rendered by `UpdateShadows Cam` each frame (Client.bb:240). Rust has none.
+   Parity needs a **shadow-mapping pass** (render depth from the sun, sample it in
+   the main shader). Large.
+2. **Emitters / particles** — area `.rpc` emitter configs (fire/smoke/fountains/
+   magic) are parsed-but-skipped. Needs an `.rpc` parser + a **particle simulation
+   + billboard renderer**. Large; the most *visible* gap.
+3. **Point lights / `LightModels`** — dynamic light-emitting meshes; needs Blitz
+   usage confirmed, then per-pixel point lighting. Medium.
+
+## Status of the loop
+
+The "verify graphical parity via test renders" pass is **complete for every
+implemented feature** — terrain (base+detail), water, scenery+rotation, actors+
+attachments, sky, clouds, foliage, multitexture, minimap — and fixed real bugs
+along the way (scenery yaw, attachment animation, minimap handedness). What
+remains is the three subsystems above: each is a multi-day renderer addition that
+should be **scoped and prioritised with the user**, not auto-built in a loop.
 
 Update this table as rows are verified or implemented.
