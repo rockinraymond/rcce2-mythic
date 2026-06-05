@@ -143,7 +143,7 @@ fn main() {
     // 5. One LOD terrain.
     pu16(&mut d, 1);
     pu16(&mut d, base_tex);
-    pu16(&mut d, 65535); // detail tex: none
+    pu16(&mut d, base_tex); // detail tex: reuse base at a finer scale (visible blend)
     pi32(&mut d, grid);
     for h in &heights {
         pf32(&mut d, *h); // (N+1)² heights, x outer / z inner (SaveArea order)
@@ -157,7 +157,7 @@ fn main() {
     pf32(&mut d, cell); // scale x
     pf32(&mut d, 1.0); // scale y
     pf32(&mut d, cell); // scale z
-    pf32(&mut d, 8.0); // detail tex scale
+    pf32(&mut d, 96.0); // detail tex scale (fine — tiles ~96× across the terrain)
     pi32(&mut d, 1); // detail
     d.push(1); // morph
     d.push(0); // shading

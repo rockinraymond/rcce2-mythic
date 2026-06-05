@@ -1589,13 +1589,22 @@ fn terrain_model(t: &rcce_data::TerrainPatch) -> B3dModel {
     let n = t.grid as usize;
     let stride = n + 1;
     let vcount = stride * stride;
+    // 2nd UV set for the detail texture (Blitz ScaleTexture(DetailScale)): tiles
+    // `detail_tex_scale` times across the whole terrain. Empty when there's no
+    // detail texture (the shader's default grey lightmap is then a no-op).
+    let has_detail = t.detail_tex_id != 65535 && t.detail_tex_scale > 0.0;
+    let dtiles = t.detail_tex_scale / n.max(1) as f32;
     let mut positions = Vec::with_capacity(vcount);
     let mut uvs = Vec::with_capacity(vcount);
+    let mut uvs2 = Vec::with_capacity(if has_detail { vcount } else { 0 });
     for x in 0..=n {
         for z in 0..=n {
             let h = t.heights.get(x * stride + z).copied().unwrap_or(0.0);
             positions.push([x as f32, h, z as f32]);
             uvs.push([x as f32, z as f32]);
+            if has_detail {
+                uvs2.push([x as f32 * dtiles, z as f32 * dtiles]);
+            }
         }
     }
     let mut indices = Vec::with_capacity(n * n * 6);
@@ -1614,7 +1623,7 @@ fn terrain_model(t: &rcce_data::TerrainPatch) -> B3dModel {
             colors: vec![[1.0, 1.0, 1.0, 1.0]; vcount],
             positions,
             uvs,
-            uvs2: Vec::new(),
+            uvs2,
             indices,
             brush_id: -1,
             texture: None,
@@ -1632,7 +1641,11 @@ fn load_zone_static(store: &mut AssetStore, view: &mut WorldView, gfx: &Gfx, dat
     let bytes = std::fs::read(&path).map_err(|e| eprintln!("[client-window] {}: {e}", path.display())).ok()?;
     let scenery = AreaScenery::parse(&bytes).ok()?;
     let mut models = Vec::new();
-    let mut textures = Vec::new();
+    let mut textures: Vec<Vec<Option<Image>>> = Vec::new();
+    // Per-instance 2nd-texture (lightmap) slot, parallel to `textures`. Scenery
+    // gets none today; LOD terrains get their detail texture here (multitexture
+    // `base × detail × 2`, the same path as lightmaps).
+    let mut lightmaps: Vec<Vec<Option<Image>>> = Vec::new();
     let mut dedup = std::collections::HashMap::new();
     let mut place = Vec::new();
     let (mut min, mut max) = ([f32::MAX; 3], [f32::MIN; 3]);
@@ -1693,8 +1706,10 @@ fn load_zone_static(store: &mut AssetStore, view: &mut WorldView, gfx: &Gfx, dat
                     );
                 }
                 let i = models.len();
+                let nm = tex.len();
                 models.push(m);
                 textures.push(tex);
+                lightmaps.push(vec![None; nm]); // scenery: no 2nd texture
                 dedup.insert(key, i);
                 i
             }
@@ -1736,9 +1751,16 @@ fn load_zone_static(store: &mut AssetStore, view: &mut WorldView, gfx: &Gfx, dat
             continue;
         }
         let tex = store.texture_path(t.base_tex_id).and_then(|p| rcce_data::texture::load(&p));
+        // Detail texture (Blitz stage-1 multitexture): blended as base × detail × 2.
+        let detail = if t.detail_tex_id != 65535 {
+            store.texture_path(t.detail_tex_id).and_then(|p| rcce_data::texture::load(&p))
+        } else {
+            None
+        };
         let idx = models.len();
         models.push(std::rc::Rc::new(terrain_model(t)));
         textures.push(vec![tex]);
+        lightmaps.push(vec![detail]);
         let rot = [t.rot[0].to_radians(), -t.rot[1].to_radians(), t.rot[2].to_radians()];
         place.push((idx, t.pos, rot, t.scale));
         // Expand the zone bounds (camera framing / centre) to the terrain footprint.
@@ -1781,7 +1803,7 @@ fn load_zone_static(store: &mut AssetStore, view: &mut WorldView, gfx: &Gfx, dat
         .map(|&(idx, pos, rot, scale)| SceneInstance {
             model: &models[idx],
             textures: &textures[idx],
-            lightmaps: &[],
+            lightmaps: &lightmaps[idx],
             translation: pos,
             rot,
             scale,

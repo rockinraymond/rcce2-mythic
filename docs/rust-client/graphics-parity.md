@@ -42,18 +42,18 @@ Legend: ✅ verified (rendered + audited) · 🟡 implemented, render-verify pen
 | Water planes | ✅ | alpha plane, white tint (texture shows), tiling `scale/tex_scale`, scroll anim |
 | Skinned actor animation | ✅ | b3d skeletal LBS, GPU/CPU paths |
 | Actor attachments (hair/weapon/shield) | ✅ | follow the animated joint (this session) |
-| Sky dome (`SkyTexID`) | 🟡 | implemented; render-verify in harness |
-| Clouds + storm swap (`CloudTexID`) | 🟡 | implemented; render-verify |
-| Night stars (`StarsTexID`) | 🟡 | implemented; gated by night factor |
+| Sky dome (`SkyTexID`) | ✅ | textured skydome renders (harness) |
+| Clouds + storm swap (`CloudTexID`) | ✅ | drifting clouds render; storm swap implemented |
+| Night stars (`StarsTexID`) | 🟡 | implemented; gated by night factor (verify at night) |
 | Fog (`FogRGB`, near/far) | 🟡 | implemented; render-verify ranges |
 | Ambient + directional light | 🟡 | from `DefaultLightPitch/Yaw` |
 | Day/night cycle | 🟡 | `RCCE_PHASE` / `RCCE_DAYNIGHT_SECS` |
-| Lightmaps (2nd-texture multitexture) | 🟡 | menu Set.b3d verified; confirm in-world scenery |
-| Alpha / masked foliage | 🟡 | `texture_flag & 4` skip; confirm leaf cutout render |
+| Lightmaps / multitexture (2nd tex) | ✅ | menu Set.b3d + terrain detail both render `base × tex × 2` |
+| Alpha / masked foliage | ✅ | fir needles render as alpha cutout (harness) |
 | Vertex colours (`EntityColor`) | 🟡 | confirm per-vertex colour path |
 | Projectiles (3D) | 🟡 | combat path |
 | Minimap / radar | ✅ | left/right handedness fixed (this session) |
-| **Terrain detail texture (2nd tex)** | ❌ | base-only; Blitz blends detail at `ScaleTexture(DetailScale)` |
+| Terrain detail texture (2nd tex) | ✅ | multitexture `base × detail × 2`, detail UV tiles at `DetailScale` (this session) |
 | **Emitters / particles (`.rpc`)** | ❌ | parsed-but-skipped; fire/smoke/fountains/magic missing |
 | **Actor shadows (`Shadow.bmp` blob)** | ❌ | confirm Blitz draws a ground blob; not in Rust |
 | **Point lights / `LightModels`** | ❌ | dynamic light meshes; confirm Blitz usage |
@@ -61,9 +61,9 @@ Legend: ✅ verified (rendered + audited) · 🟡 implemented, render-verify pen
 
 ## Queue (next)
 
-1. Terrain **detail texture** — small; completes the terrain feature.
-2. **Alpha foliage** + **lightmap** + **vertex colour** render-verification (one rich test zone).
-3. **Actor shadow** blob — check Blitz `Environment3D.bb` / `Shadow.bmp`, add if real.
-4. **Emitters / particles** — the largest visible gap; needs `.rpc` config parse + a particle sim.
+1. **Actor shadow** blob — check Blitz `Environment3D.bb` / `Shadow.bmp`, add if real (medium value).
+2. **Vertex colour** + **fog ranges** + **night stars** render-verification.
+3. **Point lights / `LightModels`** — confirm Blitz usage, add if real.
+4. **Emitters / particles** — the largest visible gap; needs `.rpc` config parse + a particle sim (likely multi-iteration; may warrant scoping with the user).
 
 Update this table as rows are verified or implemented.
