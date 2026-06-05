@@ -314,21 +314,26 @@ impl WorldView {
         // centre moves.
         let light_vp = {
             use glam::{Mat4, Vec3};
-            let center = Vec3::from(shadow_center);
             let mut ld = Vec3::from(light_dir);
             ld = if ld.length_squared() < 0.05 { Vec3::new(0.35, 1.0, 0.25).normalize() } else { ld.normalize() };
             const S: f32 = 170.0; // half-extent of the shadow region (world units)
             const D: f32 = 400.0; // light distance from centre
             let up = if ld.y.abs() > 0.99 { Vec3::Z } else { Vec3::Y };
-            let view = Mat4::look_at_lh(center + ld * D, center, up);
-            // Texel-snap the centre in light space to kill crawling shadow edges.
-            let mut snapped = view;
+            // Stabilise against edge crawl: snap the shadow centre to whole shadow
+            // texels along the two axes perpendicular to the light. Done in the
+            // light's ROTATION frame (eye at origin) — snapping in the full view
+            // would do nothing, since the view re-centres on the target every
+            // frame, leaving it at (0,0). Snapping here moves the centre by
+            // whole-texel steps in WORLD space, so the map covers the same world
+            // texels frame to frame and the shadow edges stop shimmering.
+            let rot = Mat4::look_at_lh(Vec3::ZERO, -ld, up);
             let texel = (2.0 * S) / gpu::SHADOW_DIM as f32;
-            let o = view.transform_point3(center);
-            snapped.w_axis.x -= o.x - (o.x / texel).round() * texel;
-            snapped.w_axis.y -= o.y - (o.y / texel).round() * texel;
+            let cls = rot.transform_point3(Vec3::from(shadow_center));
+            let snapped_ls = Vec3::new((cls.x / texel).round() * texel, (cls.y / texel).round() * texel, cls.z);
+            let center = rot.inverse().transform_point3(snapped_ls);
+            let view = Mat4::look_at_lh(center + ld * D, center, up);
             let proj = Mat4::orthographic_lh(-S, S, -S, S, 1.0, D * 2.0);
-            (proj * snapped).to_cols_array()
+            (proj * view).to_cols_array()
         };
         queue.write_buffer(&self.light_buf, 0, bytemuck::cast_slice(&light_vp));
         let u = Uniforms::new(view_proj, eye, fog_color, fog_near, fog_far, ambient, light_dir, light_vp);
