@@ -1755,7 +1755,13 @@ fn load_zone_static(store: &mut AssetStore, view: &mut WorldView, gfx: &Gfx, dat
         max[1] = max[1].max(t.pos[1]);
     }
     if !scenery.terrains.is_empty() {
-        println!("[client-window] zone '{zone}': {} LOD terrain(s) drawn", scenery.terrains.len());
+        for t in &scenery.terrains {
+            let (mn, mx) = t.heights.iter().fold((f32::MAX, f32::MIN), |(a, b), &h| (a.min(h), b.max(h)));
+            println!(
+                "[client-window] zone '{zone}': LOD terrain {}x{} heights [{mn:.1}..{mx:.1}] pos {:?} scale {:?}",
+                t.grid, t.grid, t.pos, t.scale
+            );
+        }
     }
     let n_water = waters.len();
     if !scenery.waters.is_empty() {
@@ -3192,6 +3198,82 @@ impl App {
     }
 
     /// Render the login / character-select screen: a slowly-orbiting view of the
+    /// Headless zone preview (`RCCE_VIEWZONE`): render the startup-loaded gameplay
+    /// zone directly with a free camera — no menu UI, no `Set.b3d` swap, no server.
+    /// Camera: `RCCE_CAMAT="x,y,z"` target (default zone centre), `RCCE_CAMYAW`
+    /// (default slow auto-orbit) / `RCCE_CAMPITCH` / `RCCE_CAMDIST`. Reuses the
+    /// in-world `view.render` path so terrain/scenery/water look exactly as in
+    /// game. Pairs with the `gen-test-zone` bin to verify area rendering without a
+    /// real fork's data or a running server.
+    fn render_zone_preview(&mut self) {
+        let elapsed = self.start.elapsed().as_secs_f32();
+        let (w, h) = match self.gfx.as_ref() {
+            Some(g) => (g.config.width, g.config.height),
+            None => return,
+        };
+        let (sw, sh) = (w as f32, h.max(1) as f32);
+        let envf = |k: &str, d: f32| std::env::var(k).ok().and_then(|s| s.trim().parse::<f32>().ok()).unwrap_or(d);
+        let target = std::env::var("RCCE_CAMAT")
+            .ok()
+            .and_then(|s| {
+                let p: Vec<f32> = s.split(',').filter_map(|t| t.trim().parse().ok()).collect();
+                (p.len() == 3).then(|| [p[0], p[1], p[2]])
+            })
+            .unwrap_or(self.center);
+        let dist = envf("RCCE_CAMDIST", self.span * 0.6);
+        let pitch = envf("RCCE_CAMPITCH", 0.5);
+        let yaw = envf("RCCE_CAMYAW", elapsed * 0.2);
+        let (sp, cp) = pitch.sin_cos();
+        let (sy, cy) = yaw.sin_cos();
+        let eye = [target[0] + dist * sy * cp, target[1] + dist * sp, target[2] + dist * cy * cp];
+        let vp = rcce_render::view_proj(eye, target, sw / sh);
+        let clear = wgpu::Color { r: 0.45, g: 0.62, b: 0.86, a: 1.0 };
+        let fog = self.fog_color;
+        let ambient = [self.ambient[0].max(0.6), self.ambient[1].max(0.6), self.ambient[2].max(0.6)];
+        let (fn_, ff_) = (self.fog_near.max(500.0), self.fog_far.max(40000.0));
+
+        let shot = std::env::var("RCCE_SHOT").ok().filter(|_| {
+            let want = std::env::var("RCCE_SHOT_FRAME").ok().and_then(|s| s.parse::<u64>().ok()).unwrap_or(45);
+            self.frames + 1 >= want
+        });
+        let (Some(gfx), Some(view)) = (self.gfx.as_ref(), self.view.as_ref()) else {
+            return;
+        };
+        if let Some(path) = shot {
+            let tex = gfx.device.create_texture(&wgpu::TextureDescriptor {
+                label: Some("zone-shot"),
+                size: wgpu::Extent3d { width: w, height: h, depth_or_array_layers: 1 },
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format: gfx.config.format,
+                usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
+                view_formats: &[],
+            });
+            let oview = tex.create_view(&Default::default());
+            view.render(&gfx.device, &gfx.queue, &oview, vp, eye, fog, fn_, ff_, ambient, self.light_dir, clear, yaw, elapsed, 0.0);
+            match rcce_render::save_texture_png(&gfx.device, &gfx.queue, &tex, w, h, gfx.config.format, &path) {
+                Ok(()) => println!("[client-window] zone preview -> {path}"),
+                Err(e) => eprintln!("[client-window] zone preview failed: {e}"),
+            }
+            std::process::exit(0);
+        }
+        let frame = match gfx.surface.get_current_texture() {
+            Ok(f) => f,
+            Err(_) => {
+                gfx.surface.configure(&gfx.device, &gfx.config);
+                match gfx.surface.get_current_texture() {
+                    Ok(f) => f,
+                    Err(_) => return,
+                }
+            }
+        };
+        let tview = frame.texture.create_view(&Default::default());
+        view.render(&gfx.device, &gfx.queue, &tview, vp, eye, fog, fn_, ff_, ambient, self.light_dir, clear, yaw, elapsed, 0.0);
+        frame.present();
+        self.frames += 1;
+    }
+
     /// loaded zone as a backdrop, with the menu UI drawn over it.
     fn render_menu(&mut self) {
         let elapsed = self.start.elapsed().as_secs_f32();
@@ -3783,6 +3865,12 @@ impl App {
     }
 
     fn render(&mut self) {
+        // Headless zone-render verification: bypass the menu (and its Set.b3d
+        // backdrop swap) to view the loaded gameplay zone directly.
+        if std::env::var_os("RCCE_VIEWZONE").is_some() {
+            self.render_zone_preview();
+            return;
+        }
         // Login / character-select: a slowly-orbiting zone backdrop + the menu.
         if self.mode != Mode::InWorld {
             self.render_menu();

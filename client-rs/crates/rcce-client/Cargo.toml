@@ -48,6 +48,10 @@ name = "overlay-test"
 path = "src/bin/overlay_test.rs"
 
 [[bin]]
+name = "gen-test-zone"
+path = "src/bin/gen_test_zone.rs"
+
+[[bin]]
 name = "chat-test"
 path = "src/bin/chat_test.rs"
 
