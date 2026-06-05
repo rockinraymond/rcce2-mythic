@@ -117,10 +117,28 @@ fn main() {
         d.push(0); // render range
     }
 
-    // 4. Empty water / colboxes / emitters.
-    pu16(&mut d, 0);
-    pu16(&mut d, 0);
-    pu16(&mut d, 0);
+    // 4. One water plane (a lake around the hill base) + empty colboxes/emitters.
+    let water_tex = texcat
+        .entries
+        .iter()
+        .filter(|e| exists(&e.filename))
+        .find(|e| e.filename.to_lowercase().contains("water"))
+        .map(|e| e.id)
+        .unwrap_or(base_tex);
+    pu16(&mut d, 1); // 1 water plane
+    pu16(&mut d, water_tex);
+    pf32(&mut d, 10.0); // tex scale
+    pf32(&mut d, 0.0); // x
+    pf32(&mut d, 5.0); // y (low — laps the hill base)
+    pf32(&mut d, 0.0); // z
+    pf32(&mut d, 130.0); // scale x
+    pf32(&mut d, 130.0); // scale z
+    d.push(40); // R (editor-only)
+    d.push(90); // G
+    d.push(160); // B
+    d.push(60); // opacity 0..100
+    pu16(&mut d, 0); // colboxes
+    pu16(&mut d, 0); // emitters
 
     // 5. One LOD terrain.
     pu16(&mut d, 1);

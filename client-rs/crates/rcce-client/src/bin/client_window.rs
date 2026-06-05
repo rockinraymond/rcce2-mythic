@@ -3227,6 +3227,30 @@ impl App {
         let (sy, cy) = yaw.sin_cos();
         let eye = [target[0] + dist * sy * cp, target[1] + dist * sp, target[2] + dist * cy * cp];
         let vp = rcce_render::view_proj(eye, target, sw / sh);
+
+        // Water planes (uploaded separately from the static scene, as in-world).
+        if !self.water_planes.is_empty() {
+            if let (Some(gfx), Some(view)) = (self.gfx.as_ref(), self.view.as_mut()) {
+                let models: Vec<B3dModel> = self.water_planes.iter().map(|(w, _)| water_quad(w, [0.0, 0.0])).collect();
+                let texs: Vec<Vec<Option<Image>>> =
+                    self.water_planes.iter().map(|(_, img)| vec![Some(img.clone())]).collect();
+                let instances: Vec<SceneInstance> = self
+                    .water_planes
+                    .iter()
+                    .enumerate()
+                    .map(|(i, (w, _))| SceneInstance {
+                        model: &models[i],
+                        textures: &texs[i][..],
+                        lightmaps: &[],
+                        translation: w.pos,
+                        rot: [0.0, 0.0, 0.0],
+                        scale: [w.scale_x, 1.0, w.scale_z],
+                        color: [1.0, 1.0, 1.0],
+                    })
+                    .collect();
+                view.set_water(&gfx.device, &gfx.queue, &instances);
+            }
+        }
         let clear = wgpu::Color { r: 0.45, g: 0.62, b: 0.86, a: 1.0 };
         let fog = self.fog_color;
         let ambient = [self.ambient[0].max(0.6), self.ambient[1].max(0.6), self.ambient[2].max(0.6)];
