@@ -1983,6 +1983,10 @@ EndIf
 						Case R_Mythic
 							NameR = 255
 							NameG = 255
+							NameB = 
+						Case R_Legendary
+							NameR = 255
+							NameG = 165
 							NameB = 0
 					End Select
 					X# = GY_MouseX# + 0.03
@@ -2149,6 +2153,10 @@ EndIf
 							NameR = 255
 							NameG = 255
 							NameB = 0
+						Case R_Legendary
+							NameR = 255
+							NameG = 165
+							NameB = 0
 					End Select
 					X# = GY_MouseX# + 0.03
 					Y# = GY_MouseY#
@@ -2311,6 +2319,10 @@ EndIf
 						Case R_Mythic
 							NameR = 255
 							NameG = 255
+							NameB = 0
+						Case R_Legendary
+							NameR = 255
+							NameG = 165
 							NameB = 0
 					End Select	
 					X# = GY_MouseX# + 0.03

@@ -41,6 +41,7 @@ Const R_Uncommon = 2
 Const R_Rare = 3
 Const R_Epic = 4
 Const R_Mythic = 5
+Const R_Legendary = 6
 
 Dim DamageTypes$(19)
 
