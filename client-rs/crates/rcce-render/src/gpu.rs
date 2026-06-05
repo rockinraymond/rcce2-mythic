@@ -49,6 +49,9 @@ pub const LIGHT_INTENSITY: f32 = 0.6;
 #[derive(Clone, Copy, Pod, Zeroable)]
 pub struct Uniforms {
     pub mvp: [f32; 16],
+    /// World → sun light clip space, for the shadow-map lookup. Identity-ish
+    /// (a far/degenerate matrix) leaves everything lit (the offscreen path).
+    pub light_vp: [f32; 16],
     pub eye: [f32; 3],
     pub fog_near: f32,
     pub fog_color: [f32; 3],
@@ -68,9 +71,11 @@ impl Uniforms {
         fog_far: f32,
         ambient: [f32; 3],
         light_dir: [f32; 3],
+        light_vp: [f32; 16],
     ) -> Uniforms {
         Uniforms {
             mvp,
+            light_vp,
             eye,
             fog_near,
             fog_color,
@@ -83,9 +88,104 @@ impl Uniforms {
     }
 }
 
+/// Sun shadow-map resolution (square). 2048² gives crisp camera-region shadows.
+pub const SHADOW_DIM: u32 = 2048;
+
+/// Renders shadow casters from the sun's POV into the shadow map (depth). It
+/// alpha-tests the base texture, so cut-out foliage (tree canopies, grass) casts
+/// its real silhouette — not just the opaque trunk. Reuses the scene `Vertex`
+/// layout (position + uv) and the scene texture bind group.
+pub struct ShadowPipeline {
+    pub pipeline: wgpu::RenderPipeline,
+    pub bgl: wgpu::BindGroupLayout,
+}
+
+const SHADOW_SHADER: &str = r#"
+struct LU { light_vp: mat4x4<f32> };
+@group(0) @binding(0) var<uniform> lu: LU;
+@group(1) @binding(0) var tex: texture_2d<f32>;
+@group(1) @binding(1) var samp: sampler;
+struct VO { @builtin(position) clip: vec4<f32>, @location(0) uv: vec2<f32> };
+@vertex fn vs(@location(0) pos: vec3<f32>, @location(2) uv: vec2<f32>) -> VO {
+    var o: VO;
+    o.clip = lu.light_vp * vec4<f32>(pos, 1.0);
+    o.uv = uv;
+    return o;
+}
+@fragment fn fs(in: VO) {
+    // Alpha-test so foliage casts its cut-out shape (opaque texels keep a≈1).
+    if (textureSample(tex, samp, in.uv).a < 0.5) { discard; }
+}
+"#;
+
+impl ShadowPipeline {
+    pub fn new(device: &wgpu::Device, bgl_texture: &wgpu::BindGroupLayout) -> ShadowPipeline {
+        let bgl = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("shadow-u"),
+            entries: &[wgpu::BindGroupLayoutEntry {
+                binding: 0,
+                visibility: wgpu::ShaderStages::VERTEX,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Uniform,
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+                count: None,
+            }],
+        });
+        let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("shadow"),
+            source: wgpu::ShaderSource::Wgsl(SHADOW_SHADER.into()),
+        });
+        let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: None,
+            bind_group_layouts: &[&bgl, bgl_texture],
+            push_constant_ranges: &[],
+        });
+        let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("shadow"),
+            layout: Some(&layout),
+            vertex: wgpu::VertexState {
+                module: &shader,
+                entry_point: "vs",
+                compilation_options: Default::default(),
+                buffers: &[wgpu::VertexBufferLayout {
+                    array_stride: std::mem::size_of::<Vertex>() as u64,
+                    step_mode: wgpu::VertexStepMode::Vertex,
+                    // position (loc 0, offset 0) + uv (loc 2, offset 24).
+                    attributes: &[
+                        wgpu::VertexAttribute { format: wgpu::VertexFormat::Float32x3, offset: 0, shader_location: 0 },
+                        wgpu::VertexAttribute { format: wgpu::VertexFormat::Float32x2, offset: 24, shader_location: 2 },
+                    ],
+                }],
+            },
+            fragment: Some(wgpu::FragmentState {
+                module: &shader,
+                entry_point: "fs",
+                compilation_options: Default::default(),
+                targets: &[], // depth only — the fs just alpha-discards
+            }),
+            primitive: wgpu::PrimitiveState { cull_mode: None, ..Default::default() },
+            depth_stencil: Some(wgpu::DepthStencilState {
+                format: DEPTH_FORMAT,
+                depth_write_enabled: true,
+                depth_compare: wgpu::CompareFunction::Less,
+                stencil: Default::default(),
+                // Constant + slope-scaled bias to cut shadow acne at the source.
+                bias: wgpu::DepthBiasState { constant: 2, slope_scale: 2.0, clamp: 0.0 },
+            }),
+            multisample: wgpu::MultisampleState::default(),
+            multiview: None,
+            cache: None,
+        });
+        ShadowPipeline { pipeline, bgl }
+    }
+}
+
 pub const SHADER: &str = r#"
 struct U {
     mvp: mat4x4<f32>,
+    light_vp: mat4x4<f32>,
     eye: vec3<f32>,
     fog_near: f32,
     fog_color: vec3<f32>,
@@ -96,6 +196,10 @@ struct U {
     _pad: f32,
 };
 @group(0) @binding(0) var<uniform> u: U;
+// Sun shadow map (depth from the light's POV) + its comparison sampler. The
+// offscreen path binds a 1×1 depth=1 default, so the test is always "lit".
+@group(0) @binding(1) var shadow_map: texture_depth_2d;
+@group(0) @binding(2) var shadow_samp: sampler_comparison;
 @group(1) @binding(0) var tex: texture_2d<f32>;
 @group(1) @binding(1) var samp: sampler;
 // Baked lightmap (the brush's 2nd texture slot), sampled with the 2nd UV set.
@@ -120,14 +224,39 @@ struct VsOut {
     o.uv2 = uv2;
     return o;
 }
+// Sun-shadow factor at a world point: 1 = lit, ~0 = shadowed. Projects into the
+// light's clip space, then 3×3 PCF compares against the shadow map (soft edges —
+// better than Blitz's hard stencil shadows). Points outside the map stay lit, so
+// distant geometry past the shadow region isn't wrongly darkened. `ndl` slopes
+// the depth bias to kill acne on grazing surfaces.
+fn sun_shadow(world: vec3<f32>, ndl: f32) -> f32 {
+    let lc = u.light_vp * vec4<f32>(world, 1.0);
+    let ndc = lc.xyz / lc.w;
+    let uv = vec2<f32>(ndc.x * 0.5 + 0.5, ndc.y * -0.5 + 0.5);
+    if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0 || ndc.z > 1.0 || ndc.z < 0.0) {
+        return 1.0;
+    }
+    let bias = max(0.0015 * (1.0 - ndl), 0.0004);
+    let texel = 1.0 / 2048.0;
+    var sum = 0.0;
+    for (var x = -1; x <= 1; x = x + 1) {
+        for (var y = -1; y <= 1; y = y + 1) {
+            let off = vec2<f32>(f32(x), f32(y)) * texel;
+            sum = sum + textureSampleCompareLevel(shadow_map, shadow_samp, uv + off, ndc.z - bias);
+        }
+    }
+    return sum / 9.0;
+}
 @fragment fn fs(in: VsOut) -> @location(0) vec4<f32> {
     let c = textureSample(tex, samp, in.uv);
     if (c.a < 0.5) { discard; }
     let N = normalize(in.normal);
     let L = normalize(u.light_dir);
     // Two-sided (cull is off): abs() keeps backfaces/interiors lit. The zone's
-    // ambient is the floor; its directional light adds on top.
-    let diff = abs(dot(N, L)) * u.light_intensity;
+    // ambient is the floor; its directional light adds on top — and is the part
+    // shadows remove (shadowed surfaces keep ambient, never go fully black).
+    let sh = sun_shadow(in.world, max(dot(N, L), 0.0));
+    let diff = abs(dot(N, L)) * u.light_intensity * sh;
     let shade = u.ambient + vec3<f32>(diff);
     // Baked lightmap (1.0 for non-lightmapped meshes via the grey default).
     let lm = textureSample(lmtex, samp, in.uv2).rgb * 2.0;
@@ -567,16 +696,36 @@ impl Pipeline {
     pub fn new(device: &wgpu::Device, color_format: wgpu::TextureFormat) -> Pipeline {
         let bgl_uniform = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("u"),
-            entries: &[wgpu::BindGroupLayoutEntry {
-                binding: 0,
-                visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
-                ty: wgpu::BindingType::Buffer {
-                    ty: wgpu::BufferBindingType::Uniform,
-                    has_dynamic_offset: false,
-                    min_binding_size: None,
+            entries: &[
+                wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
                 },
-                count: None,
-            }],
+                // Sun shadow map (depth) + comparison sampler — per frame, shared
+                // by the scene + skinned pipelines.
+                wgpu::BindGroupLayoutEntry {
+                    binding: 1,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Texture {
+                        sample_type: wgpu::TextureSampleType::Depth,
+                        view_dimension: wgpu::TextureViewDimension::D2,
+                        multisampled: false,
+                    },
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 2,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Comparison),
+                    count: None,
+                },
+            ],
         });
         let bgl_texture = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("tex"),

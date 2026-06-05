@@ -55,7 +55,7 @@ Legend: ✅ verified (rendered + audited) · 🟡 implemented, render-verify pen
 | Minimap / radar | ✅ | left/right handedness fixed (this session) |
 | Terrain detail texture (2nd tex) | ✅ | multitexture `base × detail × 2`, detail UV tiles at `DetailScale` (this session) |
 | **Emitters / particles (`.rpc`)** | ❌ | parsed-but-skipped; fire/smoke/fountains/magic. Needs particle engine. **Large** |
-| **Dynamic shadows** | ❌ | active in Blitz (Devil Shadow System): sun-cast, actors+scenery casters. Needs shadow-map pass. **Large** |
+| **Dynamic shadows** | ✅ | **shadow mapping** — sun-view depth pass + PCF in the scene shader. Casters: terrain, scenery, actors; alpha-tested so foliage casts canopy shapes. Soft edges (better than Blitz's hard stencil). Camera-centred, texel-snapped. (GPU-skin path not yet a caster.) |
 | **Point lights / `LightModels`** | ❌ | dynamic light meshes; confirm Blitz usage. Medium |
 | Water reflection / `AWater` bump+foam | ➖ | cosmetic; deferred |
 

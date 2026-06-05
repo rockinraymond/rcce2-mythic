@@ -3275,7 +3275,19 @@ impl App {
         }
         let clear = wgpu::Color { r: 0.45, g: 0.62, b: 0.86, a: 1.0 };
         let fog = self.fog_color;
-        let ambient = [self.ambient[0].max(0.6), self.ambient[1].max(0.6), self.ambient[2].max(0.6)];
+        // Ambient floor (RCCE_AMBIENT overrides) — lower it to make sun shadows
+        // read clearly when verifying.
+        let af = envf("RCCE_AMBIENT", 0.55);
+        let ambient = [af, af, af];
+        // Sun direction (RCCE_SUNDIR="x,y,z" overrides the zone's) — a low sun
+        // throws long, obvious shadows for verification.
+        let sun = std::env::var("RCCE_SUNDIR")
+            .ok()
+            .and_then(|s| {
+                let p: Vec<f32> = s.split(',').filter_map(|t| t.trim().parse().ok()).collect();
+                (p.len() == 3).then(|| [p[0], p[1], p[2]])
+            })
+            .unwrap_or(self.light_dir);
         let (fn_, ff_) = (self.fog_near.max(500.0), self.fog_far.max(40000.0));
 
         let shot = std::env::var("RCCE_SHOT").ok().filter(|_| {
@@ -3297,7 +3309,7 @@ impl App {
                 view_formats: &[],
             });
             let oview = tex.create_view(&Default::default());
-            view.render(&gfx.device, &gfx.queue, &oview, vp, eye, fog, fn_, ff_, ambient, self.light_dir, clear, yaw, elapsed, 0.0);
+            view.render(&gfx.device, &gfx.queue, &oview, vp, eye, fog, fn_, ff_, ambient, sun, clear, yaw, elapsed, 0.0, target);
             match rcce_render::save_texture_png(&gfx.device, &gfx.queue, &tex, w, h, gfx.config.format, &path) {
                 Ok(()) => println!("[client-window] zone preview -> {path}"),
                 Err(e) => eprintln!("[client-window] zone preview failed: {e}"),
@@ -3315,7 +3327,7 @@ impl App {
             }
         };
         let tview = frame.texture.create_view(&Default::default());
-        view.render(&gfx.device, &gfx.queue, &tview, vp, eye, fog, fn_, ff_, ambient, self.light_dir, clear, yaw, elapsed, 0.0);
+        view.render(&gfx.device, &gfx.queue, &tview, vp, eye, fog, fn_, ff_, ambient, sun, clear, yaw, elapsed, 0.0, target);
         frame.present();
         self.frames += 1;
     }
@@ -3615,7 +3627,10 @@ impl App {
                 view_formats: &[],
             });
             let oview = tex.create_view(&Default::default());
-            view.render(&gfx.device, &gfx.queue, &oview, vp, eye, fog, menu_fog_near, menu_fog_far, menu_ambient, menu_light, clear, ang, elapsed, 0.0);
+            // Far shadow centre → menu geometry projects out of the shadow region
+            // (always lit): the Set.b3d keeps its baked-lightmap look, no dynamic
+            // shadows from the frontal key light.
+            view.render(&gfx.device, &gfx.queue, &oview, vp, eye, fog, menu_fog_near, menu_fog_far, menu_ambient, menu_light, clear, ang, elapsed, 0.0, [1.0e6, 0.0, 1.0e6]);
             overlay.render(&gfx.device, &gfx.queue, &oview, sw, sh);
             match rcce_render::save_texture_png(&gfx.device, &gfx.queue, &tex, w, h, gfx.config.format, &path) {
                 Ok(()) => println!("[client-window] menu screenshot -> {path}"),
@@ -3636,7 +3651,7 @@ impl App {
             }
         };
         let tview = frame.texture.create_view(&Default::default());
-        view.render(&gfx.device, &gfx.queue, &tview, vp, eye, fog, menu_fog_near, menu_fog_far, menu_ambient, menu_light, clear, ang, elapsed, 0.0);
+        view.render(&gfx.device, &gfx.queue, &tview, vp, eye, fog, menu_fog_near, menu_fog_far, menu_ambient, menu_light, clear, ang, elapsed, 0.0, [1.0e6, 0.0, 1.0e6]);
         overlay.render(&gfx.device, &gfx.queue, &tview, sw, sh);
         frame.present();
         self.frames += 1;
@@ -5029,6 +5044,7 @@ impl App {
             self.cam_yaw,
             elapsed,
             rcce_client::daynight::night_factor(phase),
+            cam_target,
         );
 
         // (Headless RCCE_SHOT capture moved BELOW the overlay build so the PNG
@@ -6143,7 +6159,7 @@ impl App {
                     });
                     let sview = stex.create_view(&Default::default());
                     let clear = wgpu::Color { r: fog_dn[0] as f64, g: fog_dn[1] as f64, b: fog_dn[2] as f64, a: 1.0 };
-                    view.render(&gfx.device, &gfx.queue, &sview, vp, eye, fog_dn, self.fog_near, self.fog_far, ambient_dn, self.light_dir, clear, self.cam_yaw, elapsed, rcce_client::daynight::night_factor(phase));
+                    view.render(&gfx.device, &gfx.queue, &sview, vp, eye, fog_dn, self.fog_near, self.fog_far, ambient_dn, self.light_dir, clear, self.cam_yaw, elapsed, rcce_client::daynight::night_factor(phase), cam_target);
                     overlay.render(&gfx.device, &gfx.queue, &sview, sw, sh);
                     match rcce_render::save_texture_png(&gfx.device, &gfx.queue, &stex, w, h, gfx.config.format, &shot) {
                         Ok(()) => println!("[client-window] screenshot -> {shot}"),

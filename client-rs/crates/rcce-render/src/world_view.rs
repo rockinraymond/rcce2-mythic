@@ -49,6 +49,12 @@ pub struct WorldView {
     uniform_buf: wgpu::Buffer,
     bind0: wgpu::BindGroup,
     depth: wgpu::TextureView,
+    /// Sun shadow map: a depth-only pipeline renders casters from the light's POV
+    /// into `shadow_tex`, which the scene shader then PCF-samples (via `bind0`).
+    shadow_pipeline: gpu::ShadowPipeline,
+    shadow_tex: wgpu::TextureView,
+    light_buf: wgpu::Buffer,
+    light_bind: wgpu::BindGroup,
     /// Static geometry (terrain/scenery), uploaded once.
     statics: Vec<Drawable>,
     /// Water surfaces — rebuilt per frame with a scrolling UV offset so the
@@ -95,16 +101,52 @@ impl WorldView {
             label: Some("u"),
             contents: bytemuck::bytes_of(&Uniforms::new(
                 [0.0; 16], [0.0; 3], [0.0; 3], 1.0, 2.0, [0.5; 3], [0.0, 1.0, 0.0],
+                glam::Mat4::IDENTITY.to_cols_array(),
             )),
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+        });
+        // Sun shadow map: depth texture (rendered into + sampled) + a comparison
+        // sampler (linear → hardware 2×2 PCF, on top of the shader's 3×3).
+        let shadow_pipeline = gpu::ShadowPipeline::new(device, &pipeline.bgl_texture);
+        let shadow_tex = device
+            .create_texture(&wgpu::TextureDescriptor {
+                label: Some("shadow-map"),
+                size: wgpu::Extent3d { width: gpu::SHADOW_DIM, height: gpu::SHADOW_DIM, depth_or_array_layers: 1 },
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format: gpu::DEPTH_FORMAT,
+                usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
+                view_formats: &[],
+            })
+            .create_view(&Default::default());
+        let shadow_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+            label: Some("shadow-cmp"),
+            address_mode_u: wgpu::AddressMode::ClampToEdge,
+            address_mode_v: wgpu::AddressMode::ClampToEdge,
+            mag_filter: wgpu::FilterMode::Linear,
+            min_filter: wgpu::FilterMode::Linear,
+            compare: Some(wgpu::CompareFunction::LessEqual),
+            ..Default::default()
+        });
+        let light_buf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("light-vp"),
+            contents: bytemuck::cast_slice(&glam::Mat4::IDENTITY.to_cols_array()),
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+        });
+        let light_bind = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("light"),
+            layout: &shadow_pipeline.bgl,
+            entries: &[wgpu::BindGroupEntry { binding: 0, resource: light_buf.as_entire_binding() }],
         });
         let bind0 = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: None,
             layout: &pipeline.bgl_uniform,
-            entries: &[wgpu::BindGroupEntry {
-                binding: 0,
-                resource: uniform_buf.as_entire_binding(),
-            }],
+            entries: &[
+                wgpu::BindGroupEntry { binding: 0, resource: uniform_buf.as_entire_binding() },
+                wgpu::BindGroupEntry { binding: 1, resource: wgpu::BindingResource::TextureView(&shadow_tex) },
+                wgpu::BindGroupEntry { binding: 2, resource: wgpu::BindingResource::Sampler(&shadow_sampler) },
+            ],
         });
         WorldView {
             pipeline,
@@ -114,6 +156,10 @@ impl WorldView {
             uniform_buf,
             bind0,
             depth: make_depth(device, w, h),
+            shadow_pipeline,
+            shadow_tex,
+            light_buf,
+            light_bind,
             statics: Vec::new(),
             water: Vec::new(),
             dynamics: Vec::new(),
@@ -260,8 +306,32 @@ impl WorldView {
         sky_yaw: f32,
         sky_time: f32,
         sky_night: f32,
+        shadow_center: [f32; 3],
     ) {
-        let u = Uniforms::new(view_proj, eye, fog_color, fog_near, fog_far, ambient, light_dir);
+        // Sun light view-proj: an orthographic box along the light direction,
+        // centred on what the camera looks at (`shadow_center`), sized to cover
+        // the near scene. Snapped to shadow-texels to stop edge shimmer as the
+        // centre moves.
+        let light_vp = {
+            use glam::{Mat4, Vec3};
+            let center = Vec3::from(shadow_center);
+            let mut ld = Vec3::from(light_dir);
+            ld = if ld.length_squared() < 0.05 { Vec3::new(0.35, 1.0, 0.25).normalize() } else { ld.normalize() };
+            const S: f32 = 170.0; // half-extent of the shadow region (world units)
+            const D: f32 = 400.0; // light distance from centre
+            let up = if ld.y.abs() > 0.99 { Vec3::Z } else { Vec3::Y };
+            let view = Mat4::look_at_lh(center + ld * D, center, up);
+            // Texel-snap the centre in light space to kill crawling shadow edges.
+            let mut snapped = view;
+            let texel = (2.0 * S) / gpu::SHADOW_DIM as f32;
+            let o = view.transform_point3(center);
+            snapped.w_axis.x -= o.x - (o.x / texel).round() * texel;
+            snapped.w_axis.y -= o.y - (o.y / texel).round() * texel;
+            let proj = Mat4::orthographic_lh(-S, S, -S, S, 1.0, D * 2.0);
+            (proj * snapped).to_cols_array()
+        };
+        queue.write_buffer(&self.light_buf, 0, bytemuck::cast_slice(&light_vp));
+        let u = Uniforms::new(view_proj, eye, fog_color, fog_near, fog_far, ambient, light_dir, light_vp);
         queue.write_buffer(&self.uniform_buf, 0, bytemuck::bytes_of(&u));
         // Sky gradient: horizon = fog colour (so the world fades into it),
         // zenith bluer/darker. Then the per-frame yaw pans the sky texture and
@@ -269,6 +339,31 @@ impl WorldView {
         self.sky.set_colors(queue, gpu::sky_zenith(fog_color), fog_color);
         self.sky.set_frame(queue, sky_yaw, sky_time, sky_night);
         let mut enc = device.create_command_encoder(&Default::default());
+        // Shadow pass: render opaque casters (terrain + scenery + CPU-skinned
+        // actors) from the sun's POV into the shadow map. Depth only.
+        {
+            let mut sp = enc.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("shadow"),
+                color_attachments: &[],
+                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                    view: &self.shadow_tex,
+                    depth_ops: Some(wgpu::Operations { load: wgpu::LoadOp::Clear(1.0), store: wgpu::StoreOp::Store }),
+                    stencil_ops: None,
+                }),
+                timestamp_writes: None,
+                occlusion_query_set: None,
+            });
+            sp.set_pipeline(&self.shadow_pipeline.pipeline);
+            sp.set_bind_group(0, &self.light_bind, &[]);
+            // All casters — opaque (terrain/props/actors) and alpha (foliage); the
+            // shadow fs alpha-tests so cut-out canopies cast their real shape.
+            for d in self.statics.iter().chain(self.dynamics.iter()) {
+                sp.set_bind_group(1, &d.tex_bind, &[]);
+                sp.set_vertex_buffer(0, d.vbuf.slice(..));
+                sp.set_index_buffer(d.ibuf.slice(..), wgpu::IndexFormat::Uint32);
+                sp.draw_indexed(0..d.n_idx, 0, 0..1);
+            }
+        }
         {
             let mut rp = enc.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("world"),
@@ -383,7 +478,7 @@ impl WorldView {
         // Reuse the exact live render path, but target the offscreen view.
         self.render(
             device, queue, &view, view_proj, eye, fog_color, fog_near, fog_far, ambient,
-            light_dir, clear, sky_yaw, sky_time, sky_night,
+            light_dir, clear, sky_yaw, sky_time, sky_night, eye,
         );
         save_texture_png(device, queue, &tex, w, h, self.color_format, path)
     }

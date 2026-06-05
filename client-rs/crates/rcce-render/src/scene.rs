@@ -35,6 +35,41 @@ pub struct SceneInstance<'a> {
 /// Render the scene to a PNG with distance fog. `eye`/`target` define the
 /// camera; `fog_color` is also the sky/clear colour.
 #[allow(clippy::too_many_arguments)]
+/// A 1×1 depth texture + comparison sampler for the offscreen path's shadow-map
+/// bindings (the scene shader requires them). Paired with [`no_shadow_vp`] — the
+/// degenerate light matrix below keeps the shadow test out-of-bounds, so this
+/// texture is never actually sampled.
+fn default_shadow(device: &wgpu::Device) -> (wgpu::TextureView, wgpu::Sampler) {
+    let tex = device
+        .create_texture(&wgpu::TextureDescriptor {
+            label: Some("shadow-default"),
+            size: wgpu::Extent3d { width: 1, height: 1, depth_or_array_layers: 1 },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: gpu::DEPTH_FORMAT,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
+            view_formats: &[],
+        })
+        .create_view(&Default::default());
+    let samp = device.create_sampler(&wgpu::SamplerDescriptor {
+        label: Some("shadow-default-cmp"),
+        compare: Some(wgpu::CompareFunction::LessEqual),
+        ..Default::default()
+    });
+    (tex, samp)
+}
+
+/// A degenerate light view-proj that maps every point to clip `(0,0,10,1)` →
+/// `ndc.z = 10`, outside `[0,1]`, so the scene shader's shadow test always
+/// returns "lit". Used by the offscreen PNG renderers (no real shadow map).
+fn no_shadow_vp() -> [f32; 16] {
+    let mut m = [0.0f32; 16];
+    m[14] = 10.0; // w_axis.z → clip.z
+    m[15] = 1.0; // w_axis.w → clip.w
+    m
+}
+
 pub fn render_scene_png(
     instances: &[SceneInstance],
     eye: [f32; 3],
@@ -68,6 +103,7 @@ pub fn render_scene_png(
         fog_far,
         ambient,
         light_dir,
+        no_shadow_vp(),
     );
 
     let instance = wgpu::Instance::default();
@@ -128,10 +164,15 @@ pub fn render_scene_png(
     }
     sky.set_frame(&queue, 0.0, 0.0, night); // still image → no yaw pan / drift
     let ubuf = device.create_buffer_init_uniform(&uniforms);
+    let (sh_tex, sh_samp) = default_shadow(&device);
     let bind0 = device.create_bind_group(&wgpu::BindGroupDescriptor {
         label: None,
         layout: &pipeline.bgl_uniform,
-        entries: &[wgpu::BindGroupEntry { binding: 0, resource: ubuf.as_entire_binding() }],
+        entries: &[
+            wgpu::BindGroupEntry { binding: 0, resource: ubuf.as_entire_binding() },
+            wgpu::BindGroupEntry { binding: 1, resource: wgpu::BindingResource::TextureView(&sh_tex) },
+            wgpu::BindGroupEntry { binding: 2, resource: wgpu::BindingResource::Sampler(&sh_samp) },
+        ],
     });
     let drawables = gpu::build_drawables(&device, &queue, &pipeline, instances, ground_y);
     if drawables.is_empty() {
@@ -259,7 +300,7 @@ pub fn render_skinned_png(
     let aspect = width as f32 / height as f32;
     let proj = Mat4::perspective_rh(50f32.to_radians(), aspect, 1.0, 100_000.0);
     let view = Mat4::look_at_rh(Vec3::from(eye), Vec3::from(target), Vec3::Y);
-    let uniforms = Uniforms::new((proj * view).to_cols_array(), eye, fog_color, fog_near, fog_far, ambient, light_dir);
+    let uniforms = Uniforms::new((proj * view).to_cols_array(), eye, fog_color, fog_near, fog_far, ambient, light_dir, no_shadow_vp());
 
     let instance = wgpu::Instance::default();
     let adapter = block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
@@ -307,10 +348,15 @@ pub fn render_skinned_png(
     let pipeline = Pipeline::new(&device, color_format);
     let skin = gpu::SkinPipeline::new(&device, color_format, &pipeline);
     let ubuf = device.create_buffer_init_uniform(&uniforms);
+    let (sh_tex, sh_samp) = default_shadow(&device);
     let bind0 = device.create_bind_group(&wgpu::BindGroupDescriptor {
         label: None,
         layout: &pipeline.bgl_uniform,
-        entries: &[wgpu::BindGroupEntry { binding: 0, resource: ubuf.as_entire_binding() }],
+        entries: &[
+            wgpu::BindGroupEntry { binding: 0, resource: ubuf.as_entire_binding() },
+            wgpu::BindGroupEntry { binding: 1, resource: wgpu::BindingResource::TextureView(&sh_tex) },
+            wgpu::BindGroupEntry { binding: 2, resource: wgpu::BindingResource::Sampler(&sh_samp) },
+        ],
     });
 
     // Instance model matrix (Y·X·Z rotation, matching inst_nrot) and the
