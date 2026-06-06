@@ -785,6 +785,23 @@ struct VO { @builtin(position) pos: vec4<f32>, @location(0) ndc: vec2<f32> };
     o.ndc = xy;                      // pass clip-space xy for per-pixel ray unprojection
     return o;
 }
+// Hash a 3D cell index to [0,1) — cheap, decorrelated per axis.
+fn hash31(p: vec3<f32>) -> f32 {
+    var q = fract(p * 0.3183099 + vec3<f32>(0.71, 0.113, 0.419));
+    q = q + dot(q, q.yzx + 19.19);
+    return fract((q.x + q.y) * q.z);
+}
+// Procedural starfield from the WORLD ray direction: sparse bright points placed
+// in a fine angular grid. Pole-safe — it's a function of the 3D direction, not a
+// pinned 2D texture — so it fills the overhead sky with NO pole streaks. Returns
+// additive intensity (0 = empty cell). `dir` should be the normalized view ray.
+fn proc_stars(dir: vec3<f32>) -> f32 {
+    let cell = floor(dir * 260.0);
+    let h = hash31(cell);
+    let present = step(0.9875, h);          // ~1.25% of cells host a star
+    let b = fract(h * 113.7);               // decorrelated per-star brightness
+    return present * (0.35 + 0.65 * b);
+}
 @fragment fn fs(i: VO) -> @location(0) vec4<f32> {
     // Fully WORLD-FIXED sky: a per-pixel world ray (unproject through
     // inverse(view_proj)) drives both axes, so the sky stays put as the camera
@@ -837,6 +854,16 @@ struct VO { @builtin(position) pos: vec4<f32>, @location(0) ndc: vec2<f32> };
         let s = textureSample(starstex, starssamp, suv).rgb;
         let sfade = smoothstep(0.05, 0.40, sky_t) * pin_fade;
         col = col + s * sky.params2.y * sfade;
+    }
+    // Procedural OVERHEAD stars (pole-safe): the texture stars above only live in
+    // the horizon band (they fade out by the pin point), leaving the zenith empty.
+    // Fill it with a world-ray starfield that fades IN as the texture stars fade
+    // OUT — gated on ray.y (NOT sky_t, which is saturated above the pin), so the
+    // two crossfade cleanly into continuous coverage from horizon to zenith. Pole-
+    // safe by construction, so no streaks. Night only (× the night factor).
+    if (sky.params2.y > 0.01) {
+        let pstar = proc_stars(ray) * smoothstep(0.33, 0.52, ray.y);
+        col = col + vec3<f32>(0.90, 0.93, 1.0) * pstar * sky.params2.y;
     }
     // Celestial body at the sun direction (the same arc the shadows use): a bright
     // disc + warm glow by day, a pale-cool moon by night, cross-fading at dawn/dusk
