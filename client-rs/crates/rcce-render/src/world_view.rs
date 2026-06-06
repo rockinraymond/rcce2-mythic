@@ -40,6 +40,33 @@ struct SkinnedDrawable {
     actor: usize, // index into actor_pool
 }
 
+/// The six view-frustum planes (left, right, bottom, top, near, far) as
+/// `[a, b, c, d]` with the normal pointing INTO the frustum and normalised, so
+/// the signed distance of a point is `a*x + b*y + c*z + d`. Extracted (Gribb–
+/// Hartmann) from a column-major view-projection matrix where `clip = vp*world`,
+/// so `clip.<axis> == m.row(axis) · world`. wgpu/D3D clip volume: x,y ∈ [-w,w],
+/// z ∈ [0,w] — hence the near plane is `row2` (z ≥ 0), not `row3 + row2`.
+fn frustum_planes(view_proj: &[f32; 16]) -> [[f32; 4]; 6] {
+    let m = glam::Mat4::from_cols_array(view_proj);
+    let (r0, r1, r2, r3) = (m.row(0), m.row(1), m.row(2), m.row(3));
+    let raw = [r3 + r0, r3 - r0, r3 + r1, r3 - r1, r2, r3 - r2];
+    let mut planes = [[0.0f32; 4]; 6];
+    for (i, p) in raw.iter().enumerate() {
+        let len = glam::Vec3::new(p.x, p.y, p.z).length().max(1e-20);
+        planes[i] = [p.x / len, p.y / len, p.z / len, p.w / len];
+    }
+    planes
+}
+
+/// Conservative sphere-vs-frustum test: returns `false` only when the sphere is
+/// fully outside at least one plane. Never wrongly culls a visible object (a
+/// sphere straddling a plane stays in), so the rendered image is unchanged.
+fn sphere_in_frustum(planes: &[[f32; 4]; 6], c: &[f32; 3], r: f32) -> bool {
+    planes
+        .iter()
+        .all(|p| p[0] * c[0] + p[1] * c[1] + p[2] * c[2] + p[3] >= -r)
+}
+
 pub struct WorldView {
     pipeline: Pipeline,
     skin: SkinPipeline,
@@ -482,6 +509,14 @@ impl WorldView {
                 occlusion_query_set: None,
             });
             self.sky.draw(&mut rp); // behind the world (far plane, no depth write)
+            // View-frustum cull: a drawable is submitted only when its world
+            // bounding sphere is inside the camera frustum. Conservative, so the
+            // image is unchanged; it just skips the textured+shaded draw of props
+            // behind the camera or off the sides. `RCCE_NOFRUSTUMCULL` disables it.
+            let frustum = frustum_planes(&view_proj);
+            let fcull = std::env::var_os("RCCE_NOFRUSTUMCULL").is_none();
+            let visible = |d: &Drawable| !fcull || sphere_in_frustum(&frustum, &d.center, d.radius);
+            let (mut wdrawn, mut wculled) = (0u32, 0u32);
             // 1) Opaque pass: terrain base + props (everything except the splat
             //    overlays). Depth write on.
             rp.set_pipeline(&self.pipeline.pipeline);
@@ -490,6 +525,11 @@ impl WorldView {
                 if d.alpha {
                     continue;
                 }
+                if !visible(d) {
+                    wculled += 1;
+                    continue;
+                }
+                wdrawn += 1;
                 rp.set_bind_group(1, &d.tex_bind, &[]);
                 rp.set_vertex_buffer(0, d.vbuf.slice(..));
                 rp.set_index_buffer(d.ibuf.slice(..), wgpu::IndexFormat::Uint32);
@@ -517,6 +557,11 @@ impl WorldView {
                 if !d.alpha {
                     continue;
                 }
+                if !visible(d) {
+                    wculled += 1;
+                    continue;
+                }
+                wdrawn += 1;
                 rp.set_bind_group(1, &d.tex_bind, &[]);
                 rp.set_vertex_buffer(0, d.vbuf.slice(..));
                 rp.set_index_buffer(d.ibuf.slice(..), wgpu::IndexFormat::Uint32);
@@ -524,10 +569,18 @@ impl WorldView {
             }
             // 4) Water surfaces (alpha-blended, scrolling), over terrain + splats.
             for d in &self.water {
+                if !visible(d) {
+                    wculled += 1;
+                    continue;
+                }
+                wdrawn += 1;
                 rp.set_bind_group(1, &d.tex_bind, &[]);
                 rp.set_vertex_buffer(0, d.vbuf.slice(..));
                 rp.set_index_buffer(d.ibuf.slice(..), wgpu::IndexFormat::Uint32);
                 rp.draw_indexed(0..d.n_idx, 0, 0..1);
+            }
+            if std::env::var_os("RCCE_DRAWSTATS").is_some() {
+                eprintln!("[world] drawables drawn={wdrawn} culled={wculled}");
             }
             // 5) Particles: unlit camera-facing billboards, additive/alpha blended,
             //    depth-tested against the world but writing no depth.
@@ -679,4 +732,42 @@ pub fn view_proj(eye: [f32; 3], target: [f32; 3], aspect: f32) -> [f32; 16] {
     let proj = Mat4::perspective_lh(50f32.to_radians(), aspect, 1.0, 100_000.0);
     let view = Mat4::look_at_lh(Vec3::from(eye), Vec3::from(target), Vec3::Y);
     (proj * view).to_cols_array()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{frustum_planes, sphere_in_frustum, view_proj};
+
+    // Camera at the origin looking toward +Z (the LH forward axis).
+    fn cam() -> [[f32; 4]; 6] {
+        frustum_planes(&view_proj([0.0, 0.0, 0.0], [0.0, 0.0, 1.0], 16.0 / 9.0))
+    }
+
+    #[test]
+    fn point_ahead_is_inside_behind_is_outside() {
+        let f = cam();
+        // 50 units straight ahead — well inside the frustum.
+        assert!(sphere_in_frustum(&f, &[0.0, 0.0, 50.0], 1.0));
+        // 50 units behind the camera — fully outside (past the near plane).
+        assert!(!sphere_in_frustum(&f, &[0.0, 0.0, -50.0], 1.0));
+        // Far off to the side at close range — outside the lateral planes.
+        assert!(!sphere_in_frustum(&f, &[500.0, 0.0, 5.0], 1.0));
+    }
+
+    #[test]
+    fn large_radius_straddling_the_near_plane_stays_in() {
+        let f = cam();
+        // A huge sphere centred just behind the camera still overlaps the view
+        // (like a zone-spanning terrain mesh) — must NOT be culled.
+        assert!(sphere_in_frustum(&f, &[0.0, 0.0, -10.0], 1000.0));
+    }
+
+    #[test]
+    fn planes_are_normalised() {
+        let f = cam();
+        for p in &f {
+            let len = (p[0] * p[0] + p[1] * p[1] + p[2] * p[2]).sqrt();
+            assert!((len - 1.0).abs() < 1e-4, "plane normal not unit: {len}");
+        }
+    }
 }
