@@ -306,6 +306,9 @@ struct App {
     footstep_paths: Vec<std::path::PathBuf>,
     /// Rain/snow particles + the previous frame's elapsed time (for dt).
     weather: rcce_client::weather::WeatherSystem,
+    /// Lazily-loaded fallback "Loot Bag" mesh (model + textures) for dropped items
+    /// whose own world mesh (`mmesh`) is 65535/missing — Blitz's `LootBagEN`.
+    loot_bag: Option<(std::rc::Rc<rcce_data::B3dModel>, Vec<Option<rcce_data::Image>>)>,
     prev_elapsed: f32,
     /// Per-spell-id cooldown end time (elapsed seconds) for the action bar.
     spell_cooldowns: std::collections::HashMap<u16, f32>,
@@ -464,6 +467,7 @@ impl App {
             footsteps: rcce_client::audio::FootstepTimer::new(),
             footstep_paths: Vec::new(),
             weather: rcce_client::weather::WeatherSystem::new(240),
+            loot_bag: None,
             prev_elapsed: 0.0,
             spell_cooldowns: std::collections::HashMap::new(),
             cursor: (0.0, 0.0),
@@ -1440,6 +1444,14 @@ fn dyn_hash(world: &World, elapsed: f32, me_moving: bool, me_running: bool, me_a
         }
         // Remote attack-swing presence (CBT-3) so the swing shows under the throttle.
         world.attack_anims.contains_key(&rid).hash(&mut h);
+    }
+    // Dropped loot (DROP-1): hash the set of item handles + ids so the 3D ground
+    // meshes rebuild when loot is dropped or picked up (positions are fixed at drop).
+    let mut loot: Vec<u32> = world.dropped_items.keys().copied().collect();
+    loot.sort_unstable();
+    for hh in loot {
+        hh.hash(&mut h);
+        world.dropped_items[&hh].item_id.hash(&mut h);
     }
     h.finish()
 }
@@ -3661,6 +3673,41 @@ impl App {
             }
         }
 
+        // RCCE_LOOTPREVIEW: drop the fallback Loot Bag mesh on the ground at the
+        // camera target so the dropped-loot 3D render (DROP-1) is verifiable
+        // headlessly — the in-world path needs a live server + an actual item drop.
+        // Optional RCCE_LOOTITEM=<id> renders that item's own world mesh instead.
+        if std::env::var_os("RCCE_LOOTPREVIEW").is_some() {
+            let item = std::env::var("RCCE_LOOTITEM").ok().and_then(|s| s.parse::<u16>().ok());
+            let loaded = if let Some(store) = self.store.as_mut() {
+                match item.and_then(|id| store.gear_attachment(id)) {
+                    Some(att) => Some((att.model, att.textures, att.scale * 0.05)),
+                    None => store.mesh_by_path("Loot Bag.b3d").map(|(m, t, _)| (m, t, 0.075)),
+                }
+            } else {
+                None
+            };
+            if let (Some((model, texs, s)), Some(gfx), Some(view)) = (loaded, self.gfx.as_ref(), self.view.as_mut()) {
+                let (min, _) = model.bounds();
+                let g = self
+                    .height_field
+                    .as_ref()
+                    .and_then(|h| h.height_at(target[0], target[2]))
+                    .unwrap_or(target[1]);
+                let ty = g - min[1] * s;
+                let inst = [SceneInstance {
+                    model: &model,
+                    textures: &texs[..],
+                    lightmaps: &[],
+                    translation: [target[0], ty, target[2]],
+                    rot: [0.0, 0.0, 0.0],
+                    scale: [s, s, s],
+                    color: [1.0, 1.0, 1.0],
+                }];
+                view.set_dynamic(&gfx.device, &gfx.queue, &inst, &["loot:preview".to_string()]);
+            }
+        }
+
         // Particles: warm up the emitters so a single-frame preview shows a full
         // plume, then build this frame's billboards facing the preview camera.
         if !self.emitters.is_empty() {
@@ -4700,7 +4747,7 @@ impl App {
                     me_jump_offset, self.first_person, me_fidget, self.height_field.as_ref(),
                 );
                 // CPU drawables: attachments (+ bodies when GPU skinning is off).
-                let instances: Vec<SceneInstance> = place
+                let mut instances: Vec<SceneInstance> = place
                     .iter()
                     .map(|&(idx, t, r, color, s)| SceneInstance {
                         model: &models[idx],
@@ -4712,6 +4759,48 @@ impl App {
                         color,
                     })
                     .collect();
+                // Dropped loot (DROP-1): render each item's world mesh (its `mmesh`)
+                // seated on the ground, or the Loot Bag fallback for items with no
+                // world mesh (most shipped items) — like Blitz (ClientNet.bb:1378).
+                // Replaces the flat 2D pip with a real, terrain-occluded 3D object.
+                let mut loot_models: Vec<std::rc::Rc<rcce_data::B3dModel>> = Vec::new();
+                let mut loot_texs: Vec<Vec<Option<rcce_data::Image>>> = Vec::new();
+                let mut loot_xf: Vec<([f32; 3], f32, String)> = Vec::new();
+                if !net.world.dropped_items.is_empty() {
+                    if self.loot_bag.is_none() {
+                        self.loot_bag = store.mesh_by_path("Loot Bag.b3d").map(|(m, t, _)| (m, t));
+                    }
+                    for d in net.world.dropped_items.values() {
+                        let (model, texs, s, key) = match store.gear_attachment(d.item_id) {
+                            // Item's own world mesh (Blitz: LoadedMeshScales × 0.05).
+                            Some(att) => (att.model, att.textures, att.scale * 0.05, format!("loot:i{}", d.item_id)),
+                            // Fallback Loot Bag (Blitz scales it 0.075).
+                            None => match &self.loot_bag {
+                                Some((m, t)) => (m.clone(), t.clone(), 0.075, "loot:bag".to_string()),
+                                None => continue,
+                            },
+                        };
+                        // Seat the mesh's lowest vertex on the terrain under it.
+                        let (min, _) = model.bounds();
+                        let ground = self.height_field.as_ref().and_then(|h| h.height_at(d.x, d.z)).unwrap_or(d.y);
+                        loot_models.push(model);
+                        loot_texs.push(texs);
+                        loot_xf.push(([d.x, ground - min[1] * s, d.z], s, key));
+                    }
+                }
+                let mut keys = keys;
+                for (i, (pos, s, key)) in loot_xf.iter().enumerate() {
+                    instances.push(SceneInstance {
+                        model: &loot_models[i],
+                        textures: &loot_texs[i][..],
+                        lightmaps: &[],
+                        translation: *pos,
+                        rot: [0.0, 0.0, 0.0],
+                        scale: [*s, *s, *s],
+                        color: [1.0, 1.0, 1.0],
+                    });
+                    keys.push(key.clone());
+                }
                 view.set_dynamic(&gfx.device, &gfx.queue, &instances, &keys);
                 // GPU-skinned bodies (when enabled) — static mesh + pose uniform.
                 if self.gpu_skin {
@@ -5916,7 +6005,9 @@ impl App {
                     let gold = [1.0, 0.85, 0.3, 1.0];
                     for d in net.world.dropped_items.values() {
                         if let Some((px, py)) = rcce_render::project(&vp, [d.x, d.y + 1.2, d.z], sw, sh) {
-                            overlay.rect(px - 3.0, py - 3.0, 6.0, 6.0, gold);
+                            // The item now renders as a 3D mesh on the ground (see the
+                            // dynamic-instance build above); keep just the floating
+                            // name/amount label + the [E] pickup hint.
                             let name = store.item_name(d.item_id);
                             let label = if d.amount > 1 { format!("{name} x{}", d.amount) } else { name };
                             let in_range = nearest.map(|(h, d2)| h == d.handle && d2 < 60.0 * 60.0).unwrap_or(false);
