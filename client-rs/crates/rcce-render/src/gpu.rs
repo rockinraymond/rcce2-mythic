@@ -700,7 +700,16 @@ fn cloud_dapple(p: vec2<f32>) -> f32 {
             point = point + u.lights[i].color.rgb * (a * a) * pndl;
         }
     }
-    let shade = u.ambient + vec3<f32>(diff) + point;
+    // Hemispheric ambient: skylight is cool + a touch brighter from ABOVE and
+    // warmer + darker from BELOW (ground bounce), instead of one flat term — so
+    // up-facing surfaces catch a cool sky glow and undersides fall into a warmer
+    // shade, giving objects real grounded depth. Centred so the overall brightness
+    // at a vertical face ~matches the old flat ambient. (Beyond Blitz's flat term.)
+    let up = N.y * 0.5 + 0.5;                                 // 1 up .. 0 down
+    let sky_amb = u.ambient * vec3<f32>(0.90, 1.02, 1.32);   // cool + brighter (sky)
+    let gnd_amb = u.ambient * vec3<f32>(1.02, 0.84, 0.60);   // warm + darker (ground bounce)
+    let amb = mix(gnd_amb, sky_amb, up);
+    let shade = amb + vec3<f32>(diff) + point;
     // Baked lightmap (1.0 for non-lightmapped meshes via the grey default).
     let lm = textureSample(lmtex, samp, in.uv2).rgb * 2.0;
     let lit = c.rgb * in.color.rgb * shade * lm;
