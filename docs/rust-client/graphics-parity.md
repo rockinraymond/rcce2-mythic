@@ -56,7 +56,8 @@ Legend: ✅ verified (rendered + audited) · 🟡 implemented, render-verify pen
 | Terrain detail texture (2nd tex) | ✅ | multitexture `base × detail × 2`, detail UV tiles at `DetailScale` (this session) |
 | **Emitters / particles (`.rpc`)** | ❌ | parsed-but-skipped; fire/smoke/fountains/magic. Needs particle engine. **Large** |
 | **Dynamic shadows** | ✅ | **shadow mapping** — sun-view depth pass + PCF in the scene shader. Casters: terrain, scenery, actors; alpha-tested so foliage casts canopy shapes. Soft edges (better than Blitz's hard stencil). Camera-centred, texel-snapped. (GPU-skin path not yet a caster.) |
-| **Point lights / `LightModels`** | ❌ | dynamic light meshes; confirm Blitz usage. Medium |
+| Point lights / `LightModels` | ✅ | `light_<range>_<R>_<G>_<B>` scenery meshes → per-fragment accumulation (colour × distance falloff × facing); nearest 16 to the camera per frame. Illuminate only, no shadows (matches Blitz). Env-tunable `RCCE_LIGHTRANGE` / `RCCE_LIGHTGAIN`. |
+| Form shading (mesh self-shadow) | ✅ | `max(dot(N,L))` — lit/dark sides on every mesh + slope-shaded terrain |
 | Water reflection / `AWater` bump+foam | ➖ | cosmetic; deferred |
 
 ### Minor — implemented, render-verify pending (low risk; env-driven)

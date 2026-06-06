@@ -1585,6 +1585,31 @@ fn water_quad(w: &rcce_data::WaterPlane, scroll: [f32; 2]) -> B3dModel {
 /// tiling density is the lone cosmetic unknown until verified against a real
 /// terrain (current rcce2 zones ship none). Winding is irrelevant (backface cull
 /// is off).
+/// Parse a dynamic point light from a `LightModels` scenery mesh filename —
+/// `light_<range>_<R>_<G>_<B>.b3d` (RGB 0..255), placed at the scenery's `pos`
+/// (Blitz: `CreateLight(2)` + `LightColor` + `LightRange`, ClientAreas.bb:411).
+/// `range_mul` scales the small authored range into world units; `gain` scales
+/// brightness. Returns `None` for non-light scenery.
+fn parse_light(filename: &str, pos: [f32; 3], range_mul: f32, gain: f32) -> Option<rcce_render::gpu::PointLight> {
+    let base = filename.rsplit(['/', '\\']).next().unwrap_or(filename);
+    let stem = base.strip_suffix(".b3d").or_else(|| base.strip_suffix(".B3D")).unwrap_or(base);
+    let low = stem.to_lowercase();
+    if !low.starts_with("light_") {
+        return None;
+    }
+    let p: Vec<&str> = low.split('_').collect();
+    if p.len() < 5 {
+        return None;
+    }
+    let range: f32 = p[1].parse().ok()?;
+    let (r, g, b): (f32, f32, f32) = (p[2].parse().ok()?, p[3].parse().ok()?, p[4].parse().ok()?);
+    Some(rcce_render::gpu::PointLight {
+        pos,
+        range: range * range_mul,
+        color: [r / 255.0 * gain, g / 255.0 * gain, b / 255.0 * gain],
+    })
+}
+
 fn terrain_model(t: &rcce_data::TerrainPatch) -> B3dModel {
     let n = t.grid as usize;
     let stride = n + 1;
@@ -1660,6 +1685,10 @@ fn load_zone_static(store: &mut AssetStore, view: &mut WorldView, gfx: &Gfx, dat
     let mut lightmaps: Vec<Vec<Option<Image>>> = Vec::new();
     let mut dedup = std::collections::HashMap::new();
     let mut place = Vec::new();
+    // Dynamic point lights placed via LightModels scenery (env-tunable scale).
+    let mut lights: Vec<rcce_render::gpu::PointLight> = Vec::new();
+    let lmul = std::env::var("RCCE_LIGHTRANGE").ok().and_then(|s| s.parse().ok()).unwrap_or(30.0_f32);
+    let lgain = std::env::var("RCCE_LIGHTGAIN").ok().and_then(|s| s.parse().ok()).unwrap_or(1.0_f32);
     let (mut min, mut max) = ([f32::MAX; 3], [f32::MIN; 3]);
     for s in &scenery.sceneries {
         let key = format!("{}:{}", s.mesh_id, s.texture_id);
@@ -1726,6 +1755,10 @@ fn load_zone_static(store: &mut AssetStore, view: &mut WorldView, gfx: &Gfx, dat
                 i
             }
         };
+        // A LightModels mesh placed as scenery is a dynamic point light.
+        if let Some(light) = store.mesh_filename(s.mesh_id).and_then(|f| parse_light(f, s.pos, lmul, lgain)) {
+            lights.push(light);
+        }
         let rot = scenery_rot_radians(s.rot);
         if std::env::var_os("RCCE_SCENDIAG").is_some() {
             let fname = store.mesh_filename(s.mesh_id).unwrap_or("?").to_string();
@@ -1823,6 +1856,10 @@ fn load_zone_static(store: &mut AssetStore, view: &mut WorldView, gfx: &Gfx, dat
         })
         .collect();
     view.set_scene(&gfx.device, &gfx.queue, &instances, min[1]);
+    view.set_lights(&lights);
+    if !lights.is_empty() {
+        println!("[client-window] zone '{zone}': {} dynamic point light(s)", lights.len());
+    }
     // Real sky: resolve the area's SkyTexID through the texture catalog and
     // upload it for the textured skydome (else keep the gradient).
     let sky = scenery.env.sky_tex_id;
@@ -3283,6 +3320,20 @@ impl App {
                     })
                     .collect();
                 view.set_water(&gfx.device, &gfx.queue, &instances);
+            }
+        }
+        // RCCE_TESTLIGHT="x,y,z,range,r,g,b" injects a point light for verifying
+        // the dynamic-light shader without needing a LightModels mesh in the zone.
+        if let Ok(s) = std::env::var("RCCE_TESTLIGHT") {
+            let p: Vec<f32> = s.split(',').filter_map(|t| t.trim().parse().ok()).collect();
+            if p.len() == 7 {
+                if let Some(view) = self.view.as_mut() {
+                    view.set_lights(&[rcce_render::gpu::PointLight {
+                        pos: [p[0], p[1], p[2]],
+                        range: p[3],
+                        color: [p[4], p[5], p[6]],
+                    }]);
+                }
             }
         }
         let clear = wgpu::Color { r: 0.45, g: 0.62, b: 0.86, a: 1.0 };
@@ -6259,6 +6310,23 @@ mod tests {
         assert!((r[2] - (-45f32).to_radians()).abs() < 1e-6, "roll preserved");
         // Zero stays zero (no spurious offset for axis-aligned props).
         assert_eq!(scenery_rot_radians([0.0, 0.0, 0.0]), [0.0, 0.0, 0.0]);
+    }
+
+    // LightModels mesh name -> point light: range = setting1 × mul, colour = RGB
+    // (0..255) / 255 × gain, at the scenery position. Non-light meshes -> None.
+    #[test]
+    fn parse_light_from_mesh_name() {
+        let l = parse_light("LightModels\\light_1.5_125_150_210.b3d", [10.0, 5.0, -3.0], 30.0, 1.0).unwrap();
+        assert_eq!(l.pos, [10.0, 5.0, -3.0]);
+        assert!((l.range - 45.0).abs() < 1e-3, "1.5 × 30, got {}", l.range);
+        assert!((l.color[0] - 125.0 / 255.0).abs() < 1e-4);
+        assert!((l.color[1] - 150.0 / 255.0).abs() < 1e-4);
+        assert!((l.color[2] - 210.0 / 255.0).abs() < 1e-4);
+        // gain scales brightness; forward-slash path + no-dir name also parse.
+        let l2 = parse_light("light_2_255_0_0.b3d", [0.0; 3], 10.0, 0.5).unwrap();
+        assert!((l2.range - 20.0).abs() < 1e-3);
+        assert!((l2.color[0] - 0.5).abs() < 1e-4); // 255/255 × 0.5
+        assert!(parse_light("Trees/fir06summer.b3d", [0.0; 3], 30.0, 1.0).is_none());
     }
 
     // A LOD terrain patch (grid N=2) builds a (N+1)² vertex grid with 2 triangles

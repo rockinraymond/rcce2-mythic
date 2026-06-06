@@ -41,6 +41,28 @@ pub struct Vertex {
 /// Strength of the zone's directional light relative to its ambient floor.
 pub const LIGHT_INTENSITY: f32 = 0.6;
 
+/// Max dynamic point lights the shader accumulates per frame. The nearest this
+/// many to the camera are uploaded each frame (a zone may place far more).
+pub const MAX_LIGHTS: usize = 16;
+
+/// A placed dynamic point light (LightModels mesh / scenery light setting):
+/// world position, reach, and colour. CPU side, selected + packed per frame.
+#[derive(Clone, Copy, Debug)]
+pub struct PointLight {
+    pub pos: [f32; 3],
+    pub range: f32,
+    /// Linear RGB, already normalised to 0..1 (× any brightness gain).
+    pub color: [f32; 3],
+}
+
+/// GPU layout of one point light: `(x,y,z,range)` + `(r,g,b,_)`, std140-aligned.
+#[repr(C)]
+#[derive(Clone, Copy, Pod, Zeroable)]
+pub struct GpuLight {
+    pub pos_range: [f32; 4],
+    pub color: [f32; 4],
+}
+
 /// Camera + atmosphere uniform. Field order matches the WGSL `U` block: each
 /// vec3 packs a trailing scalar into its 16-byte slot (eye|fog_near,
 /// fog_color|fog_far, ambient|light_intensity, light_dir|pad), so the struct is
@@ -59,7 +81,8 @@ pub struct Uniforms {
     pub ambient: [f32; 3],
     pub light_intensity: f32,
     pub light_dir: [f32; 3],
-    pub _pad: f32,
+    pub num_lights: f32,
+    pub lights: [GpuLight; MAX_LIGHTS],
 }
 
 impl Uniforms {
@@ -83,7 +106,8 @@ impl Uniforms {
             ambient,
             light_intensity: LIGHT_INTENSITY,
             light_dir,
-            _pad: 0.0,
+            num_lights: 0.0,
+            lights: [GpuLight { pos_range: [0.0; 4], color: [0.0; 4] }; MAX_LIGHTS],
         }
     }
 }
@@ -183,6 +207,7 @@ impl ShadowPipeline {
 }
 
 pub const SHADER: &str = r#"
+struct Light { pos_range: vec4<f32>, color: vec4<f32> };
 struct U {
     mvp: mat4x4<f32>,
     light_vp: mat4x4<f32>,
@@ -193,7 +218,8 @@ struct U {
     ambient: vec3<f32>,
     light_intensity: f32,
     light_dir: vec3<f32>,
-    _pad: f32,
+    num_lights: f32,
+    lights: array<Light, 16>,
 };
 @group(0) @binding(0) var<uniform> u: U;
 // Sun shadow map (depth from the light's POV) + its comparison sampler. The
@@ -259,7 +285,22 @@ fn sun_shadow(world: vec3<f32>, ndl: f32) -> f32 {
     let ndl = max(dot(N, L), 0.0);
     let sh = sun_shadow(in.world, ndl);
     let diff = ndl * u.light_intensity * sh;
-    let shade = u.ambient + vec3<f32>(diff);
+    // Dynamic point lights (torches, braziers, glowing props): add their colour
+    // by distance falloff and the surface's facing, on top of sun + ambient.
+    // They illuminate but don't cast shadows (matching Blitz's point lights).
+    var point = vec3<f32>(0.0);
+    let nlights = u32(u.num_lights);
+    for (var i = 0u; i < nlights; i = i + 1u) {
+        let pr = u.lights[i].pos_range;
+        let to_l = pr.xyz - in.world;
+        let d = length(to_l);
+        if (d < pr.w) {
+            let a = 1.0 - d / pr.w; // smooth quadratic falloff to the range edge
+            let pndl = max(dot(N, to_l / max(d, 0.001)), 0.0);
+            point = point + u.lights[i].color.rgb * (a * a) * pndl;
+        }
+    }
+    let shade = u.ambient + vec3<f32>(diff) + point;
     // Baked lightmap (1.0 for non-lightmapped meshes via the grey default).
     let lm = textureSample(lmtex, samp, in.uv2).rgb * 2.0;
     let lit = c.rgb * in.color.rgb * shade * lm;

@@ -75,6 +75,9 @@ pub struct WorldView {
     actor_pool: Vec<(wgpu::Buffer, wgpu::BindGroup)>,
     /// This frame's skinned draws.
     skinned: Vec<SkinnedDrawable>,
+    /// All of the zone's placed point lights (set on zone load); the nearest
+    /// `MAX_LIGHTS` to the camera are uploaded each frame.
+    zone_lights: Vec<gpu::PointLight>,
 }
 
 fn make_depth(device: &wgpu::Device, w: u32, h: u32) -> wgpu::TextureView {
@@ -168,7 +171,13 @@ impl WorldView {
             skin_static: HashMap::new(),
             actor_pool: Vec::new(),
             skinned: Vec::new(),
+            zone_lights: Vec::new(),
         }
+    }
+
+    /// Replace the zone's placed point lights (called on zone load).
+    pub fn set_lights(&mut self, lights: &[gpu::PointLight]) {
+        self.zone_lights = lights.to_vec();
     }
 
     /// Replace the per-frame SKINNED actors (GPU linear-blend skinning). The
@@ -336,7 +345,23 @@ impl WorldView {
             (proj * view).to_cols_array()
         };
         queue.write_buffer(&self.light_buf, 0, bytemuck::cast_slice(&light_vp));
-        let u = Uniforms::new(view_proj, eye, fog_color, fog_near, fog_far, ambient, light_dir, light_vp);
+        let mut u = Uniforms::new(view_proj, eye, fog_color, fog_near, fog_far, ambient, light_dir, light_vp);
+        // Upload the nearest point lights to the focus point (the shadow centre).
+        if !self.zone_lights.is_empty() {
+            let c = glam::Vec3::from(shadow_center);
+            let d2 = |l: &gpu::PointLight| (glam::Vec3::from(l.pos) - c).length_squared();
+            let mut order: Vec<usize> = (0..self.zone_lights.len()).collect();
+            order.sort_by(|&a, &b| d2(&self.zone_lights[a]).total_cmp(&d2(&self.zone_lights[b])));
+            let n = order.len().min(gpu::MAX_LIGHTS);
+            u.num_lights = n as f32;
+            for (slot, &li) in order.iter().take(n).enumerate() {
+                let l = &self.zone_lights[li];
+                u.lights[slot] = gpu::GpuLight {
+                    pos_range: [l.pos[0], l.pos[1], l.pos[2], l.range],
+                    color: [l.color[0], l.color[1], l.color[2], 0.0],
+                };
+            }
+        }
         queue.write_buffer(&self.uniform_buf, 0, bytemuck::bytes_of(&u));
         // Sky gradient: horizon = fog colour (so the world fades into it),
         // zenith bluer/darker. Then the per-frame yaw pans the sky texture and
