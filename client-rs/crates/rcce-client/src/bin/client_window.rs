@@ -1596,6 +1596,57 @@ fn water_quad(w: &rcce_data::WaterPlane, scroll: [f32; 2]) -> B3dModel {
     }
 }
 
+/// A tall box for shadow-caster verification (`RCCE_TESTBOX`). When `skinned`, it
+/// carries a single identity bone weighted to every vertex; with `frame = None`
+/// the skin matrices are identity, so the GPU-skin path renders it at `model·pos`
+/// — identical world geometry to the unskinned box. That gives a clean A/B of the
+/// GPU-skinned shadow caster against the known-good CPU/static caster.
+fn test_box_model(skinned: bool) -> B3dModel {
+    let (hx, hz, hy) = (4.0f32, 4.0f32, 16.0f32); // ±4 in x/z, 0..16 in y (stands on the ground)
+    let positions: Vec<[f32; 3]> = vec![
+        [-hx, 0.0, -hz], [hx, 0.0, -hz], [hx, 0.0, hz], [-hx, 0.0, hz], // base
+        [-hx, hy, -hz], [hx, hy, -hz], [hx, hy, hz], [-hx, hy, hz], // top
+    ];
+    let indices: Vec<u32> = vec![
+        0, 1, 2, 0, 2, 3, // base
+        4, 6, 5, 4, 7, 6, // top
+        0, 4, 5, 0, 5, 1, // -z
+        1, 5, 6, 1, 6, 2, // +x
+        2, 6, 7, 2, 7, 3, // +z
+        3, 7, 4, 3, 4, 0, // -x
+    ];
+    let mesh = rcce_data::B3dMesh {
+        positions,
+        normals: vec![[0.0, 1.0, 0.0]; 8], // crude; shadow casting ignores normals
+        uvs: vec![[0.0, 0.0]; 8],
+        uvs2: Vec::new(),
+        colors: Vec::new(),
+        indices,
+        brush_id: -1,
+        texture: None,
+        texture_flag: 0,
+        uv_scale: [1.0, 1.0],
+        uv_offset: [0.0, 0.0],
+        lightmap: None,
+    };
+    let mut m = B3dModel { meshes: vec![mesh], ..Default::default() };
+    if skinned {
+        m.bones = vec![rcce_data::B3dBone {
+            name: "root".into(),
+            parent: None,
+            local_bind: glam::Mat4::IDENTITY.to_cols_array(),
+            local_t: [0.0; 3],
+            local_r: [1.0, 0.0, 0.0, 0.0],
+            local_s: [1.0; 3],
+            bind_world: glam::Mat4::IDENTITY.to_cols_array(),
+            inverse_bind: glam::Mat4::IDENTITY.to_cols_array(),
+            weights: (0..8u32).map(|v| (v, 1.0)).collect(),
+            keys: Vec::new(),
+        }];
+    }
+    m
+}
+
 /// Build a renderable grid mesh from a Blitz LOD [`TerrainPatch`] (`CreateTerrain`)
 /// — `(N+1)²` vertices at local `(x, height, z)` for `x,z in 0..=N`, two triangles
 /// per cell. The caller applies the patch's entity transform; the local grid spans
@@ -3432,6 +3483,43 @@ impl App {
             })
             .unwrap_or(self.light_dir);
         let (fn_, ff_) = (self.fog_near.max(500.0), self.fog_far.max(40000.0));
+
+        // Shadow-caster verification fixture (RCCE_TESTBOX=skinned|cpu): drop a tall
+        // box at the camera target, either as a GPU-skinned actor (set_skinned —
+        // the new shadow path) or as a CPU/dynamic caster (set_dynamic — the
+        // known-good path). Same world geometry ⇒ the cast shadow must match; if
+        // the skinned variant casts none, the GPU-skin shadow path is broken.
+        if let Ok(mode) = std::env::var("RCCE_TESTBOX") {
+            if let (Some(gfx), Some(view)) = (self.gfx.as_ref(), self.view.as_mut()) {
+                let tex = [Some(rcce_data::Image { width: 1, height: 1, rgba: vec![255, 255, 255, 255] })];
+                let pos = [target[0], envf("RCCE_BOXY", 0.0), target[2]];
+                if mode == "skinned" {
+                    let m = test_box_model(true);
+                    let xf = glam::Mat4::from_translation(glam::Vec3::from(pos)).to_cols_array();
+                    let inst = [rcce_render::SkinnedInstance {
+                        key: "testbox",
+                        model: &m,
+                        textures: &tex[..],
+                        frame: None,
+                        transform: xf,
+                        color: [0.8, 0.4, 0.4],
+                    }];
+                    view.set_skinned(&gfx.device, &gfx.queue, &inst);
+                } else {
+                    let m = test_box_model(false);
+                    let inst = [SceneInstance {
+                        model: &m,
+                        textures: &tex[..],
+                        lightmaps: &[],
+                        translation: pos,
+                        rot: [0.0, 0.0, 0.0],
+                        scale: [1.0, 1.0, 1.0],
+                        color: [0.8, 0.4, 0.4],
+                    }];
+                    view.set_dynamic(&gfx.device, &gfx.queue, &inst, &["testbox".to_string()]);
+                }
+            }
+        }
 
         // Particles: warm up the emitters so a single-frame preview shows a full
         // plume, then build this frame's billboards facing the preview camera.

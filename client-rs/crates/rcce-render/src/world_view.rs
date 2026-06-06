@@ -84,6 +84,8 @@ pub struct WorldView {
     /// Sun shadow map: a depth-only pipeline renders casters from the light's POV
     /// into `shadow_tex`, which the scene shader then PCF-samples (via `bind0`).
     shadow_pipeline: gpu::ShadowPipeline,
+    /// Depth-only skinned caster — lets GPU-skinned actors cast shadows too.
+    skin_shadow_pipeline: gpu::SkinShadowPipeline,
     shadow_tex: wgpu::TextureView,
     light_buf: wgpu::Buffer,
     light_bind: wgpu::BindGroup,
@@ -192,6 +194,7 @@ impl WorldView {
         // Sun shadow map: depth texture (rendered into + sampled) + a comparison
         // sampler (linear → hardware 2×2 PCF, on top of the shader's 3×3).
         let shadow_pipeline = gpu::ShadowPipeline::new(device, &pipeline.bgl_texture);
+        let skin_shadow_pipeline = gpu::SkinShadowPipeline::new(device, &shadow_pipeline.bgl, &pipeline.bgl_texture, &skin.bgl_actor);
         let shadow_tex = device
             .create_texture(&wgpu::TextureDescriptor {
                 label: Some("shadow-map"),
@@ -243,6 +246,7 @@ impl WorldView {
             sample_count,
             msaa_color: make_msaa_color(device, color_format, w, h, sample_count),
             shadow_pipeline,
+            skin_shadow_pipeline,
             shadow_tex,
             light_buf,
             light_bind,
@@ -526,8 +530,22 @@ impl WorldView {
                 sp.set_index_buffer(d.ibuf.slice(..), wgpu::IndexFormat::Uint32);
                 sp.draw_indexed(0..d.n_idx, 0, 0..1);
             }
+            // GPU-skinned actors cast shadows too: same linear-blend skin, depth
+            // only. (The CPU-skin path already casts via `dynamics` above; this
+            // covers the faster GPU-skin path so it isn't a silent regression.)
+            if !self.skinned.is_empty() && std::env::var_os("RCCE_NOSKINSHADOW").is_none() {
+                sp.set_pipeline(&self.skin_shadow_pipeline.pipeline);
+                sp.set_bind_group(0, &self.light_bind, &[]);
+                for sd in &self.skinned {
+                    sp.set_bind_group(1, &sd.tex, &[]);
+                    sp.set_bind_group(2, &self.actor_pool[sd.actor].1, &[]);
+                    sp.set_vertex_buffer(0, sd.vbuf.slice(..));
+                    sp.set_index_buffer(sd.ibuf.slice(..), wgpu::IndexFormat::Uint32);
+                    sp.draw_indexed(0..sd.n_idx, 0, 0..1);
+                }
+            }
             if std::env::var_os("RCCE_SHADOWSTATS").is_some() {
-                eprintln!("[shadow] casters drawn={drawn} culled={culled}");
+                eprintln!("[shadow] casters drawn={drawn} culled={culled} skinned={}", self.skinned.len());
             }
         }
         {

@@ -206,6 +206,106 @@ impl ShadowPipeline {
     }
 }
 
+/// Depth-only shadow caster for GPU-skinned actors: the same linear-blend skin as
+/// the main skin pipeline, but writing only depth into the sun's shadow map (so
+/// GPU-skinned actors cast shadows like the CPU-skinned/static casters). Reuses
+/// the shadow light-VP layout (group 0), the texture layout (group 1, for the
+/// alpha-test cut-out), and the per-actor pose layout (group 2).
+pub struct SkinShadowPipeline {
+    pub pipeline: wgpu::RenderPipeline,
+}
+
+const SKIN_SHADOW_SHADER: &str = r#"
+struct LU { light_vp: mat4x4<f32> };
+@group(0) @binding(0) var<uniform> lu: LU;
+@group(1) @binding(0) var tex: texture_2d<f32>;
+@group(1) @binding(1) var samp: sampler;
+struct Actor { bones: array<mat4x4<f32>, 64>, model: mat4x4<f32>, color: vec4<f32> };
+@group(2) @binding(0) var<uniform> a: Actor;
+struct VO { @builtin(position) clip: vec4<f32>, @location(0) uv: vec2<f32> };
+@vertex fn vs(
+    @location(0) pos: vec3<f32>,
+    @location(2) uv: vec2<f32>,
+    @location(3) bones: vec4<u32>,
+    @location(4) weights: vec4<f32>,
+) -> VO {
+    let wsum = weights.x + weights.y + weights.z + weights.w;
+    var sp = vec3<f32>(0.0);
+    if (wsum > 0.0001) {
+        for (var i = 0u; i < 4u; i = i + 1u) {
+            let w = weights[i];
+            if (w > 0.0) { sp = sp + w * (a.bones[bones[i]] * vec4<f32>(pos, 1.0)).xyz; }
+        }
+    } else {
+        sp = pos;
+    }
+    var o: VO;
+    o.clip = lu.light_vp * (a.model * vec4<f32>(sp, 1.0));
+    o.uv = uv;
+    return o;
+}
+@fragment fn fs(in: VO) {
+    if (textureSample(tex, samp, in.uv).a < 0.5) { discard; }
+}
+"#;
+
+impl SkinShadowPipeline {
+    pub fn new(
+        device: &wgpu::Device,
+        bgl_light: &wgpu::BindGroupLayout,
+        bgl_texture: &wgpu::BindGroupLayout,
+        bgl_actor: &wgpu::BindGroupLayout,
+    ) -> SkinShadowPipeline {
+        let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("skin-shadow"),
+            source: wgpu::ShaderSource::Wgsl(SKIN_SHADOW_SHADER.into()),
+        });
+        let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: None,
+            bind_group_layouts: &[bgl_light, bgl_texture, bgl_actor],
+            push_constant_ranges: &[],
+        });
+        let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("skin-shadow"),
+            layout: Some(&layout),
+            vertex: wgpu::VertexState {
+                module: &shader,
+                entry_point: "vs",
+                compilation_options: Default::default(),
+                buffers: &[wgpu::VertexBufferLayout {
+                    array_stride: std::mem::size_of::<SkinnedVertex>() as u64,
+                    step_mode: wgpu::VertexStepMode::Vertex,
+                    // pos (loc 0 @0), uv (loc 2 @24), bones (loc 3 @32), weights (loc 4 @48).
+                    attributes: &[
+                        wgpu::VertexAttribute { format: wgpu::VertexFormat::Float32x3, offset: 0, shader_location: 0 },
+                        wgpu::VertexAttribute { format: wgpu::VertexFormat::Float32x2, offset: 24, shader_location: 2 },
+                        wgpu::VertexAttribute { format: wgpu::VertexFormat::Uint32x4, offset: 32, shader_location: 3 },
+                        wgpu::VertexAttribute { format: wgpu::VertexFormat::Float32x4, offset: 48, shader_location: 4 },
+                    ],
+                }],
+            },
+            fragment: Some(wgpu::FragmentState {
+                module: &shader,
+                entry_point: "fs",
+                compilation_options: Default::default(),
+                targets: &[], // depth only
+            }),
+            primitive: wgpu::PrimitiveState { cull_mode: None, ..Default::default() },
+            depth_stencil: Some(wgpu::DepthStencilState {
+                format: DEPTH_FORMAT,
+                depth_write_enabled: true,
+                depth_compare: wgpu::CompareFunction::Less,
+                stencil: Default::default(),
+                bias: wgpu::DepthBiasState { constant: 2, slope_scale: 2.0, clamp: 0.0 },
+            }),
+            multisample: msaa(1), // shadow map is always single-sampled
+            multiview: None,
+            cache: None,
+        });
+        SkinShadowPipeline { pipeline }
+    }
+}
+
 /// MSAA state for the world-pass pipelines (`count` samples per pixel). `count`
 /// of 1 is the no-MSAA default; 2/4/8 anti-alias scenery/foliage silhouettes.
 fn msaa(count: u32) -> wgpu::MultisampleState {
