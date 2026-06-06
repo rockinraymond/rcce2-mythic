@@ -758,9 +758,14 @@ struct VO { @builtin(position) pos: vec4<f32>, @location(0) ndc: vec2<f32> };
     // bright cloud bands in the night sky. `day_vis` = 1 by day → 0 at deep night
     // (the inverse of the star/night factor).
     let day_vis = 1.0 - sky.params2.y;
-    // Fade the texture out very near the zenith so the spherical pole pinch isn't
-    // visible when looking straight up (the gradient takes over there).
-    let zfade = 1.0 - smoothstep(0.86, 1.0, ray.y);
+    // Zenith fade. `sky_t` saturates at ray.y >= 0.5, so the texture's V row pins
+    // to the top across the whole upper sky; as the azimuthal columns converge on
+    // the pole that pinned row smears into vertical streaks. Cross-fade EVERY sky
+    // layer (texture, clouds, AND stars) to the clean gradient across the upper sky
+    // so the ill-conditioned streak region is never shown — detail lives in the
+    // horizon..mid band where the mapping is well-behaved. Starts well below the
+    // zenith because there is no new V detail above ray.y 0.5 anyway (V is pinned).
+    let zfade = 1.0 - smoothstep(0.55, 0.92, ray.y);
     if (sky.params.x >= 0.5) {
         let uv = vec2<f32>(az + sky.params.y, tv);
         let tex = textureSample(skytex, skysamp, uv).rgb;
@@ -777,7 +782,12 @@ struct VO { @builtin(position) pos: vec4<f32>, @location(0) ndc: vec2<f32> };
         // Stars (additive), composited after clouds.
         let suv = vec2<f32>(az + sky.params2.z, tv);
         let s = textureSample(starstex, starssamp, suv).rgb;
-        let sfade = smoothstep(0.05, 0.40, sky_t);
+        // Stars keep a GENTLER, higher zenith fade than the texture: they are small
+        // dots (mild smear reads as longer dots, not bright bands) so they can stay
+        // across most of the sky and only drop out in the top few degrees where the
+        // pole convergence is extreme — preserving the starry overhead.
+        let szfade = 1.0 - smoothstep(0.82, 0.98, ray.y);
+        let sfade = smoothstep(0.05, 0.40, sky_t) * szfade;
         col = col + s * sky.params2.y * sfade;
     }
     return vec4<f32>(col, 1.0);
