@@ -1597,6 +1597,11 @@ struct U {
     _pad: f32,
 };
 @group(0) @binding(0) var<uniform> u: U;
+// Sun shadow map (same group-0 bind0 the scene pass uses) so GPU-skinned actors
+// RECEIVE shadows like the CPU path does — they darken in shade instead of staying
+// fully sunlit. Requires `light_vp` in U (added above) for the projection.
+@group(0) @binding(1) var shadow_map: texture_depth_2d;
+@group(0) @binding(2) var shadow_samp: sampler_comparison;
 @group(1) @binding(0) var tex: texture_2d<f32>;
 @group(1) @binding(1) var samp: sampler;
 struct Actor {
@@ -1605,6 +1610,25 @@ struct Actor {
     color: vec4<f32>,
 };
 @group(2) @binding(0) var<uniform> a: Actor;
+// PCF sun-shadow factor (1 = lit, ~0 = shadowed) — mirrors the scene shader.
+fn sun_shadow(world: vec3<f32>, ndl: f32) -> f32 {
+    let lc = u.light_vp * vec4<f32>(world, 1.0);
+    let ndc = lc.xyz / lc.w;
+    let uv = vec2<f32>(ndc.x * 0.5 + 0.5, ndc.y * -0.5 + 0.5);
+    if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0 || ndc.z > 1.0 || ndc.z < 0.0) {
+        return 1.0;
+    }
+    let bias = max(0.0015 * (1.0 - ndl), 0.0004);
+    let texel = 1.0 / 2048.0;
+    var sum = 0.0;
+    for (var x = -1; x <= 1; x = x + 1) {
+        for (var y = -1; y <= 1; y = y + 1) {
+            let off = vec2<f32>(f32(x), f32(y)) * texel;
+            sum = sum + textureSampleCompareLevel(shadow_map, shadow_samp, uv + off, ndc.z - bias);
+        }
+    }
+    return sum / 9.0;
+}
 struct VsOut {
     @builtin(position) clip: vec4<f32>,
     @location(0) normal: vec3<f32>,
@@ -1649,7 +1673,10 @@ struct VsOut {
     if (c.a < 0.5) { discard; }
     let N = normalize(in.normal);
     let L = normalize(u.light_dir);
-    let diff = abs(dot(N, L)) * u.light_intensity;
+    // Double-sided (abs) diffuse for thin actor meshes/hair, now darkened by the
+    // sun-shadow map so GPU-skinned actors fall into shade like the CPU path.
+    let ndl = abs(dot(N, L));
+    let diff = ndl * u.light_intensity * sun_shadow(in.world, ndl);
     let shade = u.ambient + vec3<f32>(diff);
     let lit = c.rgb * in.color * shade;
     let dist = distance(in.world, u.eye);
