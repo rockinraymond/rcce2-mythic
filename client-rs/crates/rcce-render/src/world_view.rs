@@ -115,6 +115,8 @@ pub struct WorldView {
     /// Particle billboard pipeline + this frame's batches (rebuilt each frame).
     particle_pipeline: gpu::ParticlePipeline,
     particles: Vec<ParticleBatch>,
+    /// Water surface pipeline (Fresnel sky-reflection + procedural ripples).
+    water_pipeline: gpu::WaterPipeline,
     /// Content-keyed GPU texture cache for the static scene + water. Statics dedup
     /// identical scenery textures (one upload, not one per instance); water — which
     /// is rebuilt every frame for its scrolling UV — reuses its upload instead of
@@ -188,6 +190,7 @@ impl WorldView {
         let skin = SkinPipeline::new(device, color_format, &pipeline, sample_count);
         let sky = SkyPipeline::new(device, color_format, sample_count);
         let particle_pipeline = gpu::ParticlePipeline::new(device, color_format, &pipeline.bgl_uniform, &pipeline.bgl_texture, sample_count);
+        let water_pipeline = gpu::WaterPipeline::new(device, color_format, &pipeline.bgl_uniform, &pipeline.bgl_texture, sample_count);
         let uniform_buf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("u"),
             contents: bytemuck::bytes_of(&Uniforms::new(
@@ -266,6 +269,7 @@ impl WorldView {
             zone_lights: Vec::new(),
             particle_pipeline,
             particles: Vec::new(),
+            water_pipeline,
             static_tex_cache: TexCache::new(),
         }
     }
@@ -648,7 +652,15 @@ impl WorldView {
                 rp.set_index_buffer(d.ibuf.slice(..), wgpu::IndexFormat::Uint32);
                 rp.draw_indexed(0..d.n_idx, 0, 0..1);
             }
-            // 4) Water surfaces (alpha-blended, scrolling), over terrain + splats.
+            // 4) Water surfaces — dedicated pipeline (Fresnel sky reflection +
+            //    procedural ripples), alpha-blended over terrain + splats.
+            //    RCCE_FLATWATER falls back to the old flat alpha pipeline (A/B).
+            if std::env::var_os("RCCE_FLATWATER").is_some() {
+                rp.set_pipeline(&self.pipeline.alpha_pipeline);
+            } else {
+                rp.set_pipeline(&self.water_pipeline.pipeline);
+            }
+            rp.set_bind_group(0, &self.bind0, &[]);
             for d in &self.water {
                 if !visible(d) {
                     wculled += 1;

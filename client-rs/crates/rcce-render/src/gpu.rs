@@ -466,6 +466,119 @@ impl ParticlePipeline {
     }
 }
 
+/// Water surface pipeline — a richer look than a flat textured plane (better than
+/// Blitz's scrolling texture). Adds a **Fresnel sky reflection** (water brightens
+/// toward the sky/fog colour at grazing angles and is clearer looking straight
+/// down) and **shimmering ripples** (a procedural normal driven by the surface's
+/// already-scrolling UV, so it animates with no time uniform). Convention-free:
+/// it uses only the view direction and the surface normal, never the sun
+/// direction. Alpha-blended, depth-tested, no depth write (like the old water).
+pub struct WaterPipeline {
+    pub pipeline: wgpu::RenderPipeline,
+}
+
+const WATER_SHADER: &str = r#"
+struct Light { pos_range: vec4<f32>, color: vec4<f32> };
+struct U {
+    mvp: mat4x4<f32>,
+    light_vp: mat4x4<f32>,
+    eye: vec3<f32>,
+    fog_near: f32,
+    fog_color: vec3<f32>,
+    fog_far: f32,
+    ambient: vec3<f32>,
+    light_intensity: f32,
+    light_dir: vec3<f32>,
+    num_lights: f32,
+    lights: array<Light, 16>,
+};
+@group(0) @binding(0) var<uniform> u: U;
+@group(1) @binding(0) var tex: texture_2d<f32>;
+@group(1) @binding(1) var samp: sampler;
+struct VO { @builtin(position) clip: vec4<f32>, @location(0) uv: vec2<f32>, @location(1) color: vec4<f32>, @location(2) world: vec3<f32> };
+@vertex fn vs(@location(0) pos: vec3<f32>, @location(1) normal: vec3<f32>, @location(2) uv: vec2<f32>, @location(3) uv2: vec2<f32>, @location(4) color: vec4<f32>) -> VO {
+    var o: VO;
+    o.clip = u.mvp * vec4<f32>(pos, 1.0); // positions are baked in world space
+    o.uv = uv;
+    o.color = color;
+    o.world = pos;
+    return o;
+}
+@fragment fn fs(in: VO) -> @location(0) vec4<f32> {
+    // Procedural ripple normal. The plane's UV scrolls every frame (baked offset),
+    // so these wave sums drift → the highlights shimmer without a time uniform.
+    let s = 0.07;
+    let rx = sin(in.uv.x * 40.0 + in.uv.y * 13.0) + sin(in.uv.x * 17.0 - in.uv.y * 31.0);
+    let rz = cos(in.uv.y * 37.0 - in.uv.x * 11.0) + sin(in.uv.x * 23.0 + in.uv.y * 19.0);
+    let N = normalize(vec3<f32>(rx * s, 1.0, rz * s));
+    let V = normalize(u.eye - in.world);
+    // Fresnel: ~0 looking straight down (clear), ~1 at grazing angles (reflective).
+    let fres = pow(1.0 - clamp(dot(N, V), 0.0, 1.0), 5.0);
+    let base = textureSample(tex, samp, in.uv) * in.color;
+    // Reflect the sky/fog colour; brighten toward it at grazing angles.
+    let rgb = mix(base.rgb, u.fog_color, clamp(fres * 0.7, 0.0, 1.0));
+    // A touch more opaque edge-on (water hides the bottom at grazing angles).
+    let a = clamp(base.a + fres * 0.25, 0.0, 1.0);
+    return vec4<f32>(rgb, a);
+}
+"#;
+
+impl WaterPipeline {
+    pub fn new(
+        device: &wgpu::Device,
+        color_format: wgpu::TextureFormat,
+        bgl_uniform: &wgpu::BindGroupLayout,
+        bgl_texture: &wgpu::BindGroupLayout,
+        sample_count: u32,
+    ) -> WaterPipeline {
+        let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("water"),
+            source: wgpu::ShaderSource::Wgsl(WATER_SHADER.into()),
+        });
+        let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: None,
+            bind_group_layouts: &[bgl_uniform, bgl_texture],
+            push_constant_ranges: &[],
+        });
+        let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("water"),
+            layout: Some(&layout),
+            vertex: wgpu::VertexState {
+                module: &shader,
+                entry_point: "vs",
+                compilation_options: Default::default(),
+                buffers: &[wgpu::VertexBufferLayout {
+                    array_stride: std::mem::size_of::<Vertex>() as u64,
+                    step_mode: wgpu::VertexStepMode::Vertex,
+                    attributes: &wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32x3, 2 => Float32x2, 3 => Float32x2, 4 => Float32x4],
+                }],
+            },
+            fragment: Some(wgpu::FragmentState {
+                module: &shader,
+                entry_point: "fs",
+                compilation_options: Default::default(),
+                targets: &[Some(wgpu::ColorTargetState {
+                    format: color_format,
+                    blend: Some(wgpu::BlendState::ALPHA_BLENDING),
+                    write_mask: wgpu::ColorWrites::ALL,
+                })],
+            }),
+            primitive: wgpu::PrimitiveState { cull_mode: None, ..Default::default() },
+            depth_stencil: Some(wgpu::DepthStencilState {
+                format: DEPTH_FORMAT,
+                depth_write_enabled: false,
+                depth_compare: wgpu::CompareFunction::LessEqual,
+                stencil: Default::default(),
+                bias: Default::default(),
+            }),
+            multisample: msaa(sample_count),
+            multiview: None,
+            cache: None,
+        });
+        WaterPipeline { pipeline }
+    }
+}
+
 pub const SHADER: &str = r#"
 struct Light { pos_range: vec4<f32>, color: vec4<f32> };
 struct U {

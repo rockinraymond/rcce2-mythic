@@ -3441,7 +3441,14 @@ impl App {
         // Water planes (uploaded separately from the static scene, as in-world).
         if !self.water_planes.is_empty() {
             if let (Some(gfx), Some(view)) = (self.gfx.as_ref(), self.view.as_mut()) {
-                let models: Vec<B3dModel> = self.water_planes.iter().map(|(w, _)| water_quad(w, [0.0, 0.0])).collect();
+                // Scroll the UV with the (pinnable) clock so the surface + Fresnel
+                // ripples animate in the preview like in-world (deterministic under
+                // RCCE_TIME). Matches the in-world WATER_SCROLL_U/V drift.
+                let scroll = [
+                    (WATER_SCROLL_U * elapsed).rem_euclid(1.0),
+                    (WATER_SCROLL_V * elapsed).rem_euclid(1.0),
+                ];
+                let models: Vec<B3dModel> = self.water_planes.iter().map(|(w, _)| water_quad(w, scroll)).collect();
                 let texs: Vec<Vec<Option<Image>>> =
                     self.water_planes.iter().map(|(_, img)| vec![Some(img.clone())]).collect();
                 let instances: Vec<SceneInstance> = self
