@@ -889,6 +889,17 @@ fn proc_stars(dir: vec3<f32>) -> f32 {
     let moon_disc = smoothstep(0.9978, 0.9993, cd) * 1.0;
     let moon_glow = pow(max(cd, 0.0), 420.0) * 0.45 + pow(max(cd, 0.0), 70.0) * 0.12;
     col = col + vec3<f32>(0.82, 0.88, 1.0) * (moon_disc + moon_glow) * sky.params2.y * above;
+    // Sunset / sunrise horizon glow: when the sun is LOW (`low`), the sky near the
+    // sun's AZIMUTH at the horizon glows warm (low-sun forward scattering), fading
+    // with azimuthal distance from the sun and with elevation. `low` keeps it off
+    // at noon (sun high); `day_vis` keeps it at dawn/dusk and off at deep night.
+    // Additive warm band — turns the flat dawn/dusk tint into a directional glow.
+    let rh = normalize(vec2<f32>(ray.x, ray.z) + vec2<f32>(1.0e-5, 0.0));
+    let sh = normalize(vec2<f32>(sd.x, sd.z) + vec2<f32>(1.0e-5, 0.0));
+    let azi = max(dot(rh, sh), 0.0);                        // 1 toward the sun's azimuth
+    let horiz = 1.0 - smoothstep(0.0, 0.32, ray.y);         // 1 at horizon → 0 up high
+    let sunset = pow(azi, 3.0) * horiz * low * day_vis;
+    col = col + vec3<f32>(1.0, 0.52, 0.22) * sunset * 0.7;
     return vec4<f32>(col, 1.0);
 }
 "#;
