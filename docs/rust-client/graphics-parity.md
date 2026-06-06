@@ -16,6 +16,12 @@ No real fork data or server is needed:
   a free camera: `RCCE_CAMAT="x,y,z"`, `RCCE_CAMYAW`, `RCCE_CAMPITCH`, `RCCE_CAMDIST`,
   captured via `RCCE_SHOT` / `RCCE_SHOT_FRAME`. Reuses the in-world `view.render`
   path, so it matches in-game appearance.
+- **Atmosphere / object hooks** layered on the preview: `RCCE_PHASE` (0=midnight,
+  0.25=dawn, 0.5=noon, 0.75=dusk) or `RCCE_DAYNIGHT_SECS`; `RCCE_SUNDIR="x,y,z"`
+  (force the sun direction — for the sun disc / glint / rim); `RCCE_PROJPREVIEW`
+  (spawn a projectile); `RCCE_LOOTPREVIEW` + `RCCE_LOOTITEM=<id>` (drop a loot
+  mesh); `RCCE_AMBIENT`; `RCCE_TESTBOX=cpu|skinned` + `RCCE_BOXY` (shadow caster).
+  Underwater triggers when the camera dips below a water plane.
 
 Example:
 ```
@@ -114,14 +120,49 @@ env $COMMON RCCE_PHASE=0.0 RCCE_SHOT=night.png RCCE_SHOT_FRAME=8 ClientRS.exe 12
 Last sweep (all 10 cumulative changes active together): coherent — day mean 47.8 /
 sky 52.8, night mean 15.8 / sky 11.4 / ground 21.6, no NaN, no blowouts.
 
+### Session additions — atmosphere, lighting & world objects
+
+A later pass added a cluster of features, most **on by default** (the day/night
++ sun group), a few opt-in. All verified headlessly (`RCCE_VIEWZONE` + the hooks
+noted); the combined default look was sanity-checked in normal day/dawn views (no
+over-processing — coherent, no blowouts).
+
+| Feature | Default | Notes / verify hook |
+|---|---|---|
+| **Server time-of-day** | on | Client follows the server game-clock (P_FetchActors `E` env block: TimeH/M/Factor); phase drives sky/fog/ambient + the sun arc. `RCCE_PHASE` overrides. |
+| **World-fixed sky** | on | Per-pixel world-ray (`inverse(view_proj)`) so the sky stays pinned to the world as the camera yaws **and** pitches; azimuth + scaled-elevation mapping. Replaced the camera-locked 2D pan. |
+| **Night sky cross-fade** | on | Sky texture + clouds fade OUT to a clean dark gradient at night (not just dim) while stars fade in — no bright cloud bands at midnight. |
+| **Zenith pole-fade** | on | All sky layers cross-fade to the gradient up high so the azimuthal mapping's pole pinch can't smear texture/stars into vertical streaks. |
+| **Sun + moon disc** | on | A bright sun disc + layered warm glow by day, a pale moon by night, at the time-of-day sun direction (`sun_dir(phase)`, the same arc the shadows use); reddens near the horizon. Drawn into the sky pass so terrain/trees occlude it. |
+| **Moving shadows** | on | Shadow sun direction tracks the time-of-day so shadows rotate + lengthen across the day. |
+| **Underwater camera** | on | Below a water plane: fog/clear tint to the water colour, view distance clamps to a murky near=2/far=60, and a full-screen water wash hides the sky (Blitz `CameraUnderwater`). `underwater_color()` is unit-tested. |
+| **Water sun glint** | on | Blinn-Phong specular toward the sun on the water, broken into sparkles by a fine ripple normal; fades as the sun lowers. Beyond Blitz (its water has no specular). |
+| **Dappled sunlight** | on | A world-fixed "broken cloud cover" pattern dims only the sun term in broad patches — the player walks through sun + shade (no time uniform: the pattern is pinned to the world). |
+| **Hemispheric ambient** | on | Ambient is cool + brighter from above (sky) and warm + darker from below (ground bounce), keyed on the normal — instead of one flat term. Cheap AO-like grounding. |
+| **Sun backlight rim** | on | Looking toward the sun, silhouette edges (grazing view) catch a warm scattered glow — sun wrapping around edges + through foliage. Gated to daylight via the ambient level. View-direction gated (none with the sun behind). |
+| **3D projectiles** | on | Glowing orb + fading motion trail via the particle billboard path (additive, depth-tested) — terrain occludes them. Replaced a flat 2D overlay square. Verify: `RCCE_PROJPREVIEW`. |
+| **3D dropped loot** | on | Each item's world mesh (`mmesh`), or the **Loot Bag** fallback for items with none (most shipped items), seated on the terrain — like Blitz. Replaced a flat 2D pip. Verify: `RCCE_LOOTPREVIEW` (+ `RCCE_LOOTITEM=<id>`). |
+| **Smooth local turning** | on | The local player's facing eases toward the movement heading at the remote-actor rate, instead of snapping. Unit-tested. |
+| **Movement speed** | on | Client-authoritative locomotion at a Blitz-matched speed (`RCCE_MOVESPEED`, default 8). |
+
+Most of these live in the scene/sky/water shaders with **no uniform-layout change**
+(derived from the normal / view dir / existing `u.ambient`/`light_dir`), so the
+GPU-skin path — which shares the world uniform with a mismatched prefix — is left
+untouched. The day/night + sun group keys off `RCCE_PHASE` / `RCCE_DAYNIGHT_SECS`
+/ the live server clock.
+
 ### What's left (not headless-verifiable)
 
 These need the live client + a running server, so they're out of scope for the
 test-render loop and should be **scoped with the user**:
 
-- **Projectiles (3D)** — combat path.
-- **In-world UI / nameplates / health bars** (`Interface3D`) — overlay over actors.
+- **In-world UI / nameplates / health bars** (`Interface3D`) — overlay over actors
+  (nameplates render white-only; no player/NPC/hostility colour yet).
 - **Sound**, **mouse-look**, **chat/combat send** — interaction, not rendering.
+- **Animation blending** — locomotion clips snap (idle↔walk↔run); cross-fade would
+  need per-actor blend state + dual-pose bone blending.
+- **Lens flares / god rays** — Blitz has sun flares (`Flares/*.png`); god rays would
+  reuse the bloom offscreen plumbing. Both deferred (opt-in, perf cost).
 
 Possible *beyond-parity* renderer additions (opt-in, have a perf cost worth
 discussing given fps sensitivity): bloom/HDR glow ✅ (done, `RCCE_BLOOM`),
