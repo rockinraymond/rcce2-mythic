@@ -20,6 +20,55 @@ use crate::scene::SceneInstance;
 /// already-uploaded skin instead of re-uploading every frame.
 pub type TexCache = HashMap<String, Rc<wgpu::BindGroup>>;
 
+/// Count of GPU texture uploads (mip-chain build + `create_texture`) performed by
+/// [`Pipeline::upload_tex`]. Used by `RCCE_TEXSTATS` to confirm the static/water
+/// texture cache actually dedups uploads (static scenery sharing a texture, and
+/// water — which is rebuilt every frame — re-uploading its texture each frame).
+pub static TEX_UPLOADS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// Cheap content fingerprint for a `(texture, lightmap)` pair so identical
+/// textures share one GPU upload. Dims + byte length + a spread of sampled bytes
+/// — collision-proof for distinct real textures, far cheaper than repeating the
+/// upload + mip-chain build. `RCCE_NOTEXCACHE` bypasses the cache (A/B).
+fn tex_cache_key(tex: Option<&Image>, lm: Option<&Image>) -> String {
+    fn part(img: Option<&Image>) -> String {
+        match img {
+            None => "_".into(),
+            Some(i) => {
+                let n = i.rgba.len();
+                let mut h: u64 = 0xcbf29ce484222325;
+                let step = (n / 24).max(1);
+                let mut k = 0;
+                while k < n {
+                    h = (h ^ i.rgba[k] as u64).wrapping_mul(0x100000001b3);
+                    k += step;
+                }
+                format!("{}x{}.{}.{:x}", i.width, i.height, n, h)
+            }
+        }
+    }
+    format!("{}|{}", part(tex), part(lm))
+}
+
+/// Fetch a cached texture bind group by content key, building (and counting) it on
+/// a miss. `RCCE_NOTEXCACHE` forces a fresh build every time.
+fn cached_tex_bind(
+    device: &wgpu::Device,
+    queue: &wgpu::Queue,
+    pipeline: &Pipeline,
+    cache: &mut TexCache,
+    tex: Option<&Image>,
+    lm: Option<&Image>,
+) -> Rc<wgpu::BindGroup> {
+    if std::env::var_os("RCCE_NOTEXCACHE").is_some() {
+        return Rc::new(pipeline.texture_bind_lm(device, queue, tex, lm));
+    }
+    cache
+        .entry(tex_cache_key(tex, lm))
+        .or_insert_with(|| Rc::new(pipeline.texture_bind_lm(device, queue, tex, lm)))
+        .clone()
+}
+
 pub const COLOR_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
 pub const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
 
@@ -1127,6 +1176,7 @@ impl Pipeline {
         img: Option<&Image>,
         default_rgba: [u8; 4],
     ) -> wgpu::TextureView {
+        TEX_UPLOADS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         let (w, h, data): (u32, u32, Vec<u8>) = match img {
             Some(i) if i.width > 0 && i.height > 0 => (i.width, i.height, i.rgba.clone()),
             _ => (1, 1, default_rgba.to_vec()),
@@ -1629,8 +1679,9 @@ pub fn build_drawables(
     pipeline: &Pipeline,
     instances: &[SceneInstance],
     ground_y: f32,
+    cache: &mut TexCache,
 ) -> Vec<Drawable> {
-    let (mut drawables, min, max) = build_instance_drawables(device, queue, pipeline, instances);
+    let (mut drawables, min, max) = build_instance_drawables(device, queue, pipeline, instances, cache);
 
     // Ground plane spanning the instances (skipped when ground_y is non-finite).
     if min.x <= max.x && ground_y.is_finite() {
@@ -1658,7 +1709,7 @@ pub fn build_drawables(
             vbuf,
             ibuf,
             n_idx: 6,
-            tex_bind: Rc::new(pipeline.texture_bind(device, queue, None)),
+            tex_bind: cached_tex_bind(device, queue, pipeline, cache, None, None),
             alpha: false,
             center: gc.into(),
             radius: gr,
@@ -1674,6 +1725,7 @@ fn build_instance_drawables(
     queue: &wgpu::Queue,
     pipeline: &Pipeline,
     instances: &[SceneInstance],
+    cache: &mut TexCache,
 ) -> (Vec<Drawable>, Vec3, Vec3) {
     let mut drawables = Vec::new();
     let (mut min, mut max) = (Vec3::splat(f32::MAX), Vec3::splat(f32::MIN));
@@ -1696,7 +1748,7 @@ fn build_instance_drawables(
                 vbuf,
                 ibuf,
                 n_idx,
-                tex_bind: Rc::new(pipeline.texture_bind_lm(device, queue, tex, lm)),
+                tex_bind: cached_tex_bind(device, queue, pipeline, cache, tex, lm),
                 alpha: mesh_is_alpha_overlay(mesh),
                 center,
                 radius,

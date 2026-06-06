@@ -174,7 +174,7 @@ pub fn render_scene_png(
             wgpu::BindGroupEntry { binding: 2, resource: wgpu::BindingResource::Sampler(&sh_samp) },
         ],
     });
-    let drawables = gpu::build_drawables(&device, &queue, &pipeline, instances, ground_y);
+    let drawables = gpu::build_drawables(&device, &queue, &pipeline, instances, ground_y, &mut gpu::TexCache::new());
     if drawables.is_empty() {
         return Err("empty scene".into());
     }

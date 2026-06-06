@@ -115,6 +115,11 @@ pub struct WorldView {
     /// Particle billboard pipeline + this frame's batches (rebuilt each frame).
     particle_pipeline: gpu::ParticlePipeline,
     particles: Vec<ParticleBatch>,
+    /// Content-keyed GPU texture cache for the static scene + water. Statics dedup
+    /// identical scenery textures (one upload, not one per instance); water — which
+    /// is rebuilt every frame for its scrolling UV — reuses its upload instead of
+    /// re-creating the texture (+ mip chain) every frame. Cleared on `set_scene`.
+    static_tex_cache: TexCache,
 }
 
 /// One frame's particle geometry for an emitter: its texture bind + blend +
@@ -261,6 +266,7 @@ impl WorldView {
             zone_lights: Vec::new(),
             particle_pipeline,
             particles: Vec::new(),
+            static_tex_cache: TexCache::new(),
         }
     }
 
@@ -343,7 +349,10 @@ impl WorldView {
         instances: &[SceneInstance],
         ground_y: f32,
     ) {
-        self.statics = gpu::build_drawables(device, queue, &self.pipeline, instances, ground_y);
+        // New zone: drop the previous zone's cached textures so stale entries can't
+        // be reused, then build (deduping identical scenery textures).
+        self.static_tex_cache.clear();
+        self.statics = gpu::build_drawables(device, queue, &self.pipeline, instances, ground_y, &mut self.static_tex_cache);
     }
 
     /// Replace the dynamic (per-frame) geometry — actors. `keys[i]` identifies
@@ -370,7 +379,10 @@ impl WorldView {
     /// Replace the water surfaces (rebuilt per frame so their scrolling UV offset
     /// animates). No ground plane (`f32::NAN`).
     pub fn set_water(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, instances: &[SceneInstance]) {
-        self.water = gpu::build_drawables(device, queue, &self.pipeline, instances, f32::NAN);
+        // Reuse the static cache (NOT cleared here): the scrolling UV changes the
+        // vertex buffer every frame, but the water texture is constant — so it
+        // uploads once and every later frame is a cache hit.
+        self.water = gpu::build_drawables(device, queue, &self.pipeline, instances, f32::NAN, &mut self.static_tex_cache);
     }
 
     pub fn drawable_count(&self) -> usize {
@@ -649,7 +661,8 @@ impl WorldView {
                 rp.draw_indexed(0..d.n_idx, 0, 0..1);
             }
             if std::env::var_os("RCCE_DRAWSTATS").is_some() {
-                eprintln!("[world] drawables drawn={wdrawn} culled={wculled}");
+                let uploads = gpu::TEX_UPLOADS.load(std::sync::atomic::Ordering::Relaxed);
+                eprintln!("[world] drawables drawn={wdrawn} culled={wculled} tex_uploads={uploads} tex_cache={}", self.static_tex_cache.len());
             }
             // 5) Particles: unlit camera-facing billboards, additive/alpha blended,
             //    depth-tested against the world but writing no depth.
