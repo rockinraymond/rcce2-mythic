@@ -389,7 +389,7 @@ fn me_recon_rate() -> f32 {
 /// `(1 + IsRunning)` move-distance factor). Kept safely under the server's
 /// speed-hack clamp (`~150·(SpeedAttr+0.5)` u/s). Tunable for feel via
 /// `RCCE_MOVESPEED` — this is the value to adjust if running/walking feels off.
-const CLIENT_MOVE_SPEED: f32 = 46.0;
+const CLIENT_MOVE_SPEED: f32 = 12.0;
 fn client_move_speed(running: bool) -> f32 {
     let base = std::env::var("RCCE_MOVESPEED").ok().and_then(|s| s.parse::<f32>().ok()).unwrap_or(CLIENT_MOVE_SPEED);
     base * if running { 2.0 } else { 1.0 }
@@ -401,9 +401,14 @@ fn client_move_speed(running: bool) -> f32 {
 /// position the server is behind by between sends (~`run_speed × send_interval`,
 /// ≈ 92 u/s × 0.11 s ≈ 10 u). Larger divergences (speed-hack clamp / collision /
 /// warp) still ease/snap to the server. Tunable for high-latency links.
-const ME_DEADZONE: f32 = 14.0;
 fn me_deadzone() -> f32 {
-    std::env::var("RCCE_MEDEADZONE").ok().and_then(|s| s.parse::<f32>().ok()).unwrap_or(ME_DEADZONE)
+    // Auto-scale with the run speed (~the server-trails-us distance between sends:
+    // run_speed × ~0.16 s) so changing RCCE_MOVESPEED doesn't also need a deadzone
+    // retune; `RCCE_MEDEADZONE` overrides for high-latency links.
+    std::env::var("RCCE_MEDEADZONE")
+        .ok()
+        .and_then(|s| s.parse::<f32>().ok())
+        .unwrap_or_else(|| client_move_speed(true) * 0.16 + 2.0)
 }
 
 /// Effective speed-averaging window — `SPEED_WINDOW`, env `RCCE_SPEEDWIN`.
