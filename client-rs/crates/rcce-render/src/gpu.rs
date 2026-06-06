@@ -714,7 +714,14 @@ pub struct SkyPipeline {
 }
 
 const SKY_SHADER: &str = r#"
-struct SkyU { top: vec4<f32>, bottom: vec4<f32>, params: vec4<f32>, params2: vec4<f32> };
+struct SkyU {
+    top: vec4<f32>,
+    bottom: vec4<f32>,
+    params: vec4<f32>,
+    params2: vec4<f32>,
+    inv_vp: mat4x4<f32>, // inverse(view_proj) — unprojects a pixel to a world ray
+    eye: vec4<f32>,      // camera world position (xyz)
+};
 @group(0) @binding(0) var<uniform> sky: SkyU;
 @group(1) @binding(0) var skytex: texture_2d<f32>;
 @group(1) @binding(1) var skysamp: sampler;
@@ -722,47 +729,49 @@ struct SkyU { top: vec4<f32>, bottom: vec4<f32>, params: vec4<f32>, params2: vec
 @group(2) @binding(1) var cloudsamp: sampler;
 @group(3) @binding(0) var starstex: texture_2d<f32>;
 @group(3) @binding(1) var starssamp: sampler;
-struct VO { @builtin(position) pos: vec4<f32>, @location(0) t: f32, @location(1) uv: vec2<f32> };
+struct VO { @builtin(position) pos: vec4<f32>, @location(0) ndc: vec2<f32> };
 @vertex fn vs(@builtin(vertex_index) vi: u32) -> VO {
     var p = array<vec2<f32>, 3>(vec2<f32>(-1.0, -1.0), vec2<f32>(3.0, -1.0), vec2<f32>(-1.0, 3.0));
     var o: VO;
     let xy = p[vi];
     o.pos = vec4<f32>(xy, 1.0, 1.0); // z = 1 → far plane
-    o.t = (xy.y + 1.0) * 0.5;        // 0 at screen bottom, 1 at top
-    o.uv = vec2<f32>((xy.x + 1.0) * 0.5, 1.0 - (xy.y + 1.0) * 0.5); // screen uv (y down)
+    o.ndc = xy;                      // pass clip-space xy for per-pixel ray unprojection
     return o;
 }
 @fragment fn fs(i: VO) -> @location(0) vec4<f32> {
-    let grad = mix(sky.bottom.rgb, sky.top.rgb, clamp(i.t, 0.0, 1.0));
+    // World-space view ray for this pixel: unproject the far-plane point through
+    // inverse(view_proj) and look from the eye. This makes the sky WORLD-FIXED —
+    // as the camera yaws/pitches, the rays change so a given sky feature stays at
+    // its world azimuth/elevation (a real dome), instead of the old 2D screen pan
+    // that was pinned to the camera.
+    let far = sky.inv_vp * vec4<f32>(i.ndc.x, i.ndc.y, 1.0, 1.0);
+    let ray = normalize(far.xyz / far.w - sky.eye.xyz);
+    let elev = clamp(ray.y, 0.0, 1.0);                 // 0 horizon .. 1 zenith
+    let az = atan2(ray.x, ray.z) * 0.15915494 + 0.5;   // world azimuth → [0,1)
+    let tv = clamp(1.0 - elev, 0.0, 1.0);              // panorama v: horizon→1, zenith→0
+    let grad = mix(sky.bottom.rgb, sky.top.rgb, elev);
     var col = grad;
-    // Night dimming for the textured sky + clouds: the gradient already darkens
-    // (it's the day/night-modulated fog colour), but a raw daytime sky/cloud
-    // texture would otherwise stay bright at the zenith — bright daytime clouds in
-    // a midnight sky. Scale them down by the night factor (0 by day → unchanged).
+    // Night dimming for the textured sky + clouds (0 by day → unchanged).
     let sky_dim = 1.0 - 0.78 * sky.params2.y;
     if (sky.params.x >= 0.5) {
-        // Sky texture: pan horizontally with the camera yaw (Repeat sampler);
-        // fade into the fog gradient at the horizon so it meets the terrain.
-        let uv = vec2<f32>(i.uv.x + sky.params.y, i.uv.y);
+        // Sky texture by world azimuth (+ a slow time drift in params.y).
+        let uv = vec2<f32>(az + sky.params.y, tv);
         let tex = textureSample(skytex, skysamp, uv).rgb * sky_dim;
-        let h = smoothstep(0.0, 0.30, i.t);
+        let h = smoothstep(0.0, 0.30, elev);
         col = mix(grad, tex, h);
     }
     if (sky.params.z >= 0.5) {
-        // Cloud overlay: pans faster than the sky, alpha-composited, and only
-        // well above the horizon (so it doesn't smear into the terrain).
-        let cuv = vec2<f32>(i.uv.x + sky.params.w, i.uv.y);
+        // Clouds drift over the world (params.w = time drift), only above horizon.
+        let cuv = vec2<f32>(az + sky.params.w, tv);
         let c = textureSample(cloudtex, cloudsamp, cuv);
-        let fade = smoothstep(0.12, 0.45, i.t);
+        let fade = smoothstep(0.12, 0.45, elev);
         col = mix(col, c.rgb * sky_dim, c.a * fade);
     }
     if (sky.params2.x >= 0.5 && sky.params2.y > 0.01) {
-        // Stars: additive so a black background adds nothing and white stars add
-        // light. Composited AFTER the clouds (previously before — dense clouds
-        // alpha-composited over them and erased the whole field at night).
-        let suv = vec2<f32>(i.uv.x + sky.params2.z, i.uv.y);
+        // Stars (additive), composited after clouds, world-fixed by azimuth.
+        let suv = vec2<f32>(az + sky.params2.z, tv);
         let s = textureSample(starstex, starssamp, suv).rgb;
-        let sfade = smoothstep(0.05, 0.40, i.t);
+        let sfade = smoothstep(0.05, 0.40, elev);
         col = col + s * sky.params2.y * sfade;
     }
     return vec4<f32>(col, 1.0);
@@ -786,7 +795,7 @@ impl SkyPipeline {
         });
         let buf = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("sky"),
-            size: 64, // four vec4 (top, bottom, params, params2)
+            size: 144, // four vec4 + inv_vp(mat4) + eye(vec4)
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
@@ -889,23 +898,38 @@ impl SkyPipeline {
         queue.write_buffer(&self.buf, 0, bytemuck::cast_slice(&data));
     }
 
-    /// Per-frame params: `yaw` (radians) pans the sky texture; clouds pan faster
-    /// (1.6×) plus a slow time drift so they move even when standing still. The
-    /// has-sky / has-clouds flags come from whether those textures are set.
-    pub fn set_frame(&self, queue: &wgpu::Queue, yaw: f32, time: f32, night: f32) {
-        use std::f32::consts::PI;
+    /// Per-frame params. The sky is now WORLD-FIXED via the per-pixel ray (see the
+    /// shader + [`set_camera`](Self::set_camera)), so the camera `yaw` no longer
+    /// drives the offsets — they are slow TIME drifts (clouds drift, stars wheel
+    /// slowly) layered on top of the world-azimuth sampling. `yaw` is kept in the
+    /// signature for call-site compatibility but unused.
+    pub fn set_frame(&self, queue: &wgpu::Queue, _yaw: f32, time: f32, night: f32) {
         let has_sky = if self.has_texture { 1.0 } else { 0.0 };
         let has_clouds = if self.has_clouds { 1.0 } else { 0.0 };
         let has_stars = if self.has_stars { 1.0 } else { 0.0 };
-        let off = yaw / (2.0 * PI);
-        let cloud_off = off * 1.6 + time * 0.004;
+        let sky_off = 0.0; // sky texture is static in world space
+        let cloud_off = time * 0.004; // clouds drift
+        let star_off = time * 0.0006; // stars wheel very slowly
         // params = [has_sky, sky_off, has_clouds, cloud_off];
-        // params2 = [has_stars, night, star_off, _]. Stars pan with the sky.
+        // params2 = [has_stars, night, star_off, _].
         let params: [f32; 8] = [
-            has_sky, off, has_clouds, cloud_off,
-            has_stars, night.clamp(0.0, 1.0), off, 0.0,
+            has_sky, sky_off, has_clouds, cloud_off,
+            has_stars, night.clamp(0.0, 1.0), star_off, 0.0,
         ];
         queue.write_buffer(&self.buf, 32, bytemuck::cast_slice(&params));
+    }
+
+    /// Per-frame camera state for the world-fixed sky: `inv_view_proj` (column-major,
+    /// = `inverse(view_proj)`) and the camera world position. The shader unprojects
+    /// each pixel through these to a world ray.
+    pub fn set_camera(&self, queue: &wgpu::Queue, inv_view_proj: &[f32; 16], eye: [f32; 3]) {
+        let mut data = [0.0f32; 20];
+        data[..16].copy_from_slice(inv_view_proj);
+        data[16] = eye[0];
+        data[17] = eye[1];
+        data[18] = eye[2];
+        data[19] = 1.0;
+        queue.write_buffer(&self.buf, 64, bytemuck::cast_slice(&data));
     }
 
     /// Upload the area's sky texture (RGBA8). Replaces any previous one and

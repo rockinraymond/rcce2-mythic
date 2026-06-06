@@ -501,6 +501,11 @@ impl WorldView {
         // drives the cloud drift.
         self.sky.set_colors(queue, gpu::sky_zenith(fog_color), fog_color);
         self.sky.set_frame(queue, sky_yaw, sky_time, sky_night);
+        // World-fixed sky: hand the inverse view-projection + eye to the sky shader
+        // so it casts a per-pixel world ray (the sky stays pinned to the world as
+        // the camera turns/pitches, instead of the old camera-locked 2D pan).
+        let inv_vp = glam::Mat4::from_cols_array(&view_proj).inverse().to_cols_array();
+        self.sky.set_camera(queue, &inv_vp, eye);
         let mut enc = device.create_command_encoder(&Default::default());
         // Shadow pass: render opaque casters (terrain + scenery + CPU-skinned
         // actors) from the sun's POV into the shadow map. Depth only.
