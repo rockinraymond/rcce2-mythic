@@ -3506,15 +3506,22 @@ impl App {
         // Clear/horizon = the modulated fog colour so the sky fades into it (and
         // darkens at night) instead of a fixed daytime blue.
         let clear = wgpu::Color { r: fog[0] as f64, g: fog[1] as f64, b: fog[2] as f64, a: 1.0 };
-        // Sun direction (RCCE_SUNDIR="x,y,z" overrides the zone's) — a low sun
-        // throws long, obvious shadows for verification.
+        // Sun direction: RCCE_SUNDIR="x,y,z" overrides; else the day/night phase
+        // drives it (sun moves across the sky → shadows rotate) when RCCE_PHASE /
+        // RCCE_DAYNIGHT is set; else the zone's authored light.
         let sun = std::env::var("RCCE_SUNDIR")
             .ok()
             .and_then(|s| {
                 let p: Vec<f32> = s.split(',').filter_map(|t| t.trim().parse().ok()).collect();
                 (p.len() == 3).then(|| [p[0], p[1], p[2]])
             })
-            .unwrap_or(self.light_dir);
+            .unwrap_or_else(|| {
+                if std::env::var_os("RCCE_PHASE").is_some() || std::env::var_os("RCCE_DAYNIGHT_SECS").is_some() {
+                    rcce_client::daynight::sun_dir(phase)
+                } else {
+                    self.light_dir
+                }
+            });
         let (fn_, ff_) = (self.fog_near.max(500.0), self.fog_far.max(40000.0));
 
         // Shadow-caster verification fixture (RCCE_TESTBOX=skinned|cpu): drop a tall
@@ -5317,6 +5324,18 @@ impl App {
         let sky = rcce_client::daynight::daynight(phase);
         let fog_dn = rcce_client::daynight::modulate(self.fog_color, &sky);
         let ambient_dn = rcce_client::daynight::modulate(self.ambient, &sky);
+        // Move the sun with the time-of-day so shadows rotate + lengthen across the
+        // day — but only when day/night is actually driving the phase (server clock
+        // / RCCE_PHASE / RCCE_DAYNIGHT). With the static noon default, keep the
+        // zone's authored light direction.
+        let daynight_active = server_phase.is_some()
+            || std::env::var_os("RCCE_PHASE").is_some()
+            || std::env::var_os("RCCE_DAYNIGHT_SECS").is_some();
+        let light_dir = if daynight_active {
+            rcce_client::daynight::sun_dir(phase)
+        } else {
+            self.light_dir
+        };
         // Particles: advance the sim + upload this frame's camera-facing billboards.
         // `&mut self.emitters` is disjoint from the live gfx/view/store borrows.
         let pdt = (elapsed - self.prev_elapsed).clamp(0.0, 0.1);
@@ -5332,7 +5351,7 @@ impl App {
             self.fog_near,
             self.fog_far,
             ambient_dn,
-            self.light_dir,
+            light_dir,
             wgpu::Color {
                 r: fog_dn[0] as f64,
                 g: fog_dn[1] as f64,
@@ -6457,7 +6476,7 @@ impl App {
                     });
                     let sview = stex.create_view(&Default::default());
                     let clear = wgpu::Color { r: fog_dn[0] as f64, g: fog_dn[1] as f64, b: fog_dn[2] as f64, a: 1.0 };
-                    view.render(&gfx.device, &gfx.queue, &sview, vp, eye, fog_dn, self.fog_near, self.fog_far, ambient_dn, self.light_dir, clear, self.cam_yaw, elapsed, rcce_client::daynight::night_factor(phase), cam_target);
+                    view.render(&gfx.device, &gfx.queue, &sview, vp, eye, fog_dn, self.fog_near, self.fog_far, ambient_dn, light_dir, clear, self.cam_yaw, elapsed, rcce_client::daynight::night_factor(phase), cam_target);
                     overlay.render(&gfx.device, &gfx.queue, &sview, sw, sh);
                     match rcce_render::save_texture_png(&gfx.device, &gfx.queue, &stex, w, h, gfx.config.format, &shot) {
                         Ok(()) => println!("[client-window] screenshot -> {shot}"),

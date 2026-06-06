@@ -46,6 +46,20 @@ pub fn phase_at(elapsed_secs: f32, cycle_secs: f32) -> f32 {
     (elapsed_secs / cycle_secs.max(1.0)).rem_euclid(1.0)
 }
 
+/// Sun direction (pointing TOWARD the sun, matching the renderer's `light_dir`
+/// convention) for a phase, so shadows rotate and lengthen across the day instead
+/// of staying fixed. Noon → overhead (short shadows); dawn → low in the east; dusk
+/// → low in the west; night → kept just above the horizon (the scene is dark then
+/// regardless, and this keeps the shadow projection well-defined).
+pub fn sun_dir(phase: f32) -> [f32; 3] {
+    let a = (phase.rem_euclid(1.0) - 0.25) * TAU; // 0 at dawn, π/2 noon, π dusk
+    let elev = a.sin(); // -1 midnight .. +1 noon
+    let horiz = a.cos(); // +1 dawn (east) .. 0 noon .. -1 dusk (west)
+    let v = [horiz, elev.max(0.12), 0.35];
+    let len = (v[0] * v[0] + v[1] * v[1] + v[2] * v[2]).sqrt().max(1e-4);
+    [v[0] / len, v[1] / len, v[2] / len]
+}
+
 /// How visible the night-sky stars are at `phase` (0 by day, 1 at deep night).
 /// Stars fade in only once it's fairly dark and peak at midnight.
 pub fn night_factor(phase: f32) -> f32 {
@@ -57,6 +71,25 @@ pub fn night_factor(phase: f32) -> f32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn sun_moves_across_the_sky() {
+        let noon = sun_dir(0.5);
+        let dawn = sun_dir(0.25);
+        let dusk = sun_dir(0.75);
+        // Noon highest; dawn/dusk low.
+        assert!(noon[1] > dawn[1] && noon[1] > dusk[1], "noon should be highest: {noon:?}");
+        // Sun crosses east → west: dawn +x, dusk -x, noon ~overhead (x≈0).
+        assert!(dawn[0] > 0.5, "dawn should be east (+x): {dawn:?}");
+        assert!(dusk[0] < -0.5, "dusk should be west (-x): {dusk:?}");
+        assert!(noon[0].abs() < 0.2, "noon should be ~overhead: {noon:?}");
+        // Always normalised + never below the horizon.
+        for p in [0.0_f32, 0.25, 0.5, 0.75] {
+            let d = sun_dir(p);
+            assert!((d[0] * d[0] + d[1] * d[1] + d[2] * d[2] - 1.0).abs() < 1e-3);
+            assert!(d[1] > 0.0, "sun above horizon at {p}: {d:?}");
+        }
+    }
 
     #[test]
     fn noon_is_bright_and_neutral() {
