@@ -150,8 +150,8 @@ pub fn render_scene_png(
     let depth_view = depth.create_view(&Default::default());
 
     // Shared pipeline + per-instance drawables (with ground plane).
-    let pipeline = Pipeline::new(&device, color_format);
-    let mut sky = gpu::SkyPipeline::new(&device, color_format);
+    let pipeline = Pipeline::new(&device, color_format, 1);
+    let mut sky = gpu::SkyPipeline::new(&device, color_format, 1);
     sky.set_colors(&queue, gpu::sky_zenith(fog_color), fog_color);
     if let Some((w, h, rgba)) = &sky_tex {
         sky.set_texture(&device, &queue, *w, *h, rgba);
@@ -345,8 +345,8 @@ pub fn render_skinned_png(
     });
     let depth_view = depth.create_view(&Default::default());
 
-    let pipeline = Pipeline::new(&device, color_format);
-    let skin = gpu::SkinPipeline::new(&device, color_format, &pipeline);
+    let pipeline = Pipeline::new(&device, color_format, 1);
+    let skin = gpu::SkinPipeline::new(&device, color_format, &pipeline, 1);
     let ubuf = device.create_buffer_init_uniform(&uniforms);
     let (sh_tex, sh_samp) = default_shadow(&device);
     let bind0 = device.create_bind_group(&wgpu::BindGroupDescriptor {

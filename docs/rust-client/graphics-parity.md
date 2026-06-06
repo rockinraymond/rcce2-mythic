@@ -59,6 +59,7 @@ Legend: ✅ verified (rendered + audited) · 🟡 implemented, render-verify pen
 | Point lights / `LightModels` | ✅ | `light_<range>_<R>_<G>_<B>` scenery meshes → per-fragment accumulation (colour × distance falloff × facing); nearest 16 to the camera per frame. Illuminate only, no shadows (matches Blitz). Env-tunable `RCCE_LIGHTRANGE` / `RCCE_LIGHTGAIN`. |
 | Form shading (mesh self-shadow) | ✅ | `max(dot(N,L))` — lit/dark sides on every mesh + slope-shaded terrain |
 | View-frustum culling | ✅ | each drawable's world bounding sphere is tested against the 6 camera-frustum planes; props behind the camera / off the sides skip their textured+shaded draw entirely. Conservative ⇒ lossless (verified: 10/13 drawables culled facing away, on-vs-off pixel delta at the animation noise floor). `RCCE_NOFRUSTUMCULL` disables; `RCCE_DRAWSTATS` logs drawn/culled. |
+| MSAA + alpha-to-coverage | ✅ | **better than Blitz** (fixed-function Client.exe has no MSAA). World pass renders into a multisampled colour+depth target and resolves to the surface; shadow map stays 1×. Alpha-to-coverage on the opaque + skinned pipelines anti-aliases cut-out foliage/hair silhouettes too. Verified at 4× on an opaque/sky silhouette: 12× more coverage pixels (154→1920) and −19% hard sky↔foreground adjacencies vs 1×; 1× is a byte-identical fallback. `RCCE_MSAA={1,2,4}` (default 4; clamped — 8× needs an unrequested adapter feature). |
 | Water reflection / `AWater` bump+foam | ➖ | cosmetic; deferred |
 
 ### Minor — implemented, render-verify pending (low risk; env-driven)

@@ -198,12 +198,27 @@ impl ShadowPipeline {
                 // Constant + slope-scaled bias to cut shadow acne at the source.
                 bias: wgpu::DepthBiasState { constant: 2, slope_scale: 2.0, clamp: 0.0 },
             }),
-            multisample: wgpu::MultisampleState::default(),
+            multisample: msaa(1), // shadow map is always single-sampled
             multiview: None,
             cache: None,
         });
         ShadowPipeline { pipeline, bgl }
     }
+}
+
+/// MSAA state for the world-pass pipelines (`count` samples per pixel). `count`
+/// of 1 is the no-MSAA default; 2/4/8 anti-alias scenery/foliage silhouettes.
+fn msaa(count: u32) -> wgpu::MultisampleState {
+    wgpu::MultisampleState { count, ..Default::default() }
+}
+
+/// As [`msaa`], but with alpha-to-coverage on (when multisampling). The opaque
+/// scene + skinned-actor pipelines alpha-test cut-out foliage/hair; A2C turns the
+/// fragment's alpha into an MSAA coverage mask so those cut-out silhouettes get
+/// anti-aliased too (plain MSAA only smooths geometric triangle edges). Solid
+/// meshes output alpha 1 → full coverage → unchanged. No effect at `count` 1.
+fn msaa_a2c(count: u32) -> wgpu::MultisampleState {
+    wgpu::MultisampleState { count, alpha_to_coverage_enabled: count > 1, ..Default::default() }
 }
 
 /// Unlit textured billboard pipeline for particles: vertex colour × texture, no
@@ -238,6 +253,7 @@ impl ParticlePipeline {
         color_format: wgpu::TextureFormat,
         bgl_uniform: &wgpu::BindGroupLayout,
         bgl_texture: &wgpu::BindGroupLayout,
+        sample_count: u32,
     ) -> ParticlePipeline {
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("particle"),
@@ -285,7 +301,7 @@ impl ParticlePipeline {
                     stencil: Default::default(),
                     bias: Default::default(),
                 }),
-                multisample: wgpu::MultisampleState::default(),
+                multisample: msaa(sample_count),
                 multiview: None,
                 cache: None,
             })
@@ -486,7 +502,7 @@ struct VO { @builtin(position) pos: vec4<f32>, @location(0) t: f32, @location(1)
 "#;
 
 impl SkyPipeline {
-    pub fn new(device: &wgpu::Device, color_format: wgpu::TextureFormat) -> SkyPipeline {
+    pub fn new(device: &wgpu::Device, color_format: wgpu::TextureFormat, sample_count: u32) -> SkyPipeline {
         let bgl = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("sky-u"),
             entries: &[wgpu::BindGroupLayoutEntry {
@@ -581,7 +597,7 @@ impl SkyPipeline {
                 stencil: Default::default(),
                 bias: Default::default(),
             }),
-            multisample: wgpu::MultisampleState::default(),
+            multisample: msaa(sample_count),
             multiview: None,
             cache: None,
         });
@@ -831,7 +847,7 @@ pub struct Pipeline {
 }
 
 impl Pipeline {
-    pub fn new(device: &wgpu::Device, color_format: wgpu::TextureFormat) -> Pipeline {
+    pub fn new(device: &wgpu::Device, color_format: wgpu::TextureFormat, sample_count: u32) -> Pipeline {
         let bgl_uniform = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("u"),
             entries: &[
@@ -947,7 +963,7 @@ impl Pipeline {
                 stencil: Default::default(),
                 bias: Default::default(),
             }),
-            multisample: wgpu::MultisampleState::default(),
+            multisample: msaa_a2c(sample_count),
             multiview: None,
             cache: None,
         });
@@ -984,7 +1000,7 @@ impl Pipeline {
                 stencil: Default::default(),
                 bias: Default::default(),
             }),
-            multisample: wgpu::MultisampleState::default(),
+            multisample: msaa(sample_count),
             multiview: None,
             cache: None,
         });
@@ -1216,7 +1232,7 @@ pub struct SkinPipeline {
 }
 
 impl SkinPipeline {
-    pub fn new(device: &wgpu::Device, color_format: wgpu::TextureFormat, base: &Pipeline) -> SkinPipeline {
+    pub fn new(device: &wgpu::Device, color_format: wgpu::TextureFormat, base: &Pipeline, sample_count: u32) -> SkinPipeline {
         let bgl_actor = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("actor-skin"),
             entries: &[wgpu::BindGroupLayoutEntry {
@@ -1266,7 +1282,7 @@ impl SkinPipeline {
                 stencil: Default::default(),
                 bias: Default::default(),
             }),
-            multisample: wgpu::MultisampleState::default(),
+            multisample: msaa_a2c(sample_count),
             multiview: None,
             cache: None,
         });

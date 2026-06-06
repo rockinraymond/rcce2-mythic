@@ -76,6 +76,11 @@ pub struct WorldView {
     uniform_buf: wgpu::Buffer,
     bind0: wgpu::BindGroup,
     depth: wgpu::TextureView,
+    /// MSAA sample count for the world pass (1 = off). The shadow pass is always 1×.
+    sample_count: u32,
+    /// Multisampled colour target (present only when `sample_count > 1`); resolved
+    /// into the surface view each frame.
+    msaa_color: Option<wgpu::TextureView>,
     /// Sun shadow map: a depth-only pipeline renders casters from the light's POV
     /// into `shadow_tex`, which the scene shader then PCF-samples (via `bind0`).
     shadow_pipeline: gpu::ShadowPipeline,
@@ -119,13 +124,13 @@ struct ParticleBatch {
     n: u32,
 }
 
-fn make_depth(device: &wgpu::Device, w: u32, h: u32) -> wgpu::TextureView {
+fn make_depth(device: &wgpu::Device, w: u32, h: u32, sample_count: u32) -> wgpu::TextureView {
     device
         .create_texture(&wgpu::TextureDescriptor {
             label: Some("depth"),
             size: wgpu::Extent3d { width: w.max(1), height: h.max(1), depth_or_array_layers: 1 },
             mip_level_count: 1,
-            sample_count: 1,
+            sample_count,
             dimension: wgpu::TextureDimension::D2,
             format: gpu::DEPTH_FORMAT,
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
@@ -134,12 +139,48 @@ fn make_depth(device: &wgpu::Device, w: u32, h: u32) -> wgpu::TextureView {
         .create_view(&Default::default())
 }
 
+/// The multisampled colour target the world pass renders into when MSAA is on
+/// (`sample_count > 1`); it is resolved into the single-sampled surface/screenshot
+/// view at the end of the pass. `None` when MSAA is off (render direct to view).
+fn make_msaa_color(device: &wgpu::Device, format: wgpu::TextureFormat, w: u32, h: u32, sample_count: u32) -> Option<wgpu::TextureView> {
+    if sample_count <= 1 {
+        return None;
+    }
+    Some(
+        device
+            .create_texture(&wgpu::TextureDescriptor {
+                label: Some("msaa-color"),
+                size: wgpu::Extent3d { width: w.max(1), height: h.max(1), depth_or_array_layers: 1 },
+                mip_level_count: 1,
+                sample_count,
+                dimension: wgpu::TextureDimension::D2,
+                format,
+                usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+                view_formats: &[],
+            })
+            .create_view(&Default::default()),
+    )
+}
+
+/// Anti-aliasing sample count from `RCCE_MSAA` (default 4×; `1` disables). Clamped
+/// to {1,2,4} — the range the WebGPU spec guarantees for renderable formats like
+/// Bgra8Unorm. 8× needs `TEXTURE_ADAPTER_SPECIFIC_FORMAT_FEATURES` (not requested),
+/// so it would fail pipeline validation; we never return it.
+fn msaa_sample_count() -> u32 {
+    match std::env::var("RCCE_MSAA").ok().and_then(|s| s.trim().parse::<u32>().ok()) {
+        Some(1) => 1,
+        Some(2) => 2,
+        _ => 4,
+    }
+}
+
 impl WorldView {
     pub fn new(device: &wgpu::Device, color_format: wgpu::TextureFormat, w: u32, h: u32) -> WorldView {
-        let pipeline = Pipeline::new(device, color_format);
-        let skin = SkinPipeline::new(device, color_format, &pipeline);
-        let sky = SkyPipeline::new(device, color_format);
-        let particle_pipeline = gpu::ParticlePipeline::new(device, color_format, &pipeline.bgl_uniform, &pipeline.bgl_texture);
+        let sample_count = msaa_sample_count();
+        let pipeline = Pipeline::new(device, color_format, sample_count);
+        let skin = SkinPipeline::new(device, color_format, &pipeline, sample_count);
+        let sky = SkyPipeline::new(device, color_format, sample_count);
+        let particle_pipeline = gpu::ParticlePipeline::new(device, color_format, &pipeline.bgl_uniform, &pipeline.bgl_texture, sample_count);
         let uniform_buf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("u"),
             contents: bytemuck::bytes_of(&Uniforms::new(
@@ -198,7 +239,9 @@ impl WorldView {
             color_format,
             uniform_buf,
             bind0,
-            depth: make_depth(device, w, h),
+            depth: make_depth(device, w, h, sample_count),
+            sample_count,
+            msaa_color: make_msaa_color(device, color_format, w, h, sample_count),
             shadow_pipeline,
             shadow_tex,
             light_buf,
@@ -331,7 +374,8 @@ impl WorldView {
     }
 
     pub fn resize(&mut self, device: &wgpu::Device, w: u32, h: u32) {
-        self.depth = make_depth(device, w, h);
+        self.depth = make_depth(device, w, h, self.sample_count);
+        self.msaa_color = make_msaa_color(device, self.color_format, w, h, self.sample_count);
     }
 
     /// Draw the scene to `view` with the camera + atmosphere. `eye` is the
@@ -487,11 +531,18 @@ impl WorldView {
             }
         }
         {
+            // With MSAA the pass renders into the multisampled colour target and
+            // resolves into the single-sampled surface `view`; without it, render
+            // direct to `view` (exact pre-MSAA path).
+            let (color_view, resolve_target) = match &self.msaa_color {
+                Some(msaa) => (msaa, Some(view)),
+                None => (view, None),
+            };
             let mut rp = enc.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("world"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view,
-                    resolve_target: None,
+                    view: color_view,
+                    resolve_target,
                     ops: wgpu::Operations {
                         load: wgpu::LoadOp::Clear(clear),
                         store: wgpu::StoreOp::Store,
