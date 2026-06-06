@@ -1597,6 +1597,12 @@ fn terrain_model(t: &rcce_data::TerrainPatch) -> B3dModel {
     let mut positions = Vec::with_capacity(vcount);
     let mut uvs = Vec::with_capacity(vcount);
     let mut uvs2 = Vec::with_capacity(if has_detail { vcount } else { 0 });
+    // Per-vertex normals from the height field (central differences), scaled into
+    // world space by the cell size so the slopes — and thus the sun's form
+    // shading — are correct, not flat.
+    let mut normals = Vec::with_capacity(vcount);
+    let (cx, cz) = (t.scale[0].abs().max(1e-3), t.scale[2].abs().max(1e-3));
+    let hat = |xx: usize, zz: usize| t.heights.get(xx * stride + zz).copied().unwrap_or(0.0);
     for x in 0..=n {
         for z in 0..=n {
             let h = t.heights.get(x * stride + z).copied().unwrap_or(0.0);
@@ -1605,6 +1611,12 @@ fn terrain_model(t: &rcce_data::TerrainPatch) -> B3dModel {
             if has_detail {
                 uvs2.push([x as f32 * dtiles, z as f32 * dtiles]);
             }
+            let (xl, xr) = (x.saturating_sub(1), (x + 1).min(n));
+            let (zl, zr) = (z.saturating_sub(1), (z + 1).min(n));
+            let dhx = (hat(xr, z) - hat(xl, z)) / (xr - xl).max(1) as f32;
+            let dhz = (hat(x, zr) - hat(x, zl)) / (zr - zl).max(1) as f32;
+            let nrm = glam::Vec3::new(-dhx / cx, 1.0, -dhz / cz).normalize();
+            normals.push([nrm.x, nrm.y, nrm.z]);
         }
     }
     let mut indices = Vec::with_capacity(n * n * 6);
@@ -1619,7 +1631,7 @@ fn terrain_model(t: &rcce_data::TerrainPatch) -> B3dModel {
     }
     B3dModel {
         meshes: vec![rcce_data::B3dMesh {
-            normals: vec![[0.0, 1.0, 0.0]; vcount],
+            normals,
             colors: vec![[1.0, 1.0, 1.0, 1.0]; vcount],
             positions,
             uvs,

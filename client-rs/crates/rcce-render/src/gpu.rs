@@ -252,11 +252,13 @@ fn sun_shadow(world: vec3<f32>, ndl: f32) -> f32 {
     if (c.a < 0.5) { discard; }
     let N = normalize(in.normal);
     let L = normalize(u.light_dir);
-    // Two-sided (cull is off): abs() keeps backfaces/interiors lit. The zone's
-    // ambient is the floor; its directional light adds on top — and is the part
-    // shadows remove (shadowed surfaces keep ambient, never go fully black).
-    let sh = sun_shadow(in.world, max(dot(N, L), 0.0));
-    let diff = abs(dot(N, L)) * u.light_intensity * sh;
+    // Form shading: the side facing the sun gets the directional light, the side
+    // facing away falls to ambient only (a real lit/dark gradient on the object,
+    // not flat). `sh` (the cast-shadow map) darkens the lit term further. The
+    // zone ambient is the floor, so nothing goes fully black.
+    let ndl = max(dot(N, L), 0.0);
+    let sh = sun_shadow(in.world, ndl);
+    let diff = ndl * u.light_intensity * sh;
     let shade = u.ambient + vec3<f32>(diff);
     // Baked lightmap (1.0 for non-lightmapped meshes via the grey default).
     let lm = textureSample(lmtex, samp, in.uv2).rgb * 2.0;
