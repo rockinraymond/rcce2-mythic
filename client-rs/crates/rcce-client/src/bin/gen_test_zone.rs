@@ -71,24 +71,9 @@ fn main() {
         })
         .unwrap_or(0);
 
-    // Inject a StarsTexID (header byte @10) so the night sky is testable — Plains
-    // ships none. Prefer a real star/night/sky texture, else reuse the base. Only
-    // affects night rendering (gated by the day/night factor), so day is unchanged.
-    let stars_tex = texcat
-        .entries
-        .iter()
-        .filter(|e| exists(&e.filename))
-        .filter(|e| {
-            let l = e.filename.to_lowercase();
-            ["star", "night", "sky"].iter().any(|k| l.contains(k))
-        })
-        .map(|e| e.id)
-        .next()
-        .unwrap_or(base_tex);
-    let sb = stars_tex.to_le_bytes();
-    d[10] = sb[0];
-    d[11] = sb[1];
-    eprintln!("stars tex id {stars_tex}");
+    // No StarsTexID is injected: the project ships no real (black + white dots)
+    // stars texture, and the renderer now draws a PROCEDURAL starfield at night
+    // when a zone has none — so the test zone's night sky is starry on its own.
 
     // Terrain geometry: a 32-cell grid, 4 units/cell (128×128 world), centred on
     // the origin, with a smooth central hill ~12 units tall.

@@ -748,14 +748,6 @@ struct VO { @builtin(position) pos: vec4<f32>, @location(0) t: f32, @location(1)
         let h = smoothstep(0.0, 0.30, i.t);
         col = mix(grad, tex, h);
     }
-    if (sky.params2.x >= 0.5 && sky.params2.y > 0.01) {
-        // Stars (behind clouds): additive so a black background adds nothing and
-        // white stars add light. Gated by the night factor (params2.y).
-        let suv = vec2<f32>(i.uv.x + sky.params2.z, i.uv.y);
-        let s = textureSample(starstex, starssamp, suv).rgb;
-        let sfade = smoothstep(0.05, 0.40, i.t);
-        col = col + s * sky.params2.y * sfade;
-    }
     if (sky.params.z >= 0.5) {
         // Cloud overlay: pans faster than the sky, alpha-composited, and only
         // well above the horizon (so it doesn't smear into the terrain).
@@ -763,6 +755,15 @@ struct VO { @builtin(position) pos: vec4<f32>, @location(0) t: f32, @location(1)
         let c = textureSample(cloudtex, cloudsamp, cuv);
         let fade = smoothstep(0.12, 0.45, i.t);
         col = mix(col, c.rgb * sky_dim, c.a * fade);
+    }
+    if (sky.params2.x >= 0.5 && sky.params2.y > 0.01) {
+        // Stars: additive so a black background adds nothing and white stars add
+        // light. Composited AFTER the clouds (previously before — dense clouds
+        // alpha-composited over them and erased the whole field at night).
+        let suv = vec2<f32>(i.uv.x + sky.params2.z, i.uv.y);
+        let s = textureSample(starstex, starssamp, suv).rgb;
+        let sfade = smoothstep(0.05, 0.40, i.t);
+        col = col + s * sky.params2.y * sfade;
     }
     return vec4<f32>(col, 1.0);
 }
