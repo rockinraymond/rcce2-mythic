@@ -389,7 +389,7 @@ fn me_recon_rate() -> f32 {
 /// `(1 + IsRunning)` move-distance factor). Kept safely under the server's
 /// speed-hack clamp (`~150·(SpeedAttr+0.5)` u/s). Tunable for feel via
 /// `RCCE_MOVESPEED` — this is the value to adjust if running/walking feels off.
-const CLIENT_MOVE_SPEED: f32 = 12.0;
+const CLIENT_MOVE_SPEED: f32 = 8.0;
 fn client_move_speed(running: bool) -> f32 {
     let base = std::env::var("RCCE_MOVESPEED").ok().and_then(|s| s.parse::<f32>().ok()).unwrap_or(CLIENT_MOVE_SPEED);
     base * if running { 2.0 } else { 1.0 }
