@@ -113,12 +113,24 @@ impl Gfx {
             .copied()
             .find(|f| !f.is_srgb())
             .unwrap_or(caps.formats[0]);
+        // Uncap the frame rate by default: Mailbox (render uncapped, present the
+        // latest at refresh — no tearing) → Immediate (uncapped, may tear) → Fifo
+        // (vsync, ~refresh-capped). RCCE_VSYNC=1 forces Fifo back on.
+        let present_mode = if std::env::var_os("RCCE_VSYNC").is_some() {
+            wgpu::PresentMode::Fifo
+        } else if caps.present_modes.contains(&wgpu::PresentMode::Mailbox) {
+            wgpu::PresentMode::Mailbox
+        } else if caps.present_modes.contains(&wgpu::PresentMode::Immediate) {
+            wgpu::PresentMode::Immediate
+        } else {
+            wgpu::PresentMode::Fifo
+        };
         let config = wgpu::SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
             format,
             width: size.width.max(1),
             height: size.height.max(1),
-            present_mode: wgpu::PresentMode::Fifo,
+            present_mode,
             desired_maximum_frame_latency: 2,
             alpha_mode: caps.alpha_modes[0],
             view_formats: vec![],
@@ -126,8 +138,8 @@ impl Gfx {
         surface.configure(&device, &config);
         let info = adapter.get_info();
         println!(
-            "[client-window] {}x{} via {} [{:?}] ({:?})",
-            config.width, config.height, info.name, info.backend, format
+            "[client-window] {}x{} via {} [{:?}] ({:?}) present={:?}",
+            config.width, config.height, info.name, info.backend, format, present_mode
         );
         (Gfx { surface, device, queue, config }, format)
     }
@@ -1610,11 +1622,13 @@ fn particle_batches(
     let right = normd(cross(fwd, [0.0, 1.0, 0.0]));
     let up = cross(right, fwd);
     let delta = (dt * 60.0).clamp(0.0, 4.0); // Blitz authors the sim at ~60 fps
+    // Softness vs Blitz: scale particle alpha (RCCE_PARTICLE_GAIN, default 0.6).
+    let gain = std::env::var("RCCE_PARTICLE_GAIN").ok().and_then(|s| s.parse().ok()).unwrap_or(0.6_f32);
     let mut batches = Vec::with_capacity(emitters.len());
     for (e, tex) in emitters.iter_mut() {
         e.update(delta);
         let mut verts = Vec::new();
-        e.billboards(right, up, &mut verts);
+        e.billboards(right, up, gain, &mut verts);
         batches.push((tex.clone(), e.blend_add, verts));
     }
     batches

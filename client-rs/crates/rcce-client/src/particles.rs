@@ -205,11 +205,12 @@ impl Emitter {
     }
 
     /// Append camera-facing billboard quads (6 verts each) for live particles.
-    /// `right`/`up` are the camera's world basis vectors.
-    pub fn billboards(&self, right: [f32; 3], up: [f32; 3], out: &mut Vec<Vertex>) {
+    /// `right`/`up` are the camera's world basis vectors. `gain` scales the
+    /// per-particle alpha (softness/transparency tuning vs Blitz).
+    pub fn billboards(&self, right: [f32; 3], up: [f32; 3], gain: f32, out: &mut Vec<Vertex>) {
         for p in self.particles.iter().filter(|p| p.in_use && p.alpha > 0.0 && p.scale > 0.0) {
             let s = p.scale;
-            let col = [p.color[0] / 255.0, p.color[1] / 255.0, p.color[2] / 255.0, p.alpha.clamp(0.0, 1.0)];
+            let col = [p.color[0] / 255.0, p.color[1] / 255.0, p.color[2] / 255.0, (p.alpha * gain).clamp(0.0, 1.0)];
             let corner = |ox: f32, oy: f32, uv: [f32; 2]| Vertex {
                 pos: [
                     p.pos[0] + right[0] * ox * s + up[0] * oy * s,
@@ -275,7 +276,7 @@ mod tests {
         let mut e = Emitter::new(cfg(), 0, [0.0; 3], [0.0; 3], 7);
         e.update(1.0);
         let mut v = Vec::new();
-        e.billboards([1.0, 0.0, 0.0], [0.0, 1.0, 0.0], &mut v);
+        e.billboards([1.0, 0.0, 0.0], [0.0, 1.0, 0.0], 1.0, &mut v);
         assert_eq!(v.len() % 6, 0);
         assert!(!v.is_empty());
     }
