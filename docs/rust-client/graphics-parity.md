@@ -88,13 +88,42 @@ lights). All three are done; the notes below record what each entailed.
 3. **Point lights / `LightModels`** — dynamic light-emitting meshes; needs Blitz
    usage confirmed, then per-pixel point lighting. Medium.
 
-## Status of the loop
+## Status
 
-The "verify graphical parity via test renders" pass is **complete for every
-implemented feature** — terrain (base+detail), water, scenery+rotation, actors+
-attachments, sky, clouds, foliage, multitexture, minimap — and fixed real bugs
-along the way (scenery yaw, attachment animation, minimap handedness). What
-remains is the three subsystems above: each is a multi-day renderer addition that
-should be **scoped and prioritised with the user**, not auto-built in a loop.
+Every headless-verifiable feature in the table above is **implemented and
+verified**. Along the way the pass fixed real bugs: scenery yaw, attachment
+animation, minimap handedness, the night sky showing bright daytime clouds at
+the zenith, and night stars being erased by the cloud overlay. The renderer now
+also goes **beyond** Blitz in several places (soft PCF shadows, MSAA + alpha-to-
+coverage, Fresnel water, GPU-skinned actor shadows).
+
+### Regression sweep
+
+After a batch of changes, render the synthetic full-feature zone at day **and**
+night with everything on, and sanity-check coherence (no NaN, night darker than
+day, ground still lit, no blown-out highlights):
+
+```
+gen-test-zone <data> "Test Terrain"
+COMMON="RCCE_MSAA=4 RCCE_TIME=1.0 RCCE_VIEWZONE=1 RCCE_TESTBOX=skinned RCCE_BOXY=26 \
+        RCCE_CAMAT=0,10,0 RCCE_CAMYAW=0.5 RCCE_CAMPITCH=0.28 RCCE_CAMDIST=120 RCCE_SUNDIR=0.7,-0.6,0.2"
+env $COMMON RCCE_PHASE=0.5 RCCE_SHOT=day.png   RCCE_SHOT_FRAME=8 ClientRS.exe 127.0.0.1 25000 "Test Terrain"
+env $COMMON RCCE_PHASE=0.0 RCCE_SHOT=night.png RCCE_SHOT_FRAME=8 ClientRS.exe 127.0.0.1 25000 "Test Terrain"
+```
+Last sweep (all 10 cumulative changes active together): coherent — day mean 47.8 /
+sky 52.8, night mean 15.8 / sky 11.4 / ground 21.6, no NaN, no blowouts.
+
+### What's left (not headless-verifiable)
+
+These need the live client + a running server, so they're out of scope for the
+test-render loop and should be **scoped with the user**:
+
+- **Projectiles (3D)** — combat path.
+- **In-world UI / nameplates / health bars** (`Interface3D`) — overlay over actors.
+- **Sound**, **mouse-look**, **chat/combat send** — interaction, not rendering.
+
+Possible *beyond-parity* renderer additions (opt-in, have a perf cost worth
+discussing given fps sensitivity): bloom/HDR glow on bright particles + sun
+glints, screen-space water reflections, ambient occlusion.
 
 Update this table as rows are verified or implemented.
