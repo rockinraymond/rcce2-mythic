@@ -165,7 +165,7 @@ pub fn render_scene_png(
     sky.set_frame(&queue, 0.0, 0.0, night); // still image → no yaw pan / drift
     // World-fixed sky needs the camera unprojection (else the ray is degenerate).
     let inv_vp = (proj * view).inverse().to_cols_array();
-    sky.set_camera(&queue, &inv_vp, eye);
+    sky.set_camera(&queue, &inv_vp, eye, light_dir);
     let ubuf = device.create_buffer_init_uniform(&uniforms);
     let (sh_tex, sh_samp) = default_shadow(&device);
     let bind0 = device.create_bind_group(&wgpu::BindGroupDescriptor {

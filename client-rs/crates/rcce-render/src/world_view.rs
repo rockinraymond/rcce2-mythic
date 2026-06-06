@@ -505,7 +505,9 @@ impl WorldView {
         // so it casts a per-pixel world ray (the sky stays pinned to the world as
         // the camera turns/pitches, instead of the old camera-locked 2D pan).
         let inv_vp = glam::Mat4::from_cols_array(&view_proj).inverse().to_cols_array();
-        self.sky.set_camera(queue, &inv_vp, eye);
+        // `light_dir` points toward the sun — hand it to the sky so the sun disc /
+        // moon is drawn at the same place the shadows are cast from.
+        self.sky.set_camera(queue, &inv_vp, eye, light_dir);
         let mut enc = device.create_command_encoder(&Default::default());
         // Shadow pass: render opaque casters (terrain + scenery + CPU-skinned
         // actors) from the sun's POV into the shadow map. Depth only.

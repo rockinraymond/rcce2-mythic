@@ -721,6 +721,7 @@ struct SkyU {
     params2: vec4<f32>,
     inv_vp: mat4x4<f32>, // inverse(view_proj) — unprojects a pixel to a world ray
     eye: vec4<f32>,      // camera world position (xyz)
+    sun: vec4<f32>,      // sun/celestial direction (xyz, normalized; points toward the sun)
 };
 @group(0) @binding(0) var<uniform> sky: SkyU;
 @group(1) @binding(0) var skytex: texture_2d<f32>;
@@ -790,6 +791,30 @@ struct VO { @builtin(position) pos: vec4<f32>, @location(0) ndc: vec2<f32> };
         let sfade = smoothstep(0.05, 0.40, sky_t) * szfade;
         col = col + s * sky.params2.y * sfade;
     }
+    // Celestial body at the sun direction (the same arc the shadows use): a bright
+    // disc + warm glow by day, a pale-cool moon by night, cross-fading at dawn/dusk
+    // via day_vis / night. Composited into the sky (far plane, no depth write) so
+    // hills and trees correctly occlude it. `cd` = how directly the view ray points
+    // at the body; the disc is a soft cosine threshold, the glow a wide cosine power.
+    let sd = normalize(sky.sun.xyz);
+    let cd = dot(ray, sd);
+    // Fade the body out if it dips below the horizon (sun_dir clamps it just above,
+    // so this mostly guards degenerate directions).
+    let above = smoothstep(-0.08, 0.04, sd.y);
+    // Warm/redden the disc as it nears the horizon (dawn/dusk).
+    let low = 1.0 - smoothstep(0.06, 0.45, sd.y);
+    let sun_col = mix(vec3<f32>(1.0, 0.96, 0.84), vec3<f32>(1.0, 0.5, 0.24), low);
+    // Day sun: a bright disc (~3.5° radius, soft edge) plus a layered glow — a tight
+    // hot corona, a medium falloff, and a wide faint sky-brightening near the sun.
+    let sun_disc = smoothstep(0.9965, 0.9988, cd) * 1.4;
+    let sun_glow = pow(max(cd, 0.0), 360.0) * 0.9
+                 + pow(max(cd, 0.0), 30.0) * 0.30
+                 + pow(max(cd, 0.0), 6.0) * 0.07;
+    col = col + sun_col * (sun_disc + sun_glow) * day_vis * above;
+    // Night moon: a smaller, pale-cool disc with a soft halo (no wide brightening).
+    let moon_disc = smoothstep(0.9978, 0.9993, cd) * 1.0;
+    let moon_glow = pow(max(cd, 0.0), 420.0) * 0.45 + pow(max(cd, 0.0), 70.0) * 0.12;
+    col = col + vec3<f32>(0.82, 0.88, 1.0) * (moon_disc + moon_glow) * sky.params2.y * above;
     return vec4<f32>(col, 1.0);
 }
 "#;
@@ -811,7 +836,7 @@ impl SkyPipeline {
         });
         let buf = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("sky"),
-            size: 144, // four vec4 + inv_vp(mat4) + eye(vec4)
+            size: 160, // four vec4 + inv_vp(mat4) + eye(vec4) + sun(vec4)
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
@@ -935,16 +960,26 @@ impl SkyPipeline {
         queue.write_buffer(&self.buf, 32, bytemuck::cast_slice(&params));
     }
 
-    /// Per-frame camera state for the world-fixed sky: `inv_view_proj` (column-major,
-    /// = `inverse(view_proj)`) and the camera world position. The shader unprojects
-    /// each pixel through these to a world ray.
-    pub fn set_camera(&self, queue: &wgpu::Queue, inv_view_proj: &[f32; 16], eye: [f32; 3]) {
-        let mut data = [0.0f32; 20];
+    /// Per-frame camera + sun state for the world-fixed sky: `inv_view_proj`
+    /// (column-major, = `inverse(view_proj)`), the camera world position, and the
+    /// sun/celestial direction (points toward the sun; the same arc the shadows
+    /// use). The shader unprojects each pixel to a world ray and draws a sun disc /
+    /// moon where the ray points at `sun`.
+    pub fn set_camera(&self, queue: &wgpu::Queue, inv_view_proj: &[f32; 16], eye: [f32; 3], sun: [f32; 3]) {
+        // Normalize the sun direction here so the shader can assume a unit vector
+        // (a degenerate/zero dir falls back to straight up, harmless).
+        let len = (sun[0] * sun[0] + sun[1] * sun[1] + sun[2] * sun[2]).sqrt();
+        let s = if len > 1e-4 { [sun[0] / len, sun[1] / len, sun[2] / len] } else { [0.0, 1.0, 0.0] };
+        let mut data = [0.0f32; 24];
         data[..16].copy_from_slice(inv_view_proj);
         data[16] = eye[0];
         data[17] = eye[1];
         data[18] = eye[2];
         data[19] = 1.0;
+        data[20] = s[0];
+        data[21] = s[1];
+        data[22] = s[2];
+        data[23] = 1.0;
         queue.write_buffer(&self.buf, 64, bytemuck::cast_slice(&data));
     }
 
