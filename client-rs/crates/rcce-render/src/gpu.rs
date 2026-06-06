@@ -739,40 +739,42 @@ struct VO { @builtin(position) pos: vec4<f32>, @location(0) ndc: vec2<f32> };
     return o;
 }
 @fragment fn fs(i: VO) -> @location(0) vec4<f32> {
-    // Horizontal: per-pixel WORLD azimuth (unproject through inverse(view_proj))
-    // so the sky scrolls with the world as the camera turns — fixes the "sky moves
-    // with the camera" issue. Vertical: SCREEN-based, like the original — the
-    // gradient + texture span the full sky instead of getting squished into a thin
-    // band by the spherical elevation mapping.
+    // Fully WORLD-FIXED sky: a per-pixel world ray (unproject through
+    // inverse(view_proj)) drives both axes, so the sky stays put as the camera
+    // yaws AND pitches. Horizontal = world azimuth. Vertical = world elevation,
+    // but SCALED (÷0.5) so the gradient/texture spread across the commonly-visible
+    // sky band (horizon..~30°) instead of being squished across the full 90° dome
+    // — that squish was the "thin band way up high". `sky_t` plays the role the old
+    // screen-t did, but is world-locked.
     let far = sky.inv_vp * vec4<f32>(i.ndc.x, i.ndc.y, 1.0, 1.0);
     let ray = normalize(far.xyz / far.w - sky.eye.xyz);
     let az = atan2(ray.x, ray.z) * 0.15915494 + 0.5;   // world azimuth → [0,1)
-    let t = clamp((i.ndc.y + 1.0) * 0.5, 0.0, 1.0);     // screen vertical: 0 bottom, 1 top
-    let tv = 1.0 - t;                                    // texture v (top of screen = top of image)
-    let grad = mix(sky.bottom.rgb, sky.top.rgb, t);
+    let sky_t = clamp(ray.y / 0.5, 0.0, 1.0);           // 0 horizon .. 1 by ~30° up
+    let tv = 1.0 - sky_t;                                // texture v (horizon→1, up→0)
+    let grad = mix(sky.bottom.rgb, sky.top.rgb, sky_t);
     var col = grad;
     // Night dimming for the textured sky + clouds (0 by day → unchanged).
     let sky_dim = 1.0 - 0.78 * sky.params2.y;
+    // Fade the texture out very near the zenith so the spherical pole pinch isn't
+    // visible when looking straight up (the gradient takes over there).
+    let zfade = 1.0 - smoothstep(0.86, 1.0, ray.y);
     if (sky.params.x >= 0.5) {
-        // Sky texture: u = world azimuth (+ slow drift), v = screen — fills the sky,
-        // fades into the gradient at the horizon.
         let uv = vec2<f32>(az + sky.params.y, tv);
         let tex = textureSample(skytex, skysamp, uv).rgb * sky_dim;
-        let h = smoothstep(0.0, 0.30, t);
+        let h = smoothstep(0.0, 0.30, sky_t) * zfade;
         col = mix(grad, tex, h);
     }
     if (sky.params.z >= 0.5) {
-        // Cloud overlay, well above the horizon so it doesn't smear into terrain.
         let cuv = vec2<f32>(az + sky.params.w, tv);
         let c = textureSample(cloudtex, cloudsamp, cuv);
-        let fade = smoothstep(0.12, 0.45, t);
+        let fade = smoothstep(0.12, 0.45, sky_t) * zfade;
         col = mix(col, c.rgb * sky_dim, c.a * fade);
     }
     if (sky.params2.x >= 0.5 && sky.params2.y > 0.01) {
         // Stars (additive), composited after clouds.
         let suv = vec2<f32>(az + sky.params2.z, tv);
         let s = textureSample(starstex, starssamp, suv).rgb;
-        let sfade = smoothstep(0.05, 0.40, t);
+        let sfade = smoothstep(0.05, 0.40, sky_t);
         col = col + s * sky.params2.y * sfade;
     }
     return vec4<f32>(col, 1.0);
