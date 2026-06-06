@@ -158,6 +158,8 @@ struct Net {
     world: World,
     peer: i32,
     updates: u64,
+    /// Whether we've requested the `P_FetchActors` env block (server clock) yet.
+    env_requested: bool,
 }
 
 struct App {
@@ -2771,7 +2773,7 @@ impl App {
             }
         }
         self.sheet = outcome.sheet;
-        self.net = Some(Net { transport, world, peer: outcome.peer, updates: 0 });
+        self.net = Some(Net { transport, world, peer: outcome.peer, updates: 0, env_requested: false });
         self.mode = Mode::InWorld;
         // MENU-10: stop the menu track so it doesn't bleed into a zone that ships
         // no music; the zone's own LoadingMusicID starts on the next render.
@@ -4330,6 +4332,15 @@ impl App {
                 net.updates += 1;
                 net.world.apply(&m);
             }
+            // Once in-world, request the P_FetchActors env block (empty payload,
+            // like MainMenu.bb) so we learn the server's time-of-day; the "E"
+            // sub-packet is parsed in World::on_fetch_actors. Then advance the
+            // game clock locally each frame so day/night tracks server time.
+            if !net.env_requested {
+                net.transport.send(net.peer, rcce_net::packet_id::FETCH_ACTORS, &[], true);
+                net.env_requested = true;
+            }
+            net.world.advance_time((elapsed - self.prev_elapsed).clamp(0.0, 0.1));
             // Live area change (player warp): reload the new zone's scenery +
             // sky/clouds/stars + music. Gated by the zone name so it only fires
             // on an actual change, not every frame.
@@ -5280,15 +5291,17 @@ impl App {
                 }
             }
         }
-        // Lighting: default to full daylight (phase 0.5 = noon), matching the
-        // real client's authored zone Environment brightness. The cosmetic local
-        // day/night cycle free-runs independent of the server's time-of-day and
-        // darkens the whole world (unlike Blitz, which mostly swaps sky/stars and
-        // keeps the terrain lit), so it is OPT-IN via RCCE_DAYNIGHT_SECS. RCCE_PHASE
-        // still pins a fixed phase for screenshots.
+        // Day/night phase, in priority order:
+        //   1. RCCE_PHASE — pins a fixed phase (screenshots / tests).
+        //   2. the SERVER clock (P_FetchActors "E" block) — so dusk/night follow
+        //      the world's time-of-day, like Blitz.
+        //   3. RCCE_DAYNIGHT_SECS — a cosmetic free-running local cycle.
+        //   4. noon (0.5) — bright, stable default.
+        let server_phase = self.net.as_ref().and_then(|n| n.world.day_phase());
         let phase = std::env::var("RCCE_PHASE")
             .ok()
             .and_then(|s| s.parse::<f32>().ok())
+            .or(server_phase)
             .unwrap_or_else(|| {
                 match std::env::var("RCCE_DAYNIGHT_SECS").ok().and_then(|s| s.parse::<f32>().ok()) {
                     Some(cycle) => rcce_client::daynight::phase_at(elapsed, cycle),

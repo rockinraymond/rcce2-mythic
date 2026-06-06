@@ -241,6 +241,15 @@ pub struct World {
     pub me_xp: i32,
     pub me_xp_bar: u8,
     pub me_gold: i32,
+    /// Server day/night clock from the `P_FetchActors` `"E"` env block. When
+    /// `time_known`, the client advances it locally (one game-minute = `60000 /
+    /// time_factor` ms) and the renderer drives day/night from `day_phase()`
+    /// instead of the local noon default — so dusk/night follow the server.
+    pub time_known: bool,
+    /// Game minutes since midnight (0..1440), advanced each frame.
+    pub time_minutes: f32,
+    /// Server `TimeFactor` (game-minutes pace); `60000/TimeFactor` ms per game-min.
+    pub time_factor: u32,
     pub me_attributes: HashMap<u8, (i16, i16)>,
     /// Recent combat hits (from P_AttackActor).
     pub combat_events: Vec<CombatEvent>,
@@ -559,6 +568,7 @@ impl World {
             pk::QUEST_LOG => self.on_quest_log(&m.data),
             pk::PARTY_UPDATE => self.on_party_update(&m.data),
             pk::JUMP => self.on_jump(&m.data),
+            pk::FETCH_ACTORS => self.on_fetch_actors(&m.data),
             _ => {}
         }
     }
@@ -1028,6 +1038,43 @@ impl World {
         }
     }
 
+    /// `P_FetchActors` arrives as several sentinel-tagged sub-packets; the one we
+    /// want is the `"E"` Environment block: `Year(u32) Day(u16) TimeH(u8) TimeM(u8)
+    /// TimeFactor(u8)` (seasons/months follow, ignored). Captures the server clock
+    /// so day/night follows the world instead of the local noon default.
+    fn on_fetch_actors(&mut self, d: &[u8]) {
+        if d.first() != Some(&b'E') {
+            return; // attributes/items/factions/actors blocks — not the env block
+        }
+        let mut r = MsgReader::new(&d[1..]);
+        let (Some(_year), Some(_day), Some(th), Some(tm), Some(tf)) =
+            (r.u32(), r.u16(), r.u8(), r.u8(), r.u8())
+        else {
+            return;
+        };
+        self.time_minutes = ((th as f32).clamp(0.0, 23.0) * 60.0 + (tm as f32).clamp(0.0, 59.0)).rem_euclid(1440.0);
+        self.time_factor = (tf as u32).max(1); // server clamps to >=1; mirror it
+        self.time_known = true;
+    }
+
+    /// Advance the local game clock by `dt` real seconds. One game-minute is
+    /// `60000/TimeFactor` ms, so game-minutes/sec = `TimeFactor/60`.
+    pub fn advance_time(&mut self, dt: f32) {
+        if self.time_known {
+            self.time_minutes = (self.time_minutes + dt * self.time_factor as f32 / 60.0).rem_euclid(1440.0);
+        }
+    }
+
+    /// Day/night phase in `[0,1)` (0 = midnight, 0.25 = ~dawn, 0.5 = noon,
+    /// 0.75 = ~dusk) from the server clock, or `None` if the clock is unknown.
+    pub fn day_phase(&self) -> Option<f32> {
+        if self.time_known {
+            Some((self.time_minutes / 1440.0).rem_euclid(1.0))
+        } else {
+            None
+        }
+    }
+
     /// `P_Sound` (ClientNet.bb:739): `[2]soundID [+ [2]runtimeID]`. The optional
     /// runtime id is present only for sounds whose name carries the 3D marker;
     /// for the alpha we play every sound 2D, so we read just the id and queue it.
@@ -1492,6 +1539,32 @@ impl World {
 mod tests {
     use super::*;
     use rcce_net::codec::MsgWriter;
+
+    #[test]
+    fn fetch_actors_env_block_sets_server_clock() {
+        let mut w = World { my_runtime_id: 1, ..Default::default() };
+        // "E" + Year(u32) + Day(u16) + TimeH(u8) + TimeM(u8) + TimeFactor(u8),
+        // then season/month bytes we ignore. 18:30 = dusk-ish.
+        let mut p = vec![b'E'];
+        p.extend_from_slice(&1000u32.to_le_bytes());
+        p.extend_from_slice(&5u16.to_le_bytes());
+        p.push(18); // TimeH
+        p.push(30); // TimeM
+        p.push(10); // TimeFactor
+        p.extend_from_slice(&[0u8; 64]); // trailing seasons/months (ignored)
+        w.apply(&msg(pk::FETCH_ACTORS, p));
+        assert!(w.time_known);
+        assert_eq!(w.time_factor, 10);
+        let ph = w.day_phase().unwrap();
+        assert!((ph - (18.0 * 60.0 + 30.0) / 1440.0).abs() < 1e-4, "phase {ph}");
+        // Non-env sub-packets (e.g. "A" attributes) don't clobber the clock.
+        w.apply(&msg(pk::FETCH_ACTORS, vec![b'A', 0, 0, 0]));
+        assert!(w.time_known);
+        // Advance ~6 real seconds → +1 game minute at TimeFactor 10.
+        let before = w.time_minutes;
+        w.advance_time(6.0);
+        assert!((w.time_minutes - (before + 1.0)).abs() < 1e-3, "advanced to {}", w.time_minutes);
+    }
 
     fn msg(t: u8, payload: Vec<u8>) -> RecvMessage {
         RecvMessage {
