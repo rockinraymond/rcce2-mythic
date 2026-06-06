@@ -659,6 +659,20 @@ fn sun_shadow(world: vec3<f32>, ndl: f32) -> f32 {
     }
     return sum / 9.0;
 }
+// Dappled sunlight ("broken cloud cover"): a soft, world-fixed pattern over
+// world XZ that dims the SUN term in broad patches — so the ground isn't lit
+// flat-uniform, and the player walks through sun and shade as they move (the
+// pattern is pinned to the world, not the camera, so the motion is free — no
+// time uniform needed). Returns a lit-fraction in [1-strength, 1]; only the
+// directional term is affected (ambient + point lights are untouched), like a
+// real cloud shadow. Cheap rotated-sin fbm → soft, non-stripey patches.
+fn cloud_dapple(p: vec2<f32>) -> f32 {
+    let a = sin(p.x * 0.9 + p.y * 0.5) + sin(p.x * 0.4 - p.y * 1.1);
+    let b = sin(p.x * 1.7 - p.y * 0.8) + sin(p.x * 0.6 + p.y * 1.9);
+    let n = (a + b * 0.5) / 3.0;            // ~[-1, 1]
+    let mask = smoothstep(-0.35, 0.55, n);  // soft, biased toward lit
+    return mix(0.48, 1.0, mask);            // shaded patches keep ~48% sun
+}
 @fragment fn fs(in: VsOut) -> @location(0) vec4<f32> {
     let c = textureSample(tex, samp, in.uv);
     if (c.a < 0.5) { discard; }
@@ -670,7 +684,7 @@ fn sun_shadow(world: vec3<f32>, ndl: f32) -> f32 {
     // zone ambient is the floor, so nothing goes fully black.
     let ndl = max(dot(N, L), 0.0);
     let sh = sun_shadow(in.world, ndl);
-    let diff = ndl * u.light_intensity * sh;
+    let diff = ndl * u.light_intensity * sh * cloud_dapple(in.world.xz * 0.05);
     // Dynamic point lights (torches, braziers, glowing props): add their colour
     // by distance falloff and the surface's facing, on top of sun + ambient.
     // They illuminate but don't cast shadows (matching Blitz's point lights).
