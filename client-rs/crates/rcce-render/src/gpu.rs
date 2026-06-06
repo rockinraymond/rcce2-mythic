@@ -519,7 +519,20 @@ struct VO { @builtin(position) clip: vec4<f32>, @location(0) uv: vec2<f32>, @loc
     let rgb = mix(base.rgb, u.fog_color, clamp(fres * 0.7, 0.0, 1.0));
     // A touch more opaque edge-on (water hides the bottom at grazing angles).
     let a = clamp(base.a + fres * 0.25, 0.0, 1.0);
-    return vec4<f32>(rgb, a);
+    // Sun specular glint: a Blinn-Phong highlight toward the sun, broken into
+    // sparkles by a finer, higher-frequency ripple normal (so it shimmers across
+    // the surface as the UV scrolls, not one smooth patch). `light_dir` is the
+    // day/night sun (shared world uniform); fade as the sun nears the horizon so
+    // there's no sparkle at night.
+    let fx = sin(in.uv.x * 90.0 - in.uv.y * 71.0) + sin(in.uv.x * 131.0 + in.uv.y * 53.0);
+    let fz = cos(in.uv.y * 113.0 + in.uv.x * 61.0) + sin(in.uv.x * 83.0 - in.uv.y * 97.0);
+    let Ns = normalize(vec3<f32>((rx + fx) * s, 1.0, (rz + fz) * s));
+    let L = normalize(u.light_dir);
+    let H = normalize(L + V);
+    let sun_up = smoothstep(0.0, 0.30, L.y);
+    let spec = pow(max(dot(Ns, H), 0.0), 70.0) * sun_up;
+    let glint = vec3<f32>(1.0, 0.96, 0.86) * spec * 1.1;
+    return vec4<f32>(rgb + glint, a);
 }
 "#;
 
