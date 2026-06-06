@@ -354,11 +354,14 @@ impl WorldView {
         // centred on what the camera looks at (`shadow_center`), sized to cover
         // the near scene. Snapped to shadow-texels to stop edge shimmer as the
         // centre moves.
+        // Half-extent of the orthographic shadow region (world units). Shared by
+        // the light projection below and the shadow-pass caster cull, so a caster
+        // is culled on exactly the box it would have been rasterised into.
+        const S: f32 = 170.0;
         let light_vp = {
             use glam::{Mat4, Vec3};
             let mut ld = Vec3::from(light_dir);
             ld = if ld.length_squared() < 0.05 { Vec3::new(0.35, 1.0, 0.25).normalize() } else { ld.normalize() };
-            const S: f32 = 170.0; // half-extent of the shadow region (world units)
             const D: f32 = 400.0; // light distance from centre
             let up = if ld.y.abs() > 0.99 { Vec3::Z } else { Vec3::Y };
             // Stabilise against edge crawl: snap the shadow centre to whole shadow
@@ -418,13 +421,42 @@ impl WorldView {
             });
             sp.set_pipeline(&self.shadow_pipeline.pipeline);
             sp.set_bind_group(0, &self.light_bind, &[]);
+            // Caster cull: a drawable only contributes to the shadow map if its
+            // world bounding sphere projects into the sun's ortho box. Project the
+            // centre by `light_vp` (ortho ⇒ w = 1, so clip-space == NDC) and keep it
+            // when its NDC xy is within ±(1 + radius/S) — the radius expressed in
+            // NDC units, since the box half-extent S maps to 1.0. Exact: a sphere
+            // outside that band cannot rasterise a single shadow texel, so the
+            // shadow map is byte-identical with the cull on or off. z is left
+            // unculled so tall occluders between the sun and the box still cast.
+            let lvp = glam::Mat4::from_cols_array(&light_vp);
+            // Escape hatch: `RCCE_NOSHADOWCULL` draws every caster (proves the cull
+            // is visually lossless when the two renders diff to zero).
+            let cull_on = std::env::var_os("RCCE_NOSHADOWCULL").is_none();
+            let in_shadow_box = |c: &[f32; 3], r: f32| -> bool {
+                if !cull_on {
+                    return true;
+                }
+                let clip = lvp * glam::Vec4::new(c[0], c[1], c[2], 1.0);
+                let m = 1.0 + r / S;
+                clip.x.abs() <= m && clip.y.abs() <= m
+            };
             // All casters — opaque (terrain/props/actors) and alpha (foliage); the
             // shadow fs alpha-tests so cut-out canopies cast their real shape.
+            let (mut drawn, mut culled) = (0u32, 0u32);
             for d in self.statics.iter().chain(self.dynamics.iter()) {
+                if !in_shadow_box(&d.center, d.radius) {
+                    culled += 1;
+                    continue;
+                }
+                drawn += 1;
                 sp.set_bind_group(1, &d.tex_bind, &[]);
                 sp.set_vertex_buffer(0, d.vbuf.slice(..));
                 sp.set_index_buffer(d.ibuf.slice(..), wgpu::IndexFormat::Uint32);
                 sp.draw_indexed(0..d.n_idx, 0, 0..1);
+            }
+            if std::env::var_os("RCCE_SHADOWSTATS").is_some() {
+                eprintln!("[shadow] casters drawn={drawn} culled={culled}");
             }
         }
         {

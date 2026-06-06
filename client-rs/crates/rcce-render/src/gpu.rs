@@ -1337,6 +1337,27 @@ pub struct Drawable {
     /// True for terrain splat-overlay surfaces (partial vertex alpha) — drawn in
     /// a second alpha-blended pass over the opaque base so paths blend into grass.
     pub alpha: bool,
+    /// World-space bounding sphere (centre + radius) of the baked geometry. Used by
+    /// the shadow pass to cull casters whose sphere can't project into the sun's
+    /// orthographic shadow box. Cheap to compute (once at bake time for statics).
+    pub center: [f32; 3],
+    pub radius: f32,
+}
+
+/// World-space bounding sphere of `mesh` after the instance transform — the same
+/// transform `bake_verts` applies, so the sphere matches the baked positions.
+fn mesh_world_bounds(nrot: Mat3, scale: Vec3, trans: Vec3, mesh: &B3dMesh) -> ([f32; 3], f32) {
+    if mesh.positions.is_empty() {
+        return (trans.into(), 0.0);
+    }
+    let (mut lo, mut hi) = (Vec3::splat(f32::MAX), Vec3::splat(f32::MIN));
+    for p in &mesh.positions {
+        let w = trans + nrot * (Vec3::from(*p) * scale);
+        lo = lo.min(w);
+        hi = hi.max(w);
+    }
+    let c = (lo + hi) * 0.5;
+    ((c).into(), (hi - c).length())
 }
 
 /// Whether a mesh is a splat overlay: it carries per-vertex colors and some are
@@ -1469,7 +1490,8 @@ pub fn build_actor_drawables_cached(
                 .entry(ckey)
                 .or_insert_with(|| Rc::new(pipeline.texture_bind(device, queue, tex)))
                 .clone();
-            drawables.push(Drawable { vbuf, ibuf, n_idx, tex_bind, alpha: mesh_is_alpha_overlay(mesh) });
+            let (center, radius) = mesh_world_bounds(nrot, scale, trans, mesh);
+            drawables.push(Drawable { vbuf, ibuf, n_idx, tex_bind, alpha: mesh_is_alpha_overlay(mesh), center, radius });
         }
     }
     drawables
@@ -1509,12 +1531,16 @@ pub fn build_drawables(
             contents: bytemuck::cast_slice(&idx),
             usage: wgpu::BufferUsages::INDEX,
         }));
+        let gc = Vec3::new((gx0 + gx1) * 0.5, ground_y, (gz0 + gz1) * 0.5);
+        let gr = (Vec3::new(gx1, ground_y, gz1) - gc).length();
         drawables.push(Drawable {
             vbuf,
             ibuf,
             n_idx: 6,
             tex_bind: Rc::new(pipeline.texture_bind(device, queue, None)),
             alpha: false,
+            center: gc.into(),
+            radius: gr,
         });
     }
     drawables
@@ -1544,12 +1570,15 @@ fn build_instance_drawables(
             let (vbuf, ibuf, n_idx) = bake_mesh(device, nrot, scale, trans, inst.color, mesh);
             let tex = inst.textures.get(mi).and_then(|t| t.as_ref());
             let lm = inst.lightmaps.get(mi).and_then(|t| t.as_ref());
+            let (center, radius) = mesh_world_bounds(nrot, scale, trans, mesh);
             drawables.push(Drawable {
                 vbuf,
                 ibuf,
                 n_idx,
                 tex_bind: Rc::new(pipeline.texture_bind_lm(device, queue, tex, lm)),
                 alpha: mesh_is_alpha_overlay(mesh),
+                center,
+                radius,
             });
         }
     }
