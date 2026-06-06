@@ -9,6 +9,7 @@ pub mod fetch;
 pub mod floaters;
 pub mod login;
 pub mod net;
+pub mod particles;
 pub mod radar;
 pub mod terrain;
 pub mod trade;

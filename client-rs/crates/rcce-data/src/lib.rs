@@ -11,6 +11,7 @@ pub mod anim;
 pub mod area;
 pub mod attributes;
 pub mod b3d;
+pub mod emitter;
 pub mod catalog;
 pub mod interface;
 pub mod items;
@@ -20,7 +21,8 @@ pub mod texture;
 
 pub use actors::{ActorCatalog, ActorTemplate};
 pub use anim::{AnimClip, AnimSet, AnimSetCatalog};
-pub use area::{AreaEnv, AreaScenery, SceneryPlacement, TerrainPatch, WaterPlane};
+pub use area::{AreaEnv, AreaScenery, EmitterPlacement, SceneryPlacement, TerrainPatch, WaterPlane};
+pub use emitter::EmitterConfig;
 pub use b3d::{B3dAnim, B3dBone, B3dKey, B3dMesh, B3dModel};
 pub use texture::Image;
 pub use catalog::{
@@ -313,6 +315,32 @@ mod tests {
     /// Parse real client area files and sanity-check the scenery list: a sane
     /// count, and mesh ids that resolve through the mesh catalog to loadable
     /// `.b3d` files (confirms the 41-byte header offset is correct).
+    #[test]
+    fn parse_real_emitter_configs() {
+        let root = repo_root();
+        let mut any = false;
+        for name in ["Flame", "Fireball", "fountain", "Rain", "Snow", "Waterfall", "Blood"] {
+            let path = root.join(format!("data/Emitter Configs/{name}.rpc"));
+            let Ok(bytes) = std::fs::read(&path) else { continue };
+            any = true;
+            let c = emitter::EmitterConfig::parse(&bytes).unwrap_or_else(|e| panic!("{name}: {e}"));
+            // A misaligned parse yields garbage — sane bounds are the format check.
+            assert!(c.max_particles > 0 && c.max_particles < 1_000_000, "{name}: max {}", c.max_particles);
+            assert!(c.lifespan > 0 && c.lifespan < 1_000_000, "{name}: life {}", c.lifespan);
+            assert!((1..=3).contains(&c.shape), "{name}: shape {}", c.shape);
+            assert!((1..=3).contains(&c.blend_mode), "{name}: blend {}", c.blend_mode);
+            assert!(c.scale_start.is_finite() && c.alpha_start.is_finite(), "{name}: non-finite");
+            eprintln!(
+                "{name}: max={} ppf={} life={} shape={} blend={} scale={}->{} a={}->{} col={:?} tex={}x{}",
+                c.max_particles, c.particles_per_frame, c.lifespan, c.shape, c.blend_mode,
+                c.scale_start, c.scale_change, c.alpha_start, c.alpha_change, c.color_start, c.tex_across, c.tex_down
+            );
+        }
+        if !any {
+            eprintln!("skipping: no emitter configs");
+        }
+    }
+
     #[test]
     fn parse_real_area_scenery() {
         let root = repo_root();

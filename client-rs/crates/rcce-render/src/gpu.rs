@@ -206,6 +206,101 @@ impl ShadowPipeline {
     }
 }
 
+/// Unlit textured billboard pipeline for particles: vertex colour × texture, no
+/// lighting/fog, depth-tested but no depth write (particles don't occlude). Two
+/// variants for the emitter blend modes: additive (fire/glow) and alpha (smoke).
+pub struct ParticlePipeline {
+    pub add: wgpu::RenderPipeline,
+    pub alpha: wgpu::RenderPipeline,
+}
+
+const PARTICLE_SHADER: &str = r#"
+struct U { mvp: mat4x4<f32> };
+@group(0) @binding(0) var<uniform> u: U;
+@group(1) @binding(0) var tex: texture_2d<f32>;
+@group(1) @binding(1) var samp: sampler;
+struct VO { @builtin(position) clip: vec4<f32>, @location(0) uv: vec2<f32>, @location(1) color: vec4<f32> };
+@vertex fn vs(@location(0) pos: vec3<f32>, @location(2) uv: vec2<f32>, @location(4) color: vec4<f32>) -> VO {
+    var o: VO;
+    o.clip = u.mvp * vec4<f32>(pos, 1.0);
+    o.uv = uv;
+    o.color = color;
+    return o;
+}
+@fragment fn fs(in: VO) -> @location(0) vec4<f32> {
+    return textureSample(tex, samp, in.uv) * in.color;
+}
+"#;
+
+impl ParticlePipeline {
+    pub fn new(
+        device: &wgpu::Device,
+        color_format: wgpu::TextureFormat,
+        bgl_uniform: &wgpu::BindGroupLayout,
+        bgl_texture: &wgpu::BindGroupLayout,
+    ) -> ParticlePipeline {
+        let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("particle"),
+            source: wgpu::ShaderSource::Wgsl(PARTICLE_SHADER.into()),
+        });
+        let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: None,
+            bind_group_layouts: &[bgl_uniform, bgl_texture],
+            push_constant_ranges: &[],
+        });
+        let make = |blend: wgpu::BlendState| {
+            device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                label: Some("particle"),
+                layout: Some(&layout),
+                vertex: wgpu::VertexState {
+                    module: &shader,
+                    entry_point: "vs",
+                    compilation_options: Default::default(),
+                    buffers: &[wgpu::VertexBufferLayout {
+                        array_stride: std::mem::size_of::<Vertex>() as u64,
+                        step_mode: wgpu::VertexStepMode::Vertex,
+                        // position (0), uv (offset 24, loc 2), colour (offset 40, loc 4).
+                        attributes: &[
+                            wgpu::VertexAttribute { format: wgpu::VertexFormat::Float32x3, offset: 0, shader_location: 0 },
+                            wgpu::VertexAttribute { format: wgpu::VertexFormat::Float32x2, offset: 24, shader_location: 2 },
+                            wgpu::VertexAttribute { format: wgpu::VertexFormat::Float32x4, offset: 40, shader_location: 4 },
+                        ],
+                    }],
+                },
+                fragment: Some(wgpu::FragmentState {
+                    module: &shader,
+                    entry_point: "fs",
+                    compilation_options: Default::default(),
+                    targets: &[Some(wgpu::ColorTargetState {
+                        format: color_format,
+                        blend: Some(blend),
+                        write_mask: wgpu::ColorWrites::ALL,
+                    })],
+                }),
+                primitive: wgpu::PrimitiveState { cull_mode: None, ..Default::default() },
+                depth_stencil: Some(wgpu::DepthStencilState {
+                    format: DEPTH_FORMAT,
+                    depth_write_enabled: false,
+                    depth_compare: wgpu::CompareFunction::LessEqual,
+                    stencil: Default::default(),
+                    bias: Default::default(),
+                }),
+                multisample: wgpu::MultisampleState::default(),
+                multiview: None,
+                cache: None,
+            })
+        };
+        let additive = wgpu::BlendState {
+            color: wgpu::BlendComponent { src_factor: wgpu::BlendFactor::SrcAlpha, dst_factor: wgpu::BlendFactor::One, operation: wgpu::BlendOperation::Add },
+            alpha: wgpu::BlendComponent { src_factor: wgpu::BlendFactor::One, dst_factor: wgpu::BlendFactor::One, operation: wgpu::BlendOperation::Add },
+        };
+        ParticlePipeline {
+            add: make(additive),
+            alpha: make(wgpu::BlendState::ALPHA_BLENDING),
+        }
+    }
+}
+
 pub const SHADER: &str = r#"
 struct Light { pos_range: vec4<f32>, color: vec4<f32> };
 struct U {

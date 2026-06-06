@@ -168,6 +168,8 @@ struct App {
     /// per frame so the surface texture scrolls (Blitz `PositionTexture`).
     water_planes: Vec<(rcce_data::WaterPlane, rcce_data::Image)>,
     water_scroll: [f32; 2],
+    /// Live particle emitters for the current zone (simulated each frame).
+    emitters: Vec<ZoneEmitter>,
     /// Solid-prop occluder spheres (world centre, radius) for camera collision —
     /// buildings/rocks/props, excluding terrain and see-through foliage. The
     /// third-person boom shortens when it would pass through one.
@@ -385,6 +387,7 @@ impl App {
             height_field: None,
             water_planes: Vec::new(),
             water_scroll: [0.0, 0.0],
+            emitters: Vec::new(),
             cam_occluders: Vec::new(),
             fog_color: [0.45, 0.62, 0.82],
             fog_near: 1000.0,
@@ -1531,6 +1534,9 @@ fn register_gui_textures(overlay: &mut rcce_render::Overlay, device: &wgpu::Devi
 }
 
 #[allow(clippy::type_complexity)]
+/// A live emitter + its resolved billboard texture, simulated per frame.
+type ZoneEmitter = (rcce_client::particles::Emitter, Option<rcce_data::Image>);
+
 type ZoneStatic = (
     [f32; 3],
     f32,
@@ -1539,6 +1545,7 @@ type ZoneStatic = (
     Vec<([f32; 3], f32)>,
     rcce_client::terrain::HeightField,
     Vec<(rcce_data::WaterPlane, rcce_data::Image)>,
+    Vec<ZoneEmitter>,
 );
 
 /// A flat water surface as a one-quad [`B3dModel`] (GUE water tool). The quad is
@@ -1585,6 +1592,34 @@ fn water_quad(w: &rcce_data::WaterPlane, scroll: [f32; 2]) -> B3dModel {
 /// tiling density is the lone cosmetic unknown until verified against a real
 /// terrain (current rcce2 zones ship none). Winding is irrelevant (backface cull
 /// is off).
+/// Advance emitters by `dt` seconds and build their camera-facing billboard
+/// batches `(texture, additive?, verts)`. A free function so the in-world render
+/// can call it while holding `gfx`/`view` borrows of other `self` fields.
+fn particle_batches(
+    emitters: &mut [ZoneEmitter],
+    eye: [f32; 3],
+    target: [f32; 3],
+    dt: f32,
+) -> Vec<(Option<rcce_data::Image>, bool, Vec<rcce_render::gpu::Vertex>)> {
+    let cross = |a: [f32; 3], b: [f32; 3]| [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+    let normd = |v: [f32; 3]| {
+        let l = (v[0] * v[0] + v[1] * v[1] + v[2] * v[2]).sqrt().max(1e-4);
+        [v[0] / l, v[1] / l, v[2] / l]
+    };
+    let fwd = normd([target[0] - eye[0], target[1] - eye[1], target[2] - eye[2]]);
+    let right = normd(cross(fwd, [0.0, 1.0, 0.0]));
+    let up = cross(right, fwd);
+    let delta = (dt * 60.0).clamp(0.0, 4.0); // Blitz authors the sim at ~60 fps
+    let mut batches = Vec::with_capacity(emitters.len());
+    for (e, tex) in emitters.iter_mut() {
+        e.update(delta);
+        let mut verts = Vec::new();
+        e.billboards(right, up, &mut verts);
+        batches.push((tex.clone(), e.blend_add, verts));
+    }
+    batches
+}
+
 /// Parse a dynamic point light from a `LightModels` scenery mesh filename —
 /// `light_<range>_<R>_<G>_<B>.b3d` (RGB 0..255), placed at the scenery's `pos`
 /// (Blitz: `CreateLight(2)` + `LightColor` + `LightRange`, ClientAreas.bb:411).
@@ -1963,11 +1998,31 @@ fn load_zone_static(store: &mut AssetStore, view: &mut WorldView, gfx: &Gfx, dat
         rcce_client::terrain::HeightField::build(tris, 8.0)
     };
 
+    // Particle emitters: load each placement's .rpc config + billboard texture and
+    // build a live emitter (simulated per frame in `tick_particles`).
+    let mut emitters: Vec<ZoneEmitter> = Vec::new();
+    for (ei, em) in scenery.emitters.iter().enumerate() {
+        let cfg_path = std::path::Path::new(data_root).join("Emitter Configs").join(format!("{}.rpc", em.config_name));
+        let Ok(bytes) = std::fs::read(&cfg_path) else { continue };
+        let Ok(config) = rcce_data::EmitterConfig::parse(&bytes) else { continue };
+        let tex = store.texture_path(em.tex_id).and_then(|p| rcce_data::texture::load(&p));
+        let seed = 0x9E3779B97F4A7C15u64.wrapping_mul(ei as u64 + 1) ^ (em.pos[0].to_bits() as u64);
+        emitters.push((rcce_client::particles::Emitter::new(config, em.tex_id, em.pos, em.rot, seed), tex));
+    }
+    if !emitters.is_empty() {
+        println!("[client-window] zone '{zone}': {} particle emitter(s)", emitters.len());
+        if std::env::var_os("RCCE_SCENDIAG").is_some() {
+            for em in &scenery.emitters {
+                println!("  emitter '{}' @({:.0},{:.0},{:.0}) tex {}", em.config_name, em.pos[0], em.pos[1], em.pos[2], em.tex_id);
+            }
+        }
+    }
+
     println!(
         "[client-window] zone '{zone}': {} objects, {} meshes, span {span:.0}, {} cam occluders, ground {}",
         place.len(), models.len(), occluders.len(), if height_field.is_empty() { "none" } else { "ok" }
     );
-    Some((center, span, min[1], scenery.env.clone(), occluders, height_field, waters))
+    Some((center, span, min[1], scenery.env.clone(), occluders, height_field, waters, emitters))
 }
 
 /// Result of loading a zone: camera framing + env + the decoded cloud textures
@@ -1982,20 +2037,21 @@ struct ZoneLoad {
     occluders: Vec<([f32; 3], f32)>,
     height_field: rcce_client::terrain::HeightField,
     waters: Vec<(rcce_data::WaterPlane, rcce_data::Image)>,
+    emitters: Vec<ZoneEmitter>,
 }
 
 /// Load a zone's scenery + sky/cloud/stars (via `load_zone_static`) and decode
 /// its cloud textures. The single primitive used by both the initial load and a
 /// live area-change reload.
 fn load_zone_full(store: &mut AssetStore, view: &mut WorldView, gfx: &Gfx, data_root: &str, zone: &str) -> Option<ZoneLoad> {
-    let (center, span, ground_y, env, occluders, height_field, waters) =
+    let (center, span, ground_y, env, occluders, height_field, waters, emitters) =
         load_zone_static(store, view, gfx, data_root, zone)?;
     let load_img = |id: u16| -> Option<rcce_data::texture::Image> {
         (id != 65535).then(|| store.texture_path(id).and_then(|p| rcce_data::texture::load(&p))).flatten()
     };
     let cloud_regular = load_img(env.cloud_tex_id);
     let cloud_storm = load_img(env.storm_cloud_tex_id);
-    Some(ZoneLoad { center, span, ground_y, env, cloud_regular, cloud_storm, occluders, height_field, waters })
+    Some(ZoneLoad { center, span, ground_y, env, cloud_regular, cloud_storm, occluders, height_field, waters, emitters })
 }
 
 impl ApplicationHandler for App {
@@ -2029,6 +2085,7 @@ impl ApplicationHandler for App {
             self.ground_y = z.ground_y;
             self.height_field = Some(z.height_field);
             self.water_planes = z.waters;
+            self.emitters = z.emitters;
             self.cam_occluders = z.occluders;
             self.fog_color = z.env.fog_color;
             self.fog_near = z.env.fog_near;
@@ -3269,6 +3326,15 @@ impl App {
     }
 
     /// Render the login / character-select screen: a slowly-orbiting view of the
+    /// Advance every emitter and upload this frame's billboards (preview path —
+    /// no other `self` borrow is live, so a `&mut self` method is fine).
+    fn tick_particles(&mut self, eye: [f32; 3], target: [f32; 3], dt: f32) {
+        let batches = particle_batches(&mut self.emitters, eye, target, dt);
+        if let (Some(gfx), Some(view)) = (self.gfx.as_ref(), self.view.as_mut()) {
+            view.set_particles(&gfx.device, &gfx.queue, &batches);
+        }
+    }
+
     /// Headless zone preview (`RCCE_VIEWZONE`): render the startup-loaded gameplay
     /// zone directly with a free camera — no menu UI, no `Set.b3d` swap, no server.
     /// Camera: `RCCE_CAMAT="x,y,z"` target (default zone centre), `RCCE_CAMYAW`
@@ -3352,6 +3418,17 @@ impl App {
             })
             .unwrap_or(self.light_dir);
         let (fn_, ff_) = (self.fog_near.max(500.0), self.fog_far.max(40000.0));
+
+        // Particles: warm up the emitters so a single-frame preview shows a full
+        // plume, then build this frame's billboards facing the preview camera.
+        if !self.emitters.is_empty() {
+            for _ in 0..180 {
+                for (e, _) in self.emitters.iter_mut() {
+                    e.update(1.0);
+                }
+            }
+            self.tick_particles(eye, target, 1.0 / 60.0);
+        }
 
         let shot = std::env::var("RCCE_SHOT").ok().filter(|_| {
             let want = std::env::var("RCCE_SHOT_FRAME").ok().and_then(|s| s.parse::<u64>().ok()).unwrap_or(45);
@@ -4131,6 +4208,7 @@ impl App {
                     self.ground_y = z.ground_y;
                     self.height_field = Some(z.height_field);
                     self.water_planes = z.waters;
+                    self.emitters = z.emitters;
                     self.cam_occluders = z.occluders;
                     self.fog_color = z.env.fog_color;
                     self.fog_near = z.env.fog_near;
@@ -5087,6 +5165,11 @@ impl App {
         let sky = rcce_client::daynight::daynight(phase);
         let fog_dn = rcce_client::daynight::modulate(self.fog_color, &sky);
         let ambient_dn = rcce_client::daynight::modulate(self.ambient, &sky);
+        // Particles: advance the sim + upload this frame's camera-facing billboards.
+        // `&mut self.emitters` is disjoint from the live gfx/view/store borrows.
+        let pdt = (elapsed - self.prev_elapsed).clamp(0.0, 0.1);
+        let pbatches = particle_batches(&mut self.emitters, eye, cam_target, pdt);
+        view.set_particles(&gfx.device, &gfx.queue, &pbatches);
         view.render(
             &gfx.device,
             &gfx.queue,

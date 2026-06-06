@@ -118,12 +118,25 @@ pub struct TerrainPatch {
     pub detail_tex_scale: f32,
 }
 
+/// A placed particle emitter (GUE emitter tool). Writer: `SaveArea`
+/// (ClientAreas.bb:920): `config_name(str)` · `tex_id(i16)` · `x/y/z(f32×3)` ·
+/// `pitch/yaw/roll(f32×3)`. The config name indexes `Data/Emitter Configs/<name>.rpc`.
+#[derive(Debug, Default, Clone)]
+pub struct EmitterPlacement {
+    pub config_name: String,
+    pub tex_id: u16,
+    pub pos: [f32; 3],
+    /// Pitch/yaw/roll in degrees (orients shape-based emission).
+    pub rot: [f32; 3],
+}
+
 #[derive(Debug, Default, Clone)]
 pub struct AreaScenery {
     pub env: AreaEnv,
     pub sceneries: Vec<SceneryPlacement>,
     pub waters: Vec<WaterPlane>,
     pub terrains: Vec<TerrainPatch>,
+    pub emitters: Vec<EmitterPlacement>,
 }
 
 /// Byte offset of the `Sceneries` count (fixed header prefix length).
@@ -235,6 +248,7 @@ impl AreaScenery {
         // visuals here — to land on the terrain block. All best-effort: a
         // truncated/older file without these blocks just yields no terrain.
         let mut terrains = Vec::new();
+        let mut emitters = Vec::new();
         let parsed = (|| -> Result<(), ReadError> {
             // Collision boxes: 9 floats each.
             let n_col = r.read_short_u()?;
@@ -243,14 +257,14 @@ impl AreaScenery {
                     r.read_float()?;
                 }
             }
-            // Emitters: ConfigName(str) · tex(i16) · 6 floats each.
+            // Emitters: ConfigName(str) · tex(i16) · x/y/z · pitch/yaw/roll.
             let n_emit = r.read_short_u()?;
             for _ in 0..n_emit {
-                r.read_string(260)?;
-                r.read_short_u()?;
-                for _ in 0..6 {
-                    r.read_float()?;
-                }
+                let config_name = r.read_string(260)?;
+                let tex_id = r.read_short_u()?;
+                let pos = [r.read_float()?, r.read_float()?, r.read_float()?];
+                let rot = [r.read_float()?, r.read_float()?, r.read_float()?];
+                emitters.push(EmitterPlacement { config_name, tex_id, pos, rot });
             }
             // Terrains.
             let n_terr = r.read_short_u()?;
@@ -286,7 +300,7 @@ impl AreaScenery {
         // A mid-block parse error leaves whatever terrains fully decoded so far.
         let _ = parsed;
 
-        Ok(AreaScenery { env, sceneries, waters, terrains })
+        Ok(AreaScenery { env, sceneries, waters, terrains, emitters })
     }
 }
 

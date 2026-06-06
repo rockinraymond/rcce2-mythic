@@ -78,6 +78,18 @@ pub struct WorldView {
     /// All of the zone's placed point lights (set on zone load); the nearest
     /// `MAX_LIGHTS` to the camera are uploaded each frame.
     zone_lights: Vec<gpu::PointLight>,
+    /// Particle billboard pipeline + this frame's batches (rebuilt each frame).
+    particle_pipeline: gpu::ParticlePipeline,
+    particles: Vec<ParticleBatch>,
+}
+
+/// One frame's particle geometry for an emitter: its texture bind + blend +
+/// camera-facing billboard vertices.
+struct ParticleBatch {
+    tex_bind: wgpu::BindGroup,
+    add: bool,
+    vbuf: wgpu::Buffer,
+    n: u32,
 }
 
 fn make_depth(device: &wgpu::Device, w: u32, h: u32) -> wgpu::TextureView {
@@ -100,6 +112,7 @@ impl WorldView {
         let pipeline = Pipeline::new(device, color_format);
         let skin = SkinPipeline::new(device, color_format, &pipeline);
         let sky = SkyPipeline::new(device, color_format);
+        let particle_pipeline = gpu::ParticlePipeline::new(device, color_format, &pipeline.bgl_uniform, &pipeline.bgl_texture);
         let uniform_buf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("u"),
             contents: bytemuck::bytes_of(&Uniforms::new(
@@ -172,12 +185,32 @@ impl WorldView {
             actor_pool: Vec::new(),
             skinned: Vec::new(),
             zone_lights: Vec::new(),
+            particle_pipeline,
+            particles: Vec::new(),
         }
     }
 
     /// Replace the zone's placed point lights (called on zone load).
     pub fn set_lights(&mut self, lights: &[gpu::PointLight]) {
         self.zone_lights = lights.to_vec();
+    }
+
+    /// Replace this frame's particle billboards: `(texture, additive?, verts)` per
+    /// emitter. Verts are camera-facing quads (6 per particle). Rebuilt each frame.
+    pub fn set_particles(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, batches: &[(Option<Image>, bool, Vec<gpu::Vertex>)]) {
+        self.particles.clear();
+        for (img, add, verts) in batches {
+            if verts.is_empty() {
+                continue;
+            }
+            let vbuf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("particles"),
+                contents: bytemuck::cast_slice(verts),
+                usage: wgpu::BufferUsages::VERTEX,
+            });
+            let tex_bind = self.pipeline.texture_bind(device, queue, img.as_ref());
+            self.particles.push(ParticleBatch { tex_bind, add: *add, vbuf, n: verts.len() as u32 });
+        }
     }
 
     /// Replace the per-frame SKINNED actors (GPU linear-blend skinning). The
@@ -463,6 +496,17 @@ impl WorldView {
                 rp.set_vertex_buffer(0, d.vbuf.slice(..));
                 rp.set_index_buffer(d.ibuf.slice(..), wgpu::IndexFormat::Uint32);
                 rp.draw_indexed(0..d.n_idx, 0, 0..1);
+            }
+            // 5) Particles: unlit camera-facing billboards, additive/alpha blended,
+            //    depth-tested against the world but writing no depth.
+            if !self.particles.is_empty() {
+                rp.set_bind_group(0, &self.bind0, &[]);
+                for b in &self.particles {
+                    rp.set_pipeline(if b.add { &self.particle_pipeline.add } else { &self.particle_pipeline.alpha });
+                    rp.set_bind_group(1, &b.tex_bind, &[]);
+                    rp.set_vertex_buffer(0, b.vbuf.slice(..));
+                    rp.draw(0..b.n, 0..1);
+                }
             }
         }
         queue.submit(Some(enc.finish()));

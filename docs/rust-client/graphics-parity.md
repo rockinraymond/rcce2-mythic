@@ -54,7 +54,7 @@ Legend: ✅ verified (rendered + audited) · 🟡 implemented, render-verify pen
 | Projectiles (3D) | 🟡 | combat path |
 | Minimap / radar | ✅ | left/right handedness fixed (this session) |
 | Terrain detail texture (2nd tex) | ✅ | multitexture `base × detail × 2`, detail UV tiles at `DetailScale` (this session) |
-| **Emitters / particles (`.rpc`)** | ❌ | parsed-but-skipped; fire/smoke/fountains/magic. Needs particle engine. **Large** |
+| Emitters / particles (`.rpc`) | ✅ | full RottParticles port: `.rpc` config parse + shape-based spawn + force/velocity/scale/alpha/colour-over-life sim + camera-facing billboards (additive/alpha). Zone emitters loaded + ticked per frame. |
 | **Dynamic shadows** | ✅ | **shadow mapping** — sun-view depth pass + PCF in the scene shader. Casters: terrain, scenery, actors; alpha-tested so foliage casts canopy shapes. Soft edges (better than Blitz's hard stencil). Camera-centred, texel-snapped. (GPU-skin path not yet a caster.) |
 | Point lights / `LightModels` | ✅ | `light_<range>_<R>_<G>_<B>` scenery meshes → per-fragment accumulation (colour × distance falloff × facing); nearest 16 to the camera per frame. Illuminate only, no shadows (matches Blitz). Env-tunable `RCCE_LIGHTRANGE` / `RCCE_LIGHTGAIN`. |
 | Form shading (mesh self-shadow) | ✅ | `max(dot(N,L))` — lit/dark sides on every mesh + slope-shaded terrain |
@@ -66,10 +66,10 @@ Legend: ✅ verified (rendered + audited) · 🟡 implemented, render-verify pen
 `ambient + directional light` — all applied in every harness render already; not
 independently isolated. Low-risk; can confirm opportunistically.
 
-### Large missing subsystems (NET-NEW — warrant scoping, not "parity tweaks")
+### Large subsystems — all now implemented ✅
 
-These are real, active features in the Blitz client but each is a significant
-renderer addition, not a verification pass:
+These were the net-new renderer additions (dynamic shadows, particles, point
+lights). All three are done; the notes below record what each entailed.
 
 1. **Dynamic shadows** — Blitz runs the **Devil Shadow System** userlib
    (`DevilShadowSystem.decls` + `ShadowsMultiple.bb`): the sun is the
