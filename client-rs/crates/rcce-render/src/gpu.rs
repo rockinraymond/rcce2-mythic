@@ -805,36 +805,37 @@ struct VO { @builtin(position) pos: vec4<f32>, @location(0) ndc: vec2<f32> };
     // bright cloud bands in the night sky. `day_vis` = 1 by day → 0 at deep night
     // (the inverse of the star/night factor).
     let day_vis = 1.0 - sky.params2.y;
-    // Zenith fade. `sky_t` saturates at ray.y >= 0.5, so the texture's V row pins
-    // to the top across the whole upper sky; as the azimuthal columns converge on
-    // the pole that pinned row smears into vertical streaks. Cross-fade EVERY sky
-    // layer (texture, clouds, AND stars) to the clean gradient across the upper sky
-    // so the ill-conditioned streak region is never shown — detail lives in the
-    // horizon..mid band where the mapping is well-behaved. Starts well below the
-    // zenith because there is no new V detail above ray.y 0.5 anyway (V is pinned).
-    let zfade = 1.0 - smoothstep(0.55, 0.92, ray.y);
+    // Pin fade — THE pole-streak fix. `sky_t` saturates at ray.y >= 0.5, pinning
+    // the texture's V row (tv = 0) across the ENTIRE upper sky; sampling that pinned
+    // row while the azimuth keeps varying smears it into vertical streaks. So fade
+    // EVERY textured layer (sky texture, clouds, AND stars) to the clean gradient as
+    // `sky_t` -> 1, i.e. by the pin point itself — nothing textured is ever sampled
+    // in the pinned region, so the streaks cannot form. Keyed on `sky_t` (the
+    // pinning coordinate), NOT on ray.y: a ray.y threshold above 0.5 leaves an
+    // unfaded, already-pinned band (the bug — stars formerly faded only at ray.y
+    // 0.82, so the whole 0.5..0.82 band streaked at night). Detail therefore lives
+    // only in the horizon..~30° band where V still varies and the mapping behaves.
+    let pin_fade = 1.0 - smoothstep(0.70, 0.99, sky_t);
     if (sky.params.x >= 0.5) {
         let uv = vec2<f32>(az + sky.params.y, tv);
         let tex = textureSample(skytex, skysamp, uv).rgb;
-        let h = smoothstep(0.0, 0.30, sky_t) * zfade * day_vis;
+        let h = smoothstep(0.0, 0.30, sky_t) * pin_fade * day_vis;
         col = mix(grad, tex, h);
     }
     if (sky.params.z >= 0.5) {
         let cuv = vec2<f32>(az + sky.params.w, tv);
         let c = textureSample(cloudtex, cloudsamp, cuv);
-        let fade = smoothstep(0.12, 0.45, sky_t) * zfade * day_vis;
+        let fade = smoothstep(0.12, 0.45, sky_t) * pin_fade * day_vis;
         col = mix(col, c.rgb, c.a * fade);
     }
     if (sky.params2.x >= 0.5 && sky.params2.y > 0.01) {
-        // Stars (additive), composited after clouds.
+        // Stars (additive), composited after clouds. Same pin fade: stars live in
+        // the horizon..mid band and are gone by the pin point, so the prominent
+        // night streaks (the user's report) cannot appear. Overhead resolves to the
+        // clean dark gradient.
         let suv = vec2<f32>(az + sky.params2.z, tv);
         let s = textureSample(starstex, starssamp, suv).rgb;
-        // Stars keep a GENTLER, higher zenith fade than the texture: they are small
-        // dots (mild smear reads as longer dots, not bright bands) so they can stay
-        // across most of the sky and only drop out in the top few degrees where the
-        // pole convergence is extreme — preserving the starry overhead.
-        let szfade = 1.0 - smoothstep(0.82, 0.98, ray.y);
-        let sfade = smoothstep(0.05, 0.40, sky_t) * szfade;
+        let sfade = smoothstep(0.05, 0.40, sky_t) * pin_fade;
         col = col + s * sky.params2.y * sfade;
     }
     // Celestial body at the sun direction (the same arc the shadows use): a bright
