@@ -1687,6 +1687,20 @@ fn particle_batches(
     batches
 }
 
+/// The water-tint colour if the camera `eye` is underwater — below a water
+/// plane's surface Y and within its X/Z bounds (Blitz `CameraUnderwater`,
+/// Client.bb:895-914). `None` when above water; the first containing plane wins.
+/// The caller tints fog + a full-screen wash to this colour and clamps the view
+/// distance, reproducing the murky submerged look (and hiding the sky).
+fn underwater_color(water_planes: &[(rcce_data::WaterPlane, rcce_data::Image)], eye: [f32; 3]) -> Option<[f32; 3]> {
+    water_planes.iter().find_map(|(w, _)| {
+        let p = w.pos;
+        let under =
+            eye[1] < p[1] && (eye[0] - p[0]).abs() < w.scale_x * 0.5 && (eye[2] - p[2]).abs() < w.scale_z * 0.5;
+        under.then_some(w.color)
+    })
+}
+
 /// A soft radial glow sprite (white RGB, alpha falls off from the centre) used
 /// for projectile orbs. Built once. The additive particle blend is
 /// `dst += tex.rgb·col.rgb · (tex.a·col.a)`, so putting the falloff in the alpha
@@ -3590,9 +3604,16 @@ impl App {
                 None => 0.5,
             });
         let sky_mod = rcce_client::daynight::daynight(phase);
-        let fog = rcce_client::daynight::modulate(self.fog_color, &sky_mod);
         let ambient = rcce_client::daynight::modulate([af, af, af], &sky_mod);
         let night = rcce_client::daynight::night_factor(phase);
+        // Underwater (Blitz CameraUnderwater): tint fog to the water colour when the
+        // free camera dips below a water plane, so the preview can verify the murk +
+        // wash headlessly (the wash itself is composited onto the shot below).
+        let underwater = underwater_color(&self.water_planes, eye);
+        let fog = match underwater {
+            Some(wc) => [wc[0] * 0.7, wc[1] * 0.7, wc[2] * 0.7],
+            None => rcce_client::daynight::modulate(self.fog_color, &sky_mod),
+        };
         // Clear/horizon = the modulated fog colour so the sky fades into it (and
         // darkens at night) instead of a fixed daytime blue.
         let clear = wgpu::Color { r: fog[0] as f64, g: fog[1] as f64, b: fog[2] as f64, a: 1.0 };
@@ -3612,7 +3633,10 @@ impl App {
                     self.light_dir
                 }
             });
-        let (fn_, ff_) = (self.fog_near.max(500.0), self.fog_far.max(40000.0));
+        let (fn_, ff_) = match underwater {
+            Some(_) => (2.0, 60.0), // murky short-range underwater view distance
+            None => (self.fog_near.max(500.0), self.fog_far.max(40000.0)),
+        };
 
         // Shadow-caster verification fixture (RCCE_TESTBOX=skinned|cpu): drop a tall
         // box at the camera target, either as a GPU-skinned actor (set_skinned —
@@ -3715,6 +3739,14 @@ impl App {
             });
             let oview = tex.create_view(&Default::default());
             view.render(&gfx.device, &gfx.queue, &oview, vp, eye, fog, fn_, ff_, ambient, sun, clear, yaw, elapsed, night, target);
+            // Composite the underwater wash onto the shot (the in-world path draws
+            // this in the HUD overlay), so the headless preview shows the full look.
+            if let Some(wc) = underwater {
+                if let Some(overlay) = self.overlay.as_mut() {
+                    overlay.rect(0.0, 0.0, w as f32, h as f32, [wc[0], wc[1], wc[2], 0.6]);
+                    overlay.render(&gfx.device, &gfx.queue, &oview, w as f32, h as f32);
+                }
+            }
             match rcce_render::save_texture_png(&gfx.device, &gfx.queue, &tex, w, h, gfx.config.format, &path) {
                 Ok(()) => println!("[client-window] zone preview -> {path}"),
                 Err(e) => eprintln!("[client-window] zone preview failed: {e}"),
@@ -5445,8 +5477,20 @@ impl App {
                 }
             });
         let sky = rcce_client::daynight::daynight(phase);
-        let fog_dn = rcce_client::daynight::modulate(self.fog_color, &sky);
+        let mut fog_dn = rcce_client::daynight::modulate(self.fog_color, &sky);
         let ambient_dn = rcce_client::daynight::modulate(self.ambient, &sky);
+        // Underwater (Blitz CameraUnderwater): when the camera dips below a water
+        // plane, tint the fog/clear to the water colour and clamp to a short murky
+        // view distance. The full-screen water wash added to the overlay below also
+        // hides the sky/sun (Blitz hides Sky/Stars/Cloud entities underwater).
+        let underwater = underwater_color(&self.water_planes, eye);
+        let mut fog_near_eff = self.fog_near;
+        let mut fog_far_eff = self.fog_far;
+        if let Some(wc) = underwater {
+            fog_dn = [wc[0] * 0.7, wc[1] * 0.7, wc[2] * 0.7];
+            fog_near_eff = 2.0;
+            fog_far_eff = 60.0;
+        }
         // Move the sun with the time-of-day so shadows rotate + lengthen across the
         // day — but only when day/night is actually driving the phase (server clock
         // / RCCE_PHASE / RCCE_DAYNIGHT). With the static noon default, keep the
@@ -5484,8 +5528,8 @@ impl App {
             vp,
             eye,
             fog_dn,
-            self.fog_near,
-            self.fog_far,
+            fog_near_eff,
+            fog_far_eff,
             ambient_dn,
             light_dir,
             wgpu::Color {
@@ -5509,6 +5553,13 @@ impl App {
         if let Some(overlay) = self.overlay.as_mut() {
             let (sw, sh) = (gfx.config.width as f32, gfx.config.height as f32);
             let white = [1.0, 1.0, 1.0, 1.0];
+
+            // Underwater wash: a translucent full-screen water-colour tint, drawn
+            // FIRST so it sits over the (already murk-fogged) world + sky but under
+            // the HUD/nameplates — hiding the sky/sun and giving the submerged look.
+            if let Some(wc) = underwater {
+                overlay.rect(0.0, 0.0, sw, sh, [wc[0], wc[1], wc[2], 0.6]);
+            }
 
             // Weather particles (rain/snow) — drawn first so they sit behind the
             // HUD/nameplates. Driven by the zone's weather byte.
@@ -6747,6 +6798,31 @@ mod tests {
         let tz = first_trail.iter().map(|v| v.pos[2]).sum::<f32>() / 6.0;
         assert!(tz < -0.4, "first trail sample is behind the head (−z): {tz}");
         assert!(first_trail[0].color[3] < 1.0, "trail is fainter than the core");
+    }
+
+    // Underwater = camera eye below a water plane's surface AND within its X/Z
+    // bounds; returns the plane's tint colour (else None).
+    #[test]
+    fn underwater_only_below_surface_and_in_bounds() {
+        let img = rcce_data::Image { width: 1, height: 1, rgba: vec![0, 0, 0, 255] };
+        let w = rcce_data::WaterPlane {
+            tex_id: 0,
+            tex_scale: 1.0,
+            pos: [0.0, 10.0, 0.0],
+            scale_x: 20.0,
+            scale_z: 20.0,
+            color: [0.1, 0.3, 0.4],
+            opacity: 0.5,
+        };
+        let planes = vec![(w, img)];
+        // Below the surface, inside the footprint → tinted.
+        assert_eq!(underwater_color(&planes, [0.0, 5.0, 0.0]), Some([0.1, 0.3, 0.4]));
+        assert_eq!(underwater_color(&planes, [9.0, 9.9, -9.0]), Some([0.1, 0.3, 0.4]));
+        // Above the surface → none, even within the footprint.
+        assert_eq!(underwater_color(&planes, [0.0, 12.0, 0.0]), None);
+        // Below the surface but outside the X / Z footprint → none.
+        assert_eq!(underwater_color(&planes, [50.0, 5.0, 0.0]), None);
+        assert_eq!(underwater_color(&planes, [0.0, 5.0, 50.0]), None);
     }
 
     // A LOD terrain patch (grid N=2) builds a (N+1)² vertex grid with 2 triangles
