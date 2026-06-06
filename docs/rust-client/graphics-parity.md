@@ -61,6 +61,7 @@ Legend: ✅ verified (rendered + audited) · 🟡 implemented, render-verify pen
 | View-frustum culling | ✅ | each drawable's world bounding sphere is tested against the 6 camera-frustum planes; props behind the camera / off the sides skip their textured+shaded draw entirely. Conservative ⇒ lossless (verified: 10/13 drawables culled facing away, on-vs-off pixel delta at the animation noise floor). `RCCE_NOFRUSTUMCULL` disables; `RCCE_DRAWSTATS` logs drawn/culled. |
 | Texture upload cache (static + water) | ✅ | content-keyed GPU texture-bind cache for the static scene + water. Static scenery sharing a texture uploads once (not once per instance); **water — rebuilt every frame for its scrolling UV — now reuses its texture instead of re-creating it (+ mip chain) every frame**. Verified lossless (pixel-identical) and effective: test zone `tex_uploads` 10 (flat) vs 64-and-growing without (`RCCE_NOTEXCACHE`); `RCCE_TEXSTATS`/`RCCE_DRAWSTATS` report uploads + cache size. |
 | MSAA + alpha-to-coverage | ✅ | **better than Blitz** (fixed-function Client.exe has no MSAA). World pass renders into a multisampled colour+depth target and resolves to the surface; shadow map stays 1×. Alpha-to-coverage on the opaque + skinned pipelines anti-aliases cut-out foliage/hair silhouettes too. Verified at 4× on an opaque/sky silhouette: 12× more coverage pixels (154→1920) and −19% hard sky↔foreground adjacencies vs 1×; 1× is a byte-identical fallback. `RCCE_MSAA={1,2,4}` (default 4; clamped — 8× needs an unrequested adapter feature). |
+| Bloom / HDR glow (opt-in) | ✅ | **beyond Blitz**, **default-off** (`RCCE_BLOOM`). The world renders to an offscreen scene texture; a bright-pass (luminance knee) + half-res separable Gaussian + additive composite makes bright pixels (sun glints, fire/magic particles, water highlights) bleed a soft glow. Verified: glow is additive (never darkens — min +0), concentrated in bright regions (+4.1) vs dark (+0.0); default-off path is byte-identical. Tunable `RCCE_BLOOM_THRESHOLD` / `RCCE_BLOOM_INTENSITY`. |
 | Water surface (Fresnel + ripples) | ✅ | **better than Blitz** — dedicated water pipeline adds a Fresnel sky-reflection (water brightens toward the sky/fog colour at grazing angles, stays clear/textured looking straight down) + procedural ripple normals driven by the scrolling UV (shimmer, no time uniform). Convention-free (view dir + normal only). Verified: vs flat water, the change is localized to the water band, +57 brighter, grazing-stronger; animates with the scroll. `RCCE_FLATWATER` reverts. |
 | `AWater` bump-map + foam textures | ➖ | the authored bump/foam texture path; deferred (the procedural ripples above cover the look) |
 
@@ -123,7 +124,7 @@ test-render loop and should be **scoped with the user**:
 - **Sound**, **mouse-look**, **chat/combat send** — interaction, not rendering.
 
 Possible *beyond-parity* renderer additions (opt-in, have a perf cost worth
-discussing given fps sensitivity): bloom/HDR glow on bright particles + sun
-glints, screen-space water reflections, ambient occlusion.
+discussing given fps sensitivity): bloom/HDR glow ✅ (done, `RCCE_BLOOM`),
+screen-space water reflections, ambient occlusion.
 
 Update this table as rows are verified or implemented.

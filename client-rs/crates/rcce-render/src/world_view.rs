@@ -117,6 +117,8 @@ pub struct WorldView {
     particles: Vec<ParticleBatch>,
     /// Water surface pipeline (Fresnel sky-reflection + procedural ripples).
     water_pipeline: gpu::WaterPipeline,
+    /// Optional bloom/glow post-process (RCCE_BLOOM; None by default → zero cost).
+    bloom: Option<crate::bloom::Bloom>,
     /// Content-keyed GPU texture cache for the static scene + water. Statics dedup
     /// identical scenery textures (one upload, not one per instance); water — which
     /// is rebuilt every frame for its scrolling UV — reuses its upload instead of
@@ -270,6 +272,7 @@ impl WorldView {
             particle_pipeline,
             particles: Vec::new(),
             water_pipeline,
+            bloom: crate::bloom::Bloom::maybe_new(device, color_format, w, h),
             static_tex_cache: TexCache::new(),
         }
     }
@@ -396,6 +399,9 @@ impl WorldView {
     pub fn resize(&mut self, device: &wgpu::Device, w: u32, h: u32) {
         self.depth = make_depth(device, w, h, self.sample_count);
         self.msaa_color = make_msaa_color(device, self.color_format, w, h, self.sample_count);
+        if let Some(b) = &mut self.bloom {
+            b.resize(device, w, h);
+        }
     }
 
     /// Draw the scene to `view` with the camera + atmosphere. `eye` is the
@@ -565,12 +571,16 @@ impl WorldView {
             }
         }
         {
+            // When bloom is on, the world renders into an offscreen `scene` texture
+            // (so it can be sampled by the post-process); a final composite writes
+            // the glowing result to the surface. Off (default) → straight to `view`.
+            let world_dst: &wgpu::TextureView = self.bloom.as_ref().map(|b| b.scene_view()).unwrap_or(view);
             // With MSAA the pass renders into the multisampled colour target and
-            // resolves into the single-sampled surface `view`; without it, render
-            // direct to `view` (exact pre-MSAA path).
+            // resolves into the single-sampled destination; without it, render
+            // direct to the destination (exact pre-MSAA path).
             let (color_view, resolve_target) = match &self.msaa_color {
-                Some(msaa) => (msaa, Some(view)),
-                None => (view, None),
+                Some(msaa) => (msaa, Some(world_dst)),
+                None => (world_dst, None),
             };
             let mut rp = enc.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("world"),
@@ -687,6 +697,13 @@ impl WorldView {
                     rp.draw(0..b.n, 0..1);
                 }
             }
+        }
+        // Bloom post-process: bright-pass + blur the offscreen scene and composite
+        // the glow onto the surface. No-op (and the world drew straight to `view`)
+        // when bloom is off.
+        if let Some(b) = &self.bloom {
+            b.write_uniforms(queue);
+            b.run(&mut enc, view);
         }
         queue.submit(Some(enc.finish()));
     }
