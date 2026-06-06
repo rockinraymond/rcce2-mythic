@@ -3467,12 +3467,28 @@ impl App {
                 }
             }
         }
-        let clear = wgpu::Color { r: 0.45, g: 0.62, b: 0.86, a: 1.0 };
-        let fog = self.fog_color;
         // Ambient floor (RCCE_AMBIENT overrides) — lower it to make sun shadows
         // read clearly when verifying.
         let af = envf("RCCE_AMBIENT", 0.55);
-        let ambient = [af, af, af];
+        // Day/night: pin the cosmetic phase with RCCE_PHASE (0=midnight, 0.25=dawn,
+        // 0.5=noon, 0.75=dusk), or free-run via RCCE_DAYNIGHT_SECS; default noon so
+        // existing day renders are unchanged. Modulates fog + ambient and drives the
+        // night-stars factor — the same path the in-world render uses, so the
+        // preview can verify night/stars/atmosphere (was hardcoded to full day).
+        let phase = std::env::var("RCCE_PHASE")
+            .ok()
+            .and_then(|s| s.trim().parse::<f32>().ok())
+            .unwrap_or_else(|| match std::env::var("RCCE_DAYNIGHT_SECS").ok().and_then(|s| s.parse::<f32>().ok()) {
+                Some(cycle) => rcce_client::daynight::phase_at(elapsed, cycle),
+                None => 0.5,
+            });
+        let sky_mod = rcce_client::daynight::daynight(phase);
+        let fog = rcce_client::daynight::modulate(self.fog_color, &sky_mod);
+        let ambient = rcce_client::daynight::modulate([af, af, af], &sky_mod);
+        let night = rcce_client::daynight::night_factor(phase);
+        // Clear/horizon = the modulated fog colour so the sky fades into it (and
+        // darkens at night) instead of a fixed daytime blue.
+        let clear = wgpu::Color { r: fog[0] as f64, g: fog[1] as f64, b: fog[2] as f64, a: 1.0 };
         // Sun direction (RCCE_SUNDIR="x,y,z" overrides the zone's) — a low sun
         // throws long, obvious shadows for verification.
         let sun = std::env::var("RCCE_SUNDIR")
@@ -3551,7 +3567,7 @@ impl App {
                 view_formats: &[],
             });
             let oview = tex.create_view(&Default::default());
-            view.render(&gfx.device, &gfx.queue, &oview, vp, eye, fog, fn_, ff_, ambient, sun, clear, yaw, elapsed, 0.0, target);
+            view.render(&gfx.device, &gfx.queue, &oview, vp, eye, fog, fn_, ff_, ambient, sun, clear, yaw, elapsed, night, target);
             match rcce_render::save_texture_png(&gfx.device, &gfx.queue, &tex, w, h, gfx.config.format, &path) {
                 Ok(()) => println!("[client-window] zone preview -> {path}"),
                 Err(e) => eprintln!("[client-window] zone preview failed: {e}"),
@@ -3569,7 +3585,7 @@ impl App {
             }
         };
         let tview = frame.texture.create_view(&Default::default());
-        view.render(&gfx.device, &gfx.queue, &tview, vp, eye, fog, fn_, ff_, ambient, sun, clear, yaw, elapsed, 0.0, target);
+        view.render(&gfx.device, &gfx.queue, &tview, vp, eye, fog, fn_, ff_, ambient, sun, clear, yaw, elapsed, night, target);
         frame.present();
         self.frames += 1;
     }

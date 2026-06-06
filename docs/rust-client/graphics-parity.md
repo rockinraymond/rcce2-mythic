@@ -44,10 +44,10 @@ Legend: ✅ verified (rendered + audited) · 🟡 implemented, render-verify pen
 | Actor attachments (hair/weapon/shield) | ✅ | follow the animated joint (this session) |
 | Sky dome (`SkyTexID`) | ✅ | textured skydome renders (harness) |
 | Clouds + storm swap (`CloudTexID`) | ✅ | drifting clouds render; storm swap implemented |
-| Night stars (`StarsTexID`) | 🟡 | implemented; gated by night factor (verify at night) |
-| Fog (`FogRGB`, near/far) | 🟡 | implemented; render-verify ranges |
-| Ambient + directional light | 🟡 | from `DefaultLightPitch/Yaw` |
-| Day/night cycle | 🟡 | `RCCE_PHASE` / `RCCE_DAYNIGHT_SECS` |
+| Night stars (`StarsTexID`) | 🟡 | night-factor now reaches the preview render (the sky darkens with phase, verified); visual stars need a zone with a `StarsTexID` (the Plains-derived test zone has none, so it correctly shows none) |
+| Fog (`FogRGB`, near/far) | ✅ | distance fade to the (day/night-modulated) fog colour; horizon/clear = fog so the world fades into it. Verified darkening/tinting across phases. |
+| Ambient + directional light | ✅ | ambient modulated by the day/night curve (verified brightness ordering noon>dawn/dusk>midnight); sun dir from `DefaultLightPitch/Yaw` (or `RCCE_SUNDIR`). |
+| Day/night cycle | ✅ | `RCCE_PHASE` / `RCCE_DAYNIGHT_SECS`. **Fixed**: the zone preview ignored `RCCE_PHASE` (hardcoded full day); now it modulates fog+ambient and drives the night factor like the in-world path. Verified: noon bright/neutral, dawn+dusk warmer, midnight dim+blue (`R-B` −11). |
 | Lightmaps / multitexture (2nd tex) | ✅ | menu Set.b3d + terrain detail both render `base × tex × 2` |
 | Alpha / masked foliage | ✅ | fir needles render as alpha cutout (harness) |
 | Vertex colours (`EntityColor`) | 🟡 | confirm per-vertex colour path |
