@@ -754,17 +754,23 @@ struct VO { @builtin(position) pos: vec4<f32>, @location(0) ndc: vec2<f32> };
     // Night dimming for the textured sky + clouds (0 by day → unchanged).
     let sky_dim = 1.0 - 0.78 * sky.params2.y;
     if (sky.params.x >= 0.5) {
-        // Sky texture by world azimuth (+ a slow time drift in params.y).
+        // Sky texture by world azimuth (+ a slow time drift in params.y). It fills
+        // the sky from just above the horizon up, and fades out near the zenith so
+        // the spherical mapping's pole pinch (a bright arc when looking up) is
+        // hidden — the gradient takes over there. Without these it got squished
+        // into a thin band "way up high".
         let uv = vec2<f32>(az + sky.params.y, tv);
         let tex = textureSample(skytex, skysamp, uv).rgb * sky_dim;
-        let h = smoothstep(0.0, 0.30, elev);
+        let h = smoothstep(0.02, 0.14, elev) * (1.0 - smoothstep(0.82, 0.99, elev));
         col = mix(grad, tex, h);
     }
     if (sky.params.z >= 0.5) {
-        // Clouds drift over the world (params.w = time drift), only above horizon.
+        // Clouds drift over the world (params.w = time drift). Fade them in above
+        // the horizon and out near the zenith (hide the pole pinch), same as the
+        // sky texture.
         let cuv = vec2<f32>(az + sky.params.w, tv);
         let c = textureSample(cloudtex, cloudsamp, cuv);
-        let fade = smoothstep(0.12, 0.45, elev);
+        let fade = smoothstep(0.06, 0.25, elev) * (1.0 - smoothstep(0.82, 0.99, elev));
         col = mix(col, c.rgb * sky_dim, c.a * fade);
     }
     if (sky.params2.x >= 0.5 && sky.params2.y > 0.01) {
