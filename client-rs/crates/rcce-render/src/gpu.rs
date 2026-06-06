@@ -713,11 +713,21 @@ fn cloud_dapple(p: vec2<f32>) -> f32 {
     // Baked lightmap (1.0 for non-lightmapped meshes via the grey default).
     let lm = textureSample(lmtex, samp, in.uv2).rgb * 2.0;
     let lit = c.rgb * in.color.rgb * shade * lm;
+    // Sun backlight rim: when looking TOWARD the sun (the view ray into the scene
+    // aligns with the sun), the silhouette edges of geometry (grazing view) catch a
+    // warm scattered glow — sunlight wrapping around object edges and through
+    // foliage. Tied to daylight via the ambient level so it doesn't glow at night
+    // (no day-factor uniform needed). Beyond Blitz.
+    let V = normalize(u.eye - in.world);
+    let dayish = smoothstep(0.15, 0.40, dot(u.ambient, vec3<f32>(0.333)));
+    let toward = max(dot(L, -V), 0.0);                       // 1 = looking at the sun
+    let edge = pow(1.0 - max(dot(N, V), 0.0), 5.0);          // tight silhouette grazing
+    let rim = vec3<f32>(1.0, 0.86, 0.62) * pow(toward, 6.0) * edge * dayish * 0.35;
     // Distance fog toward the sky/fog colour.
     let dist = distance(in.world, u.eye);
     let f = clamp((dist - u.fog_near) / max(u.fog_far - u.fog_near, 1.0), 0.0, 1.0);
     // Alpha = texture-alpha × vertex-alpha (1.0 for opaque meshes → no blend).
-    return vec4<f32>(mix(lit, u.fog_color, f), c.a * in.color.a);
+    return vec4<f32>(mix(lit + rim, u.fog_color, f), c.a * in.color.a);
 }
 "#;
 
