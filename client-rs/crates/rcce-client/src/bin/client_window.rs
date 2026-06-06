@@ -4418,7 +4418,7 @@ impl App {
             // across the buffered server positions — smooth regardless of frame or
             // echo-cadence jitter, no velocity guessing.
             let rz_before = net.world.me_render_z;
-            net.world.tick_movement(elapsed, proj_dt, dir, moving);
+            net.world.tick_movement(elapsed, proj_dt, dir, moving, run);
             // RCCE_MOVEDIAG: per-frame trace — me_z (server), me_render_z, the
             // frame's render delta, and the sample count. A smooth render shows a
             // steady delta proportional to dt.
@@ -4483,7 +4483,13 @@ impl App {
             // like ClientNet.bb): the server walks the actor toward Dest and
             // echoes its authoritative position, which on_standard_update
             // applies back to me_x/z. A single stop packet on key-release.
-            let (mx, my, mz) = (net.world.me_x, net.world.me_y, net.world.me_z);
+            // Report the CLIENT-AUTHORITATIVE position (me_render, advanced this
+            // frame by tick_movement) so the server takes our position directly
+            // (NewX/NewZ) like Blitz — instead of the stale last-echo position,
+            // which made movement wait on the server walking toward a dest. `my`
+            // (height) still comes from the server echo. (RCCE_SERVERMOVE keeps the
+            // old behaviour: me_render reconciles to me_x, so this ≈ the echo.)
+            let (mx, my, mz) = (net.world.me_render_x, net.world.me_y, net.world.me_render_z);
             // Blocker #4 (MOVE-1/3): predict the local body's facing from the
             // steering direction every frame so the character turns immediately
             // to face where it's walking. The P_StandardUpdate wire carries no

@@ -385,6 +385,27 @@ fn me_recon_rate() -> f32 {
     std::env::var("RCCE_MERECON").ok().and_then(|s| s.parse().ok()).unwrap_or(ME_RECON_RATE)
 }
 
+/// Client-authoritative base move speed (units/sec). Running doubles it (Blitz's
+/// `(1 + IsRunning)` move-distance factor). Kept safely under the server's
+/// speed-hack clamp (`~150·(SpeedAttr+0.5)` u/s). Tunable for feel via
+/// `RCCE_MOVESPEED` — this is the value to adjust if running/walking feels off.
+const CLIENT_MOVE_SPEED: f32 = 46.0;
+fn client_move_speed(running: bool) -> f32 {
+    let base = std::env::var("RCCE_MOVESPEED").ok().and_then(|s| s.parse::<f32>().ok()).unwrap_or(CLIENT_MOVE_SPEED);
+    base * if running { 2.0 } else { 1.0 }
+}
+
+/// Reconcile deadzone (units): in client-authoritative mode the local body leads
+/// freely within this distance of the server position, so normal network lag (the
+/// echo trailing our reported position) doesn't drag us back. Sized to exceed the
+/// position the server is behind by between sends (~`run_speed × send_interval`,
+/// ≈ 92 u/s × 0.11 s ≈ 10 u). Larger divergences (speed-hack clamp / collision /
+/// warp) still ease/snap to the server. Tunable for high-latency links.
+const ME_DEADZONE: f32 = 14.0;
+fn me_deadzone() -> f32 {
+    std::env::var("RCCE_MEDEADZONE").ok().and_then(|s| s.parse::<f32>().ok()).unwrap_or(ME_DEADZONE)
+}
+
 /// Effective speed-averaging window — `SPEED_WINDOW`, env `RCCE_SPEEDWIN`.
 fn speed_window() -> f32 {
     std::env::var("RCCE_SPEEDWIN").ok().and_then(|s| s.parse().ok()).unwrap_or(SPEED_WINDOW)
@@ -492,34 +513,51 @@ impl World {
     /// samples that bracket it. No velocity estimate, no prediction/reconcile
     /// fight. Facing follows the interpolated motion. `dt` is only for the yaw
     /// ease. Applies to the local player and every actor alike.
-    pub fn tick_movement(&mut self, now: f32, dt: f32, dir: [f32; 2], moving: bool) {
+    pub fn tick_movement(&mut self, now: f32, dt: f32, dir: [f32; 2], moving: bool, running: bool) {
         let t = now - render_delay();
         let dtc = dt.clamp(0.0, 0.1);
         let ky = 1.0 - (-YAW_RATE * dtc).exp();
         let kp = 1.0 - (-smooth_rate() * dtc).exp();
-        // Local player: client-side prediction. Advance in the INPUT direction at
-        // the buffer-smoothed speed (constant velocity → none of the server's
-        // per-echo burst alias), then reconcile gently toward the newest
-        // authoritative position. Stops are crisp because they're input-gated
-        // (`moving`), not inferred from a stale velocity → no overshoot.
         let first = self.me_samples.is_empty();
         push_sample(&mut self.me_samples, now, self.me_x, self.me_z);
         self.me_render_init = true;
+        let mag = (dir[0] * dir[0] + dir[1] * dir[1]).sqrt();
         if first {
             self.me_render_x = self.me_x;
             self.me_render_z = self.me_z;
-        } else {
-            if moving {
-                let mag = (dir[0] * dir[0] + dir[1] * dir[1]).sqrt();
-                if mag > 1e-4 {
-                    let spd = buffer_avg_speed(&self.me_samples, now);
-                    self.me_render_x += dir[0] / mag * spd * dtc;
-                    self.me_render_z += dir[1] / mag * spd * dtc;
-                }
+        } else if std::env::var_os("RCCE_SERVERMOVE").is_some() {
+            // Legacy server-driven prediction: advance at the echo-derived speed
+            // and reconcile toward the authoritative echo every frame.
+            if moving && mag > 1e-4 {
+                let spd = buffer_avg_speed(&self.me_samples, now);
+                self.me_render_x += dir[0] / mag * spd * dtc;
+                self.me_render_z += dir[1] / mag * spd * dtc;
             }
             let kr = 1.0 - (-me_recon_rate() * dtc).exp();
             ease_pos(&mut self.me_render_x, self.me_x, kr);
             ease_pos(&mut self.me_render_z, self.me_z, kr);
+        } else {
+            // Client-authoritative (like Blitz): move the local body at a fixed
+            // speed each frame and report it; the server accepts it (speed-hack
+            // clamp). This makes movement instant + full-speed instead of paced by
+            // the request-dest/echo round-trip ("takes forever"). Only correct
+            // toward the server position when it diverges past a deadzone, so
+            // normal lag doesn't rubber-band us, but clamp/collision/warp do.
+            if moving && mag > 1e-4 {
+                let spd = client_move_speed(running);
+                self.me_render_x += dir[0] / mag * spd * dtc;
+                self.me_render_z += dir[1] / mag * spd * dtc;
+            }
+            let (dx, dz) = (self.me_x - self.me_render_x, self.me_z - self.me_render_z);
+            let err = (dx * dx + dz * dz).sqrt();
+            if err > ACTOR_SNAP_DIST {
+                self.me_render_x = self.me_x; // warp / teleport
+                self.me_render_z = self.me_z;
+            } else if err > me_deadzone() {
+                let kr = 1.0 - (-me_recon_rate() * dtc).exp(); // clamp/collision
+                self.me_render_x += dx * kr;
+                self.me_render_z += dz * kr;
+            }
         }
         for a in self.actors.values_mut() {
             let first = a.samples.is_empty();
@@ -1539,6 +1577,27 @@ impl World {
 mod tests {
     use super::*;
     use rcce_net::codec::MsgWriter;
+
+    #[test]
+    fn client_authoritative_move_leads_and_doesnt_rubberband() {
+        std::env::remove_var("RCCE_SERVERMOVE");
+        std::env::set_var("RCCE_MOVESPEED", "46");
+        let mut w = World { my_runtime_id: 1, ..Default::default() };
+        // Prime: first tick snaps render to the (origin) server pos + seeds samples.
+        w.tick_movement(0.0, 0.016, [0.0, 1.0], true, false);
+        let start = w.me_render_z;
+        // Walk forward (+z) for 0.1 s; server pos (me_x/z) stays at origin (no echo
+        // yet). Client-authoritative ⇒ the body advances ~46·0.1 and is NOT dragged
+        // back (within the deadzone).
+        w.tick_movement(0.12, 0.1, [0.0, 1.0], true, false);
+        let walked = w.me_render_z - start;
+        assert!((walked - 4.6).abs() < 0.6, "walked {walked} (expected ~4.6)");
+        // A teleport-scale server jump still snaps the body to the server position.
+        w.me_z = 1000.0;
+        w.tick_movement(0.20, 0.016, [0.0, 0.0], false, false);
+        assert!((w.me_render_z - 1000.0).abs() < 0.01, "warp didn't snap: {}", w.me_render_z);
+        std::env::remove_var("RCCE_MOVESPEED");
+    }
 
     #[test]
     fn fetch_actors_env_block_sets_server_clock() {
