@@ -1581,6 +1581,12 @@ const IDENTITY16: [f32; 16] = [
 const SKIN_SHADER: &str = r#"
 struct U {
     mvp: mat4x4<f32>,
+    // MUST mirror the shared `Uniforms` layout (this binds the same group-0 buffer,
+    // `bind0`): `light_vp` sits between `mvp` and `eye`. Omitting it shifted every
+    // field below by 64 bytes, so the lighting read the light-VP matrix bytes —
+    // ambient/light_dir ≈ 0 → GPU-skinned actors (RCCE_GPUSKIN) rendered BLACK.
+    // Unused here (no shadow sampling on the skin pass) but required for alignment.
+    light_vp: mat4x4<f32>,
     eye: vec3<f32>,
     fog_near: f32,
     fog_color: vec3<f32>,
