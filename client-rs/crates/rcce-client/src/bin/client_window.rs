@@ -1989,7 +1989,9 @@ fn load_zone_static(store: &mut AssetStore, view: &mut WorldView, gfx: &Gfx, dat
     if stars != 65535 {
         if let Some(img) = store.texture_path(stars).and_then(|p| rcce_data::texture::load(&p)) {
             view.set_stars_texture(&gfx.device, &gfx.queue, img.width, img.height, &img.rgba);
+            println!("[client-window] zone '{zone}': stars texture {}x{} (id {stars})", img.width, img.height);
         } else {
+            println!("[client-window] zone '{zone}': stars tex id {stars} FAILED to load -> no stars");
             view.clear_stars_texture();
         }
     } else {
@@ -3408,7 +3410,13 @@ impl App {
     /// game. Pairs with the `gen-test-zone` bin to verify area rendering without a
     /// real fork's data or a running server.
     fn render_zone_preview(&mut self) {
-        let elapsed = self.start.elapsed().as_secs_f32();
+        // RCCE_TIME pins the animation clock (sky/cloud/star pan, particle warmup)
+        // so separate preview runs are byte-deterministic — needed to A/B animated
+        // features (e.g. stars on/off) without the wall-clock sky drift as noise.
+        let elapsed = std::env::var("RCCE_TIME")
+            .ok()
+            .and_then(|s| s.trim().parse::<f32>().ok())
+            .unwrap_or_else(|| self.start.elapsed().as_secs_f32());
         let (w, h) = match self.gfx.as_ref() {
             Some(g) => (g.config.width, g.config.height),
             None => return,

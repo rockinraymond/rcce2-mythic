@@ -42,9 +42,9 @@ Legend: ✅ verified (rendered + audited) · 🟡 implemented, render-verify pen
 | Water planes | ✅ | alpha plane, white tint (texture shows), tiling `scale/tex_scale`, scroll anim |
 | Skinned actor animation | ✅ | b3d skeletal LBS, GPU/CPU paths |
 | Actor attachments (hair/weapon/shield) | ✅ | follow the animated joint (this session) |
-| Sky dome (`SkyTexID`) | ✅ | textured skydome renders (harness) |
-| Clouds + storm swap (`CloudTexID`) | ✅ | drifting clouds render; storm swap implemented |
-| Night stars (`StarsTexID`) | 🟡 | night-factor now reaches the preview render (the sky darkens with phase, verified); visual stars need a zone with a `StarsTexID` (the Plains-derived test zone has none, so it correctly shows none) |
+| Sky dome (`SkyTexID`) | ✅ | textured skydome renders. **Fixed**: the sky texture now dims at night (`×(1−0.78·night)`) — it stayed full daytime brightness before, so the zenith showed bright daytime sky at midnight. Verified: zenith noon 61→midnight 14 (ratio 0.22); noon unchanged. |
+| Clouds + storm swap (`CloudTexID`) | ✅ | drifting clouds render; storm swap implemented. Clouds dim at night with the same `sky_dim` factor (no more bright daytime clouds in a midnight sky). |
+| Night stars (`StarsTexID`) | 🟡 | path verified: `set_stars_texture` fires and the overlay is additive + day-gated (0 px at noon, deterministic via `RCCE_TIME`). Visible stars need a real stars texture (black + white dots); the project ships none, so `gen-test-zone` injects the sky texture, which clamps additively — exercises the path but isn't a faithful stars image. |
 | Fog (`FogRGB`, near/far) | ✅ | distance fade to the (day/night-modulated) fog colour; horizon/clear = fog so the world fades into it. Verified darkening/tinting across phases. |
 | Ambient + directional light | ✅ | ambient modulated by the day/night curve (verified brightness ordering noon>dawn/dusk>midnight); sun dir from `DefaultLightPitch/Yaw` (or `RCCE_SUNDIR`). |
 | Day/night cycle | ✅ | `RCCE_PHASE` / `RCCE_DAYNIGHT_SECS`. **Fixed**: the zone preview ignored `RCCE_PHASE` (hardcoded full day); now it modulates fog+ambient and drives the night factor like the in-world path. Verified: noon bright/neutral, dawn+dusk warmer, midnight dim+blue (`R-B` −11). |

@@ -573,11 +573,16 @@ struct VO { @builtin(position) pos: vec4<f32>, @location(0) t: f32, @location(1)
 @fragment fn fs(i: VO) -> @location(0) vec4<f32> {
     let grad = mix(sky.bottom.rgb, sky.top.rgb, clamp(i.t, 0.0, 1.0));
     var col = grad;
+    // Night dimming for the textured sky + clouds: the gradient already darkens
+    // (it's the day/night-modulated fog colour), but a raw daytime sky/cloud
+    // texture would otherwise stay bright at the zenith — bright daytime clouds in
+    // a midnight sky. Scale them down by the night factor (0 by day → unchanged).
+    let sky_dim = 1.0 - 0.78 * sky.params2.y;
     if (sky.params.x >= 0.5) {
         // Sky texture: pan horizontally with the camera yaw (Repeat sampler);
         // fade into the fog gradient at the horizon so it meets the terrain.
         let uv = vec2<f32>(i.uv.x + sky.params.y, i.uv.y);
-        let tex = textureSample(skytex, skysamp, uv).rgb;
+        let tex = textureSample(skytex, skysamp, uv).rgb * sky_dim;
         let h = smoothstep(0.0, 0.30, i.t);
         col = mix(grad, tex, h);
     }
@@ -595,7 +600,7 @@ struct VO { @builtin(position) pos: vec4<f32>, @location(0) t: f32, @location(1)
         let cuv = vec2<f32>(i.uv.x + sky.params.w, i.uv.y);
         let c = textureSample(cloudtex, cloudsamp, cuv);
         let fade = smoothstep(0.12, 0.45, i.t);
-        col = mix(col, c.rgb, c.a * fade);
+        col = mix(col, c.rgb * sky_dim, c.a * fade);
     }
     return vec4<f32>(col, 1.0);
 }
