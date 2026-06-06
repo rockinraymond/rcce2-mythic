@@ -828,8 +828,8 @@ const WATER_SCROLL_V: f32 = 0.021;
 /// by an in-client A/B sweep: only the yaw-negated variant matched Blitz).
 ///
 /// Actor bodies are *not* affected: their facing is computed locally from
-/// movement direction (`heading_from_dir`) and calibrated independently, so they
-/// never consume a stored Blitz yaw through this path.
+/// movement direction (eased toward the heading in `World::tick_movement`) and
+/// calibrated independently, so they never consume a stored Blitz yaw here.
 fn scenery_rot_radians(deg: [f32; 3]) -> [f32; 3] {
     [deg[0].to_radians(), -deg[1].to_radians(), deg[2].to_radians()]
 }
@@ -840,20 +840,6 @@ const MENU_MUSIC_ID: u16 = 65534;
 
 /// Body facing (yaw, **degrees**) for a movement direction `(dx, dz)` in world
 /// XZ (MOVE-1/3, blocker #4). Returns `fallback` when the direction is ~zero (so
-/// a stopped actor keeps its last facing). `me_yaw`/`a.yaw` are stored in degrees
-/// (the wire's `EntityYaw` unit) and the renderer applies `from_rotation_y(yaw
-/// .to_radians())`, which rotates the base `-Z` forward to `(-sin θ, -cos θ)`;
-/// so facing `(dx, dz)` ⇒ `atan2(-dx, -dz)` then to degrees. Pure — unit-tested.
-/// The server independently faces the actor toward its Dest (`PointEntity`), so
-/// this locally predicts that same heading immediately (the wire carries no yaw).
-fn heading_from_dir(dx: f32, dz: f32, fallback: f32) -> f32 {
-    if dx * dx + dz * dz > 1e-6 {
-        (-dx).atan2(-dz).to_degrees()
-    } else {
-        fallback
-    }
-}
-
 /// Unproject a screen pixel to the world XZ where the camera ray hits the
 /// **terrain** (not a flat plane). Click-to-move landed short/long because
 /// `unproject_ground` intersects a flat plane at the stale `me_y`, while the
@@ -4652,15 +4638,13 @@ impl App {
             // (height) still comes from the server echo. (RCCE_SERVERMOVE keeps the
             // old behaviour: me_render reconciles to me_x, so this ≈ the echo.)
             let (mx, my, mz) = (net.world.me_render_x, net.world.me_y, net.world.me_render_z);
-            // Blocker #4 (MOVE-1/3): predict the local body's facing from the
-            // steering direction every frame so the character turns immediately
-            // to face where it's walking. The P_StandardUpdate wire carries no
-            // yaw — the server faces the actor toward Dest (PointEntity) and the
-            // echo never updates me_yaw — so without this the body stays frozen
-            // at its spawn heading. Idle keeps the last facing (fallback).
-            if moving {
-                net.world.me_yaw = heading_from_dir(dir[0], dir[1], net.world.me_yaw);
-            }
+            // Blocker #4 (MOVE-1/3): the local body faces its steering direction.
+            // The P_StandardUpdate wire carries no yaw — the server faces the actor
+            // toward Dest (PointEntity) and the echo never updates me_yaw — so
+            // without a client-side facing the body stays frozen at its spawn
+            // heading. This is now done by `tick_movement` (called above), which
+            // EASES me_yaw toward the movement heading at the same rate as remote
+            // actors, so the turn glides instead of snapping. Idle keeps the facing.
             if moving && want_send {
                 let (nx, nz) = (dir[0] / mag, dir[1] / mag);
                 let p = movement_packet(mx + nx * 16.0, mz + nz * 16.0, my, mx, mz, run, false);
@@ -7172,34 +7156,6 @@ mod tests {
         let g = unproject_terrain(&vp, sw, sh, cx, cy, Some(&hf), 0.0).unwrap();
         assert!((g[0] - direct[0]).abs() < 0.1, "x: {} vs {}", g[0], direct[0]);
         assert!((g[1] - direct[2]).abs() < 0.1, "z: {} vs {}", g[1], direct[2]);
-    }
-
-    // Body facing prediction (blocker #4): yaw faces the movement direction;
-    // verify the round-trip yaw -> facing vector matches the input direction for
-    // each cardinal, and that a ~zero direction keeps the fallback.
-    #[test]
-    fn heading_faces_movement() {
-        // The renderer rotates the base -Z forward by from_rotation_y(deg.to_radians())
-        // → facing = (-sin θ, -cos θ). Round-trip the returned degrees and confirm
-        // it reproduces the input direction for each cardinal.
-        let facing = |deg: f32| {
-            let r = deg.to_radians();
-            (-r.sin(), -r.cos())
-        };
-        for (dx, dz) in [(0.0, 1.0), (0.0, -1.0), (1.0, 0.0), (-1.0, 0.0), (1.0, 1.0)] {
-            let yaw = heading_from_dir(dx, dz, 99.0);
-            let (fx, fz) = facing(yaw);
-            let mag = (dx * dx + dz * dz).sqrt();
-            assert!((fx - dx / mag).abs() < 1e-4, "x for ({dx},{dz})");
-            assert!((fz - dz / mag).abs() < 1e-4, "z for ({dx},{dz})");
-        }
-        // Spot-check exact degree values: +X ⇒ -90°, -Z ⇒ 0°, +Z ⇒ 180°.
-        assert!((heading_from_dir(1.0, 0.0, 0.0) - -90.0).abs() < 1e-3);
-        assert!((heading_from_dir(0.0, -1.0, 9.0) - 0.0).abs() < 1e-3);
-        assert!((heading_from_dir(0.0, 1.0, 0.0).abs() - 180.0).abs() < 1e-3);
-        // Near-zero direction keeps the fallback (stopped actor holds facing).
-        assert_eq!(heading_from_dir(0.0, 0.0, 1.234), 1.234);
-        assert_eq!(heading_from_dir(0.0005, -0.0005, 7.0), 7.0);
     }
 
     #[test]

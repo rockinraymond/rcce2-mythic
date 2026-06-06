@@ -209,7 +209,9 @@ pub struct World {
     pub me_yaw: f32,
     /// Smoothed render position for the local player (eased toward `me_x`/`me_z`),
     /// so the body and the camera following it glide between server echoes instead
-    /// of snapping. `me_yaw` is already client-driven per frame, so it's not eased.
+    /// of snapping. `me_yaw` (the visual facing) is also eased toward the movement
+    /// heading in `tick_movement` — at the same rate as remote actors — so the body
+    /// turns smoothly instead of snapping.
     pub me_render_x: f32,
     pub me_render_z: f32,
     /// Cleared until the first authoritative position arrives, so interpolation
@@ -563,6 +565,13 @@ impl World {
                 self.me_render_x += dx * kr;
                 self.me_render_z += dz * kr;
             }
+        }
+        // Ease the LOCAL player's facing toward the movement heading, with the same
+        // rate as remote actors (below), instead of snapping. Idle keeps the last
+        // facing. The movement direction itself uses `dir`, not `me_yaw`, so this is
+        // purely the visual body rotation — third-person turns now glide.
+        if moving && mag > 1e-4 {
+            ease_yaw(&mut self.me_yaw, (-dir[0]).atan2(-dir[1]).to_degrees(), ky);
         }
         for a in self.actors.values_mut() {
             let first = a.samples.is_empty();
@@ -1582,6 +1591,32 @@ impl World {
 mod tests {
     use super::*;
     use rcce_net::codec::MsgWriter;
+
+    // The local player's facing EASES toward the movement heading (same rate as
+    // remote actors) instead of snapping; idle holds the last facing.
+    #[test]
+    fn local_facing_eases_not_snaps() {
+        std::env::remove_var("RCCE_SERVERMOVE");
+        let mut w = World { my_runtime_id: 1, ..Default::default() };
+        w.me_yaw = 0.0;
+        // Walking toward +x → heading −90°. After a tick the facing has moved PART
+        // of the way, not snapped.
+        w.tick_movement(0.0, 0.016, [1.0, 0.0], true, false);
+        let before = w.me_yaw;
+        w.tick_movement(0.05, 0.016, [1.0, 0.0], true, false);
+        let after = w.me_yaw;
+        assert!(after < before, "eased toward −90: {before} → {after}");
+        assert!(after > -89.0, "did NOT snap to −90 in one tick: {after}");
+        // Many ticks converge to the heading.
+        for i in 0..300 {
+            w.tick_movement(0.1 + i as f32 * 0.016, 0.016, [1.0, 0.0], true, false);
+        }
+        assert!((w.me_yaw + 90.0).abs() < 1.0, "converged to −90: {}", w.me_yaw);
+        // Idle holds the facing (no movement → no rotation).
+        let held = w.me_yaw;
+        w.tick_movement(10.0, 0.016, [0.0, 0.0], false, false);
+        assert!((w.me_yaw - held).abs() < 1e-4, "idle holds facing: {} vs {held}", w.me_yaw);
+    }
 
     #[test]
     fn client_authoritative_move_leads_and_doesnt_rubberband() {
