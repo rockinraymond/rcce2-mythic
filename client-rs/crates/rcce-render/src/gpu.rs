@@ -814,7 +814,13 @@ fn proc_stars(dir: vec3<f32>) -> f32 {
     let ray = normalize(far.xyz / far.w - sky.eye.xyz);
     let az = atan2(ray.x, ray.z) * 0.15915494 + 0.5;   // world azimuth → [0,1)
     let sky_t = clamp(ray.y / 0.5, 0.0, 1.0);           // 0 horizon .. 1 by ~30° up
-    let tv = 1.0 - sky_t;                                // texture v (horizon→1, up→0)
+    // Texture V. The sky panoramics are skybox-style: the TOP ~half is sky+clouds
+    // and the BOTTOM half is solid BLACK (below-horizon filler). Map ONLY the sky
+    // half (v 0 at the zenith → ~0.47 at the horizon-cloud line) across the dome so
+    // the black bottom is never sampled — that black was showing as a dark band
+    // between the clouds and the horizon. `SKY_HORIZON_V` is the texture row where
+    // sky meets black.
+    let tv = (1.0 - sky_t) * 0.47;                       // sky-half only (skip black bottom)
     let grad = mix(sky.bottom.rgb, sky.top.rgb, sky_t);
     var col = grad;
     // The daytime sky texture + clouds FADE OUT as night falls (cross-fading to
@@ -836,7 +842,10 @@ fn proc_stars(dir: vec3<f32>) -> f32 {
     if (sky.params.x >= 0.5) {
         let uv = vec2<f32>(az + sky.params.y, tv);
         let tex = textureSample(skytex, skysamp, uv).rgb;
-        let h = smoothstep(0.0, 0.30, sky_t) * pin_fade * day_vis;
+        // Reach the horizon: only a tiny fade into the fog in the lowest few degrees
+        // (so the sky meets the fogged distant terrain smoothly) instead of the old
+        // wide ramp that left a gradient gap. pin_fade keeps the zenith clean.
+        let h = smoothstep(0.0, 0.07, sky_t) * pin_fade * day_vis;
         col = mix(grad, tex, h);
     }
     if (sky.params.z >= 0.5) {
