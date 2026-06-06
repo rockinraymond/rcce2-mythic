@@ -1687,6 +1687,96 @@ fn particle_batches(
     batches
 }
 
+/// A soft radial glow sprite (white RGB, alpha falls off from the centre) used
+/// for projectile orbs. Built once. The additive particle blend is
+/// `dst += tex.rgb·col.rgb · (tex.a·col.a)`, so putting the falloff in the alpha
+/// channel gives a round, soft, colour-tinted glow whose intensity scales with
+/// the per-vertex `col.a` (used to fade the trail).
+fn projectile_glow_image() -> rcce_data::Image {
+    use std::sync::OnceLock;
+    static GLOW: OnceLock<rcce_data::Image> = OnceLock::new();
+    GLOW.get_or_init(|| {
+        const N: usize = 64;
+        let mut rgba = vec![0u8; N * N * 4];
+        let c = (N as f32 - 1.0) * 0.5;
+        for y in 0..N {
+            for x in 0..N {
+                let dx = (x as f32 - c) / c;
+                let dy = (y as f32 - c) / c;
+                let r = (dx * dx + dy * dy).sqrt();
+                // Soft falloff: 1 at centre → 0 at the inscribed circle, squared
+                // for a rounder core + softer halo.
+                let a = (1.0 - r).clamp(0.0, 1.0);
+                let a = a * a;
+                let i = (y * N + x) * 4;
+                rgba[i] = 255;
+                rgba[i + 1] = 255;
+                rgba[i + 2] = 255;
+                rgba[i + 3] = (a * 255.0) as u8;
+            }
+        }
+        rcce_data::Image { width: N as u32, height: N as u32, rgba }
+    })
+    .clone()
+}
+
+/// Emit camera-facing additive billboard quads for in-flight projectiles: a
+/// bright warm core orb plus a short fading motion trail behind it (along the
+/// reverse of its flight direction `target→pos`). Drawn through the particle
+/// pipeline (additive, depth-tested, no depth-write) so projectiles glow and are
+/// correctly occluded by terrain/scenery — unlike the old flat 2D overlay marker
+/// that drew over everything. Approximates Blitz's 3D projectile mesh + trailing
+/// emitter (Projectiles3D.bb) with a glow + trail.
+fn projectile_billboards(
+    projectiles: &[rcce_client::world::Projectile],
+    eye: [f32; 3],
+    target: [f32; 3],
+    out: &mut Vec<rcce_render::gpu::Vertex>,
+) {
+    let cross = |a: [f32; 3], b: [f32; 3]| [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+    let normd = |v: [f32; 3]| {
+        let l = (v[0] * v[0] + v[1] * v[1] + v[2] * v[2]).sqrt().max(1e-4);
+        [v[0] / l, v[1] / l, v[2] / l]
+    };
+    let fwd = normd([target[0] - eye[0], target[1] - eye[1], target[2] - eye[2]]);
+    let right = normd(cross(fwd, [0.0, 1.0, 0.0]));
+    let up = cross(right, fwd);
+    let quad = |c: [f32; 3], s: f32, col: [f32; 4], out: &mut Vec<rcce_render::gpu::Vertex>| {
+        let corner = |ox: f32, oy: f32, uv: [f32; 2]| rcce_render::gpu::Vertex {
+            pos: [
+                c[0] + right[0] * ox * s + up[0] * oy * s,
+                c[1] + right[1] * ox * s + up[1] * oy * s,
+                c[2] + right[2] * ox * s + up[2] * oy * s,
+            ],
+            normal: [0.0, 0.0, 1.0],
+            uv,
+            uv2: [0.0, 0.0],
+            color: col,
+        };
+        let v00 = corner(-1.0, -1.0, [0.0, 1.0]);
+        let v01 = corner(-1.0, 1.0, [0.0, 0.0]);
+        let v11 = corner(1.0, 1.0, [1.0, 0.0]);
+        let v10 = corner(1.0, -1.0, [1.0, 1.0]);
+        out.extend_from_slice(&[v00, v01, v11, v00, v11, v10]);
+    };
+    const CORE: f32 = 0.95; // core orb half-size (world units)
+    const TRAIL: usize = 6;
+    const STEP: f32 = 0.5; // spacing between trail samples
+    for p in projectiles {
+        let dir = normd([p.tx - p.x, p.ty - p.y, p.tz - p.z]);
+        // Trail behind the head, drawn first so the bright core composites on top.
+        for i in 1..=TRAIL {
+            let f = i as f32;
+            let c = [p.x - dir[0] * STEP * f, p.y - dir[1] * STEP * f, p.z - dir[2] * STEP * f];
+            let s = (CORE * (1.0 - 0.11 * f)).max(0.12);
+            let a = 0.6 * (1.0 - f / (TRAIL as f32 + 1.0));
+            quad(c, s, [1.0, 0.5, 0.16, a], out);
+        }
+        // Bright warm core orb at the head.
+        quad([p.x, p.y, p.z], CORE, [1.0, 0.86, 0.42, 1.0], out);
+    }
+}
+
 /// Parse a dynamic point light from a `LightModels` scenery mesh filename —
 /// `light_<range>_<R>_<G>_<B>.b3d` (RGB 0..255), placed at the scenery's `pos`
 /// (Blitz: `CreateLight(2)` + `LightColor` + `LightRange`, ClientAreas.bb:411).
@@ -3572,6 +3662,39 @@ impl App {
             self.tick_particles(eye, target, 1.0 / 60.0);
         }
 
+        // RCCE_PROJPREVIEW: synthesize a projectile flying away from the camera so
+        // the new world-space glowing-orb + trail render is verifiable headlessly
+        // (the in-world path needs a live server). Builds the same projectile batch
+        // the in-world path does and uploads it (merged with any zone emitters).
+        if std::env::var_os("RCCE_PROJPREVIEW").is_some() {
+            let normd = |v: [f32; 3]| {
+                let l = (v[0] * v[0] + v[1] * v[1] + v[2] * v[2]).sqrt().max(1e-4);
+                [v[0] / l, v[1] / l, v[2] / l]
+            };
+            let dir = normd([target[0] - eye[0], target[1] - eye[1], target[2] - eye[2]]);
+            // Place it part-way to the target, flying onward (so the trail points
+            // back toward the camera).
+            let pos = [eye[0] + dir[0] * 40.0, eye[1] + dir[1] * 40.0 + 6.0, eye[2] + dir[2] * 40.0];
+            let pr = rcce_client::world::Projectile {
+                x: pos[0],
+                y: pos[1],
+                z: pos[2],
+                target_rid: 0,
+                tx: pos[0] + dir[0] * 100.0,
+                ty: pos[1] + dir[1] * 100.0,
+                tz: pos[2] + dir[2] * 100.0,
+                homing: false,
+                speed: 40.0,
+            };
+            let mut batches = particle_batches(&mut self.emitters, eye, target, 1.0 / 60.0);
+            let mut verts = Vec::new();
+            projectile_billboards(std::slice::from_ref(&pr), eye, target, &mut verts);
+            batches.push((Some(projectile_glow_image()), true, verts));
+            if let (Some(gfx), Some(view)) = (self.gfx.as_ref(), self.view.as_mut()) {
+                view.set_particles(&gfx.device, &gfx.queue, &batches);
+            }
+        }
+
         let shot = std::env::var("RCCE_SHOT").ok().filter(|_| {
             let want = std::env::var("RCCE_SHOT_FRAME").ok().and_then(|s| s.parse::<u64>().ok()).unwrap_or(45);
             self.frames + 1 >= want
@@ -5339,7 +5462,20 @@ impl App {
         // Particles: advance the sim + upload this frame's camera-facing billboards.
         // `&mut self.emitters` is disjoint from the live gfx/view/store borrows.
         let pdt = (elapsed - self.prev_elapsed).clamp(0.0, 0.1);
-        let pbatches = particle_batches(&mut self.emitters, eye, cam_target, pdt);
+        let mut pbatches = particle_batches(&mut self.emitters, eye, cam_target, pdt);
+        // Projectiles: a depth-correct glowing orb + motion trail, appended as an
+        // additive particle batch (so terrain/scenery occludes them) — replaces the
+        // old flat 2D overlay square. Disjoint borrow of `self.net` vs the gfx/view
+        // borrows above.
+        if let Some(net) = self.net.as_ref() {
+            if !net.world.projectiles.is_empty() {
+                let mut verts = Vec::new();
+                projectile_billboards(&net.world.projectiles, eye, cam_target, &mut verts);
+                if !verts.is_empty() {
+                    pbatches.push((Some(projectile_glow_image()), true, verts));
+                }
+            }
+        }
         view.set_particles(&gfx.device, &gfx.queue, &pbatches);
         view.render(
             &gfx.device,
@@ -5636,14 +5772,9 @@ impl App {
                     overlay.text_shadow(wx + 14.0, wy + wh - 22.0, 0.85, "Esc = close", [0.6, 0.6, 0.65, 1.0]);
                 }
 
-                // Projectiles (PRJ-1): a bright billboard at each projectile's
-                // projected screen position, with a soft glow halo.
-                for pr in &net.world.projectiles {
-                    if let Some((px, py)) = rcce_render::project(&vp, [pr.x, pr.y, pr.z], sw, sh) {
-                        overlay.rect(px - 12.0, py - 12.0, 24.0, 24.0, [1.0, 0.5, 0.08, 0.4]);
-                        overlay.rect(px - 6.0, py - 6.0, 12.0, 12.0, [1.0, 0.88, 0.35, 1.0]);
-                    }
-                }
+                // Projectiles now render as depth-correct glowing orbs + trails in
+                // the world (additive particle batch, see the set_particles call
+                // above) — no 2D overlay marker, so they're occluded by terrain.
 
                 // Chat bubbles (CHAT-4): a small label over the speaking actor's
                 // head (or me), projected each frame.
@@ -6581,6 +6712,41 @@ mod tests {
         assert!((l2.range - 20.0).abs() < 1e-3);
         assert!((l2.color[0] - 0.5).abs() < 1e-4); // 255/255 × 0.5
         assert!(parse_light("Trees/fir06summer.b3d", [0.0; 3], 30.0, 1.0).is_none());
+    }
+
+    // A projectile emits 1 core orb + 6 trail quads = 7 quads × 6 verts = 42
+    // verts. The core is centred on the projectile head; the trail steps back
+    // along the reverse flight direction (target→pos), so its samples are farther
+    // from the head than the core's own corners and fade in alpha.
+    #[test]
+    fn projectile_billboards_core_plus_trail() {
+        let pr = rcce_client::world::Projectile {
+            x: 0.0,
+            y: 10.0,
+            z: 0.0,
+            target_rid: 0,
+            tx: 0.0,
+            ty: 10.0,
+            tz: 100.0, // flying toward +z
+            homing: false,
+            speed: 40.0,
+        };
+        let mut out = Vec::new();
+        projectile_billboards(std::slice::from_ref(&pr), [0.0, 10.0, -30.0], [0.0, 10.0, 0.0], &mut out);
+        assert_eq!(out.len(), 7 * 6, "1 core + 6 trail quads");
+        // The last 6 verts are the bright core orb (drawn last); its centre is the
+        // projectile head, so the quad's vertices straddle (0,10,0).
+        let core = &out[36..42];
+        let cx = core.iter().map(|v| v.pos[0]).sum::<f32>() / 6.0;
+        let cy = core.iter().map(|v| v.pos[1]).sum::<f32>() / 6.0;
+        let cz = core.iter().map(|v| v.pos[2]).sum::<f32>() / 6.0;
+        assert!(cx.abs() < 1e-3 && (cy - 10.0).abs() < 1e-3 && cz.abs() < 1e-3, "core centred at head: {cx},{cy},{cz}");
+        assert!((core[0].color[3] - 1.0).abs() < 1e-6, "core is full alpha");
+        // Trail samples sit behind the head (−z, since flight is +z) and are fainter.
+        let first_trail = &out[0..6];
+        let tz = first_trail.iter().map(|v| v.pos[2]).sum::<f32>() / 6.0;
+        assert!(tz < -0.4, "first trail sample is behind the head (−z): {tz}");
+        assert!(first_trail[0].color[3] < 1.0, "trail is fainter than the core");
     }
 
     // A LOD terrain patch (grid N=2) builds a (N+1)² vertex grid with 2 triangles
