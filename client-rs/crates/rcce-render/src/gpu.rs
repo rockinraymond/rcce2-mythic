@@ -753,22 +753,25 @@ struct VO { @builtin(position) pos: vec4<f32>, @location(0) ndc: vec2<f32> };
     let tv = 1.0 - sky_t;                                // texture v (horizon→1, up→0)
     let grad = mix(sky.bottom.rgb, sky.top.rgb, sky_t);
     var col = grad;
-    // Night dimming for the textured sky + clouds (0 by day → unchanged).
-    let sky_dim = 1.0 - 0.78 * sky.params2.y;
+    // The daytime sky texture + clouds FADE OUT as night falls (cross-fading to
+    // the dark gradient + stars), like Blitz — instead of just dimming, which left
+    // bright cloud bands in the night sky. `day_vis` = 1 by day → 0 at deep night
+    // (the inverse of the star/night factor).
+    let day_vis = 1.0 - sky.params2.y;
     // Fade the texture out very near the zenith so the spherical pole pinch isn't
     // visible when looking straight up (the gradient takes over there).
     let zfade = 1.0 - smoothstep(0.86, 1.0, ray.y);
     if (sky.params.x >= 0.5) {
         let uv = vec2<f32>(az + sky.params.y, tv);
-        let tex = textureSample(skytex, skysamp, uv).rgb * sky_dim;
-        let h = smoothstep(0.0, 0.30, sky_t) * zfade;
+        let tex = textureSample(skytex, skysamp, uv).rgb;
+        let h = smoothstep(0.0, 0.30, sky_t) * zfade * day_vis;
         col = mix(grad, tex, h);
     }
     if (sky.params.z >= 0.5) {
         let cuv = vec2<f32>(az + sky.params.w, tv);
         let c = textureSample(cloudtex, cloudsamp, cuv);
-        let fade = smoothstep(0.12, 0.45, sky_t) * zfade;
-        col = mix(col, c.rgb * sky_dim, c.a * fade);
+        let fade = smoothstep(0.12, 0.45, sky_t) * zfade * day_vis;
+        col = mix(col, c.rgb, c.a * fade);
     }
     if (sky.params2.x >= 0.5 && sky.params2.y > 0.01) {
         // Stars (additive), composited after clouds.
