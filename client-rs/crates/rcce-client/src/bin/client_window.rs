@@ -6188,6 +6188,22 @@ impl App {
                 }
             }
         }
+        // Headless vitals self-test: inject Health + Energy (attr 1) values so
+        // both vital bars render with their numeric "cur/max" + name. No-op unless
+        // RCCE_VITALSTEST=<frame> is set.
+        if let Ok(vt) = std::env::var("RCCE_VITALSTEST") {
+            if let Ok(at) = vt.parse::<u64>() {
+                if self.frames == at {
+                    if let Some(net) = self.net.as_mut() {
+                        net.world.me_health = 85;
+                        net.world.me_health_max = 100;
+                        net.world.me_attributes.insert(0, (85, 100)); // Health
+                        net.world.me_attributes.insert(1, (50, 80)); // Energy
+                    }
+                    println!("[vitalstest] frame {} injected Health 85/100 + Energy 50/80", self.frames);
+                }
+            }
+        }
         // Headless buff self-test: inject status effects (two with real icon
         // textures borrowed from item thumbnails, one without) so the buff icons +
         // name-pill fallback are capturable. No-op unless RCCE_BUFFTEST=<frame>.
@@ -6867,9 +6883,17 @@ impl App {
                         let col = [a.rgb[0] as f32 / 255.0, a.rgb[1] as f32 / 255.0, a.rgb[2] as f32 / 255.0, 1.0];
                         overlay.rect(vx - 1.0, vy - 1.0, vw + 2.0, vh + 2.0, [0.0, 0.0, 0.0, 0.6]);
                         overlay.bar(vx, vy, vw, vh, frac, col);
-                        if i == 0 {
-                            let s = format!("{}/{}", val as i32, max as i32);
-                            overlay.text_shadow(vx + 3.0, vy + vh * 0.5 - 4.0, 1.0, &s, white);
+                        // Numeric "cur/max" on every vital bar (Energy/mana too, not
+                        // just Health) — Blitz shows the value on each. The attribute
+                        // name (Health/Energy/…) right-aligned when it fits.
+                        let s = format!("{}/{}", val as i32, max as i32);
+                        overlay.text_shadow(vx + 3.0, vy + vh * 0.5 - 4.0, 1.0, &s, white);
+                        if let Some(name) = store.attribute_name(i) {
+                            let nw = rcce_render::font::text_width(name, 1.0);
+                            let sw_ = rcce_render::font::text_width(&s, 1.0);
+                            if nw + sw_ + 12.0 < vw {
+                                overlay.text_shadow(vx + vw - nw - 3.0, vy + vh * 0.5 - 4.0, 1.0, name, [0.85, 0.85, 0.9, 0.9]);
+                            }
                         }
                     }
                 } else {
