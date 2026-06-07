@@ -6502,8 +6502,16 @@ impl App {
                 let dimc = [0.6, 0.6, 0.6, 1.0];
                 let (pw, ph) = (320.0, 300.0);
                 let (px, py) = ((sw - pw - 40.0).round(), ((sh - ph) * 0.5).round());
-                overlay.rect(px, py, pw, ph, [0.07, 0.06, 0.05, 0.92]);
-                overlay.rect(px, py, pw, 22.0, [0.28, 0.22, 0.12, 0.96]);
+                // Leather skin to match the other windows (ItemShop.png is a wide
+                // two-column layout that wouldn't fit this tall list, so reuse the
+                // generic InventoryBG); flat rect fallback.
+                if overlay.has_texture("gui:InventoryBG") {
+                    overlay.image(px, py, pw, ph, "gui:InventoryBG", [1.0, 1.0, 1.0, 1.0]);
+                    overlay.rect(px, py, pw, 22.0, [0.0, 0.0, 0.0, 0.45]);
+                } else {
+                    overlay.rect(px, py, pw, ph, [0.07, 0.06, 0.05, 0.92]);
+                    overlay.rect(px, py, pw, 22.0, [0.28, 0.22, 0.12, 0.96]);
+                }
                 let title = match trade.kind {
                     TradeKind::Npc => "Vendor",
                     TradeKind::Scenery => "Container",
