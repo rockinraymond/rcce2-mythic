@@ -342,6 +342,9 @@ struct App {
     show_party: bool,
     /// Spellbook window visible (K key) — SPL-1; lists `World.known_spells`.
     show_spellbook: bool,
+    /// First visible spellbook row (mouse-wheel scroll), so a player with more
+    /// known spells than the window fits can reach them all. Clamped each frame.
+    spellbook_scroll: usize,
     /// SPL-4 memorise: the in-progress `(known_spell index, start elapsed)` while
     /// the progress bar fills, and the set of memorised known-spell indices.
     memorising: Option<(usize, f32)>,
@@ -527,6 +530,7 @@ impl App {
             show_quests: false,
             show_party: false,
             show_spellbook: false,
+            spellbook_scroll: 0,
             memorising: None,
             memorised: std::collections::HashSet::new(),
             spell_hitboxes: Vec::new(),
@@ -839,6 +843,13 @@ fn vendor_window_rect(sw: f32, sh: f32) -> (f32, f32, f32, f32) {
 fn point_in_vendor(cx: f32, cy: f32, sw: f32, sh: f32) -> bool {
     let (px, py, pw, ph) = vendor_window_rect(sw, sh);
     cx >= px && cx < px + pw && cy >= py && cy < py + ph
+}
+
+/// Spellbook window rect `(x, y, w, h)` — right of centre, vertically centred.
+/// Shared by the render and the mouse-wheel scroll hit-test.
+fn spellbook_rect(sw: f32, sh: f32) -> (f32, f32, f32, f32) {
+    let (kwd, khd) = (240.0f32, 240.0f32);
+    (sw * 0.5 + 12.0, (sh - khd) * 0.5, kwd, khd)
 }
 
 /// The vendor "Confirm" button rect `(x, y, w, h)` — bottom of the vendor window.
@@ -1223,6 +1234,13 @@ fn next_target(current: Option<u16>, sorted: &[u16]) -> Option<u16> {
 /// shared by the renderer and unit-tested for the scrollback window (CHAT-3).
 fn visible_chat(lines: &[(String, [f32; 4])], skip: usize, max: usize) -> Vec<&(String, [f32; 4])> {
     lines.iter().rev().skip(skip).take(max).collect()
+}
+
+/// Clamp a list scroll offset so it never scrolls past the last full page:
+/// `min(scroll, total - visible)` (0 when everything fits). Pure — shared by the
+/// spellbook render and unit-tested.
+fn clamp_scroll(scroll: usize, total: usize, visible: usize) -> usize {
+    scroll.min(total.saturating_sub(visible))
 }
 
 /// Per-frame combat decision for the auto-attack loop (CBT-1): chase if out of
@@ -3030,7 +3048,26 @@ impl ApplicationHandler for App {
                     MouseScrollDelta::LineDelta(_, y) => y,
                     MouseScrollDelta::PixelDelta(p) => (p.y as f32) / 40.0,
                 };
-                if lines != 0.0 {
+                // With the spellbook open and the cursor over it, the wheel scrolls
+                // the known-spell list instead of zooming the camera.
+                let over_spellbook = self.show_spellbook
+                    && self
+                        .gfx
+                        .as_ref()
+                        .map(|g| {
+                            let (sw, sh) = (g.config.width as f32, g.config.height as f32);
+                            let (x, y, w, h) = spellbook_rect(sw, sh);
+                            let (cx, cy) = self.cursor;
+                            cx >= x && cx < x + w && cy >= y && cy < y + h
+                        })
+                        .unwrap_or(false);
+                if over_spellbook {
+                    if lines > 0.0 {
+                        self.spellbook_scroll = self.spellbook_scroll.saturating_sub(1);
+                    } else if lines < 0.0 {
+                        self.spellbook_scroll += 1; // clamped in the render
+                    }
+                } else if lines != 0.0 {
                     self.cam_dist = zoom_step(self.cam_dist, -lines * 1.5);
                 }
             }
@@ -6179,6 +6216,24 @@ impl App {
                 }
             }
         }
+        // Headless spellbook-scroll self-test: inject 18 known spells, open the
+        // window, and scroll down so the range indicator + later spells + the up
+        // affordance are capturable. No-op unless RCCE_SPELLSCROLL=<frame> is set.
+        if let Ok(sv) = std::env::var("RCCE_SPELLSCROLL") {
+            if let Ok(at) = sv.parse::<u64>() {
+                if self.frames == at {
+                    if let Some(net) = self.net.as_mut() {
+                        use rcce_client::world::KnownSpell;
+                        net.world.known_spells = (0..18)
+                            .map(|i| KnownSpell { id: 100 + i as u16, name: format!("Spell {:02}", i + 1), level: (i % 5 + 1) as u16 })
+                            .collect();
+                    }
+                    self.show_spellbook = true;
+                    self.spellbook_scroll = 5; // show spells 6..15
+                    println!("[spellscroll] frame {} injected 18 spells, scrolled to 5", self.frames);
+                }
+            }
+        }
         // Headless memorise self-test (SPL-4): inject known spells, open the
         // spellbook, mark one memorised, and start a memorise on another so the
         // progress bar + memorised dot are capturable. No-op unless
@@ -6988,8 +7043,7 @@ impl App {
                 // panel; scrolls nothing yet (list is short in practice).
                 self.spell_hitboxes.clear();
                 if self.show_spellbook {
-                    let (kwd, khd) = (240.0f32, 240.0f32);
-                    let (kxp, kyp) = (sw * 0.5 + 12.0, (sh - khd) * 0.5);
+                    let (kxp, kyp, kwd, khd) = spellbook_rect(sw, sh);
                     if overlay.has_texture("gui:AbilitiesBG") {
                         overlay.image(kxp, kyp, kwd, khd, "gui:AbilitiesBG", [1.0, 1.0, 1.0, 1.0]);
                         overlay.rect(kxp, kyp, kwd, 22.0, [0.0, 0.0, 0.0, 0.45]);
@@ -6997,15 +7051,28 @@ impl App {
                         overlay.rect(kxp, kyp, kwd, khd, [0.05, 0.06, 0.10, 0.94]);
                         overlay.rect(kxp, kyp, kwd, 22.0, [0.18, 0.15, 0.28, 0.96]);
                     }
+                    // How many rows fit between the header and the footer (memorise
+                    // bar / hint). Scroll lets a long known-spell list be reached in
+                    // full (mouse wheel over the window).
+                    const SPELL_ROWS: usize = 10;
+                    let total = w.known_spells.len();
+                    let scroll = clamp_scroll(self.spellbook_scroll, total, SPELL_ROWS);
+                    self.spellbook_scroll = scroll;
+                    let shown = format!("{}", total);
                     overlay.text_shadow(kxp + 10.0, kyp + 6.0, 1.3, "Spellbook", white);
+                    if total > SPELL_ROWS {
+                        // Range indicator (e.g. "3-12 / 18") + close hint.
+                        overlay.text(kxp + 86.0, kyp + 8.0, 1.0, &format!("{}-{} / {}", scroll + 1, (scroll + SPELL_ROWS).min(total), shown), [0.6, 0.7, 0.85, 1.0]);
+                    }
                     overlay.text(kxp + kwd - 78.0, kyp + 7.0, 1.0, "[K] close", [0.6, 0.6, 0.6, 1.0]);
                     let mut ky2 = kyp + 30.0;
                     if w.known_spells.is_empty() {
                         overlay.text(kxp + 10.0, ky2, 1.0, "No spells known.", [0.7, 0.7, 0.7, 1.0]);
                     }
                     // Each row is clickable to memorise the spell (SPL-4); a green
-                    // dot marks the memorised ones.
-                    for (i, sp) in w.known_spells.iter().take(11).enumerate() {
+                    // dot marks the memorised ones. `i` is the ABSOLUTE known index
+                    // (scroll offset applied) so memorise/drag use the right spell.
+                    for (i, sp) in w.known_spells.iter().enumerate().skip(scroll).take(SPELL_ROWS) {
                         let memorised = self.memorised.contains(&i);
                         let name_col = if memorised { [0.5, 1.0, 0.6, 1.0] } else { [0.7, 0.85, 1.0, 1.0] };
                         if memorised {
@@ -7016,6 +7083,13 @@ impl App {
                         overlay.text(kxp + kwd - 64.0, ky2, 1.0, &rank, [0.85, 0.8, 0.6, 1.0]);
                         self.spell_hitboxes.push((kxp + 2.0, ky2 - 2.0, kwd - 4.0, 15.0, i));
                         ky2 += 16.0;
+                    }
+                    // Up/down "more" affordances when scrolled.
+                    if scroll > 0 {
+                        overlay.text(kxp + kwd - 18.0, kyp + 30.0, 1.0, "▲", [0.7, 0.8, 1.0, 1.0]);
+                    }
+                    if scroll + SPELL_ROWS < total {
+                        overlay.text(kxp + kwd - 18.0, kyp + 30.0 + SPELL_ROWS as f32 * 16.0 - 14.0, 1.0, "▼", [0.7, 0.8, 1.0, 1.0]);
                     }
                     // Memorise progress bar (SPL-4) while a memorise is in flight.
                     if let Some((idx, start)) = self.memorising {
@@ -8334,6 +8408,20 @@ mod tests {
         // Unknown attacker name falls back.
         let (l, _) = compose_damage_line(me, 99, 2, me, name);
         assert_eq!(l, "Someone hits you for 2 damage!");
+    }
+
+    #[test]
+    fn spellbook_scroll_clamps() {
+        // Everything fits → no scroll regardless of the requested offset.
+        assert_eq!(clamp_scroll(0, 8, 10), 0);
+        assert_eq!(clamp_scroll(5, 8, 10), 0);
+        // 18 spells, 10 visible → last full page starts at 8.
+        assert_eq!(clamp_scroll(0, 18, 10), 0);
+        assert_eq!(clamp_scroll(3, 18, 10), 3);
+        assert_eq!(clamp_scroll(8, 18, 10), 8);
+        assert_eq!(clamp_scroll(99, 18, 10), 8); // can't scroll past the end
+        // Exactly one page.
+        assert_eq!(clamp_scroll(4, 10, 10), 0);
     }
 
     // Sound options master-volume step clamps to [0,1].
