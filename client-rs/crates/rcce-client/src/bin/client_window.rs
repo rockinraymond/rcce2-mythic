@@ -190,9 +190,10 @@ enum HotbarEntry {
 enum DragSrc {
     Spellbook(usize),
     Slot(usize),
-    /// An inventory item slot. The carried `HotbarEntry::Item(id)` is all the drop
-    /// needs (the bag isn't modified), so the source slot isn't retained.
-    Inventory,
+    /// An inventory item slot (0..45). The source slot is retained so a drop onto
+    /// another inventory slot can equip / move / unequip (dropping onto the hotbar
+    /// instead just copies the carried `HotbarEntry::Item`).
+    Inventory(u8),
 }
 
 /// An active left-button hotbar drag: the entry being carried, its origin, the
@@ -742,6 +743,30 @@ fn effective_action_bar(
         }
     }
     out
+}
+
+/// Destination slot for an inventory drag from slot `from` onto slot `to`.
+/// Inventory slots 0..13 are the equipment column, 14.. the backpack. Dropping a
+/// backpack item (`from >= 14`) into the equipment column (`to < 14`) equips it to
+/// the item's *proper* slot `equip_slot` (so a sword dropped anywhere on the gear
+/// column lands in the weapon slot); `None` equip_slot (not equippable) → no move.
+/// Any other drop is a direct swap to `to`. Returns `None` for a no-op (same slot).
+/// Pure, so the equip-vs-move decision is unit-testable without a live world.
+fn resolve_inventory_dest(from: u8, to: u8, equip_slot: Option<u8>) -> Option<u8> {
+    const BACKPACK_START: u8 = 14;
+    if from == to {
+        return None;
+    }
+    let dest = if to < BACKPACK_START && from >= BACKPACK_START {
+        equip_slot?
+    } else {
+        to
+    };
+    if dest == from {
+        None
+    } else {
+        Some(dest)
+    }
 }
 
 /// Index of the action-bar spell slot (0..=11) whose rect contains `(cx, cy)`.
@@ -3468,7 +3493,7 @@ impl App {
                     .as_ref()
                     .and_then(|n| n.world.me_inventory.values().find(|it| it.slot == slot as u8).map(|it| it.item_id))
                 {
-                    self.drag = Some(SpellDrag { entry: HotbarEntry::Item(item_id), src: DragSrc::Inventory, start: (cx, cy), moved: false });
+                    self.drag = Some(SpellDrag { entry: HotbarEntry::Item(item_id), src: DragSrc::Inventory(slot as u8), start: (cx, cy), moved: false });
                     return true;
                 }
             }
@@ -3485,8 +3510,8 @@ impl App {
 
     /// Left-button release: finish the in-flight drag (if any). A drag that never
     /// moved is treated as a click (memorise the row / use the slot); a real drag
-    /// drops onto the action-bar slot under the cursor, or clears the source slot
-    /// when released off the bar.
+    /// drops onto the action-bar slot under the cursor (assign), an inventory slot
+    /// (equip / move / unequip), or nowhere (clear a bar slot / cancel).
     fn end_drag(&mut self) {
         let Some(drag) = self.drag.take() else { return };
         let Some(gfx) = self.gfx.as_ref() else { return };
@@ -3497,31 +3522,71 @@ impl App {
             match drag.src {
                 DragSrc::Spellbook(idx) => self.toggle_memorise(idx),
                 DragSrc::Slot(i) => self.use_slot(i),
-                DragSrc::Inventory => { /* click on a bag slot — no-op */ }
+                DragSrc::Inventory(_) => { /* click on a bag slot — no-op */ }
             }
             return;
         }
-        let target = spell_slot_at(cx, cy, sw, sh);
-        match (drag.src, target) {
-            (_, Some(slot)) => {
-                self.materialize_action_bar();
-                // Move semantics: dragging a bar slot onto another swaps the
-                // source out (so an entry isn't duplicated by a rearrange).
-                if let DragSrc::Slot(from) = drag.src {
-                    if from != slot {
-                        self.action_bar[from] = None;
-                    }
+        // Dropped onto the hotbar → assign / rearrange (covers every source).
+        if let Some(slot) = spell_slot_at(cx, cy, sw, sh) {
+            self.materialize_action_bar();
+            // Move semantics: dragging a bar slot onto another swaps the source out
+            // (so an entry isn't duplicated by a rearrange).
+            if let DragSrc::Slot(from) = drag.src {
+                if from != slot {
+                    self.action_bar[from] = None;
                 }
-                self.action_bar[slot] = Some(drag.entry);
-                self.persist_action_bar();
             }
-            (DragSrc::Slot(from), None) => {
-                // Dragged a slot off the bar: clear it (un-assign).
+            self.action_bar[slot] = Some(drag.entry);
+            self.persist_action_bar();
+            return;
+        }
+        // Not on the hotbar.
+        match drag.src {
+            DragSrc::Slot(from) => {
+                // Dragged a bar slot off the bar: clear it (un-assign).
                 self.materialize_action_bar();
                 self.action_bar[from] = None;
                 self.persist_action_bar();
             }
-            (DragSrc::Spellbook(_) | DragSrc::Inventory, None) => { /* dropped nowhere — cancel */ }
+            DragSrc::Inventory(from) => {
+                // Dropped on an inventory slot → equip / move / unequip.
+                if self.show_inventory {
+                    let to = self
+                        .store
+                        .as_ref()
+                        .and_then(|s| s.interface())
+                        .and_then(|iface| inventory_slot_at(cx, cy, iface.inventory_window, &iface.inventory_buttons, sw, sh));
+                    if let Some(to) = to {
+                        self.inventory_move(from, to as u8);
+                    }
+                }
+            }
+            DragSrc::Spellbook(_) => { /* dropped nowhere — cancel */ }
+        }
+    }
+
+    /// Move/equip the item in inventory slot `from` onto slot `to` (drag-drop): a
+    /// `P_InventoryUpdate` swap. Dropping a backpack item into the equipment region
+    /// equips it to the item's *proper* slot (matching Shift+equip), so a sword
+    /// dropped anywhere on the gear column lands in the weapon slot; a non-equippable
+    /// item dropped there is ignored. Any other drop is a direct slot swap (backpack
+    /// rearrange, or unequip when `from` is an equipment slot and `to` is a bag slot).
+    fn inventory_move(&mut self, from: u8, to: u8) {
+        let item_id = self
+            .net
+            .as_ref()
+            .and_then(|n| n.world.me_inventory.values().find(|it| it.slot == from).map(|it| it.item_id));
+        let Some(item_id) = item_id else { return };
+        let equip_slot = self.store.as_ref().and_then(|s| s.item_equip_slot(item_id));
+        let Some(dest) = resolve_inventory_dest(from, to, equip_slot) else { return };
+        let rid = self.net.as_ref().map(|n| n.world.my_runtime_id).unwrap_or(0);
+        if let Some(net) = self.net.as_mut() {
+            net.transport.send(
+                net.peer,
+                rcce_net::packet_id::INVENTORY_UPDATE,
+                &rcce_client::net::inv_move_packet(rid, from, dest, 0, true),
+                true,
+            );
         }
     }
 
@@ -7942,6 +8007,24 @@ mod tests {
 
         // No sheet → empty bar stays empty (no panic).
         assert_eq!(effective_action_bar(&empty, None), [None; 12]);
+    }
+
+    #[test]
+    fn inventory_drag_dest_resolution() {
+        // Backpack (20) onto the equipment column (slot 2) equips to the item's
+        // proper slot (here weapon = 0), regardless of which gear slot was hit.
+        assert_eq!(resolve_inventory_dest(20, 2, Some(0)), Some(0));
+        // A non-equippable item dropped on the gear column → no move.
+        assert_eq!(resolve_inventory_dest(20, 2, None), None);
+        // Backpack → backpack is a direct swap to the dropped slot.
+        assert_eq!(resolve_inventory_dest(20, 31, Some(0)), Some(31));
+        // Equipment (0) → backpack (25) unequips to that bag slot (direct).
+        assert_eq!(resolve_inventory_dest(0, 25, Some(0)), Some(25));
+        // Dropping back onto the same slot is a no-op.
+        assert_eq!(resolve_inventory_dest(20, 20, Some(0)), None);
+        // Equipment → equipment is a direct swap (the equip-resolve only applies
+        // to a backpack source), e.g. weapon slot 0 onto shield slot 1.
+        assert_eq!(resolve_inventory_dest(0, 1, Some(0)), Some(1));
     }
 
     #[test]
