@@ -424,8 +424,12 @@ struct App {
     /// live area change (player warp) reloads the new zone's scenery + sky.
     data_root: String,
     loaded_zone: String,
-    /// GPU linear-blend skinning for actor bodies (RCCE_GPUSKIN). Off by default
-    /// (the CPU posed-meshes path); attachments stay CPU either way.
+    /// GPU linear-blend skinning for actor bodies. ON by default (the faster
+    /// path: a static skinned vbuf per appearance + a small per-frame bone-
+    /// palette uniform, vs. the CPU path that re-skins and re-uploads vertices
+    /// on every pose change). Set `RCCE_CPUSKIN` to force the legacy CPU path.
+    /// Per-actor it still falls back to CPU when an appearance `can_skin` check
+    /// fails; attachments stay CPU either way.
     gpu_skin: bool,
     /// True once the menu has replaced the startup gameplay-zone geometry with
     /// the dedicated menu scene (void + posed character). Cleared so entering
@@ -604,7 +608,9 @@ impl App {
             playable: Vec::new(),
             data_root: String::new(),
             loaded_zone: String::new(),
-            gpu_skin: std::env::var("RCCE_GPUSKIN").is_ok(),
+            // GPU skinning is the default; RCCE_CPUSKIN forces the legacy CPU
+            // path (RCCE_GPUSKIN is still accepted as an explicit no-op opt-in).
+            gpu_skin: std::env::var_os("RCCE_CPUSKIN").is_none(),
         }
     }
 }
