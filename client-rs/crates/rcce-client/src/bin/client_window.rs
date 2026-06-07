@@ -1524,6 +1524,7 @@ fn resolve_data_root() -> String {
 fn register_gui_textures(overlay: &mut rcce_render::Overlay, device: &wgpu::Device, queue: &wgpu::Queue, data_root: &str) {
     let gui = std::path::Path::new(data_root).join("Textures").join("GUI");
     let files = [
+        // Function-button icons (bottom-right cluster).
         ("gui:Chat", "Chat.bmp"),
         ("gui:Map", "Map.bmp"),
         ("gui:Inventory", "Inventory.bmp"),
@@ -1534,6 +1535,29 @@ fn register_gui_textures(overlay: &mut rcce_render::Overlay, device: &wgpu::Devi
         ("gui:Menu", "Menu.bmp"),
         ("gui:EmptySlot", "EmptySlot.bmp"),
         ("gui:XP", "Action Bar XP.bmp"),
+        // Window background skins (textured leather/parchment) — replace the flat
+        // dark panels so the HUD windows match Blitz's skinned look.
+        ("gui:InventoryBG", "InventoryBG.png"),
+        ("gui:CharBG", "CharBG.png"),
+        ("gui:MenuBG", "MenuBG.png"),
+        ("gui:QuestLogBG", "QuestLogBG.png"),
+        ("gui:PartyBG", "PartyBG.png"),
+        ("gui:AbilitiesBG", "AbilitiesBG.png"),
+        ("gui:HelpBG", "HelpBG.png"),
+        ("gui:ToolTip", "ToolTip.png"),
+        // Action-bar frame + coin + equipment-slot placeholder icons.
+        ("gui:ActionBar", "Action Bar.bmp"),
+        ("gui:Coin", "Coin.bmp"),
+        ("gui:slot:Hat", "Hat.bmp"),
+        ("gui:slot:Amulet", "Amulet.bmp"),
+        ("gui:slot:Chest", "Chest.bmp"),
+        ("gui:slot:Hand", "Hand.bmp"),
+        ("gui:slot:Ring", "Ring.bmp"),
+        ("gui:slot:Belt", "Belt.bmp"),
+        ("gui:slot:Legs", "Legs.bmp"),
+        ("gui:slot:Feet", "Feet.bmp"),
+        ("gui:slot:Shield", "Shield.bmp"),
+        ("gui:slot:Backpack", "Backpack.bmp"),
     ];
     let mut ok = 0;
     for (key, name) in files {
