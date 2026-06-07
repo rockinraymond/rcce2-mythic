@@ -81,15 +81,24 @@ fi
 
 # Drop the .ico flag on macOS until BlitzForge supports native icon embedding.
 # See https://github.com/RydeTec/blitz-forge — fix/custom-exe-icons.
+# Only true Windows bash shells (MSYS/MinGW/Cygwin) emit .exe binaries and
+# embed the .ico. macOS AND Linux produce suffix-less binaries and don't embed
+# a Windows icon — previously everything non-Darwin was treated as Windows,
+# which broke the Linux build (it looked for client-window.exe).
+IS_WINDOWS=0
+case "$(uname -s)" in
+  MINGW*|MSYS*|CYGWIN*) IS_WINDOWS=1 ;;
+esac
+
 ICON_FLAG=()
-if [[ "$(uname -s)" != "Darwin" && -f "${ROOTDIR}/res/Icon.ico" ]]; then
+if [[ "$IS_WINDOWS" == "1" && -f "${ROOTDIR}/res/Icon.ico" ]]; then
   ICON_FLAG=(-n "${ROOTDIR}/res/Icon.ico")
 fi
 
-# Match compile.bat output names on macOS: drop the .exe extension so that
+# Match compile.bat output names on macOS/Linux: drop the .exe extension so that
 # `Project Manager` (no suffix) launches as the README documents.
 EXE_SUFFIX=""
-if [[ "$(uname -s)" != "Darwin" ]]; then
+if [[ "$IS_WINDOWS" == "1" ]]; then
   EXE_SUFFIX=".exe"
 fi
 
