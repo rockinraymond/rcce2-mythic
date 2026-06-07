@@ -350,9 +350,12 @@ struct App {
     /// known spells than the window fits can reach them all. Clamped each frame.
     spellbook_scroll: usize,
     /// SPL-4 memorise: the in-progress `(known_spell index, start elapsed)` while
-    /// the progress bar fills, and the set of memorised known-spell indices.
+    /// the progress bar fills, and the set of memorised spell IDs. Keyed by spell
+    /// id (not known-list index) so it's the single live source of truth shared by
+    /// the spellbook (green dot), the spellbook drag, and the action-bar auto-fill;
+    /// populated at login from the sheet's memorised flags (`enter_outcome`).
     memorising: Option<(usize, f32)>,
-    memorised: std::collections::HashSet<usize>,
+    memorised: std::collections::HashSet<u16>,
     /// Spellbook row hitboxes `(x,y,w,h, known index)`, rebuilt as the panel draws.
     spell_hitboxes: Vec<(f32, f32, f32, f32, usize)>,
     /// Staged vendor transaction (Blitz batches a whole shop visit into ONE
@@ -834,13 +837,18 @@ fn inv_action_button_at(
 fn effective_action_bar(
     action_bar: &[Option<HotbarEntry>; 12],
     sheet: Option<&rcce_client::fetch::CharacterSheet>,
+    memorised: &std::collections::HashSet<u16>,
 ) -> [Option<HotbarEntry>; 12] {
     if action_bar.iter().any(|s| s.is_some()) {
         return *action_bar;
     }
     let mut out = [None; 12];
     if let Some(sheet) = sheet {
-        for (i, sp) in sheet.spells.iter().filter(|s| s.memorised).take(12).enumerate() {
+        // Auto-fill from the LIVE memorised set (keyed by spell id), in the sheet's
+        // spell order, taking the rich info (id) from the sheet. Using the live set
+        // — not the sheet's login `memorised` flag — keeps the auto-fill in sync
+        // with the spellbook as spells are memorised/unmemorised in-session.
+        for (i, sp) in sheet.spells.iter().filter(|s| memorised.contains(&s.id)).take(12).enumerate() {
             out[i] = Some(HotbarEntry::Spell(sp.id));
         }
     }
@@ -3254,6 +3262,14 @@ impl App {
             }
             self.action_bar = bar;
         }
+        // Seed the live memorised set (by spell id) from the sheet's login flags,
+        // so the spellbook's memorised dots and the hotbar auto-fill agree from the
+        // first frame (they share `self.memorised` from here on).
+        self.memorised = outcome
+            .sheet
+            .as_ref()
+            .map(|s| s.spells.iter().filter(|sp| sp.memorised).map(|sp| sp.id).collect())
+            .unwrap_or_default();
         self.sheet = outcome.sheet;
         self.net = Some(Net { transport, world, peer: outcome.peer, updates: 0, env_requested: false });
         self.mode = Mode::InWorld;
@@ -3526,10 +3542,16 @@ impl App {
     /// memorise progress bar. `known_num` is the spell's index in the known list
     /// (the server applies it against its `KnownSpells[]` when `RequireMemorise`).
     fn toggle_memorise(&mut self, idx: usize) {
+        // The spellbook row `idx` indexes the live known-spell list; the memorised
+        // SET is keyed by spell id. The wire packet still carries the known-list
+        // index (the server applies it against its `KnownSpells[]`).
+        let Some(id) = self.net.as_ref().and_then(|n| n.world.known_spells.get(idx)).map(|s| s.id) else {
+            return;
+        };
         let now = self.start.elapsed().as_secs_f32();
-        let already = self.memorised.contains(&idx);
+        let already = self.memorised.contains(&id);
         let packet = if already {
-            self.memorised.remove(&idx);
+            self.memorised.remove(&id);
             self.memorising = None;
             rcce_client::net::unmemorise_packet(idx as u16)
         } else {
@@ -3539,7 +3561,7 @@ impl App {
         if let Some(net) = self.net.as_mut() {
             net.transport.send(net.peer, rcce_net::packet_id::SPELL_UPDATE, &packet, true);
         }
-        println!("[memorise] idx {idx} {}", if already { "UNMEMORISE sent" } else { "MEMORISE sent" });
+        println!("[memorise] idx {idx} id {id} {}", if already { "UNMEMORISE sent" } else { "MEMORISE sent" });
     }
 
     /// The effective action-bar contents: the explicit `action_bar` assignments
@@ -3547,7 +3569,7 @@ impl App {
     /// first 12 memorised spells (the pre-drag-drop default). One source of truth
     /// for both the bar render and casting so they can never disagree.
     fn action_bar_ids(&self) -> [Option<HotbarEntry>; 12] {
-        effective_action_bar(&self.action_bar, self.sheet.as_ref())
+        effective_action_bar(&self.action_bar, self.sheet.as_ref(), &self.memorised)
     }
 
     /// Promote the current auto-filled view into explicit `action_bar` slots, so
@@ -3676,8 +3698,8 @@ impl App {
                 .find(|&&(x, y, w, h, _)| cx >= x && cx <= x + w && cy >= y && cy <= y + h)
                 .map(|&(_, _, _, _, idx)| idx);
             if let Some(idx) = row {
-                if self.memorised.contains(&idx) {
-                    if let Some(id) = self.net.as_ref().and_then(|n| n.world.known_spells.get(idx)).map(|s| s.id) {
+                if let Some(id) = self.net.as_ref().and_then(|n| n.world.known_spells.get(idx)).map(|s| s.id) {
+                    if self.memorised.contains(&id) {
                         self.drag = Some(SpellDrag { entry: HotbarEntry::Spell(id), src: DragSrc::Spellbook(idx), start: (cx, cy), moved: false });
                         return true;
                     }
@@ -5609,10 +5631,13 @@ impl App {
             } else {
                 None
             };
-            // SPL-4: complete a memorise once its progress bar fills.
+            // SPL-4: complete a memorise once its progress bar fills (insert the
+            // spell id — the memorised set is id-keyed).
             if let Some((idx, start)) = self.memorising {
                 if memorise_progress(start, elapsed) >= 1.0 {
-                    self.memorised.insert(idx);
+                    if let Some(id) = net.world.known_spells.get(idx).map(|s| s.id) {
+                        self.memorised.insert(id);
+                    }
                     self.memorising = None;
                 }
             }
@@ -6421,7 +6446,7 @@ impl App {
                         }
                     }
                     self.show_spellbook = true;
-                    self.memorised.insert(0); // Fireball already memorised
+                    self.memorised.insert(12); // Fireball (id 12) already memorised
                     // Inline (not toggle_memorise): self.gfx is mutably borrowed in
                     // this scope, so only disjoint-field access is legal here.
                     self.memorising = Some((1, self.start.elapsed().as_secs_f32()));
@@ -6467,7 +6492,7 @@ impl App {
                             KnownSpell { id: 21, name: "Lightning Bolt".into(), level: 1 },
                         ];
                     }
-                    self.memorised = [0usize, 1, 2].into_iter().collect();
+                    self.memorised = [12u16, 7, 21].into_iter().collect(); // ids, not indices
                     self.action_bar = [None; 12];
                     self.action_bar[0] = Some(HotbarEntry::Spell(12)); // Fireball, slot 1
                     self.action_bar[1] = Some(HotbarEntry::Spell(7)); // Heal, slot 2
@@ -6592,6 +6617,39 @@ impl App {
                         ],
                     });
                     println!("[itemmenu] frame {} opened item menu over slot 14", self.frames);
+                }
+            }
+        }
+        // Headless memorise-sync self-test: sheet + known spells + a LIVE memorised
+        // set (ids), action bar left to auto-fill + spellbook open, so the spellbook
+        // dots and the hotbar auto-fill can be checked to agree. No-op unless
+        // RCCE_MEMSYNC=<frame> is set.
+        if let Ok(ms) = std::env::var("RCCE_MEMSYNC") {
+            if let Ok(at) = ms.parse::<u64>() {
+                if self.frames == at {
+                    use rcce_client::fetch::{CharacterSheet, SpellInfo};
+                    use rcce_client::world::KnownSpell;
+                    let mk = |id: u16, name: &str, lvl: u16| SpellInfo {
+                        id, level: lvl, thumb_tex: 0, recharge: 1500, name: name.to_string(),
+                        description: String::new(), memorised: false,
+                    };
+                    self.sheet = Some(CharacterSheet {
+                        spells: vec![mk(12, "Fireball", 3), mk(7, "Heal", 2), mk(21, "Lightning Bolt", 1)],
+                        ..Default::default()
+                    });
+                    if let Some(net) = self.net.as_mut() {
+                        net.world.known_spells = vec![
+                            KnownSpell { id: 12, name: "Fireball".into(), level: 3 },
+                            KnownSpell { id: 7, name: "Heal".into(), level: 2 },
+                            KnownSpell { id: 21, name: "Lightning Bolt".into(), level: 1 },
+                        ];
+                    }
+                    // Fireball + Heal memorised (live set, by id); action bar left
+                    // empty so it auto-fills from the SAME set.
+                    self.memorised = [12u16, 7].into_iter().collect();
+                    self.action_bar = [None; 12];
+                    self.show_spellbook = true;
+                    println!("[memsync] frame {} spellbook + auto-fill share memorised {{12,7}}", self.frames);
                 }
             }
         }
@@ -7281,7 +7339,7 @@ impl App {
                     // dot marks the memorised ones. `i` is the ABSOLUTE known index
                     // (scroll offset applied) so memorise/drag use the right spell.
                     for (i, sp) in w.known_spells.iter().enumerate().skip(scroll).take(SPELL_ROWS) {
-                        let memorised = self.memorised.contains(&i);
+                        let memorised = self.memorised.contains(&sp.id);
                         let name_col = if memorised { [0.5, 1.0, 0.6, 1.0] } else { [0.7, 0.85, 1.0, 1.0] };
                         if memorised {
                             overlay.rect(kxp + 4.0, ky2 + 3.0, 4.0, 4.0, [0.4, 1.0, 0.5, 1.0]);
@@ -7526,8 +7584,9 @@ impl App {
                             } else {
                                 overlay.rect(sx + 4.0, sy, 13.0, 13.0, [0.1, 0.1, 0.16, 0.9]);
                             }
-                            let col = if sp.memorised { [1.0, 0.9, 0.5, 1.0] } else { [0.85, 0.85, 0.9, 1.0] };
-                            let star = if sp.memorised { "*" } else { "" };
+                            let mem = self.memorised.contains(&sp.id);
+                            let col = if mem { [1.0, 0.9, 0.5, 1.0] } else { [0.85, 0.85, 0.9, 1.0] };
+                            let star = if mem { "*" } else { "" };
                             let nm: String = format!("{}{} (L{})", star, sp.name, sp.level).chars().take(24).collect();
                             overlay.text(sx + 20.0, sy + 3.0, 1.0, &nm, col);
                             sy += rowh;
@@ -7800,7 +7859,7 @@ impl App {
                 // 12 spell slots, resolved from the explicit action-bar layout
                 // (drag-drop) or the memorised auto-fill default — one source of
                 // truth shared with the Digit-key / click activate path (`use_slot`).
-                let bar_ids = effective_action_bar(&self.action_bar, self.sheet.as_ref());
+                let bar_ids = effective_action_bar(&self.action_bar, self.sheet.as_ref(), &self.memorised);
                 // The slot under the cursor being dragged-over (drop highlight),
                 // and the source slot of an in-flight bar drag (dim it as it lifts).
                 let drag_target = self.drag.filter(|d| d.moved).and_then(|_| spell_slot_at(self.cursor.0, self.cursor.1, sw, sh));
@@ -7959,7 +8018,7 @@ impl App {
                 }
                 if lines.is_empty() {
                     if let Some(slot) = spell_slot_at(cx, cy, sw, sh) {
-                        match effective_action_bar(&self.action_bar, self.sheet.as_ref()).get(slot).copied().flatten() {
+                        match effective_action_bar(&self.action_bar, self.sheet.as_ref(), &self.memorised).get(slot).copied().flatten() {
                             Some(HotbarEntry::Spell(spell_id)) => {
                                 if let Some(sp) = self.sheet.as_ref().and_then(|s| s.spells.iter().find(|x| x.id == spell_id)) {
                                     lines.push((sp.name.clone(), white));
@@ -8825,19 +8884,25 @@ mod tests {
             description: String::new(),
             memorised: mem,
         };
-        // Sheet with 3 memorised spells (ids 10,30) + 1 un-memorised (20) between.
+        // Sheet lists 3 spells; the LIVE memorised set (ids 10, 30) drives the
+        // auto-fill — the sheet's own `memorised` flag is now ignored, so the bar
+        // tracks in-session memorise changes.
         let sheet = CharacterSheet {
-            spells: vec![sp(10, true), sp(20, false), sp(30, true)],
+            spells: vec![sp(10, false), sp(20, false), sp(30, false)],
             ..Default::default()
         };
+        let mem: std::collections::HashSet<u16> = [10u16, 30].into_iter().collect();
 
-        // All-None bar → auto-fill from the memorised spells (as Spell entries), in
-        // sheet order, with the un-memorised one skipped.
+        // All-None bar → auto-fill from the memorised SET, in sheet order, skipping
+        // the un-memorised id (20).
         let empty = [None; 12];
-        let auto = effective_action_bar(&empty, Some(&sheet));
+        let auto = effective_action_bar(&empty, Some(&sheet), &mem);
         assert_eq!(auto[0], Some(HotbarEntry::Spell(10)));
         assert_eq!(auto[1], Some(HotbarEntry::Spell(30)));
         assert_eq!(auto[2], None);
+
+        // Empty memorised set → no auto-fill even with spells in the sheet.
+        assert_eq!(effective_action_bar(&empty, Some(&sheet), &std::collections::HashSet::new()), [None; 12]);
 
         // Any explicit assignment switches the whole bar to the explicit layout —
         // the auto-fill no longer leaks in, gaps are honoured, and an item entry is
@@ -8845,13 +8910,13 @@ mod tests {
         let mut explicit = [None; 12];
         explicit[4] = Some(HotbarEntry::Spell(30));
         explicit[5] = Some(HotbarEntry::Item(99));
-        let resolved = effective_action_bar(&explicit, Some(&sheet));
+        let resolved = effective_action_bar(&explicit, Some(&sheet), &mem);
         assert_eq!(resolved[0], None, "auto-fill must not leak once customised");
         assert_eq!(resolved[4], Some(HotbarEntry::Spell(30)));
         assert_eq!(resolved[5], Some(HotbarEntry::Item(99)));
 
         // No sheet → empty bar stays empty (no panic).
-        assert_eq!(effective_action_bar(&empty, None), [None; 12]);
+        assert_eq!(effective_action_bar(&empty, None, &mem), [None; 12]);
     }
 
     #[test]
