@@ -29,6 +29,14 @@ pub struct EnetTransport {
     peer: *mut ENetPeer,
 }
 
+// SAFETY: `host`/`peer` are owned exclusively by this `EnetTransport` and are
+// only ever dereferenced from whichever single thread currently holds the
+// value. The transport is *moved* between threads (e.g. handed to a login
+// worker and moved back through an mpsc channel), never shared — there is no
+// aliasing and no concurrent access. We deliberately do NOT implement `Sync`
+// (no `&EnetTransport` is ever sent across threads), only `Send` for the move.
+unsafe impl Send for EnetTransport {}
+
 impl Default for EnetTransport {
     fn default() -> Self {
         Self::new()

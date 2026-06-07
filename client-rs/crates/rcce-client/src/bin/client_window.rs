@@ -51,6 +51,11 @@ enum Mode {
     InWorld,
 }
 
+/// Result handed back from the background account-login worker: the moved-back
+/// transport + peer + character roster on success, or an error string. Carried
+/// over an `mpsc` channel so the connect/handshake never blocks the UI thread.
+type LoginResult = Result<(EnetTransport, i32, Vec<CharInfo>), String>;
+
 /// The in-world key bindings, shown on the `Mode::Controls` reference screen
 /// (MENU-OPT). Kept in sync with the `WindowEvent::KeyboardInput` match below —
 /// these are the literal bindings, not invented. `(action, key)`.
@@ -445,6 +450,11 @@ struct App {
     /// The menu connection's transport (account login + char create/delete).
     /// Moved into `Net`'s transport when a character enters the world.
     login_transport: Option<EnetTransport>,
+    /// When `Some`, an account-login worker thread is connecting in the
+    /// background; the UI shows "Connecting…" and keeps painting. `poll_login`
+    /// drains this each frame and applies the result. `None` = no login in
+    /// flight. This is the non-blocking-login state (mode stays `Login`).
+    login_rx: Option<std::sync::mpsc::Receiver<LoginResult>>,
     /// Open menu-connection peer handle (valid in CharSelect).
     login_peer: i32,
     /// Editable credential fields + which one has focus (0 = user, 1 = pass).
@@ -570,6 +580,7 @@ impl App {
             cloud_is_storm: false,
             mode: Mode::Login,
             login_transport: None,
+            login_rx: None,
             login_peer: 0,
             login_user: std::env::var("RCCE_USER").unwrap_or_else(|_| "rustbot".to_string()),
             // Interactive login starts with an EMPTY password (the user types it).
@@ -2598,7 +2609,9 @@ impl ApplicationHandler for App {
             // real account-login against the server) so the screen is screenshot-
             // verifiable. Pre-fills from RCCE_USER like the live "Enter" press.
             if std::env::var_os("RCCE_AUTOSUBMIT").is_some() {
-                self.submit_login();
+                // Synchronous here so the headless screenshot harness still has a
+                // populated char-select by first capture (timing unchanged).
+                self.submit_login_blocking();
             }
         }
 
@@ -3312,7 +3325,14 @@ impl App {
 
     /// Login screen submit: open the menu connection, create/verify the account,
     /// and advance to character select on success.
+    /// Begin account login on a background thread so the window never freezes
+    /// during the (up to ~5s) ENet connect + handshake. `poll_login` applies the
+    /// result once it arrives. No-op if a login is already in flight. The menu
+    /// keeps painting a "Connecting…" state throughout (mode stays `Login`).
     fn submit_login(&mut self) {
+        if self.login_rx.is_some() {
+            return;
+        }
         let creds = Credentials {
             username: self.login_user.trim().to_string(),
             password: self.login_pass.clone(),
@@ -3322,13 +3342,76 @@ impl App {
             self.login_msg = "Account name required".to_string();
             return;
         }
+        // MD5 derives from the password alone (no transport needed) — cache it
+        // now for the later create/delete calls.
+        self.login_md5 = rcce_net::auth::md5_hex(&creds.password);
+        self.login_msg = "Connecting…".to_string();
+        let (host, port) = (self.host.clone(), self.port);
+        let (tx, rx) = std::sync::mpsc::channel::<LoginResult>();
+        self.login_rx = Some(rx);
+        std::thread::spawn(move || {
+            // The transport is constructed, used, and (on success) moved back to
+            // the UI thread through the channel — single-owner, never shared.
+            let mut transport = EnetTransport::new();
+            let result = match account_login(&mut transport, &host, port, &creds) {
+                Ok((peer, chars)) => Ok((transport, peer, chars)),
+                Err(e) => Err(e),
+            };
+            let _ = tx.send(result); // receiver gone (window closed) → drop
+        });
+    }
+
+    /// Synchronous account login — used only by the headless `RCCE_AUTOSUBMIT`
+    /// hook, which must complete before the first frame is captured (preserving
+    /// the screenshot harness's timing). Interactive logins use `submit_login`.
+    fn submit_login_blocking(&mut self) {
+        let creds = Credentials {
+            username: self.login_user.trim().to_string(),
+            password: self.login_pass.clone(),
+            email: "rust@bot.com".to_string(),
+        };
+        if creds.username.is_empty() {
+            self.login_msg = "Account name required".to_string();
+            return;
+        }
+        self.login_md5 = rcce_net::auth::md5_hex(&creds.password);
         self.login_msg = "Connecting…".to_string();
         let mut transport = EnetTransport::new();
-        match account_login(&mut transport, &self.host, self.port, &creds) {
-            Ok((peer, chars)) => {
+        let result = match account_login(&mut transport, &self.host, self.port, &creds) {
+            Ok((peer, chars)) => Ok((transport, peer, chars)),
+            Err(e) => Err(e),
+        };
+        self.account_login_apply(result);
+    }
+
+    /// Drain the background login worker (if any) once per frame and apply its
+    /// result. Non-blocking: returns immediately while the worker is still
+    /// connecting, so the menu keeps animating.
+    fn poll_login(&mut self) {
+        let Some(rx) = self.login_rx.as_ref() else {
+            return;
+        };
+        match rx.try_recv() {
+            Ok(result) => {
+                self.login_rx = None;
+                self.account_login_apply(result);
+            }
+            Err(std::sync::mpsc::TryRecvError::Empty) => {}
+            Err(std::sync::mpsc::TryRecvError::Disconnected) => {
+                // Worker vanished without sending (panic) — fail soft.
+                self.login_rx = None;
+                self.login_msg = "Connection failed".to_string();
+            }
+        }
+    }
+
+    /// Apply an account-login result to the menu state. Shared by the async
+    /// (`poll_login`) and synchronous (`submit_login_blocking`) paths.
+    fn account_login_apply(&mut self, result: LoginResult) {
+        match result {
+            Ok((transport, peer, chars)) => {
                 self.login_transport = Some(transport);
                 self.login_peer = peer;
-                self.login_md5 = rcce_net::auth::md5_hex(&creds.password);
                 self.chars = chars;
                 self.char_sel = 0;
                 self.creating = None;
@@ -3340,7 +3423,7 @@ impl App {
                 self.mode = Mode::CharSelect;
                 // MENU-12: remember the account for next launch's pre-fill.
                 if let Some(s) = self.store.as_ref() {
-                    s.save_last_username(creds.username.trim());
+                    s.save_last_username(self.login_user.trim());
                 }
             }
             Err(e) => self.login_msg = e,
@@ -3431,6 +3514,12 @@ impl App {
 
     /// Keyboard handling for the login + character-select screens.
     fn menu_key(&mut self, event_loop: &ActiveEventLoop, code: KeyCode, text: Option<&str>) {
+        // While a background account-login is connecting, swallow all menu input:
+        // the transport is checked out to the worker, so create/delete/enter
+        // would no-op, and a second Enter must not spawn a duplicate worker.
+        if self.login_rx.is_some() {
+            return;
+        }
         match self.mode {
             // MENU-13 EULA gate: Enter accepts → Login; Esc declines → quit;
             // PageUp/PageDown scroll the license text.
@@ -5318,6 +5407,9 @@ impl App {
     }
 
     fn render(&mut self) {
+        // Drain any in-flight background account-login before drawing this frame
+        // (non-blocking; only does work while a login worker is connecting).
+        self.poll_login();
         // Headless zone-render verification: bypass the menu (and its Set.b3d
         // backdrop swap) to view the loaded gameplay zone directly.
         if std::env::var_os("RCCE_VIEWZONE").is_some() {
@@ -8396,6 +8488,18 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // Non-blocking login moves the EnetTransport to a worker thread and back
+    // through an mpsc channel, which requires `EnetTransport: Send` (a hand-
+    // written `unsafe impl`). Gate that contract: if the impl is dropped, the
+    // worker `thread::spawn` stops compiling — this test makes the requirement
+    // explicit and fails fast with a clear message instead.
+    #[test]
+    fn enet_transport_and_login_result_are_send() {
+        fn assert_send<T: Send>() {}
+        assert_send::<EnetTransport>();
+        assert_send::<LoginResult>();
+    }
 
     // Scenery rotation maps Blitz [pitch,yaw,roll] degrees to render radians with
     // yaw negated (left-handed view) and pitch/roll preserved.
