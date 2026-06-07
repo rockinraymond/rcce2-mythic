@@ -26,6 +26,8 @@ pub enum ReadError {
     SeekOutOfBounds { target: usize, len: usize },
     #[error("string length {len} exceeds the maximum {max} (corrupt or hostile file)")]
     StringTooLong { len: i32, max: usize },
+    #[error("declared count/size {count} exceeds the maximum {max} (corrupt or hostile file)")]
+    CountTooLarge { count: i64, max: usize },
 }
 
 /// A cursor over an in-memory Blitz binary file.

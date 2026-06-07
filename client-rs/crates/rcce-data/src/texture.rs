@@ -177,6 +177,13 @@ pub fn decode_tga(b: &[u8]) -> Option<Image> {
     if width == 0 || height == 0 || cmap_type != 0 {
         return None;
     }
+    // Clamp absurd dimensions before allocating, matching decode_dds. A hostile
+    // .tga declaring e.g. 65535x65535 @ 32bpp would otherwise force a ~17 GB
+    // zero-filled allocation below (vec![0u8; width*height*bpp]) → OOM abort =
+    // client crash. Real textures are well under this bound.
+    if width > 16384 || height > 16384 {
+        return None;
+    }
     if !(bpp == 24 || bpp == 32) {
         return None;
     }
