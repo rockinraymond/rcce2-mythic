@@ -125,11 +125,22 @@ impl Gfx {
         } else {
             wgpu::PresentMode::Fifo
         };
+        // RCCE_RES="WxH" forces the surface/render size — used for headless HUD
+        // captures (the offscreen RCCE_SHOT renders at config.width/height and the
+        // overlay lays out against them, so this gives a full-res HUD screenshot
+        // even when the headless window's physical size is tiny).
+        let (cfg_w, cfg_h) = std::env::var("RCCE_RES")
+            .ok()
+            .and_then(|s| {
+                let p: Vec<u32> = s.split(['x', 'X']).filter_map(|t| t.trim().parse().ok()).collect();
+                (p.len() == 2 && p[0] > 0 && p[1] > 0).then(|| (p[0], p[1]))
+            })
+            .unwrap_or((size.width.max(1), size.height.max(1)));
         let config = wgpu::SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
             format,
-            width: size.width.max(1),
-            height: size.height.max(1),
+            width: cfg_w,
+            height: cfg_h,
             present_mode,
             desired_maximum_frame_latency: 2,
             alpha_mode: caps.alpha_modes[0],
@@ -6056,8 +6067,13 @@ impl App {
                 if self.show_quests {
                     let (qw, qh) = (320.0f32, 240.0f32);
                     let (qx, qy) = ((sw - qw) * 0.5, (sh - qh) * 0.5);
-                    overlay.rect(qx, qy, qw, qh, [0.05, 0.06, 0.10, 0.94]);
-                    overlay.rect(qx, qy, qw, 22.0, [0.15, 0.18, 0.28, 0.96]);
+                    if overlay.has_texture("gui:QuestLogBG") {
+                        overlay.image(qx, qy, qw, qh, "gui:QuestLogBG", [1.0, 1.0, 1.0, 1.0]);
+                        overlay.rect(qx, qy, qw, 22.0, [0.0, 0.0, 0.0, 0.45]);
+                    } else {
+                        overlay.rect(qx, qy, qw, qh, [0.05, 0.06, 0.10, 0.94]);
+                        overlay.rect(qx, qy, qw, 22.0, [0.15, 0.18, 0.28, 0.96]);
+                    }
                     overlay.text_shadow(qx + 10.0, qy + 6.0, 1.3, "Quest Log", white);
                     overlay.text(qx + qw - 78.0, qy + 7.0, 1.0, "[L] close", [0.6, 0.6, 0.6, 1.0]);
                     let mut yy = qy + 30.0;
@@ -6249,8 +6265,16 @@ impl App {
                         (((sw - pw) * 0.5).round(), ((sh - ph) * 0.5).round(), pw, ph)
                     }
                 };
-                overlay.rect(px, py, pw, ph, [0.05, 0.06, 0.10, 0.92]);
-                overlay.rect(px, py, pw, 22.0, [0.15, 0.18, 0.28, 0.96]);
+                // Skinned leather window background (Blitz InventoryBG), with the
+                // flat panel as the fallback. A slim translucent title strip keeps
+                // the header text readable over the texture.
+                if overlay.has_texture("gui:InventoryBG") {
+                    overlay.image(px, py, pw, ph, "gui:InventoryBG", [1.0, 1.0, 1.0, 1.0]);
+                    overlay.rect(px, py, pw, 22.0, [0.0, 0.0, 0.0, 0.45]);
+                } else {
+                    overlay.rect(px, py, pw, ph, [0.05, 0.06, 0.10, 0.92]);
+                    overlay.rect(px, py, pw, 22.0, [0.15, 0.18, 0.28, 0.96]);
+                }
                 overlay.text_shadow(px + 10.0, py + 6.0, 1.5, "Character", white);
                 overlay.text(px + pw - 78.0, py + 7.0, 1.0, "[I] close", dim);
 
