@@ -5827,7 +5827,11 @@ impl App {
                     let (dx, dy) = (0.02 * sw, 0.15 * sh);
                     let (dw, dh) = (0.34 * sw, 0.5 * sh);
                     overlay.rect(dx - 2.0, dy - 2.0, dw + 4.0, dh + 4.0, [0.6, 0.5, 0.2, 0.95]);
-                    overlay.rect(dx, dy, dw, dh, [0.04, 0.04, 0.07, 0.93]);
+                    if overlay.has_texture("gui:InventoryBG") {
+                        overlay.image(dx, dy, dw, dh, "gui:InventoryBG", [1.0, 1.0, 1.0, 1.0]);
+                    } else {
+                        overlay.rect(dx, dy, dw, dh, [0.04, 0.04, 0.07, 0.93]);
+                    }
                     overlay.text_shadow(dx + 8.0, dy + 6.0, 1.3, &dl.title, [1.0, 0.92, 0.6, 1.0]);
                     let max_chars = (((dw - 18.0) / 6.5) as usize).max(8);
                     let mut ty = dy + 30.0;
@@ -5879,7 +5883,11 @@ impl App {
                     let (dw, dh) = (0.40 * sw, 0.22 * sh);
                     let (dx, dy) = ((sw - dw) * 0.5, (sh - dh) * 0.5);
                     overlay.rect(dx - 2.0, dy - 2.0, dw + 4.0, dh + 4.0, [0.6, 0.5, 0.2, 0.97]);
-                    overlay.rect(dx, dy, dw, dh, [0.05, 0.05, 0.08, 0.97]);
+                    if overlay.has_texture("gui:InventoryBG") {
+                        overlay.image(dx, dy, dw, dh, "gui:InventoryBG", [1.0, 1.0, 1.0, 1.0]);
+                    } else {
+                        overlay.rect(dx, dy, dw, dh, [0.05, 0.05, 0.08, 0.97]);
+                    }
                     overlay.text_shadow(dx + 10.0, dy + 8.0, 1.3, &si.title, [1.0, 0.92, 0.6, 1.0]);
                     let max_chars = (((dw - 20.0) / 6.5) as usize).max(8);
                     let mut ty = dy + 32.0;
