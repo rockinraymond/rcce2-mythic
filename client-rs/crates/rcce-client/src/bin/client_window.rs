@@ -362,7 +362,11 @@ struct App {
     /// button sends them all at once. Cleared when the trade opens / confirms /
     /// cancels.
     pending_buys: Vec<usize>,
-    pending_sells: Vec<u8>,
+    /// Staged sells as `(inventory slot, quantity)` — the quantity lets a partial
+    /// stack be sold (chosen via the `qty_prompt`).
+    pending_sells: Vec<(u8, u16)>,
+    /// Open quantity prompt for a partial-stack sell/drop, if any.
+    qty_prompt: Option<QtyPrompt>,
     /// Explicit action-bar assignments: `action_bar[i]` = the spell/item placed on
     /// hotbar slot `i` (drag-drop from the spellbook / inventory / rearranged within
     /// the bar). All-`None` means "not yet customised" and the bar falls back to
@@ -543,6 +547,7 @@ impl App {
             drag: None,
             pending_buys: Vec::new(),
             pending_sells: Vec::new(),
+            qty_prompt: None,
             footsteps: rcce_client::audio::FootstepTimer::new(),
             footstep_paths: Vec::new(),
             weather: rcce_client::weather::WeatherSystem::new(240),
@@ -662,6 +667,29 @@ impl ItemMenu {
         let row = ((cy - self.y) / CTX_ROW).floor() as usize;
         self.items.get(row).map(|&(_, a)| a)
     }
+}
+
+/// A modal "how many?" prompt for a partial-stack action (sell or drop). Opened
+/// when a stack is dragged to the vendor / chosen to drop; the chosen `qty`
+/// (1..=max) is applied on confirm. Mirrors Blitz's stack-quantity dialog.
+#[derive(Clone)]
+struct QtyPrompt {
+    slot: u8,
+    item_id: u16,
+    max: u16,
+    qty: u16,
+    action: QtyAction,
+}
+
+#[derive(Clone, Copy, PartialEq)]
+enum QtyAction {
+    Sell,
+    Drop,
+}
+
+/// Clamp a quantity into `1..=max` (max>=1). Pure — unit-tested.
+fn clamp_qty(qty: i64, max: u16) -> u16 {
+    qty.clamp(1, max.max(1) as i64) as u16
 }
 
 /// An open "Actions" context menu anchored at a screen position over a target
@@ -2612,6 +2640,38 @@ impl ApplicationHandler for App {
                     }
                     return;
                 }
+                // Quantity prompt modal: arrows/±/PageUp-Down/Home/End/digits
+                // adjust, Enter confirms, Esc cancels. Consumes all keys.
+                if self.qty_prompt.is_some() {
+                    if pressed {
+                        let max = self.qty_prompt.as_ref().map(|p| p.max).unwrap_or(1);
+                        match event.physical_key {
+                            PhysicalKey::Code(KeyCode::Enter | KeyCode::NumpadEnter) => self.confirm_qty(),
+                            PhysicalKey::Code(KeyCode::Escape) => self.qty_prompt = None,
+                            PhysicalKey::Code(k) => {
+                                if let Some(p) = self.qty_prompt.as_mut() {
+                                    let cur = p.qty as i64;
+                                    let nq = match k {
+                                        KeyCode::ArrowLeft | KeyCode::ArrowDown | KeyCode::Minus | KeyCode::NumpadSubtract => cur - 1,
+                                        KeyCode::ArrowRight | KeyCode::ArrowUp | KeyCode::Equal | KeyCode::NumpadAdd => cur + 1,
+                                        KeyCode::PageDown => cur - 10,
+                                        KeyCode::PageUp => cur + 10,
+                                        KeyCode::Home => 1,
+                                        KeyCode::End => max as i64,
+                                        KeyCode::Backspace => cur / 10,
+                                        _ => match event.text.as_ref().and_then(|t| t.chars().next()).and_then(|c| c.to_digit(10)) {
+                                            Some(d) => cur * 10 + d as i64,
+                                            None => cur,
+                                        },
+                                    };
+                                    p.qty = clamp_qty(nq, max);
+                                }
+                            }
+                            _ => {}
+                        }
+                    }
+                    return;
+                }
                 // Chat typing mode: capture text, Enter sends, Esc cancels.
                 if self.chat_input.is_some() {
                     if pressed {
@@ -3022,7 +3082,10 @@ impl ApplicationHandler for App {
                 // Left-click on the HUD acts only while mouse-look is off (cursor
                 // free). Right-button toggles mouse-look on press for quick camera
                 // grab, off on release.
-                if button == MouseButton::Left && state == ElementState::Pressed && !self.mouse_look {
+                if self.qty_prompt.is_some() {
+                    // The quantity modal is keyboard-driven; swallow mouse buttons
+                    // so a stray click doesn't act on the HUD behind it.
+                } else if button == MouseButton::Left && state == ElementState::Pressed && !self.mouse_look {
                     // Arm a spell drag if the press is over a draggable source
                     // (memorised spellbook row / occupied hotbar slot); the release
                     // decides click-vs-drag. Otherwise act on the click immediately.
@@ -3754,19 +3817,40 @@ impl App {
     /// (toggle). The actual sell goes out with the whole basket when the player
     /// hits Confirm — Blitz batches buys+sells into one `P_OpenTrading` confirm.
     fn sell_inventory_slot(&mut self, slot: u8) {
-        // Only stage a slot that actually holds an item.
-        let has_item = self
-            .net
-            .as_ref()
-            .map(|n| n.world.me_inventory.values().any(|it| it.slot == slot))
-            .unwrap_or(false);
-        if !has_item {
+        // Already staged → unstage (toggle).
+        if let Some(p) = self.pending_sells.iter().position(|&(s, _)| s == slot) {
+            self.pending_sells.remove(p);
             return;
         }
-        if let Some(p) = self.pending_sells.iter().position(|&s| s == slot) {
-            self.pending_sells.remove(p);
+        let item = self
+            .net
+            .as_ref()
+            .and_then(|n| n.world.me_inventory.values().find(|it| it.slot == slot))
+            .map(|it| (it.item_id, it.amount.max(1)));
+        let Some((item_id, amount)) = item else { return };
+        if amount > 1 {
+            // Stack → ask how many to sell.
+            self.qty_prompt = Some(QtyPrompt { slot, item_id, max: amount, qty: amount, action: QtyAction::Sell });
         } else {
-            self.pending_sells.push(slot);
+            self.pending_sells.push((slot, 1));
+        }
+    }
+
+    /// Apply the open quantity prompt (Enter): stage the sell `(slot, qty)` or
+    /// drop `qty` from the slot, then close the prompt.
+    fn confirm_qty(&mut self) {
+        let Some(p) = self.qty_prompt.take() else { return };
+        let qty = clamp_qty(p.qty as i64, p.max);
+        match p.action {
+            QtyAction::Sell => {
+                self.pending_sells.retain(|&(s, _)| s != p.slot);
+                self.pending_sells.push((p.slot, qty));
+            }
+            QtyAction::Drop => {
+                if let Some(net) = self.net.as_mut() {
+                    net.transport.send(net.peer, rcce_net::packet_id::INVENTORY_UPDATE, &rcce_client::net::inv_drop_packet(p.slot, qty), true);
+                }
+            }
         }
     }
 
@@ -3784,10 +3868,18 @@ impl App {
             .iter()
             .filter_map(|&i| trade.offers.get(i).map(|o| (o.server_trade_id, o.amount.max(1))))
             .collect();
+        // Each staged sell carries its chosen quantity; clamp to the slot's live
+        // amount in case the stack shrank since staging.
         let sells: Vec<(u8, u16)> = self
             .pending_sells
             .iter()
-            .filter_map(|&slot| net.world.me_inventory.values().find(|it| it.slot == slot).map(|it| (slot, it.amount.max(1))))
+            .filter_map(|&(slot, qty)| {
+                net.world
+                    .me_inventory
+                    .values()
+                    .find(|it| it.slot == slot)
+                    .map(|it| (slot, qty.clamp(1, it.amount.max(1))))
+            })
             .collect();
         let pkt = rcce_client::net::trade_confirm_packet(&buys, &sells);
         if let Some(net) = self.net.as_mut() {
@@ -4104,14 +4196,19 @@ impl App {
                     }
                 }
             }
-            ItemAction::Drop | ItemAction::DropAll => {
-                let amount = if action == ItemAction::DropAll {
-                    self.net.as_ref().and_then(|n| n.world.me_inventory.values().find(|it| it.slot == slot)).map(|it| it.amount.max(1)).unwrap_or(1)
-                } else {
-                    1
-                };
+            ItemAction::DropAll => {
+                let amount = self.net.as_ref().and_then(|n| n.world.me_inventory.values().find(|it| it.slot == slot)).map(|it| it.amount.max(1)).unwrap_or(1);
                 if let Some(net) = self.net.as_mut() {
                     net.transport.send(net.peer, rcce_net::packet_id::INVENTORY_UPDATE, &rcce_client::net::inv_drop_packet(slot, amount), true);
+                }
+            }
+            ItemAction::Drop => {
+                let amount = self.net.as_ref().and_then(|n| n.world.me_inventory.values().find(|it| it.slot == slot)).map(|it| it.amount.max(1)).unwrap_or(1);
+                if amount > 1 {
+                    // Stack → ask how many to drop.
+                    self.qty_prompt = Some(QtyPrompt { slot, item_id, max: amount, qty: 1, action: QtyAction::Drop });
+                } else if let Some(net) = self.net.as_mut() {
+                    net.transport.send(net.peer, rcce_net::packet_id::INVENTORY_UPDATE, &rcce_client::net::inv_drop_packet(slot, 1), true);
                 }
             }
         }
@@ -6411,7 +6508,7 @@ impl App {
                     // Stage a buy (offer 1) + a sell (slot 14) so the basket /
                     // net-gold / Confirm button are capturable.
                     self.pending_buys = vec![1];
-                    self.pending_sells = vec![14];
+                    self.pending_sells = vec![(14, 1)];
                     println!("[vendortest] frame {} injected vendor (3 offers) + 2 backpack items + staged 1 buy/1 sell", self.frames);
                 }
             }
@@ -6455,6 +6552,21 @@ impl App {
                         ],
                     });
                     println!("[itemmenu] frame {} opened item menu over slot 14", self.frames);
+                }
+            }
+        }
+        // Headless quantity-prompt self-test: inject a stack + open the sell
+        // quantity modal at a partial value. No-op unless RCCE_QTYPROMPT=<frame>.
+        if let Ok(qp) = std::env::var("RCCE_QTYPROMPT") {
+            if let Ok(at) = qp.parse::<u64>() {
+                if self.frames == at {
+                    use rcce_client::fetch::InvItem;
+                    if let Some(net) = self.net.as_mut() {
+                        net.world.me_inventory.insert(20, InvItem { slot: 20, item_id: 1, amount: 25, health: 100 });
+                    }
+                    self.show_inventory = true;
+                    self.qty_prompt = Some(QtyPrompt { slot: 20, item_id: 1, max: 25, qty: 8, action: QtyAction::Sell });
+                    println!("[qtyprompt] frame {} opened sell-quantity modal (8/25)", self.frames);
                 }
             }
         }
@@ -7588,10 +7700,12 @@ impl App {
                     let names: Vec<String> = self
                         .pending_sells
                         .iter()
-                        .filter_map(|&slot| inv.and_then(|m| m.values().find(|it| it.slot == slot)))
-                        .map(|it| {
-                            net_gold += store.item_value(it.item_id).max(0) as i64 * it.amount.max(1) as i64;
-                            store.item_name(it.item_id)
+                        .filter_map(|&(slot, qty)| inv.and_then(|m| m.values().find(|it| it.slot == slot)).map(|it| (it, qty)))
+                        .map(|(it, qty)| {
+                            let q = qty.clamp(1, it.amount.max(1));
+                            net_gold += store.item_value(it.item_id).max(0) as i64 * q as i64;
+                            let name = store.item_name(it.item_id);
+                            if q > 1 { format!("{name} x{q}") } else { name }
                         })
                         .collect();
                     let label = if names.is_empty() {
@@ -7918,6 +8032,29 @@ impl App {
                     }
                     overlay.text_shadow(menu.x + 8.0, ry + 6.0, 1.0, label, [0.94, 0.94, 0.72, 1.0]);
                 }
+            }
+
+            // Quantity prompt modal (partial-stack sell/drop): centred, keyboard-
+            // driven. Drawn over the HUD so it reads as a focused dialog.
+            if let Some(p) = &self.qty_prompt {
+                let (bw, bh) = (280.0f32, 92.0f32);
+                let bx = ((sw - bw) * 0.5).round();
+                let by = ((sh - bh) * 0.5).round();
+                overlay.rect(bx - 2.0, by - 2.0, bw + 4.0, bh + 4.0, [1.0, 0.85, 0.2, 0.95]);
+                overlay.rect(bx, by, bw, bh, [0.05, 0.05, 0.09, 0.98]);
+                let verb = match p.action {
+                    QtyAction::Sell => "Sell",
+                    QtyAction::Drop => "Drop",
+                };
+                let name = store.item_name(p.item_id);
+                overlay.text_shadow(bx + 12.0, by + 8.0, 1.1, &format!("{verb} {name}"), white);
+                let q = format!("{} / {}", p.qty, p.max);
+                let qw2 = rcce_render::font::text_width(&q, 1.6);
+                overlay.text_shadow(bx + bw * 0.5 - qw2 * 0.5, by + 28.0, 1.6, &q, [1.0, 0.95, 0.6, 1.0]);
+                let frac = p.qty as f32 / p.max.max(1) as f32;
+                overlay.rect(bx + 12.0, by + 52.0, bw - 24.0, 8.0, [0.0, 0.0, 0.0, 0.6]);
+                overlay.bar(bx + 12.0, by + 52.0, bw - 24.0, 8.0, frac, [0.4, 0.8, 1.0, 1.0]);
+                overlay.text(bx + 12.0, by + bh - 15.0, 1.0, "←/→ ±1 · PgUp/Dn ±10 · Enter OK · Esc cancel", [0.7, 0.7, 0.78, 1.0]);
             }
 
             // Dragged spell/item icon following the cursor (drag-drop hotbar
@@ -8464,6 +8601,18 @@ mod tests {
         // Unknown attacker name falls back.
         let (l, _) = compose_damage_line(me, 99, 2, me, name);
         assert_eq!(l, "Someone hits you for 2 damage!");
+    }
+
+    #[test]
+    fn quantity_clamps() {
+        // 1..=max, never 0 or above the stack.
+        assert_eq!(clamp_qty(5, 10), 5);
+        assert_eq!(clamp_qty(0, 10), 1);
+        assert_eq!(clamp_qty(-3, 10), 1);
+        assert_eq!(clamp_qty(99, 10), 10);
+        assert_eq!(clamp_qty(10, 10), 10);
+        // max 0 is treated as 1 (defensive — a 0-stack shouldn't reach here).
+        assert_eq!(clamp_qty(5, 0), 1);
     }
 
     #[test]
