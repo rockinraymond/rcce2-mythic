@@ -15,7 +15,7 @@ The source of truth for "parity" is the **behavior of `bin/Client.exe`** as defi
 Headless verification primitives (confirmed in `client_window.rs`):
 - `RCCE_SHOT=<path>` `RCCE_SHOT_FRAME=N` — capture to PNG and `exit(0)`. **Mode-dependent**: menu path default frame **45**, world path default frame **150**.
 - `RCCE_AUTOLOGIN` (implied by `RCCE_BENCH`/`RCCE_AUTOWALK`), `RCCE_AUTOSUBMIT` (auto-submit login → char-select), `RCCE_AUTOENTER` (auto-enter first character → world).
-- `RCCE_AUTOWALK` (headless movement self-test), `RCCE_BENCH=N` (`[bench] avg fps`), `RCCE_GPUSKIN`.
+- `RCCE_AUTOWALK` (headless movement self-test), `RCCE_BENCH=N` (`[bench] avg fps`), `RCCE_CPUSKIN` (force the legacy CPU skinning path; GPU skinning is now the **default** — `RCCE_GPUSKIN` is a no-op opt-in kept for back-compat).
 - Probe bins: `move_test`, `combat_test`, `chat_test`, `interact_test`, `actor_render`, `zone_render`, `anim_probe`, `tex_diag`, `appearance_probe`.
 - Live data: `bin\Server.exe -UNLOCK` (UDP 25000, account `rustbot`; restart to clear an `L`/already-online state).
 

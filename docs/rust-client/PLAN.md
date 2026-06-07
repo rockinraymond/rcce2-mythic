@@ -90,7 +90,7 @@ Per the Praxis evidence ladder, a criterion flips to `DONE` only with evidence a
 - **Protocol/data** criteria → `cargo test` round-trip + a live exchange against `Server.exe -UNLOCK`.
 - **Interaction** criteria → live run with the documented input → observed result.
 
-Update the status tags in `ACCEPTANCE.md` as criteria pass, citing the evidence. Never flip `RCCE_GPUSKIN` to default as part of parity work.
+Update the status tags in `ACCEPTANCE.md` as criteria pass, citing the evidence. GPU linear-blend skinning is now the **default** actor path (flipped in a dedicated perf increment after verifying pose parity day+night and bench ≥ the CPU path); `RCCE_CPUSKIN` forces the legacy CPU path. Do not change this default as part of *parity* work — only in a dedicated, separately-verified perf change.
 
 ## Workspace
 
