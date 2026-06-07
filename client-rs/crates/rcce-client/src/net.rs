@@ -232,6 +232,19 @@ mod tests {
     }
 
     #[test]
+    fn trade_confirm_batched_buys_and_sells() {
+        // The whole vendor basket goes out as ONE confirm (the server ends trading
+        // after a single confirm): two buys + two sells in the same packet.
+        let p = trade_confirm_packet(&[(1001, 2), (1002, 1)], &[(14, 3), (15, 1)]);
+        assert_eq!(p.len(), 288);
+        assert_eq!(&p[0..6], &[0xE9, 0x03, 0, 0, 2, 0]); // buy0: id 1001 amt 2
+        assert_eq!(&p[6..12], &[0xEA, 0x03, 0, 0, 1, 0]); // buy1: id 1002 amt 1
+        assert_eq!(&p[12..18], &[0xFF, 0xFF, 0xFF, 0xFF, 0, 0]); // buy2: empty
+        assert_eq!(&p[192..195], &[14, 3, 0]); // sell0: slot 14 amt 3
+        assert_eq!(&p[195..198], &[15, 1, 0]); // sell1: slot 15 amt 1
+    }
+
+    #[test]
     fn trade_confirm_with_sell() {
         let p = trade_confirm_packet(&[], &[(14, 5)]);
         assert_eq!(p.len(), 288);

@@ -346,6 +346,14 @@ struct App {
     memorised: std::collections::HashSet<usize>,
     /// Spellbook row hitboxes `(x,y,w,h, known index)`, rebuilt as the panel draws.
     spell_hitboxes: Vec<(f32, f32, f32, f32, usize)>,
+    /// Staged vendor transaction (Blitz batches a whole shop visit into ONE
+    /// `P_OpenTrading` confirm, which ends trading server-side). `pending_buys`
+    /// holds offer indices to buy; `pending_sells` holds inventory slots to sell.
+    /// Number keys toggle buys, drag-to-vendor toggles sells, and the Confirm
+    /// button sends them all at once. Cleared when the trade opens / confirms /
+    /// cancels.
+    pending_buys: Vec<usize>,
+    pending_sells: Vec<u8>,
     /// Explicit action-bar assignments: `action_bar[i]` = the spell/item placed on
     /// hotbar slot `i` (drag-drop from the spellbook / inventory / rearranged within
     /// the bar). All-`None` means "not yet customised" and the bar falls back to
@@ -521,6 +529,8 @@ impl App {
             spell_hitboxes: Vec::new(),
             action_bar: [None; 12],
             drag: None,
+            pending_buys: Vec::new(),
+            pending_sells: Vec::new(),
             footsteps: rcce_client::audio::FootstepTimer::new(),
             footstep_paths: Vec::new(),
             weather: rcce_client::weather::WeatherSystem::new(240),
@@ -781,6 +791,20 @@ fn vendor_window_rect(sw: f32, sh: f32) -> (f32, f32, f32, f32) {
 fn point_in_vendor(cx: f32, cy: f32, sw: f32, sh: f32) -> bool {
     let (px, py, pw, ph) = vendor_window_rect(sw, sh);
     cx >= px && cx < px + pw && cy >= py && cy < py + ph
+}
+
+/// The vendor "Confirm" button rect `(x, y, w, h)` — bottom of the vendor window.
+/// Shared by the render and the click hit-test.
+fn vendor_confirm_button_rect(sw: f32, sh: f32) -> (f32, f32, f32, f32) {
+    let (px, py, pw, ph) = vendor_window_rect(sw, sh);
+    let bw = pw - 16.0;
+    (px + 8.0, py + ph - 24.0, bw, 18.0)
+}
+
+/// Whether `(cx, cy)` is on the vendor Confirm button.
+fn point_in_confirm(cx: f32, cy: f32, sw: f32, sh: f32) -> bool {
+    let (x, y, w, h) = vendor_confirm_button_rect(sw, sh);
+    cx >= x && cx < x + w && cy >= y && cy < y + h
 }
 
 /// Index of the action-bar spell slot (0..=11) whose rect contains `(cx, cy)`.
@@ -2707,22 +2731,24 @@ impl ApplicationHandler for App {
                                 }
                                 return;
                             }
-                            // If a vendor window is open, the number keys buy
-                            // the Nth offer; otherwise they cast the Nth spell.
-                            let buy = self
+                            // If a vendor window is open, the number keys STAGE the
+                            // Nth offer for purchase (toggle); the Confirm button
+                            // sends the whole basket. Otherwise they cast the Nth
+                            // spell. Blitz batches a shop visit into one confirm, so
+                            // staging matches it (and the server ends trading after
+                            // a single confirm — sending per keypress only ever
+                            // bought one item).
+                            let has_offer = self
                                 .net
                                 .as_ref()
                                 .and_then(|n| n.world.current_trade.as_ref())
-                                .and_then(|t| t.offers.get(idx))
-                                .map(|o| (o.server_trade_id, o.amount.max(1)));
-                            if let Some((trade_id, amount)) = buy {
-                                if let Some(net) = self.net.as_mut() {
-                                    net.transport.send(
-                                        net.peer,
-                                        rcce_net::packet_id::OPEN_TRADING,
-                                        &rcce_client::net::trade_confirm_packet(&[(trade_id, amount)], &[]),
-                                        true,
-                                    );
+                                .map(|t| idx < t.offers.len())
+                                .unwrap_or(false);
+                            if has_offer {
+                                if let Some(p) = self.pending_buys.iter().position(|&b| b == idx) {
+                                    self.pending_buys.remove(p);
+                                } else {
+                                    self.pending_buys.push(idx);
                                 }
                                 return;
                             }
@@ -2876,6 +2902,9 @@ impl ApplicationHandler for App {
                                         );
                                         net.world.current_trade = None;
                                     }
+                                    // Discard the staged basket on cancel.
+                                    self.pending_buys.clear();
+                                    self.pending_sells.clear();
                                 }
                                 EscLayer::Spellbook => self.show_spellbook = false,
                                 EscLayer::Inventory => self.show_inventory = false,
@@ -3614,24 +3643,53 @@ impl App {
         }
     }
 
-    /// Sell the whole stack in inventory slot `slot` to the open vendor — a
-    /// `P_OpenTrading` confirm carrying just that sell (`trade_confirm_packet`'s
-    /// sell list). The server credits the item's value and "T"-takes it from our
-    /// inventory; mirrors the existing per-action buy (one confirm per item).
+    /// Stage the item in inventory slot `slot` to be sold to the open vendor
+    /// (toggle). The actual sell goes out with the whole basket when the player
+    /// hits Confirm — Blitz batches buys+sells into one `P_OpenTrading` confirm.
     fn sell_inventory_slot(&mut self, slot: u8) {
-        let amount = self
+        // Only stage a slot that actually holds an item.
+        let has_item = self
             .net
             .as_ref()
-            .and_then(|n| n.world.me_inventory.values().find(|it| it.slot == slot).map(|it| it.amount.max(1)));
-        let Some(amount) = amount else { return };
-        if let Some(net) = self.net.as_mut() {
-            net.transport.send(
-                net.peer,
-                rcce_net::packet_id::OPEN_TRADING,
-                &rcce_client::net::trade_confirm_packet(&[], &[(slot, amount)]),
-                true,
-            );
+            .map(|n| n.world.me_inventory.values().any(|it| it.slot == slot))
+            .unwrap_or(false);
+        if !has_item {
+            return;
         }
+        if let Some(p) = self.pending_sells.iter().position(|&s| s == slot) {
+            self.pending_sells.remove(p);
+        } else {
+            self.pending_sells.push(slot);
+        }
+    }
+
+    /// Send the staged vendor basket as ONE `P_OpenTrading` confirm (all buys +
+    /// all sells), then clear the staging and close the window — the server ends
+    /// trading on a single confirm. No-op if nothing is staged.
+    fn confirm_trade(&mut self) {
+        if self.pending_buys.is_empty() && self.pending_sells.is_empty() {
+            return;
+        }
+        let Some(net) = self.net.as_ref() else { return };
+        let Some(trade) = net.world.current_trade.as_ref() else { return };
+        let buys: Vec<(u32, u16)> = self
+            .pending_buys
+            .iter()
+            .filter_map(|&i| trade.offers.get(i).map(|o| (o.server_trade_id, o.amount.max(1))))
+            .collect();
+        let sells: Vec<(u8, u16)> = self
+            .pending_sells
+            .iter()
+            .filter_map(|&slot| net.world.me_inventory.values().find(|it| it.slot == slot).map(|it| (slot, it.amount.max(1))))
+            .collect();
+        let pkt = rcce_client::net::trade_confirm_packet(&buys, &sells);
+        if let Some(net) = self.net.as_mut() {
+            net.transport.send(net.peer, rcce_net::packet_id::OPEN_TRADING, &pkt, true);
+            // The server ends trading on confirm; reflect that client-side.
+            net.world.current_trade = None;
+        }
+        self.pending_buys.clear();
+        self.pending_sells.clear();
     }
 
     fn hud_click(&mut self) {
@@ -3686,6 +3744,15 @@ impl App {
         let Some(gfx) = self.gfx.as_ref() else { return };
         let (sw, sh) = (gfx.config.width as f32, gfx.config.height as f32);
         let (cx, cy) = self.cursor;
+
+        // Vendor Confirm button: sends the staged basket (buys + sells) as one
+        // P_OpenTrading confirm. Checked while a trade is open and is consumed.
+        if self.net.as_ref().map(|n| n.world.current_trade.is_some()).unwrap_or(false)
+            && point_in_confirm(cx, cy, sw, sh)
+        {
+            self.confirm_trade();
+            return;
+        }
 
         // Function-button row.
         if let Some(action) = function_button_at(cx, cy, sw, sh) {
@@ -5336,6 +5403,9 @@ impl App {
         }
         if open_inventory_for_trade {
             self.show_inventory = true;
+            // Fresh basket for the new shop visit.
+            self.pending_buys.clear();
+            self.pending_sells.clear();
         }
         self.was_moving = moving;
 
@@ -6110,7 +6180,11 @@ impl App {
                         net.world.me_inventory.insert(15, InvItem { slot: 15, item_id: 2, amount: 3, health: 100 });
                     }
                     self.show_inventory = true;
-                    println!("[vendortest] frame {} injected vendor (3 offers) + 2 backpack items", self.frames);
+                    // Stage a buy (offer 1) + a sell (slot 14) so the basket /
+                    // net-gold / Confirm button are capturable.
+                    self.pending_buys = vec![1];
+                    self.pending_sells = vec![14];
+                    println!("[vendortest] frame {} injected vendor (3 offers) + 2 backpack items + staged 1 buy/1 sell", self.frames);
                 }
             }
         }
@@ -7145,14 +7219,23 @@ impl App {
                 overlay.text(px + pw - 80.0, py + 7.0, 1.0, "[Esc] close", dimc);
                 let mut y = py + 30.0;
                 let row_h = 20.0f32;
-                let foot = py + ph - 18.0;
+                // Reserve the bottom band for the staged-sells line, the net-gold
+                // line, and the Confirm button.
+                let foot = py + ph - 58.0;
+                // Net gold delta = sell value (staged sells) − buy cost (staged buys).
+                let mut net_gold: i64 = 0;
                 if trade.offers.is_empty() {
                     overlay.text(px + 10.0, y, 1.0, "(nothing for sale)", dimc);
                 } else {
-                    overlay.text(px + 10.0, y, 1.0, "Press 1-9 to buy:", dimc);
+                    overlay.text(px + 10.0, y, 1.0, "1-9 to add/remove:", dimc);
                     y += 16.0;
                     for (i, off) in trade.offers.iter().enumerate() {
                         if y + row_h > foot { break; }
+                        let staged = self.pending_buys.contains(&i);
+                        if staged {
+                            overlay.rect(px + 8.0, y - 1.0, pw - 16.0, row_h, [0.25, 0.5, 0.25, 0.5]);
+                            net_gold -= store.item_value(off.item_id).max(0) as i64 * off.amount.max(1) as i64;
+                        }
                         // Item icon (lazily registered from the item's thumbnail).
                         let key = format!("item:{}", off.item_id);
                         if !overlay.has_texture(&key) {
@@ -7167,26 +7250,61 @@ impl App {
                         let name = store.item_name(off.item_id);
                         let qty = if off.amount > 1 { format!(" x{}", off.amount) } else { String::new() };
                         let num = if i < 9 { format!("{}. ", i + 1) } else { String::new() };
-                        let line: String = format!("{num}{name}{qty}").chars().take(24).collect();
-                        overlay.text(px + 10.0 + row_h, y + 3.0, 1.0, &line, white);
-                        // Price = the item's base value (Items.dat), right-aligned.
+                        let check = if staged { "+ " } else { "" };
+                        let line: String = format!("{check}{num}{name}{qty}").chars().take(24).collect();
+                        let col = if staged { [0.7, 1.0, 0.7, 1.0] } else { white };
+                        overlay.text(px + 10.0 + row_h, y + 3.0, 1.0, &line, col);
                         let price = format!("{}g", store.item_value(off.item_id).max(0));
                         let pw2 = rcce_render::font::text_width(&price, 1.0);
                         overlay.text(px + pw - pw2 - 12.0, y + 3.0, 1.0, &price, gold);
                         y += row_h;
                     }
                 }
-                // Sell drop-zone footer (only for vendor/container, where selling is
-                // allowed). Brightens while an item is dragged over the window.
+                // Staged-sells summary line + their value (only for sellable trades).
+                let sell_y = py + ph - 56.0;
                 if sellable {
-                    let (fc, msg): ([f32; 4], &str) = if selling_here {
-                        ([0.6, 1.0, 0.7, 1.0], "Release to sell")
+                    let inv = self.net.as_ref().map(|n| &n.world.me_inventory);
+                    let names: Vec<String> = self
+                        .pending_sells
+                        .iter()
+                        .filter_map(|&slot| inv.and_then(|m| m.values().find(|it| it.slot == slot)))
+                        .map(|it| {
+                            net_gold += store.item_value(it.item_id).max(0) as i64 * it.amount.max(1) as i64;
+                            store.item_name(it.item_id)
+                        })
+                        .collect();
+                    let label = if names.is_empty() {
+                        if selling_here { "Release to sell".to_string() } else { "Drag items here to sell".to_string() }
                     } else {
-                        ([0.65, 0.6, 0.45, 1.0], "Drag items here to sell")
+                        format!("Sell: {}", names.join(", "))
                     };
-                    overlay.rect(px + 6.0, foot - 2.0, pw - 12.0, 16.0, [0.0, 0.0, 0.0, 0.3]);
-                    overlay.text(px + 12.0, foot, 1.0, msg, fc);
+                    let lc = if names.is_empty() && !selling_here { [0.65, 0.6, 0.45, 1.0] } else { [0.6, 1.0, 0.7, 1.0] };
+                    let label: String = label.chars().take(34).collect();
+                    overlay.text(px + 12.0, sell_y, 1.0, &label, lc);
                 }
+                // Net gold delta.
+                let (ng_txt, ng_col) = if net_gold >= 0 {
+                    (format!("Net: +{net_gold}g"), [0.6, 1.0, 0.7, 1.0])
+                } else {
+                    (format!("Net: {net_gold}g"), [1.0, 0.6, 0.5, 1.0])
+                };
+                overlay.text(px + 12.0, py + ph - 42.0, 1.0, &ng_txt, ng_col);
+                // Confirm button — sends the whole basket. Bright when staged.
+                let (bx, by_, bw_, bh_) = vendor_confirm_button_rect(sw, sh);
+                let staged_n = self.pending_buys.len() + self.pending_sells.len();
+                let active = staged_n > 0;
+                let hovering = point_in_confirm(self.cursor.0, self.cursor.1, sw, sh);
+                let bgc = if active && hovering {
+                    [0.3, 0.6, 0.3, 0.95]
+                } else if active {
+                    [0.2, 0.45, 0.2, 0.9]
+                } else {
+                    [0.18, 0.18, 0.2, 0.8]
+                };
+                overlay.rect(bx, by_, bw_, bh_, bgc);
+                let btxt = if active { format!("Confirm ({staged_n})") } else { "Confirm".to_string() };
+                let btw = rcce_render::font::text_width(&btxt, 1.0);
+                overlay.text_shadow(bx + bw_ * 0.5 - btw * 0.5, by_ + 3.0, 1.0, &btxt, if active { white } else { dimc });
             }
 
             // Bottom action bar + function buttons, placed at the real
