@@ -134,7 +134,8 @@ pub fn render_model_png(
         &wgpu::DeviceDescriptor {
             label: Some("model3d"),
             required_features: wgpu::Features::empty(),
-            required_limits: wgpu::Limits::downlevel_defaults(),
+            required_limits: wgpu::Limits::downlevel_defaults()
+                .using_resolution(adapter.limits()),
             memory_hints: wgpu::MemoryHints::Performance,
         },
         None,

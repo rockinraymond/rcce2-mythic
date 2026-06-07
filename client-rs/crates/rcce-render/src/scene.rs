@@ -118,7 +118,8 @@ pub fn render_scene_png(
         &wgpu::DeviceDescriptor {
             label: Some("scene"),
             required_features: wgpu::Features::empty(),
-            required_limits: wgpu::Limits::downlevel_defaults(),
+            required_limits: wgpu::Limits::downlevel_defaults()
+                .using_resolution(adapter.limits()),
             memory_hints: wgpu::MemoryHints::Performance,
         },
         None,
@@ -317,7 +318,8 @@ pub fn render_skinned_png(
         &wgpu::DeviceDescriptor {
             label: Some("skin"),
             required_features: wgpu::Features::empty(),
-            required_limits: wgpu::Limits::downlevel_defaults(),
+            required_limits: wgpu::Limits::downlevel_defaults()
+                .using_resolution(adapter.limits()),
             memory_hints: wgpu::MemoryHints::Performance,
         },
         None,

@@ -100,7 +100,8 @@ impl Gfx {
             &wgpu::DeviceDescriptor {
                 label: Some("window"),
                 required_features: wgpu::Features::empty(),
-                required_limits: wgpu::Limits::downlevel_defaults(),
+                required_limits: wgpu::Limits::downlevel_defaults()
+                    .using_resolution(adapter.limits()),
                 memory_hints: wgpu::MemoryHints::Performance,
             },
             None,
@@ -8373,8 +8374,18 @@ impl App {
 
 fn main() {
     let mut args = std::env::args().skip(1);
-    let host = args.next().unwrap_or_else(|| "127.0.0.1".to_string());
-    let port: u16 = args.next().and_then(|s| s.parse().ok()).unwrap_or(25000);
+    // Server address: positional arg wins, else RCCE_HOST / RCCE_PORT, else the
+    // 127.0.0.1:25000 default. Lets a macOS/Linux client point at a Windows
+    // server host without passing CLI args (e.g. launched via compile.sh).
+    let host = args
+        .next()
+        .or_else(|| std::env::var("RCCE_HOST").ok().filter(|s| !s.trim().is_empty()))
+        .unwrap_or_else(|| "127.0.0.1".to_string());
+    let port: u16 = args
+        .next()
+        .and_then(|s| s.parse().ok())
+        .or_else(|| std::env::var("RCCE_PORT").ok().and_then(|s| s.trim().parse().ok()))
+        .unwrap_or(25000);
     let zone = args.next().unwrap_or_else(|| "Plains".to_string());
     let event_loop = EventLoop::new().expect("event loop");
     event_loop.set_control_flow(ControlFlow::Poll);
