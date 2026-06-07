@@ -271,7 +271,21 @@ impl AreaScenery {
             for _ in 0..n_terr {
                 let base_tex_id = r.read_short_u()?;
                 let detail_tex_id = r.read_short_u()?;
-                let grid = r.read_int()? as u32;
+                let grid = r.read_int()?;
+                // `grid` comes straight off disk. A corrupt or hostile area file
+                // can carry a negative or absurd value; `(grid+1)^2` would then
+                // overflow the vertex count (the multiply itself wraps `usize`,
+                // and `Vec::with_capacity` panics past `isize::MAX`). Real LOD
+                // terrain grids are tiny — reject anything implausible and let
+                // the caller soft-fail the zone rather than crash the client.
+                const MAX_TERRAIN_GRID: i32 = 4096;
+                if !(0..=MAX_TERRAIN_GRID).contains(&grid) {
+                    return Err(ReadError::CountTooLarge {
+                        count: grid as i64,
+                        max: MAX_TERRAIN_GRID as usize,
+                    });
+                }
+                let grid = grid as u32;
                 let verts = (grid as usize + 1) * (grid as usize + 1);
                 let mut heights = Vec::with_capacity(verts);
                 for _ in 0..verts {
