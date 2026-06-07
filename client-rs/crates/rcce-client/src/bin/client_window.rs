@@ -6114,6 +6114,26 @@ impl App {
                 }
             }
         }
+        // Headless buff self-test: inject status effects (two with real icon
+        // textures borrowed from item thumbnails, one without) so the buff icons +
+        // name-pill fallback are capturable. No-op unless RCCE_BUFFTEST=<frame>.
+        if let Ok(bv) = std::env::var("RCCE_BUFFTEST") {
+            if let Ok(at) = bv.parse::<u64>() {
+                if self.frames == at {
+                    use rcce_client::world::ActiveEffect;
+                    let tex = |id: u16| store.item_def(id).map(|d| d.thumbnail_tex_id).filter(|&t| t >= 0).map(|t| t as u16).unwrap_or(0);
+                    let (t1, t2) = (tex(1), tex(2));
+                    if let Some(net) = self.net.as_mut() {
+                        net.world.active_effects = vec![
+                            ActiveEffect { id: 1, texture_id: t1, name: "Strength".into() },
+                            ActiveEffect { id: 2, texture_id: t2, name: "Poison".into() },
+                            ActiveEffect { id: 3, texture_id: 0, name: "Haste".into() },
+                        ];
+                    }
+                    println!("[bufftest] frame {} injected 3 effects (icon tex {t1},{t2},0)", self.frames);
+                }
+            }
+        }
         // Day/night phase, in priority order:
         //   1. RCCE_PHASE — pins a fixed phase (screenshots / tests).
         //   2. the SERVER clock (P_FetchActors "E" block) — so dusk/night follow
@@ -6566,19 +6586,48 @@ impl App {
                     }
                 }
 
-                // Status-effect pills at the real Buffs rect (top-right).
+                // Status-effect icons at the real Buffs rect (top-right). Blitz
+                // draws each effect's IconTexID; the Rust client only showed a name
+                // pill. Now: the real icon (lazily registered from the catalog),
+                // name pill as the fallback, and the name on hover.
                 if !net.world.active_effects.is_empty() {
-                    let (mut ex, ey) = match store.interface() {
+                    let (bx0, by0) = match store.interface() {
                         Some(iface) => (iface.buffs.x * sw, iface.buffs.y * sh),
                         None => (10.0, 152.0),
                     };
+                    let isz = 24.0f32;
+                    let (cxp, cyp) = self.cursor;
+                    let mut ex = bx0;
+                    let mut hover: Option<(f32, f32, String)> = None;
                     for eff in &net.world.active_effects {
-                        let label: String = eff.name.chars().take(12).collect();
-                        let tw = rcce_render::font::text_width(&label, 1.0);
-                        let pillw = tw + 10.0;
-                        overlay.rect(ex, ey, pillw, 14.0, [0.32, 0.16, 0.36, 0.82]);
-                        overlay.text_shadow(ex + 5.0, ey + 2.0, 1.0, &label, [1.0, 0.85, 1.0, 1.0]);
-                        ex += pillw + 4.0;
+                        let key = format!("buff:{}", eff.texture_id);
+                        if !overlay.has_texture(&key) {
+                            if let Some(img) = store.texture_path(eff.texture_id).and_then(|p| rcce_data::texture::load(&p)) {
+                                overlay.register_texture(&gfx.device, &gfx.queue, &key, img.width, img.height, &img.rgba);
+                            }
+                        }
+                        let w = if overlay.has_texture(&key) {
+                            overlay.rect(ex - 1.0, by0 - 1.0, isz + 2.0, isz + 2.0, [0.0, 0.0, 0.0, 0.5]);
+                            overlay.image(ex, by0, isz, isz, &key, [1.0, 1.0, 1.0, 1.0]);
+                            isz
+                        } else {
+                            // Name-pill fallback (the previous behaviour).
+                            let label: String = eff.name.chars().take(12).collect();
+                            let pillw = rcce_render::font::text_width(&label, 1.0) + 10.0;
+                            overlay.rect(ex, by0, pillw, 14.0, [0.32, 0.16, 0.36, 0.82]);
+                            overlay.text_shadow(ex + 5.0, by0 + 2.0, 1.0, &label, [1.0, 0.85, 1.0, 1.0]);
+                            pillw
+                        };
+                        if cxp >= ex && cxp < ex + w && cyp >= by0 && cyp < by0 + isz {
+                            hover = Some((ex, by0 + isz + 2.0, eff.name.clone()));
+                        }
+                        ex += w + 4.0;
+                    }
+                    // Hovered effect's full name as a tooltip just under its icon.
+                    if let Some((tx, ty, name)) = hover {
+                        let tw = rcce_render::font::text_width(&name, 1.0) + 8.0;
+                        overlay.rect(tx, ty, tw, 14.0, [0.05, 0.05, 0.1, 0.94]);
+                        overlay.text_shadow(tx + 4.0, ty + 2.0, 1.0, &name, [1.0, 1.0, 1.0, 1.0]);
                     }
                 }
 
