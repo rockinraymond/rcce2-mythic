@@ -6102,8 +6102,13 @@ impl App {
                 if self.show_party {
                     let (pwd, phd) = (220.0f32, 160.0f32);
                     let (pxp, pyp) = (sw * 0.5 - pwd - 12.0, (sh - phd) * 0.5);
-                    overlay.rect(pxp, pyp, pwd, phd, [0.05, 0.06, 0.10, 0.94]);
-                    overlay.rect(pxp, pyp, pwd, 22.0, [0.15, 0.18, 0.28, 0.96]);
+                    if overlay.has_texture("gui:PartyBG") {
+                        overlay.image(pxp, pyp, pwd, phd, "gui:PartyBG", [1.0, 1.0, 1.0, 1.0]);
+                        overlay.rect(pxp, pyp, pwd, 22.0, [0.0, 0.0, 0.0, 0.45]);
+                    } else {
+                        overlay.rect(pxp, pyp, pwd, phd, [0.05, 0.06, 0.10, 0.94]);
+                        overlay.rect(pxp, pyp, pwd, 22.0, [0.15, 0.18, 0.28, 0.96]);
+                    }
                     overlay.text_shadow(pxp + 10.0, pyp + 6.0, 1.3, "Party", white);
                     overlay.text(pxp + pwd - 78.0, pyp + 7.0, 1.0, "[P] close", [0.6, 0.6, 0.6, 1.0]);
                     let mut py2 = pyp + 30.0;
@@ -6124,8 +6129,13 @@ impl App {
                 if self.show_spellbook {
                     let (kwd, khd) = (240.0f32, 240.0f32);
                     let (kxp, kyp) = (sw * 0.5 + 12.0, (sh - khd) * 0.5);
-                    overlay.rect(kxp, kyp, kwd, khd, [0.05, 0.06, 0.10, 0.94]);
-                    overlay.rect(kxp, kyp, kwd, 22.0, [0.18, 0.15, 0.28, 0.96]);
+                    if overlay.has_texture("gui:AbilitiesBG") {
+                        overlay.image(kxp, kyp, kwd, khd, "gui:AbilitiesBG", [1.0, 1.0, 1.0, 1.0]);
+                        overlay.rect(kxp, kyp, kwd, 22.0, [0.0, 0.0, 0.0, 0.45]);
+                    } else {
+                        overlay.rect(kxp, kyp, kwd, khd, [0.05, 0.06, 0.10, 0.94]);
+                        overlay.rect(kxp, kyp, kwd, 22.0, [0.18, 0.15, 0.28, 0.96]);
+                    }
                     overlay.text_shadow(kxp + 10.0, kyp + 6.0, 1.3, "Spellbook", white);
                     overlay.text(kxp + kwd - 78.0, kyp + 7.0, 1.0, "[K] close", [0.6, 0.6, 0.6, 1.0]);
                     let mut ky2 = kyp + 30.0;
