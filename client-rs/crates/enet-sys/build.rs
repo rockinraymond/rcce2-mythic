@@ -24,6 +24,16 @@ fn main() {
         // ENet's platform code keys off WIN32 (no underscore); MSVC only
         // guarantees _WIN32, so define WIN32 explicitly.
         b.define("WIN32", None);
+    } else {
+        // macOS and modern Linux/glibc provide socklen_t in <sys/socket.h>.
+        // vendor/unix.c only falls back to its own `typedef int socklen_t;`
+        // when HAS_SOCKLEN_T is undefined — and that fallback collides with
+        // the system typedef, a hard error under clang. Signal that the
+        // platform has it so ENet skips the conflicting definition. Every
+        // other HAS_* guard safely takes its portable fallback branch (which
+        // uses BSD socket APIs present on both macOS and Linux), so this is
+        // the only flag the cc build needs on unix.
+        b.define("HAS_SOCKLEN_T", None);
     }
     b.compile("rcenet_c");
 
