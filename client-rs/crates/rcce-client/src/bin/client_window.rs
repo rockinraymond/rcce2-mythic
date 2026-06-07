@@ -173,22 +173,34 @@ struct Net {
     env_requested: bool,
 }
 
-/// Where an in-flight spell drag started — a spellbook row (known-spell index,
-/// for the click-vs-drag fallback to memorise) or an action-bar slot (slot
-/// index, so a drop elsewhere moves/clears it). Parity with Blitz's WSpells →
-/// action-bar drag (Interface3D.bb DragSpell).
+/// One thing that can sit on an action-bar slot: a spell (by id) or an item (by
+/// id). Matches Blitz's `Slots$` `"S"name` / `"I"itemid` tagging. The server keys
+/// spells by name on the wire; ids resolve to names at send time.
+#[derive(Clone, Copy, PartialEq, Debug)]
+enum HotbarEntry {
+    Spell(u16),
+    Item(u16),
+}
+
+/// Where an in-flight hotbar drag started — a spellbook row (known-spell index,
+/// for the click-vs-drag fallback to memorise), an action-bar slot (slot index,
+/// so a drop elsewhere moves/clears it), or an inventory slot (drag an item onto
+/// the bar). Parity with Blitz's WSpells / inventory → action-bar drag.
 #[derive(Clone, Copy)]
 enum DragSrc {
     Spellbook(usize),
     Slot(usize),
+    /// An inventory item slot. The carried `HotbarEntry::Item(id)` is all the drop
+    /// needs (the bag isn't modified), so the source slot isn't retained.
+    Inventory,
 }
 
-/// An active left-button spell drag: the spell being carried, its origin, the
-/// press position and whether the cursor has moved far enough to count as a
-/// drag (vs a plain click, which falls back to memorise / cast on release).
+/// An active left-button hotbar drag: the entry being carried, its origin, the
+/// press position and whether the cursor has moved far enough to count as a drag
+/// (vs a plain click, which falls back to memorise / cast on release).
 #[derive(Clone, Copy)]
 struct SpellDrag {
-    spell_id: u16,
+    entry: HotbarEntry,
     src: DragSrc,
     start: (f32, f32),
     moved: bool,
@@ -333,12 +345,13 @@ struct App {
     memorised: std::collections::HashSet<usize>,
     /// Spellbook row hitboxes `(x,y,w,h, known index)`, rebuilt as the panel draws.
     spell_hitboxes: Vec<(f32, f32, f32, f32, usize)>,
-    /// Explicit action-bar assignments: `action_bar[i]` = the spell id placed on
-    /// hotbar slot `i` (drag-drop from the spellbook / rearranged within the bar).
-    /// All-`None` means "not yet customised" and the bar falls back to auto-filling
-    /// from the memorised spells, so the default view is unchanged until the player
-    /// first drags a spell onto it. See `action_bar_ids` / `materialize_action_bar`.
-    action_bar: [Option<u16>; 12],
+    /// Explicit action-bar assignments: `action_bar[i]` = the spell/item placed on
+    /// hotbar slot `i` (drag-drop from the spellbook / inventory / rearranged within
+    /// the bar). All-`None` means "not yet customised" and the bar falls back to
+    /// auto-filling from the memorised spells, so the default view is unchanged
+    /// until the player first drags onto it. See `action_bar_ids` /
+    /// `materialize_action_bar`.
+    action_bar: [Option<HotbarEntry>; 12],
     /// The in-flight left-button spell drag (spellbook row → hotbar slot, or
     /// slot → slot / off-bar to clear). `None` when nothing is being dragged.
     drag: Option<SpellDrag>,
@@ -716,16 +729,16 @@ fn inv_action_button_at(
 /// can call it while `self.gfx` is mutably borrowed — it only reads two disjoint
 /// fields the caller passes in.
 fn effective_action_bar(
-    action_bar: &[Option<u16>; 12],
+    action_bar: &[Option<HotbarEntry>; 12],
     sheet: Option<&rcce_client::fetch::CharacterSheet>,
-) -> [Option<u16>; 12] {
+) -> [Option<HotbarEntry>; 12] {
     if action_bar.iter().any(|s| s.is_some()) {
         return *action_bar;
     }
     let mut out = [None; 12];
     if let Some(sheet) = sheet {
         for (i, sp) in sheet.spells.iter().filter(|s| s.memorised).take(12).enumerate() {
-            out[i] = Some(sp.id);
+            out[i] = Some(HotbarEntry::Spell(sp.id));
         }
     }
     out
@@ -2674,9 +2687,8 @@ impl ApplicationHandler for App {
                                 }
                                 return;
                             }
-                            // Cast the spell on hotbar slot `idx` (explicit
-                            // assignment, or auto-filled memorised spell).
-                            self.cast_slot(idx);
+                            // Activate hotbar slot `idx` (cast spell / use item).
+                            self.use_slot(idx);
                         }
                         KeyCode::KeyW | KeyCode::ArrowUp => self.keys_wasd[0] = pressed,
                         KeyCode::KeyA => self.keys_wasd[1] = pressed,
@@ -2961,13 +2973,13 @@ impl App {
             }
         }
         // Load the persisted hotbar (P_ActionBarUpdate round-trip): resolve each
-        // stored spell NAME back to its id via the sheet / known spells. Slots
-        // past the 12 visible are dropped; item slots aren't placeable on the Rust
-        // bar yet (counted for the log). A non-empty result makes the bar explicit,
-        // so `effective_action_bar` shows exactly the saved layout (no auto-fill).
+        // stored spell NAME back to its id via the sheet / known spells; item slots
+        // carry their id directly. Slots past the 12 visible are dropped. A non-empty
+        // result makes the bar explicit, so `effective_action_bar` shows exactly the
+        // saved layout (no auto-fill).
         {
-            let mut bar = [None; 12];
-            let mut items_skipped = 0usize;
+            let mut bar: [Option<HotbarEntry>; 12] = [None; 12];
+            let mut unresolved = 0usize;
             for (slot, sl) in &outcome.action_bar {
                 if *slot >= 12 {
                     continue;
@@ -2979,11 +2991,12 @@ impl App {
                             .as_ref()
                             .and_then(|s| s.spells.iter().find(|sp| sp.name.eq_ignore_ascii_case(name)).map(|sp| sp.id))
                             .or_else(|| world.known_spells.iter().find(|k| k.name.eq_ignore_ascii_case(name)).map(|k| k.id));
-                        if let Some(id) = id {
-                            bar[*slot] = Some(id);
+                        match id {
+                            Some(id) => bar[*slot] = Some(HotbarEntry::Spell(id)),
+                            None => unresolved += 1,
                         }
                     }
-                    rcce_client::login::ActionSlot::Item(_) => items_skipped += 1,
+                    rcce_client::login::ActionSlot::Item(id) => bar[*slot] = Some(HotbarEntry::Item(*id)),
                 }
             }
             let loaded = bar.iter().filter(|s| s.is_some()).count();
@@ -3003,7 +3016,7 @@ impl App {
                     "[client-window] action bar: {} saved slot(s) [{}] -> {loaded} resolved{}",
                     outcome.action_bar.len(),
                     raw.join(", "),
-                    if items_skipped > 0 { format!(", {items_skipped} item skipped") } else { String::new() }
+                    if unresolved > 0 { format!(", {unresolved} spell name(s) unresolved") } else { String::new() }
                 );
             }
             self.action_bar = bar;
@@ -3300,7 +3313,7 @@ impl App {
     /// once the player has customised the bar, otherwise an auto-fill from the
     /// first 12 memorised spells (the pre-drag-drop default). One source of truth
     /// for both the bar render and casting so they can never disagree.
-    fn action_bar_ids(&self) -> [Option<u16>; 12] {
+    fn action_bar_ids(&self) -> [Option<HotbarEntry>; 12] {
         effective_action_bar(&self.action_bar, self.sheet.as_ref())
     }
 
@@ -3336,12 +3349,13 @@ impl App {
         }
         for slot in 0..12usize {
             let pkt = match self.action_bar[slot] {
-                Some(id) => match self.spell_name_for_id(id) {
+                Some(HotbarEntry::Spell(id)) => match self.spell_name_for_id(id) {
                     Some(name) => rcce_client::net::action_bar_spell_packet(slot as u8, &name),
                     // Unknown name (shouldn't happen for an assigned spell) — skip
                     // rather than clobber the server slot with a bad value.
                     None => continue,
                 },
+                Some(HotbarEntry::Item(item_id)) => rcce_client::net::action_bar_item_packet(slot as u8, item_id),
                 None => rcce_client::net::action_bar_clear_packet(slot as u8),
             };
             if let Some(net) = self.net.as_mut() {
@@ -3350,40 +3364,73 @@ impl App {
         }
     }
 
-    /// Cast the spell on action-bar slot `i` (Digit key or click), respecting the
-    /// per-spell cooldown. Recharge comes from the character sheet when known.
-    fn cast_slot(&mut self, i: usize) {
-        let Some(spell_id) = self.action_bar_ids().get(i).copied().flatten() else {
+    /// Activate action-bar slot `i` (Digit key or click): cast the spell (respecting
+    /// the per-spell cooldown) or use the item (eat / run its Use script, found in
+    /// the inventory by id). No-op for an empty slot or an item no longer carried.
+    fn use_slot(&mut self, i: usize) {
+        let Some(entry) = self.action_bar_ids().get(i).copied().flatten() else {
             return;
         };
-        let recharge = self
-            .sheet
-            .as_ref()
-            .and_then(|s| s.spells.iter().find(|x| x.id == spell_id))
-            .map(|x| x.recharge)
-            .unwrap_or(0);
-        let now = self.start.elapsed().as_secs_f32();
-        let ready = self.spell_cooldowns.get(&spell_id).copied().unwrap_or(0.0);
-        if now < ready {
-            return;
+        match entry {
+            HotbarEntry::Spell(spell_id) => {
+                let recharge = self
+                    .sheet
+                    .as_ref()
+                    .and_then(|s| s.spells.iter().find(|x| x.id == spell_id))
+                    .map(|x| x.recharge)
+                    .unwrap_or(0);
+                let now = self.start.elapsed().as_secs_f32();
+                let ready = self.spell_cooldowns.get(&spell_id).copied().unwrap_or(0.0);
+                if now < ready {
+                    return;
+                }
+                let target = self.target;
+                if let Some(net) = self.net.as_mut() {
+                    net.transport.send(
+                        net.peer,
+                        rcce_net::packet_id::SPELL_UPDATE,
+                        &rcce_client::net::cast_packet(spell_id, target),
+                        true,
+                    );
+                }
+                self.spell_cooldowns.insert(spell_id, now + recharge as f32 / 1000.0);
+            }
+            HotbarEntry::Item(item_id) => {
+                // Find an inventory slot holding this item, then use it the same way
+                // the inventory Eat button does (Interface3D.bb UseItem): Potion (4)
+                // / Ingredient (5) are eaten, everything else runs its Use script.
+                let slot = self
+                    .net
+                    .as_ref()
+                    .and_then(|n| n.world.me_inventory.values().find(|it| it.item_id == item_id).map(|it| it.slot));
+                let Some(slot) = slot else { return };
+                let (item_type, image_id) = self
+                    .store
+                    .as_ref()
+                    .and_then(|s| s.item_def(item_id))
+                    .map(|d| (d.item_type, d.image_id))
+                    .unwrap_or((0, -1));
+                let edible = item_type == 4 || item_type == 5;
+                let target = self.target;
+                if let Some(net) = self.net.as_mut() {
+                    if edible {
+                        net.transport.send(net.peer, rcce_net::packet_id::EAT_ITEM, &rcce_client::net::eat_item_packet(slot, 1), true);
+                    } else {
+                        net.transport.send(net.peer, rcce_net::packet_id::ITEM_SCRIPT, &rcce_client::net::item_script_packet(slot, target), true);
+                    }
+                }
+                if item_type == 6 && image_id >= 0 {
+                    self.image_window = Some(image_id as u16);
+                }
+            }
         }
-        let target = self.target;
-        if let Some(net) = self.net.as_mut() {
-            net.transport.send(
-                net.peer,
-                rcce_net::packet_id::SPELL_UPDATE,
-                &rcce_client::net::cast_packet(spell_id, target),
-                true,
-            );
-        }
-        self.spell_cooldowns.insert(spell_id, now + recharge as f32 / 1000.0);
     }
 
-    /// Left-button press while the cursor is over a draggable spell source: begin
-    /// a drag (deferred — the release decides click-vs-drag). Returns true if a
-    /// drag was armed, so the caller skips the immediate `hud_click`. A draggable
-    /// source is a *memorised* spellbook row (parity: only memorised spells slot)
-    /// or an action-bar slot that currently holds a spell.
+    /// Left-button press while the cursor is over a draggable source: begin a drag
+    /// (deferred — the release decides click-vs-drag). Returns true if a drag was
+    /// armed, so the caller skips the immediate `hud_click`. Draggable sources: a
+    /// *memorised* spellbook row (parity: only memorised spells slot), an occupied
+    /// action-bar slot, or an inventory item slot (drag the item onto the bar).
     fn begin_drag(&mut self) -> bool {
         let Some(gfx) = self.gfx.as_ref() else { return false };
         let (sw, sh) = (gfx.config.width as f32, gfx.config.height as f32);
@@ -3398,7 +3445,7 @@ impl App {
             if let Some(idx) = row {
                 if self.memorised.contains(&idx) {
                     if let Some(id) = self.net.as_ref().and_then(|n| n.world.known_spells.get(idx)).map(|s| s.id) {
-                        self.drag = Some(SpellDrag { spell_id: id, src: DragSrc::Spellbook(idx), start: (cx, cy), moved: false });
+                        self.drag = Some(SpellDrag { entry: HotbarEntry::Spell(id), src: DragSrc::Spellbook(idx), start: (cx, cy), moved: false });
                         return true;
                     }
                 }
@@ -3407,10 +3454,29 @@ impl App {
                 return false;
             }
         }
-        // Action-bar slot that holds a spell.
+        // Inventory item slot (panel open): drag the item onto the bar. A plain
+        // click on a grid slot is otherwise a no-op, so this can't steal an action.
+        if self.show_inventory {
+            let slot = self
+                .store
+                .as_ref()
+                .and_then(|s| s.interface())
+                .and_then(|iface| inventory_slot_at(cx, cy, iface.inventory_window, &iface.inventory_buttons, sw, sh));
+            if let Some(slot) = slot {
+                if let Some(item_id) = self
+                    .net
+                    .as_ref()
+                    .and_then(|n| n.world.me_inventory.values().find(|it| it.slot == slot as u8).map(|it| it.item_id))
+                {
+                    self.drag = Some(SpellDrag { entry: HotbarEntry::Item(item_id), src: DragSrc::Inventory, start: (cx, cy), moved: false });
+                    return true;
+                }
+            }
+        }
+        // Action-bar slot that holds an entry.
         if let Some(slot) = spell_slot_at(cx, cy, sw, sh) {
-            if let Some(id) = self.action_bar_ids().get(slot).copied().flatten() {
-                self.drag = Some(SpellDrag { spell_id: id, src: DragSrc::Slot(slot), start: (cx, cy), moved: false });
+            if let Some(entry) = self.action_bar_ids().get(slot).copied().flatten() {
+                self.drag = Some(SpellDrag { entry, src: DragSrc::Slot(slot), start: (cx, cy), moved: false });
                 return true;
             }
         }
@@ -3418,7 +3484,7 @@ impl App {
     }
 
     /// Left-button release: finish the in-flight drag (if any). A drag that never
-    /// moved is treated as a click (memorise the row / cast the slot); a real drag
+    /// moved is treated as a click (memorise the row / use the slot); a real drag
     /// drops onto the action-bar slot under the cursor, or clears the source slot
     /// when released off the bar.
     fn end_drag(&mut self) {
@@ -3430,7 +3496,8 @@ impl App {
             // Plain click: same effect the press would have had.
             match drag.src {
                 DragSrc::Spellbook(idx) => self.toggle_memorise(idx),
-                DragSrc::Slot(i) => self.cast_slot(i),
+                DragSrc::Slot(i) => self.use_slot(i),
+                DragSrc::Inventory => { /* click on a bag slot — no-op */ }
             }
             return;
         }
@@ -3439,13 +3506,13 @@ impl App {
             (_, Some(slot)) => {
                 self.materialize_action_bar();
                 // Move semantics: dragging a bar slot onto another swaps the
-                // source out (so a spell isn't duplicated by a rearrange).
+                // source out (so an entry isn't duplicated by a rearrange).
                 if let DragSrc::Slot(from) = drag.src {
                     if from != slot {
                         self.action_bar[from] = None;
                     }
                 }
-                self.action_bar[slot] = Some(drag.spell_id);
+                self.action_bar[slot] = Some(drag.entry);
                 self.persist_action_bar();
             }
             (DragSrc::Slot(from), None) => {
@@ -3454,7 +3521,7 @@ impl App {
                 self.action_bar[from] = None;
                 self.persist_action_bar();
             }
-            (DragSrc::Spellbook(_), None) => { /* dropped nowhere — cancel */ }
+            (DragSrc::Spellbook(_) | DragSrc::Inventory, None) => { /* dropped nowhere — cancel */ }
         }
     }
 
@@ -5841,26 +5908,32 @@ impl App {
                     }
                     self.memorised = [0usize, 1, 2].into_iter().collect();
                     self.action_bar = [None; 12];
-                    self.action_bar[0] = Some(12); // Fireball on slot 1
-                    self.action_bar[1] = Some(7); // Heal on slot 2
-                    self.action_bar[4] = Some(21); // Lightning on slot 5 (gap at 3,4)
+                    self.action_bar[0] = Some(HotbarEntry::Spell(12)); // Fireball, slot 1
+                    self.action_bar[1] = Some(HotbarEntry::Spell(7)); // Heal, slot 2
+                    self.action_bar[4] = Some(HotbarEntry::Spell(21)); // Lightning, slot 5
+                    self.action_bar[6] = Some(HotbarEntry::Item(1)); // an item on slot 7
                     self.show_spellbook = true;
                     // Persist to the server (P_ActionBarUpdate) so a relog loads it
                     // back. Inlined (not persist_action_bar): self.gfx is mutably
                     // borrowed in this render scope, so only disjoint-field access
                     // is legal — a `&mut self` method call would conflict.
                     for slot in 0..12usize {
-                        if let Some(id) = self.action_bar[slot] {
-                            let name = self.sheet.as_ref().and_then(|s| s.spells.iter().find(|sp| sp.id == id).map(|sp| sp.name.clone()));
-                            if let Some(name) = name {
-                                let pkt = rcce_client::net::action_bar_spell_packet(slot as u8, &name);
-                                if let Some(net) = self.net.as_mut() {
-                                    net.transport.send(net.peer, rcce_net::packet_id::ACTION_BAR_UPDATE, &pkt, true);
-                                }
+                        let pkt = match self.action_bar[slot] {
+                            Some(HotbarEntry::Spell(id)) => self
+                                .sheet
+                                .as_ref()
+                                .and_then(|s| s.spells.iter().find(|sp| sp.id == id))
+                                .map(|sp| rcce_client::net::action_bar_spell_packet(slot as u8, &sp.name)),
+                            Some(HotbarEntry::Item(id)) => Some(rcce_client::net::action_bar_item_packet(slot as u8, id)),
+                            None => None,
+                        };
+                        if let Some(pkt) = pkt {
+                            if let Some(net) = self.net.as_mut() {
+                                net.transport.send(net.peer, rcce_net::packet_id::ACTION_BAR_UPDATE, &pkt, true);
                             }
                         }
                     }
-                    println!("[actionbartest] frame {} explicit hotbar [0]=Fireball [1]=Heal [4]=Lightning + persisted", self.frames);
+                    println!("[actionbartest] frame {} explicit hotbar [0]=Fireball [1]=Heal [4]=Lightning [6]=Item(1) + persisted", self.frames);
                 }
             }
         }
@@ -6898,7 +6971,7 @@ impl App {
                 let by = BAR_Y * sh;
                 // 12 spell slots, resolved from the explicit action-bar layout
                 // (drag-drop) or the memorised auto-fill default — one source of
-                // truth shared with the Digit-key / click cast path (`cast_slot`).
+                // truth shared with the Digit-key / click activate path (`use_slot`).
                 let bar_ids = effective_action_bar(&self.action_bar, self.sheet.as_ref());
                 // The slot under the cursor being dragged-over (drop highlight),
                 // and the source slot of an in-flight bar drag (dim it as it lifts).
@@ -6917,42 +6990,54 @@ impl App {
                     } else {
                         overlay.rect(x, by, sw_, sh_, [0.08, 0.08, 0.13, 0.78]);
                     }
-                    // Drop-target highlight while dragging a spell over this slot.
+                    // Drop-target highlight while dragging an entry over this slot.
                     if drag_target == Some(i) {
                         overlay.rect(x, by, sw_, sh_, [0.4, 0.7, 1.0, 0.28]);
                     }
-                    if let Some(spell_id) = bar_ids[i] {
-                        // Rich spell info from the sheet (icon/recharge/name); fall
-                        // back to the live known-spell list for a name-only slot.
-                        let sp = self.sheet.as_ref().and_then(|s| s.spells.iter().find(|x| x.id == spell_id));
-                        let name = sp.map(|s| s.name.clone()).or_else(|| {
-                            self.net.as_ref().and_then(|n| n.world.known_spells.iter().find(|s| s.id == spell_id)).map(|s| s.name.clone())
-                        }).unwrap_or_default();
-                        let recharge = sp.map(|s| s.recharge).unwrap_or(0);
-                        // Real spell icon (Spell.ThumbnailTexID → Textures.dat),
-                        // lazily registered, drawn over the slot frame.
-                        let key = format!("spell:{spell_id}");
-                        if !overlay.has_texture(&key) {
-                            if let Some(img) =
-                                sp.and_then(|s| store.texture_path(s.thumb_tex)).and_then(|p| rcce_data::texture::load(&p))
-                            {
-                                overlay.register_texture(&gfx.device, &gfx.queue, &key, img.width, img.height, &img.rgba);
-                            }
-                        }
-                        let has_icon = overlay.has_texture(&key);
-                        // Source slot of a bar→bar drag: dim it so the spell looks
+                    if let Some(entry) = bar_ids[i] {
+                        // Source slot of a bar→bar drag: dim it so the entry looks
                         // "picked up" while it follows the cursor.
                         let icon_a = if drag_from == Some(i) { 0.35 } else { 1.0 };
+                        // Resolve (icon key, display name, spell recharge) per kind;
+                        // register the icon lazily from the spell/item catalog.
+                        let (key, name, recharge): (String, String, u16) = match entry {
+                            HotbarEntry::Spell(spell_id) => {
+                                let sp = self.sheet.as_ref().and_then(|s| s.spells.iter().find(|x| x.id == spell_id));
+                                let name = sp.map(|s| s.name.clone()).or_else(|| {
+                                    self.net.as_ref().and_then(|n| n.world.known_spells.iter().find(|s| s.id == spell_id)).map(|s| s.name.clone())
+                                }).unwrap_or_default();
+                                let key = format!("spell:{spell_id}");
+                                if !overlay.has_texture(&key) {
+                                    if let Some(img) = sp.and_then(|s| store.texture_path(s.thumb_tex)).and_then(|p| rcce_data::texture::load(&p)) {
+                                        overlay.register_texture(&gfx.device, &gfx.queue, &key, img.width, img.height, &img.rgba);
+                                    }
+                                }
+                                (key, name, sp.map(|s| s.recharge).unwrap_or(0))
+                            }
+                            HotbarEntry::Item(item_id) => {
+                                let key = format!("item:{item_id}");
+                                if !overlay.has_texture(&key) {
+                                    if let Some(img) = store.item_icon_path(item_id).and_then(|p| rcce_data::texture::load(&p)) {
+                                        overlay.register_texture(&gfx.device, &gfx.queue, &key, img.width, img.height, &img.rgba);
+                                    }
+                                }
+                                (key, store.item_name(item_id), 0)
+                            }
+                        };
+                        let has_icon = overlay.has_texture(&key);
                         if has_icon {
                             let pad = (sw_ * 0.08).min(2.0);
                             overlay.image(x + pad, by + pad, sw_ - pad * 2.0, sh_ - pad * 2.0, &key, [1.0, 1.0, 1.0, icon_a]);
                         }
-                        let ready = self.spell_cooldowns.get(&spell_id).copied().unwrap_or(0.0);
-                        let remaining = (ready - elapsed).max(0.0);
-                        if remaining > 0.0 {
-                            let span = (recharge as f32 / 1000.0).max(0.1);
-                            let frac = (remaining / span).clamp(0.0, 1.0);
-                            overlay.rect(x, by, sw_, sh_ * frac, [0.0, 0.0, 0.0, 0.6]);
+                        // Cooldown shade (spells only — items have no recharge).
+                        if let HotbarEntry::Spell(spell_id) = entry {
+                            let ready = self.spell_cooldowns.get(&spell_id).copied().unwrap_or(0.0);
+                            let remaining = (ready - elapsed).max(0.0);
+                            if remaining > 0.0 {
+                                let span = (recharge as f32 / 1000.0).max(0.1);
+                                let frac = (remaining / span).clamp(0.0, 1.0);
+                                overlay.rect(x, by, sw_, sh_ * frac, [0.0, 0.0, 0.0, 0.6]);
+                            }
                         }
                         if i < 9 {
                             overlay.text_shadow(x + 2.0, by + 1.0, 1.0, &format!("{}", i + 1), [1.0, 1.0, 0.6, 1.0]);
@@ -7046,17 +7131,34 @@ impl App {
                 }
                 if lines.is_empty() {
                     if let Some(slot) = spell_slot_at(cx, cy, sw, sh) {
-                        if let Some(spell_id) = effective_action_bar(&self.action_bar, self.sheet.as_ref()).get(slot).copied().flatten() {
-                            if let Some(sp) = self.sheet.as_ref().and_then(|s| s.spells.iter().find(|x| x.id == spell_id)) {
-                                lines.push((sp.name.clone(), white));
-                                lines.push((format!("Level {} · Recharge {:.1}s", sp.level, sp.recharge as f32 / 1000.0), accent));
-                                for chunk in wrap_text(&sp.description, 44).into_iter().take(6) {
-                                    lines.push((chunk, [0.78, 0.78, 0.78, 1.0]));
+                        match effective_action_bar(&self.action_bar, self.sheet.as_ref()).get(slot).copied().flatten() {
+                            Some(HotbarEntry::Spell(spell_id)) => {
+                                if let Some(sp) = self.sheet.as_ref().and_then(|s| s.spells.iter().find(|x| x.id == spell_id)) {
+                                    lines.push((sp.name.clone(), white));
+                                    lines.push((format!("Level {} · Recharge {:.1}s", sp.level, sp.recharge as f32 / 1000.0), accent));
+                                    for chunk in wrap_text(&sp.description, 44).into_iter().take(6) {
+                                        lines.push((chunk, [0.78, 0.78, 0.78, 1.0]));
+                                    }
+                                } else if let Some(ks) = self.net.as_ref().and_then(|n| n.world.known_spells.iter().find(|s| s.id == spell_id)) {
+                                    lines.push((ks.name.clone(), white));
+                                    lines.push((format!("Rank {}", ks.level), accent));
                                 }
-                            } else if let Some(ks) = self.net.as_ref().and_then(|n| n.world.known_spells.iter().find(|s| s.id == spell_id)) {
-                                lines.push((ks.name.clone(), white));
-                                lines.push((format!("Rank {}", ks.level), accent));
                             }
+                            Some(HotbarEntry::Item(item_id)) => {
+                                lines.push((store.item_name(item_id), white));
+                                if let Some(def) = store.item_def(item_id) {
+                                    if def.weapon_damage > 0 {
+                                        lines.push((format!("Damage: {}", def.weapon_damage), [1.0, 0.7, 0.6, 1.0]));
+                                    }
+                                    if def.armour_level > 0 {
+                                        lines.push((format!("Armour: {}", def.armour_level), accent));
+                                    }
+                                }
+                                // Whether the player still carries one (greyed if not).
+                                let have = self.net.as_ref().map(|n| n.world.me_inventory.values().any(|it| it.item_id == item_id)).unwrap_or(false);
+                                lines.push((if have { "Click / number to use".into() } else { "(none in inventory)".to_string() }, if have { [0.7, 1.0, 0.7, 1.0] } else { [0.7, 0.5, 0.5, 1.0] }));
+                            }
+                            None => {}
                         }
                     }
                 }
@@ -7128,23 +7230,27 @@ impl App {
                 }
             }
 
-            // Dragged spell icon following the cursor (drag-drop hotbar assign):
-            // drawn over the whole HUD so it reads as "carried". Only once the
-            // press has become a real drag (moved past the dead-zone).
+            // Dragged spell/item icon following the cursor (drag-drop hotbar
+            // assign): drawn over the whole HUD so it reads as "carried". Only once
+            // the press has become a real drag (moved past the dead-zone).
             if let Some(drag) = self.drag.filter(|d| d.moved) {
                 let (cx, cy) = self.cursor;
                 let isz = FBTN_W * sw * 0.9;
-                let key = format!("spell:{}", drag.spell_id);
+                let (key, name) = match drag.entry {
+                    HotbarEntry::Spell(id) => (
+                        format!("spell:{id}"),
+                        self.sheet
+                            .as_ref()
+                            .and_then(|s| s.spells.iter().find(|x| x.id == id).map(|x| x.name.clone()))
+                            .or_else(|| self.net.as_ref().and_then(|n| n.world.known_spells.iter().find(|s| s.id == id).map(|s| s.name.clone())))
+                            .unwrap_or_default(),
+                    ),
+                    HotbarEntry::Item(id) => (format!("item:{id}"), store.item_name(id)),
+                };
                 if overlay.has_texture(&key) {
                     overlay.image(cx - isz * 0.5, cy - isz * 0.5, isz, isz, &key, [1.0, 1.0, 1.0, 0.85]);
                 } else {
                     // No icon registered: a labelled chip so the drag is still legible.
-                    let name = self
-                        .sheet
-                        .as_ref()
-                        .and_then(|s| s.spells.iter().find(|x| x.id == drag.spell_id).map(|x| x.name.clone()))
-                        .or_else(|| self.net.as_ref().and_then(|n| n.world.known_spells.iter().find(|s| s.id == drag.spell_id).map(|s| s.name.clone())))
-                        .unwrap_or_default();
                     let cw = rcce_render::font::text_width(&name, 1.0) + 8.0;
                     overlay.rect(cx - cw * 0.5, cy - 8.0, cw, 16.0, [0.1, 0.14, 0.22, 0.9]);
                     overlay.text_shadow(cx - cw * 0.5 + 4.0, cy - 6.0, 1.0, &name, [0.9, 0.95, 1.0, 1.0]);
@@ -7815,21 +7921,24 @@ mod tests {
             ..Default::default()
         };
 
-        // All-None bar → auto-fill from the memorised spells, in sheet order, with
-        // the un-memorised one skipped.
+        // All-None bar → auto-fill from the memorised spells (as Spell entries), in
+        // sheet order, with the un-memorised one skipped.
         let empty = [None; 12];
         let auto = effective_action_bar(&empty, Some(&sheet));
-        assert_eq!(auto[0], Some(10));
-        assert_eq!(auto[1], Some(30));
+        assert_eq!(auto[0], Some(HotbarEntry::Spell(10)));
+        assert_eq!(auto[1], Some(HotbarEntry::Spell(30)));
         assert_eq!(auto[2], None);
 
         // Any explicit assignment switches the whole bar to the explicit layout —
-        // the auto-fill no longer leaks in, and gaps are honoured.
+        // the auto-fill no longer leaks in, gaps are honoured, and an item entry is
+        // preserved alongside spells.
         let mut explicit = [None; 12];
-        explicit[4] = Some(30);
+        explicit[4] = Some(HotbarEntry::Spell(30));
+        explicit[5] = Some(HotbarEntry::Item(99));
         let resolved = effective_action_bar(&explicit, Some(&sheet));
         assert_eq!(resolved[0], None, "auto-fill must not leak once customised");
-        assert_eq!(resolved[4], Some(30));
+        assert_eq!(resolved[4], Some(HotbarEntry::Spell(30)));
+        assert_eq!(resolved[5], Some(HotbarEntry::Item(99)));
 
         // No sheet → empty bar stays empty (no panic).
         assert_eq!(effective_action_bar(&empty, None), [None; 12]);

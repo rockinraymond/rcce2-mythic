@@ -70,6 +70,17 @@ pub fn action_bar_spell_packet(slot: u8, name: &str) -> Vec<u8> {
     v
 }
 
+/// `P_ActionBarUpdate "I"` (ServerNet.bb:1120) — persist an item on hotbar slot
+/// `slot`: `"I"` + slot byte + item id (2-byte LE, the same bytes the server
+/// re-stores via `Mid$(data,3,2)`). Sent reliable.
+pub fn action_bar_item_packet(slot: u8, item_id: u16) -> Vec<u8> {
+    let mut v = Vec::with_capacity(4);
+    v.push(b'I');
+    v.push(slot);
+    v.extend_from_slice(&item_id.to_le_bytes());
+    v
+}
+
 /// `P_ActionBarUpdate "N"` (ServerNet.bb:1122) — clear hotbar slot `slot`,
 /// storing "" server-side. `"N"` + slot byte. Sent reliable.
 pub fn action_bar_clear_packet(slot: u8) -> Vec<u8> {
@@ -241,6 +252,14 @@ mod tests {
         assert_eq!(p[0], b'S');
         assert_eq!(p[1], 5);
         assert_eq!(&p[2..], b"Fireball");
+    }
+
+    #[test]
+    fn action_bar_item_layout() {
+        // Server parse: type 'I', slot byte 1, item id = Mid$(data,3,2) [bytes 2..4]
+        // little-endian. (ServerNet.bb:1120)
+        let p = action_bar_item_packet(3, 1000);
+        assert_eq!(p, vec![b'I', 3, 0xE8, 0x03]);
     }
 
     #[test]
