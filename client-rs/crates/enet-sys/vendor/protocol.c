@@ -1108,8 +1108,6 @@ enet_protocol_check_timeouts (ENetHost * host, ENetPeer * peer, ENetEvent * even
                (outgoingCommand -> roundTripTimeout >= outgoingCommand -> roundTripTimeoutLimit &&
                  ENET_TIME_DIFFERENCE(timeCurrent, peer -> earliestTimeout) >= ENET_PEER_TIMEOUT_MINIMUM)))
        {
-		   FILE *file; fopen_s(&file, "c:\\enet_protocol_check_timeouts.txt","w");
-		   fclose(file);
            enet_protocol_notify_disconnect (host, peer, event);
 
           return 1;
