@@ -769,6 +769,20 @@ fn resolve_inventory_dest(from: u8, to: u8, equip_slot: Option<u8>) -> Option<u8
     }
 }
 
+/// Screen rect `(x, y, w, h)` of the vendor / trade window, right-anchored and
+/// vertically centred. One definition shared by the render and the drag-to-sell
+/// drop hit-test so they can't drift.
+fn vendor_window_rect(sw: f32, sh: f32) -> (f32, f32, f32, f32) {
+    let (pw, ph) = (320.0, 300.0);
+    ((sw - pw - 40.0).round(), ((sh - ph) * 0.5).round(), pw, ph)
+}
+
+/// Whether `(cx, cy)` is inside the vendor window (drag-to-sell drop test).
+fn point_in_vendor(cx: f32, cy: f32, sw: f32, sh: f32) -> bool {
+    let (px, py, pw, ph) = vendor_window_rect(sw, sh);
+    cx >= px && cx < px + pw && cy >= py && cy < py + ph
+}
+
 /// Index of the action-bar spell slot (0..=11) whose rect contains `(cx, cy)`.
 /// Pure — uses the same geometry the spell-bar draw loop does.
 fn spell_slot_at(cx: f32, cy: f32, sw: f32, sh: f32) -> Option<usize> {
@@ -3549,7 +3563,17 @@ impl App {
                 self.persist_action_bar();
             }
             DragSrc::Inventory(from) => {
-                // Dropped on an inventory slot → equip / move / unequip.
+                // Dropped onto an open vendor/container window → sell that slot.
+                let selling = point_in_vendor(cx, cy, sw, sh)
+                    && matches!(
+                        self.net.as_ref().and_then(|n| n.world.current_trade.as_ref()).map(|t| t.kind),
+                        Some(rcce_client::trade::TradeKind::Npc) | Some(rcce_client::trade::TradeKind::Scenery)
+                    );
+                if selling {
+                    self.sell_inventory_slot(from);
+                    return;
+                }
+                // Otherwise, dropped on an inventory slot → equip / move / unequip.
                 if self.show_inventory {
                     let to = self
                         .store
@@ -3585,6 +3609,26 @@ impl App {
                 net.peer,
                 rcce_net::packet_id::INVENTORY_UPDATE,
                 &rcce_client::net::inv_move_packet(rid, from, dest, 0, true),
+                true,
+            );
+        }
+    }
+
+    /// Sell the whole stack in inventory slot `slot` to the open vendor — a
+    /// `P_OpenTrading` confirm carrying just that sell (`trade_confirm_packet`'s
+    /// sell list). The server credits the item's value and "T"-takes it from our
+    /// inventory; mirrors the existing per-action buy (one confirm per item).
+    fn sell_inventory_slot(&mut self, slot: u8) {
+        let amount = self
+            .net
+            .as_ref()
+            .and_then(|n| n.world.me_inventory.values().find(|it| it.slot == slot).map(|it| it.amount.max(1)));
+        let Some(amount) = amount else { return };
+        if let Some(net) = self.net.as_mut() {
+            net.transport.send(
+                net.peer,
+                rcce_net::packet_id::OPEN_TRADING,
+                &rcce_client::net::trade_confirm_packet(&[], &[(slot, amount)]),
                 true,
             );
         }
@@ -4952,10 +4996,24 @@ impl App {
         let mut cam_me_yaw = 0.0f32; // player facing, for the first-person camera (CAM-4)
         let mut following = false;
         let mut did_send = false;
+        // Set when a vendor/container trade opens this frame, so the inventory
+        // panel auto-opens alongside it (parity: Blitz shows both, and you drag
+        // items between them to sell). Applied after the `net` borrow ends.
+        let mut open_inventory_for_trade = false;
         if let Some(net) = self.net.as_mut() {
+            let was_trading = net.world.current_trade.is_some();
             for m in net.transport.poll() {
                 net.updates += 1;
                 net.world.apply(&m);
+            }
+            if !was_trading {
+                use rcce_client::trade::TradeKind;
+                if matches!(
+                    net.world.current_trade.as_ref().map(|t| t.kind),
+                    Some(TradeKind::Npc) | Some(TradeKind::Scenery)
+                ) {
+                    open_inventory_for_trade = true;
+                }
             }
             // Once in-world, request the P_FetchActors env block (empty payload,
             // like MainMenu.bb) so we learn the server's time-of-day; the "E"
@@ -5275,6 +5333,9 @@ impl App {
         }
         if did_send {
             self.last_move = Instant::now();
+        }
+        if open_inventory_for_trade {
+            self.show_inventory = true;
         }
         self.was_moving = moving;
 
@@ -6024,6 +6085,32 @@ impl App {
             if let Ok(at) = pl.parse::<u64>() {
                 if self.frames == at {
                     self.show_inventory = true;
+                }
+            }
+        }
+        // Headless vendor self-test: inject a synthetic vendor trade + a couple of
+        // backpack items and open the inventory, so the vendor window (icons +
+        // sell drop-zone footer) and the side-by-side inventory are capturable.
+        // No-op unless RCCE_VENDORTEST=<frame> is set.
+        if let Ok(vv) = std::env::var("RCCE_VENDORTEST") {
+            if let Ok(at) = vv.parse::<u64>() {
+                if self.frames == at {
+                    use rcce_client::fetch::InvItem;
+                    use rcce_client::trade::{TradeKind, TradeOffer, TradeWindow};
+                    if let Some(net) = self.net.as_mut() {
+                        net.world.current_trade = Some(TradeWindow {
+                            kind: TradeKind::Npc,
+                            offers: vec![
+                                TradeOffer { item_id: 1, amount: 1, server_trade_id: 1001 },
+                                TradeOffer { item_id: 2, amount: 5, server_trade_id: 1002 },
+                                TradeOffer { item_id: 3, amount: 1, server_trade_id: 1003 },
+                            ],
+                        });
+                        net.world.me_inventory.insert(14, InvItem { slot: 14, item_id: 1, amount: 1, health: 100 });
+                        net.world.me_inventory.insert(15, InvItem { slot: 15, item_id: 2, amount: 3, health: 100 });
+                    }
+                    self.show_inventory = true;
+                    println!("[vendortest] frame {} injected vendor (3 offers) + 2 backpack items", self.frames);
                 }
             }
         }
@@ -6974,12 +7061,14 @@ impl App {
             }
 
             // Vendor / trade window (P_OpenTrading) — lists what the NPC offers,
-            // with names from Items.dat and prices from each item's value.
+            // with item icons, names from Items.dat and prices from each item's
+            // value. Drag an inventory item onto this window to sell it.
             if let Some(trade) = self.net.as_ref().and_then(|n| n.world.current_trade.as_ref()) {
                 use rcce_client::trade::TradeKind;
                 let dimc = [0.6, 0.6, 0.6, 1.0];
-                let (pw, ph) = (320.0, 300.0);
-                let (px, py) = ((sw - pw - 40.0).round(), ((sh - ph) * 0.5).round());
+                let gold = [1.0, 0.88, 0.4, 1.0];
+                let (px, py, pw, ph) = vendor_window_rect(sw, sh);
+                let sellable = matches!(trade.kind, TradeKind::Npc | TradeKind::Scenery);
                 // Leather skin to match the other windows (ItemShop.png is a wide
                 // two-column layout that wouldn't fit this tall list, so reuse the
                 // generic InventoryBG); flat rect fallback.
@@ -6990,6 +7079,14 @@ impl App {
                     overlay.rect(px, py, pw, ph, [0.07, 0.06, 0.05, 0.92]);
                     overlay.rect(px, py, pw, 22.0, [0.28, 0.22, 0.12, 0.96]);
                 }
+                // Highlight the window as a drop target while dragging an inventory
+                // item over it (drag-to-sell).
+                let selling_here = sellable
+                    && matches!(self.drag, Some(SpellDrag { moved: true, src: DragSrc::Inventory(_), .. }))
+                    && point_in_vendor(self.cursor.0, self.cursor.1, sw, sh);
+                if selling_here {
+                    overlay.rect(px, py, pw, ph, [0.4, 0.7, 1.0, 0.18]);
+                }
                 let title = match trade.kind {
                     TradeKind::Npc => "Vendor",
                     TradeKind::Scenery => "Container",
@@ -6998,24 +7095,48 @@ impl App {
                 overlay.text_shadow(px + 10.0, py + 6.0, 1.5, title, white);
                 overlay.text(px + pw - 80.0, py + 7.0, 1.0, "[Esc] close", dimc);
                 let mut y = py + 30.0;
+                let row_h = 20.0f32;
+                let foot = py + ph - 18.0;
                 if trade.offers.is_empty() {
                     overlay.text(px + 10.0, y, 1.0, "(nothing for sale)", dimc);
                 } else {
                     overlay.text(px + 10.0, y, 1.0, "Press 1-9 to buy:", dimc);
-                    y += 14.0;
+                    y += 16.0;
                     for (i, off) in trade.offers.iter().enumerate() {
-                        if y > py + ph - 16.0 { break; }
+                        if y + row_h > foot { break; }
+                        // Item icon (lazily registered from the item's thumbnail).
+                        let key = format!("item:{}", off.item_id);
+                        if !overlay.has_texture(&key) {
+                            if let Some(img) = store.item_icon_path(off.item_id).and_then(|p| rcce_data::texture::load(&p)) {
+                                overlay.register_texture(&gfx.device, &gfx.queue, &key, img.width, img.height, &img.rgba);
+                            }
+                        }
+                        overlay.rect(px + 10.0, y - 1.0, row_h - 2.0, row_h - 2.0, [0.0, 0.0, 0.0, 0.35]);
+                        if overlay.has_texture(&key) {
+                            overlay.image(px + 11.0, y, row_h - 4.0, row_h - 4.0, &key, [1.0, 1.0, 1.0, 1.0]);
+                        }
                         let name = store.item_name(off.item_id);
                         let qty = if off.amount > 1 { format!(" x{}", off.amount) } else { String::new() };
-                        let num = if i < 9 { format!("{}. ", i + 1) } else { "   ".to_string() };
-                        let line: String = format!("{num}{name}{qty}").chars().take(30).collect();
-                        overlay.text(px + 12.0, y, 1.0, &line, white);
+                        let num = if i < 9 { format!("{}. ", i + 1) } else { String::new() };
+                        let line: String = format!("{num}{name}{qty}").chars().take(24).collect();
+                        overlay.text(px + 10.0 + row_h, y + 3.0, 1.0, &line, white);
                         // Price = the item's base value (Items.dat), right-aligned.
                         let price = format!("{}g", store.item_value(off.item_id).max(0));
                         let pw2 = rcce_render::font::text_width(&price, 1.0);
-                        overlay.text(px + pw - pw2 - 12.0, y, 1.0, &price, [1.0, 0.88, 0.4, 1.0]);
-                        y += 14.0;
+                        overlay.text(px + pw - pw2 - 12.0, y + 3.0, 1.0, &price, gold);
+                        y += row_h;
                     }
+                }
+                // Sell drop-zone footer (only for vendor/container, where selling is
+                // allowed). Brightens while an item is dragged over the window.
+                if sellable {
+                    let (fc, msg): ([f32; 4], &str) = if selling_here {
+                        ([0.6, 1.0, 0.7, 1.0], "Release to sell")
+                    } else {
+                        ([0.65, 0.6, 0.45, 1.0], "Drag items here to sell")
+                    };
+                    overlay.rect(px + 6.0, foot - 2.0, pw - 12.0, 16.0, [0.0, 0.0, 0.0, 0.3]);
+                    overlay.text(px + 12.0, foot, 1.0, msg, fc);
                 }
             }
 
@@ -8007,6 +8128,23 @@ mod tests {
 
         // No sheet → empty bar stays empty (no panic).
         assert_eq!(effective_action_bar(&empty, None), [None; 12]);
+    }
+
+    #[test]
+    fn vendor_window_hit_test() {
+        let (sw, sh) = (1280.0f32, 800.0f32);
+        let (px, py, pw, ph) = vendor_window_rect(sw, sh);
+        // Right-anchored (40px gap) and vertically centred.
+        assert!((px - (sw - pw - 40.0)).abs() < 1.0);
+        assert!((py - (sh - ph) * 0.5).abs() < 1.0);
+        // Centre is inside; points just outside each edge are not.
+        assert!(point_in_vendor(px + pw * 0.5, py + ph * 0.5, sw, sh));
+        assert!(!point_in_vendor(px - 1.0, py + 5.0, sw, sh));
+        assert!(!point_in_vendor(px + pw * 0.5, py - 1.0, sw, sh));
+        assert!(!point_in_vendor(px + pw + 1.0, py + 5.0, sw, sh));
+        // The vendor sits clear of the action bar's spell slots (left-anchored), so
+        // a sell-drop and a hotbar-drop never both fire for one release.
+        assert!(spell_slot_at(px + pw * 0.5, py + ph * 0.5, sw, sh).is_none());
     }
 
     #[test]
