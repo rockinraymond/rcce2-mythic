@@ -3217,6 +3217,27 @@ impl App {
             // started at 0, so the HUD gold (which now reads me_gold) would have
             // shown a balance relative to login instead of the real total.
             world.me_gold = s.gold as i32;
+            // Populate the spellbook's known-spell list from the login sheet.
+            // Login spells arrive via P_FetchCharacter, NOT P_KnownSpellUpdate, so
+            // without this the spellbook was EMPTY at login for any character that
+            // already knew spells. The sheet is in the server's ascending
+            // KnownSpells[] order, so the position is the wire memorise index.
+            if world.known_spells.is_empty() {
+                world.known_spells = s
+                    .spells
+                    .iter()
+                    .enumerate()
+                    .map(|(i, sp)| rcce_client::world::KnownSpell {
+                        id: sp.id,
+                        name: sp.name.clone(),
+                        level: sp.level,
+                        known_index: i as u16,
+                    })
+                    .collect();
+                world
+                    .known_spells
+                    .sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+            }
         }
         // Load the persisted hotbar (P_ActionBarUpdate round-trip): resolve each
         // stored spell NAME back to its id via the sheet / known spells; item slots
@@ -3547,10 +3568,12 @@ impl App {
     /// memorise progress bar. `known_num` is the spell's index in the known list
     /// (the server applies it against its `KnownSpells[]` when `RequireMemorise`).
     fn toggle_memorise(&mut self, idx: usize) {
-        // The spellbook row `idx` indexes the live known-spell list; the memorised
-        // SET is keyed by spell id. The wire packet still carries the known-list
-        // index (the server applies it against its `KnownSpells[]`).
-        let Some(id) = self.net.as_ref().and_then(|n| n.world.known_spells.get(idx)).map(|s| s.id) else {
+        // The spellbook row `idx` indexes the DISPLAY-sorted known-spell list; the
+        // memorised SET is keyed by spell id. The wire packet must carry the
+        // SERVER's KnownSpells[] index (`known_index`), not the sorted row position
+        // — sending the row position memorised the wrong spell once the list had
+        // more than one entry (the sort reorders them).
+        let Some((id, known_index)) = self.net.as_ref().and_then(|n| n.world.known_spells.get(idx)).map(|s| (s.id, s.known_index)) else {
             return;
         };
         let now = self.start.elapsed().as_secs_f32();
@@ -3558,10 +3581,10 @@ impl App {
         let packet = if already {
             self.memorised.remove(&id);
             self.memorising = None;
-            rcce_client::net::unmemorise_packet(idx as u16)
+            rcce_client::net::unmemorise_packet(known_index)
         } else {
             self.memorising = Some((idx, now));
-            rcce_client::net::memorise_packet(idx as u16)
+            rcce_client::net::memorise_packet(known_index)
         };
         if let Some(net) = self.net.as_mut() {
             net.transport.send(net.peer, rcce_net::packet_id::SPELL_UPDATE, &packet, true);
@@ -6444,9 +6467,9 @@ impl App {
                     if let Some(net) = self.net.as_mut() {
                         use rcce_client::world::KnownSpell;
                         net.world.known_spells = vec![
-                            KnownSpell { id: 12, name: "Fireball".into(), level: 3 },
-                            KnownSpell { id: 7, name: "Heal".into(), level: 2 },
-                            KnownSpell { id: 21, name: "Lightning Bolt".into(), level: 1 },
+                            KnownSpell { id: 12, name: "Fireball".into(), level: 3, known_index: 0 },
+                            KnownSpell { id: 7, name: "Heal".into(), level: 2, known_index: 1 },
+                            KnownSpell { id: 21, name: "Lightning Bolt".into(), level: 1, known_index: 2 },
                         ];
                     }
                     self.show_spellbook = true;
@@ -6463,7 +6486,7 @@ impl App {
                     if let Some(net) = self.net.as_mut() {
                         use rcce_client::world::KnownSpell;
                         net.world.known_spells = (0..18)
-                            .map(|i| KnownSpell { id: 100 + i as u16, name: format!("Spell {:02}", i + 1), level: (i % 5 + 1) as u16 })
+                            .map(|i| KnownSpell { id: 100 + i as u16, name: format!("Spell {:02}", i + 1), level: (i % 5 + 1) as u16, known_index: i as u16 })
                             .collect();
                     }
                     self.show_spellbook = true;
@@ -6483,9 +6506,9 @@ impl App {
                         use rcce_client::world::KnownSpell;
                         if net.world.known_spells.is_empty() {
                             net.world.known_spells = vec![
-                                KnownSpell { id: 12, name: "Fireball".into(), level: 3 },
-                                KnownSpell { id: 7, name: "Heal".into(), level: 2 },
-                                KnownSpell { id: 21, name: "Lightning Bolt".into(), level: 1 },
+                                KnownSpell { id: 12, name: "Fireball".into(), level: 3, known_index: 0 },
+                                KnownSpell { id: 7, name: "Heal".into(), level: 2, known_index: 1 },
+                                KnownSpell { id: 21, name: "Lightning Bolt".into(), level: 1, known_index: 2 },
                             ];
                         }
                     }
@@ -6531,9 +6554,9 @@ impl App {
                     });
                     if let Some(net) = self.net.as_mut() {
                         net.world.known_spells = vec![
-                            KnownSpell { id: 12, name: "Fireball".into(), level: 3 },
-                            KnownSpell { id: 7, name: "Heal".into(), level: 2 },
-                            KnownSpell { id: 21, name: "Lightning Bolt".into(), level: 1 },
+                            KnownSpell { id: 12, name: "Fireball".into(), level: 3, known_index: 0 },
+                            KnownSpell { id: 7, name: "Heal".into(), level: 2, known_index: 1 },
+                            KnownSpell { id: 21, name: "Lightning Bolt".into(), level: 1, known_index: 2 },
                         ];
                     }
                     self.memorised = [12u16, 7, 21].into_iter().collect(); // ids, not indices
@@ -6683,9 +6706,9 @@ impl App {
                     });
                     if let Some(net) = self.net.as_mut() {
                         net.world.known_spells = vec![
-                            KnownSpell { id: 12, name: "Fireball".into(), level: 3 },
-                            KnownSpell { id: 7, name: "Heal".into(), level: 2 },
-                            KnownSpell { id: 21, name: "Lightning Bolt".into(), level: 1 },
+                            KnownSpell { id: 12, name: "Fireball".into(), level: 3, known_index: 0 },
+                            KnownSpell { id: 7, name: "Heal".into(), level: 2, known_index: 1 },
+                            KnownSpell { id: 21, name: "Lightning Bolt".into(), level: 1, known_index: 2 },
                         ];
                     }
                     // Fireball + Heal memorised (live set, by id); action bar left

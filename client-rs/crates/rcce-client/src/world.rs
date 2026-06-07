@@ -93,12 +93,17 @@ pub struct ScreenFlash {
 
 /// A known spell tracked live via `P_KnownSpellUpdate` (SPL-7): id + name +
 /// rank/level. The full record (icon/recharge/desc) is in the P_FetchCharacter
-/// sheet; this is the live add/remove/level state, kept sorted by name.
+/// sheet; this is the live add/remove/level state. Displayed name-sorted, but the
+/// memorise/unmemorise wire index must be the SERVER's `KnownSpells[]` array index
+/// (`known_index`) — the protocol doesn't carry it, so it's tracked as the
+/// add/receive order (server `AddSpell` fills the first free slot, dense from 0).
 #[derive(Debug, Clone, Default)]
 pub struct KnownSpell {
     pub id: u16,
     pub name: String,
     pub level: u16,
+    /// Server `KnownSpells[]` index (add order), sent on memorise/unmemorise.
+    pub known_index: u16,
 }
 
 /// A quest-log entry (`P_QuestLog`, QST-1): name + a coloured status line and a
@@ -1496,7 +1501,11 @@ impl World {
                 };
                 let name = r.str16().unwrap_or_default();
                 if !name.is_empty() && !self.known_spells.iter().any(|s| s.id == id) {
-                    self.known_spells.push(KnownSpell { id, name, level });
+                    // The server appended this spell at the next free KnownSpells[]
+                    // slot; mirror that as the add-order index (the wire memorise
+                    // index). Display order is sorted; the index is preserved.
+                    let known_index = self.known_spells.len() as u16;
+                    self.known_spells.push(KnownSpell { id, name, level, known_index });
                     self.known_spells
                         .sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
                 }
@@ -1966,6 +1975,10 @@ mod tests {
             w.known_spells.iter().map(|s| s.name.as_str()).collect::<Vec<_>>(),
             ["Fireball", "Heal"]
         );
+        // known_index reflects ADD order (Heal first = 0, Fireball second = 1), NOT
+        // the sorted display position — so memorise sends the right server index.
+        assert_eq!(w.known_spells.iter().find(|s| s.name == "Heal").unwrap().known_index, 0);
+        assert_eq!(w.known_spells.iter().find(|s| s.name == "Fireball").unwrap().known_index, 1);
         // "L" Fireball → level 3.
         let mut l = MsgWriter::new();
         l.u8(b'L').u32(3).raw(b"FIREBALL");
