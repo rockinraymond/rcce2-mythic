@@ -3925,10 +3925,15 @@ impl App {
             if let (Some(opt), Some(net)) = (opt, self.net.as_mut()) {
                 if let Some(dl) = net.world.dialog.as_ref() {
                     let sh = dl.script_handle;
+                    // Dialog options are 1-BASED on the server (AddDialogOption sets
+                    // OptionNum = TotalOptions starting at 1; the script branches on
+                    // 1,2,3…). `opt` is the 0-based hitbox position, so send opt+1 —
+                    // sending the 0-based index meant the first option (e.g. a
+                    // trainer's "learn fireball") never matched and silently no-op'd.
                     net.transport.send(
                         net.peer,
                         rcce_net::packet_id::DIALOG,
-                        &rcce_client::net::dialog_option_packet(sh, opt as u8),
+                        &rcce_client::net::dialog_option_packet(sh, (opt + 1) as u8),
                         true,
                     );
                 }
@@ -6104,6 +6109,40 @@ impl App {
                             println!("[interact] frame {} -> RIGHT_CLICK rid={rid}", self.frames);
                         }
                     }
+                }
+            }
+        }
+        // Headless trainer flow self-test: interact with the nearest NPC, then pick
+        // dialog option 1, then report known spells — exercises the real
+        // server/trainer script to prove the dialog-option fix learns the spell.
+        // No-op unless RCCE_TRAINERTEST=<frame> is set.
+        if let Ok(tv) = std::env::var("RCCE_TRAINERTEST") {
+            if let Ok(at) = tv.parse::<u64>() {
+                if self.frames == at {
+                    let rid = self.net.as_ref().and_then(|n| nearest_living_actor(&n.world, n.world.me_x, n.world.me_z));
+                    if let Some(rid) = rid {
+                        self.target = Some(rid);
+                        if let Some(net) = self.net.as_mut() {
+                            net.transport.send(net.peer, rcce_net::packet_id::RIGHT_CLICK, &rcce_client::net::right_click_packet(rid), true);
+                        }
+                        println!("[trainertest] frame {} interact rid {rid}", self.frames);
+                    } else {
+                        println!("[trainertest] frame {} no actor to interact with", self.frames);
+                    }
+                } else if self.frames == at + 60 {
+                    if let Some(net) = self.net.as_mut() {
+                        if let Some(dl) = net.world.dialog.as_ref() {
+                            let (sh, n) = (dl.script_handle, dl.options.len());
+                            net.transport.send(net.peer, rcce_net::packet_id::DIALOG, &rcce_client::net::dialog_option_packet(sh, 1), true);
+                            if let Some(dl) = net.world.dialog.as_mut() { dl.options.clear(); }
+                            println!("[trainertest] frame {} dialog open ({n} opts) -> sent option 1", self.frames);
+                        } else {
+                            println!("[trainertest] frame {} NO dialog open", self.frames);
+                        }
+                    }
+                } else if self.frames == at + 150 {
+                    let names: Vec<String> = self.net.as_ref().map(|n| n.world.known_spells.iter().map(|s| s.name.clone()).collect()).unwrap_or_default();
+                    println!("[trainertest] frame {} known_spells = {names:?}", self.frames);
                 }
             }
         }
