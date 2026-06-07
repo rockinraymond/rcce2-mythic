@@ -338,6 +338,10 @@ struct App {
     show_inventory: bool,
     /// Quest-log panel visible (Quests button / L key) — QST-1.
     show_quests: bool,
+    /// First visible quest (mouse-wheel scroll). Quests are variable-height
+    /// (title + wrapped status), so the render clips at the window bottom and this
+    /// lets a long list be reached; clamped to keep the last quest reachable.
+    quest_scroll: usize,
     /// Party panel visible (Party button / P key) — PTY-1.
     show_party: bool,
     /// Spellbook window visible (K key) — SPL-1; lists `World.known_spells`.
@@ -528,6 +532,7 @@ impl App {
             sheet: None,
             show_inventory: false,
             show_quests: false,
+            quest_scroll: 0,
             show_party: false,
             show_spellbook: false,
             spellbook_scroll: 0,
@@ -850,6 +855,13 @@ fn point_in_vendor(cx: f32, cy: f32, sw: f32, sh: f32) -> bool {
 fn spellbook_rect(sw: f32, sh: f32) -> (f32, f32, f32, f32) {
     let (kwd, khd) = (240.0f32, 240.0f32);
     (sw * 0.5 + 12.0, (sh - khd) * 0.5, kwd, khd)
+}
+
+/// Quest-log window rect `(x, y, w, h)` — centred. Shared by the render and the
+/// mouse-wheel scroll hit-test.
+fn quest_window_rect(sw: f32, sh: f32) -> (f32, f32, f32, f32) {
+    let (qw, qh) = (320.0f32, 240.0f32);
+    ((sw - qw) * 0.5, (sh - qh) * 0.5, qw, qh)
 }
 
 /// The vendor "Confirm" button rect `(x, y, w, h)` — bottom of the vendor window.
@@ -3048,24 +3060,22 @@ impl ApplicationHandler for App {
                     MouseScrollDelta::LineDelta(_, y) => y,
                     MouseScrollDelta::PixelDelta(p) => (p.y as f32) / 40.0,
                 };
-                // With the spellbook open and the cursor over it, the wheel scrolls
-                // the known-spell list instead of zooming the camera.
-                let over_spellbook = self.show_spellbook
-                    && self
-                        .gfx
-                        .as_ref()
-                        .map(|g| {
-                            let (sw, sh) = (g.config.width as f32, g.config.height as f32);
-                            let (x, y, w, h) = spellbook_rect(sw, sh);
-                            let (cx, cy) = self.cursor;
-                            cx >= x && cx < x + w && cy >= y && cy < y + h
-                        })
-                        .unwrap_or(false);
-                if over_spellbook {
+                // With a scrollable panel open and the cursor over it, the wheel
+                // scrolls that list instead of zooming the camera.
+                let (sw, sh) = self.gfx.as_ref().map(|g| (g.config.width as f32, g.config.height as f32)).unwrap_or((0.0, 0.0));
+                let (cx, cy) = self.cursor;
+                let in_rect = |r: (f32, f32, f32, f32)| cx >= r.0 && cx < r.0 + r.2 && cy >= r.1 && cy < r.1 + r.3;
+                if self.show_spellbook && in_rect(spellbook_rect(sw, sh)) {
                     if lines > 0.0 {
                         self.spellbook_scroll = self.spellbook_scroll.saturating_sub(1);
                     } else if lines < 0.0 {
                         self.spellbook_scroll += 1; // clamped in the render
+                    }
+                } else if self.show_quests && in_rect(quest_window_rect(sw, sh)) {
+                    if lines > 0.0 {
+                        self.quest_scroll = self.quest_scroll.saturating_sub(1);
+                    } else if lines < 0.0 {
+                        self.quest_scroll += 1; // clamped in the render
                     }
                 } else if lines != 0.0 {
                     self.cam_dist = zoom_step(self.cam_dist, -lines * 1.5);
@@ -6185,6 +6195,28 @@ impl App {
                 }
             }
         }
+        // Headless quest-scroll self-test: inject 8 quests (enough to overflow the
+        // window) + scroll, so the range indicator / clip / affordances show. No-op
+        // unless RCCE_QUESTSCROLL=<frame> is set.
+        if let Ok(qv) = std::env::var("RCCE_QUESTSCROLL") {
+            if let Ok(at) = qv.parse::<u64>() {
+                if self.frames == at {
+                    if let Some(net) = self.net.as_mut() {
+                        net.world.quests = (0..8)
+                            .map(|i| rcce_client::world::Quest {
+                                name: format!("Quest number {:02}", i + 1),
+                                status: format!("Objective {}: travel to the far reaches and report back.", i + 1),
+                                color: [0.9, 0.9, 0.5, 1.0],
+                                completed: i % 3 == 0,
+                            })
+                            .collect();
+                    }
+                    self.show_quests = true;
+                    self.quest_scroll = 2;
+                    println!("[questscroll] frame {} injected 8 quests, scrolled to 2", self.frames);
+                }
+            }
+        }
         // Headless party self-test (PTY-1): inject party names + open the panel.
         // No-op unless RCCE_PARTYTEST=<frame> is set.
         if let Ok(pv) = std::env::var("RCCE_PARTYTEST") {
@@ -6981,8 +7013,7 @@ impl App {
                 // Quest log panel (QST-1, toggled by L / the Quests button): each
                 // quest's name + coloured status; completed quests in gold.
                 if self.show_quests {
-                    let (qw, qh) = (320.0f32, 240.0f32);
-                    let (qx, qy) = ((sw - qw) * 0.5, (sh - qh) * 0.5);
+                    let (qx, qy, qw, qh) = quest_window_rect(sw, sh);
                     if overlay.has_texture("gui:QuestLogBG") {
                         overlay.image(qx, qy, qw, qh, "gui:QuestLogBG", [1.0, 1.0, 1.0, 1.0]);
                         overlay.rect(qx, qy, qw, 22.0, [0.0, 0.0, 0.0, 0.45]);
@@ -6990,13 +7021,27 @@ impl App {
                         overlay.rect(qx, qy, qw, qh, [0.05, 0.06, 0.10, 0.94]);
                         overlay.rect(qx, qy, qw, 22.0, [0.15, 0.18, 0.28, 0.96]);
                     }
+                    let total = w.quests.len();
+                    // Keep at least the last quest reachable; variable-height rows
+                    // are clipped at the window bottom rather than counted.
+                    let qscroll = clamp_scroll(self.quest_scroll, total, 1);
+                    self.quest_scroll = qscroll;
                     overlay.text_shadow(qx + 10.0, qy + 6.0, 1.3, "Quest Log", white);
+                    if total > 0 {
+                        overlay.text(qx + 92.0, qy + 8.0, 1.0, &format!("{} / {}", (qscroll + 1).min(total), total), [0.6, 0.7, 0.85, 1.0]);
+                    }
                     overlay.text(qx + qw - 78.0, qy + 7.0, 1.0, "[L] close", [0.6, 0.6, 0.6, 1.0]);
                     let mut yy = qy + 30.0;
+                    let foot = qy + qh - 12.0; // clip rows past here (no overflow)
                     if w.quests.is_empty() {
                         overlay.text(qx + 10.0, yy, 1.0, "No quests available.", [0.7, 0.7, 0.7, 1.0]);
                     }
-                    for q in &w.quests {
+                    let mut clipped = false;
+                    for q in w.quests.iter().skip(qscroll) {
+                        if yy + 13.0 > foot {
+                            clipped = true;
+                            break;
+                        }
                         let title = if q.completed {
                             format!("{}  (Completed)", q.name)
                         } else {
@@ -7006,10 +7051,21 @@ impl App {
                         overlay.text_shadow(qx + 10.0, yy, 1.0, &title, tcol);
                         yy += 13.0;
                         for line in wrap_text(&q.status, 46) {
+                            if yy + 12.0 > foot {
+                                clipped = true;
+                                break;
+                            }
                             overlay.text(qx + 18.0, yy, 1.0, &line, q.color);
                             yy += 12.0;
                         }
                         yy += 6.0;
+                    }
+                    // Scroll affordances (wheel over the window).
+                    if qscroll > 0 {
+                        overlay.text(qx + qw - 18.0, qy + 28.0, 1.0, "▲", [0.7, 0.8, 1.0, 1.0]);
+                    }
+                    if clipped {
+                        overlay.text(qx + qw - 18.0, qy + qh - 16.0, 1.0, "▼", [0.7, 0.8, 1.0, 1.0]);
                     }
                 }
 
