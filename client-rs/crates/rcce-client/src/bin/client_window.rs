@@ -173,6 +173,27 @@ struct Net {
     env_requested: bool,
 }
 
+/// Where an in-flight spell drag started — a spellbook row (known-spell index,
+/// for the click-vs-drag fallback to memorise) or an action-bar slot (slot
+/// index, so a drop elsewhere moves/clears it). Parity with Blitz's WSpells →
+/// action-bar drag (Interface3D.bb DragSpell).
+#[derive(Clone, Copy)]
+enum DragSrc {
+    Spellbook(usize),
+    Slot(usize),
+}
+
+/// An active left-button spell drag: the spell being carried, its origin, the
+/// press position and whether the cursor has moved far enough to count as a
+/// drag (vs a plain click, which falls back to memorise / cast on release).
+#[derive(Clone, Copy)]
+struct SpellDrag {
+    spell_id: u16,
+    src: DragSrc,
+    start: (f32, f32),
+    moved: bool,
+}
+
 struct App {
     host: String,
     port: u16,
@@ -312,6 +333,15 @@ struct App {
     memorised: std::collections::HashSet<usize>,
     /// Spellbook row hitboxes `(x,y,w,h, known index)`, rebuilt as the panel draws.
     spell_hitboxes: Vec<(f32, f32, f32, f32, usize)>,
+    /// Explicit action-bar assignments: `action_bar[i]` = the spell id placed on
+    /// hotbar slot `i` (drag-drop from the spellbook / rearranged within the bar).
+    /// All-`None` means "not yet customised" and the bar falls back to auto-filling
+    /// from the memorised spells, so the default view is unchanged until the player
+    /// first drags a spell onto it. See `action_bar_ids` / `materialize_action_bar`.
+    action_bar: [Option<u16>; 12],
+    /// The in-flight left-button spell drag (spellbook row → hotbar slot, or
+    /// slot → slot / off-bar to clear). `None` when nothing is being dragged.
+    drag: Option<SpellDrag>,
     /// Footstep cadence + the resolved footstep .ogg files.
     footsteps: rcce_client::audio::FootstepTimer,
     footstep_paths: Vec<std::path::PathBuf>,
@@ -475,6 +505,8 @@ impl App {
             memorising: None,
             memorised: std::collections::HashSet::new(),
             spell_hitboxes: Vec::new(),
+            action_bar: [None; 12],
+            drag: None,
             footsteps: rcce_client::audio::FootstepTimer::new(),
             footstep_paths: Vec::new(),
             weather: rcce_client::weather::WeatherSystem::new(240),
@@ -676,6 +708,27 @@ fn inv_action_button_at(
     } else {
         None
     }
+}
+
+/// The effective 12-slot action bar: the explicit `action_bar` assignments once
+/// the player has customised the bar (drag-drop), otherwise an auto-fill from the
+/// first 12 memorised spells. A free fn (not a `&self` method) so the render loop
+/// can call it while `self.gfx` is mutably borrowed — it only reads two disjoint
+/// fields the caller passes in.
+fn effective_action_bar(
+    action_bar: &[Option<u16>; 12],
+    sheet: Option<&rcce_client::fetch::CharacterSheet>,
+) -> [Option<u16>; 12] {
+    if action_bar.iter().any(|s| s.is_some()) {
+        return *action_bar;
+    }
+    let mut out = [None; 12];
+    if let Some(sheet) = sheet {
+        for (i, sp) in sheet.spells.iter().filter(|s| s.memorised).take(12).enumerate() {
+            out[i] = Some(sp.id);
+        }
+    }
+    out
 }
 
 /// Index of the action-bar spell slot (0..=11) whose rect contains `(cx, cy)`.
@@ -2621,28 +2674,9 @@ impl ApplicationHandler for App {
                                 }
                                 return;
                             }
-                            let cast = self
-                                .sheet
-                                .as_ref()
-                                .and_then(|s| s.spells.iter().filter(|x| x.memorised).nth(idx))
-                                .map(|sp| (sp.id, sp.recharge));
-                            if let Some((spell_id, recharge)) = cast {
-                                let now = self.start.elapsed().as_secs_f32();
-                                let ready = self.spell_cooldowns.get(&spell_id).copied().unwrap_or(0.0);
-                                if now >= ready {
-                                    let target = self.target;
-                                    if let Some(net) = self.net.as_mut() {
-                                        net.transport.send(
-                                            net.peer,
-                                            rcce_net::packet_id::SPELL_UPDATE,
-                                            &rcce_client::net::cast_packet(spell_id, target),
-                                            true,
-                                        );
-                                    }
-                                    self.spell_cooldowns
-                                        .insert(spell_id, now + recharge as f32 / 1000.0);
-                                }
-                            }
+                            // Cast the spell on hotbar slot `idx` (explicit
+                            // assignment, or auto-filled memorised spell).
+                            self.cast_slot(idx);
                         }
                         KeyCode::KeyW | KeyCode::ArrowUp => self.keys_wasd[0] = pressed,
                         KeyCode::KeyA => self.keys_wasd[1] = pressed,
@@ -2809,13 +2843,30 @@ impl ApplicationHandler for App {
             }
             WindowEvent::CursorMoved { position, .. } => {
                 self.cursor = (position.x as f32, position.y as f32);
+                // Promote an armed press to a real drag once it moves past a small
+                // dead-zone, so a click (memorise / cast) and a drag stay distinct.
+                if let Some(drag) = self.drag.as_mut() {
+                    if !drag.moved {
+                        let (dx, dy) = (self.cursor.0 - drag.start.0, self.cursor.1 - drag.start.1);
+                        if dx * dx + dy * dy > 25.0 {
+                            drag.moved = true;
+                        }
+                    }
+                }
             }
             WindowEvent::MouseInput { state, button, .. } => {
                 // Left-click on the HUD acts only while mouse-look is off (cursor
                 // free). Right-button toggles mouse-look on press for quick camera
                 // grab, off on release.
                 if button == MouseButton::Left && state == ElementState::Pressed && !self.mouse_look {
-                    self.hud_click();
+                    // Arm a spell drag if the press is over a draggable source
+                    // (memorised spellbook row / occupied hotbar slot); the release
+                    // decides click-vs-drag. Otherwise act on the click immediately.
+                    if !self.begin_drag() {
+                        self.hud_click();
+                    }
+                } else if button == MouseButton::Left && state == ElementState::Released {
+                    self.end_drag();
                 } else if button == MouseButton::Right {
                     self.set_mouse_look(state == ElementState::Pressed);
                 } else if button == MouseButton::Middle && state == ElementState::Pressed {
@@ -3195,6 +3246,129 @@ impl App {
             net.transport.send(net.peer, rcce_net::packet_id::SPELL_UPDATE, &packet, true);
         }
         println!("[memorise] idx {idx} {}", if already { "UNMEMORISE sent" } else { "MEMORISE sent" });
+    }
+
+    /// The effective action-bar contents: the explicit `action_bar` assignments
+    /// once the player has customised the bar, otherwise an auto-fill from the
+    /// first 12 memorised spells (the pre-drag-drop default). One source of truth
+    /// for both the bar render and casting so they can never disagree.
+    fn action_bar_ids(&self) -> [Option<u16>; 12] {
+        effective_action_bar(&self.action_bar, self.sheet.as_ref())
+    }
+
+    /// Promote the current auto-filled view into explicit `action_bar` slots, so
+    /// a subsequent drop edits a concrete layout instead of fighting the auto-fill.
+    /// No-op once any slot is already assigned (idempotent; never clobbers edits).
+    fn materialize_action_bar(&mut self) {
+        if self.action_bar.iter().all(|s| s.is_none()) {
+            self.action_bar = self.action_bar_ids();
+        }
+    }
+
+    /// Cast the spell on action-bar slot `i` (Digit key or click), respecting the
+    /// per-spell cooldown. Recharge comes from the character sheet when known.
+    fn cast_slot(&mut self, i: usize) {
+        let Some(spell_id) = self.action_bar_ids().get(i).copied().flatten() else {
+            return;
+        };
+        let recharge = self
+            .sheet
+            .as_ref()
+            .and_then(|s| s.spells.iter().find(|x| x.id == spell_id))
+            .map(|x| x.recharge)
+            .unwrap_or(0);
+        let now = self.start.elapsed().as_secs_f32();
+        let ready = self.spell_cooldowns.get(&spell_id).copied().unwrap_or(0.0);
+        if now < ready {
+            return;
+        }
+        let target = self.target;
+        if let Some(net) = self.net.as_mut() {
+            net.transport.send(
+                net.peer,
+                rcce_net::packet_id::SPELL_UPDATE,
+                &rcce_client::net::cast_packet(spell_id, target),
+                true,
+            );
+        }
+        self.spell_cooldowns.insert(spell_id, now + recharge as f32 / 1000.0);
+    }
+
+    /// Left-button press while the cursor is over a draggable spell source: begin
+    /// a drag (deferred — the release decides click-vs-drag). Returns true if a
+    /// drag was armed, so the caller skips the immediate `hud_click`. A draggable
+    /// source is a *memorised* spellbook row (parity: only memorised spells slot)
+    /// or an action-bar slot that currently holds a spell.
+    fn begin_drag(&mut self) -> bool {
+        let Some(gfx) = self.gfx.as_ref() else { return false };
+        let (sw, sh) = (gfx.config.width as f32, gfx.config.height as f32);
+        let (cx, cy) = self.cursor;
+        // Spellbook row first (it overlaps nothing on the bar row).
+        if self.show_spellbook {
+            let row = self
+                .spell_hitboxes
+                .iter()
+                .find(|&&(x, y, w, h, _)| cx >= x && cx <= x + w && cy >= y && cy <= y + h)
+                .map(|&(_, _, _, _, idx)| idx);
+            if let Some(idx) = row {
+                if self.memorised.contains(&idx) {
+                    if let Some(id) = self.net.as_ref().and_then(|n| n.world.known_spells.get(idx)).map(|s| s.id) {
+                        self.drag = Some(SpellDrag { spell_id: id, src: DragSrc::Spellbook(idx), start: (cx, cy), moved: false });
+                        return true;
+                    }
+                }
+                // A non-memorised row is still a normal click (memorise) — let
+                // hud_click handle it; don't arm a drag.
+                return false;
+            }
+        }
+        // Action-bar slot that holds a spell.
+        if let Some(slot) = spell_slot_at(cx, cy, sw, sh) {
+            if let Some(id) = self.action_bar_ids().get(slot).copied().flatten() {
+                self.drag = Some(SpellDrag { spell_id: id, src: DragSrc::Slot(slot), start: (cx, cy), moved: false });
+                return true;
+            }
+        }
+        false
+    }
+
+    /// Left-button release: finish the in-flight drag (if any). A drag that never
+    /// moved is treated as a click (memorise the row / cast the slot); a real drag
+    /// drops onto the action-bar slot under the cursor, or clears the source slot
+    /// when released off the bar.
+    fn end_drag(&mut self) {
+        let Some(drag) = self.drag.take() else { return };
+        let Some(gfx) = self.gfx.as_ref() else { return };
+        let (sw, sh) = (gfx.config.width as f32, gfx.config.height as f32);
+        let (cx, cy) = self.cursor;
+        if !drag.moved {
+            // Plain click: same effect the press would have had.
+            match drag.src {
+                DragSrc::Spellbook(idx) => self.toggle_memorise(idx),
+                DragSrc::Slot(i) => self.cast_slot(i),
+            }
+            return;
+        }
+        let target = spell_slot_at(cx, cy, sw, sh);
+        match (drag.src, target) {
+            (_, Some(slot)) => {
+                self.materialize_action_bar();
+                // Move semantics: dragging a bar slot onto another swaps the
+                // source out (so a spell isn't duplicated by a rearrange).
+                if let DragSrc::Slot(from) = drag.src {
+                    if from != slot {
+                        self.action_bar[from] = None;
+                    }
+                }
+                self.action_bar[slot] = Some(drag.spell_id);
+            }
+            (DragSrc::Slot(from), None) => {
+                // Dragged a slot off the bar: clear it (un-assign).
+                self.materialize_action_bar();
+                self.action_bar[from] = None;
+            }
+            (DragSrc::Spellbook(_), None) => { /* dropped nowhere — cancel */ }
+        }
     }
 
     fn hud_click(&mut self) {
@@ -5544,6 +5718,50 @@ impl App {
                 }
             }
         }
+        // Headless action-bar self-test (drag-drop result): inject a sheet with
+        // memorised spells + an EXPLICIT, non-contiguous hotbar layout (slots 0,1,4
+        // filled, 2,3 empty) — a layout the memorised auto-fill could never produce
+        // — so the drag-drop render path is capturable. No-op unless
+        // RCCE_ACTIONBARTEST=<frame> is set.
+        if let Ok(av) = std::env::var("RCCE_ACTIONBARTEST") {
+            if let Ok(at) = av.parse::<u64>() {
+                if self.frames == at {
+                    use rcce_client::fetch::{CharacterSheet, SpellInfo};
+                    use rcce_client::world::KnownSpell;
+                    let mk = |id: u16, name: &str, lvl: u16| SpellInfo {
+                        id,
+                        level: lvl,
+                        thumb_tex: 0,
+                        recharge: 1500,
+                        name: name.to_string(),
+                        description: format!("{name} — injected for the action-bar self-test."),
+                        memorised: true,
+                    };
+                    self.sheet = Some(CharacterSheet {
+                        spells: vec![
+                            mk(12, "Fireball", 3),
+                            mk(7, "Heal", 2),
+                            mk(21, "Lightning Bolt", 1),
+                        ],
+                        ..Default::default()
+                    });
+                    if let Some(net) = self.net.as_mut() {
+                        net.world.known_spells = vec![
+                            KnownSpell { id: 12, name: "Fireball".into(), level: 3 },
+                            KnownSpell { id: 7, name: "Heal".into(), level: 2 },
+                            KnownSpell { id: 21, name: "Lightning Bolt".into(), level: 1 },
+                        ];
+                    }
+                    self.memorised = [0usize, 1, 2].into_iter().collect();
+                    self.action_bar = [None; 12];
+                    self.action_bar[0] = Some(12); // Fireball on slot 1
+                    self.action_bar[1] = Some(7); // Heal on slot 2
+                    self.action_bar[4] = Some(21); // Lightning on slot 5 (gap at 3,4)
+                    self.show_spellbook = true;
+                    println!("[actionbartest] frame {} explicit hotbar [0]=Fireball [1]=Heal [4]=Lightning", self.frames);
+                }
+            }
+        }
         // Headless screen-flash self-test (ENV-6): inject a red flash. No-op
         // unless RCCE_FLASHTEST=<frame> is set.
         if let Ok(fv) = std::env::var("RCCE_FLASHTEST") {
@@ -6576,12 +6794,17 @@ impl App {
                 const SLOT_X0: f32 = SPELLBAR_X0;
                 let (sw_, sh_, bw, bh) = (SLOT_W * sw, SLOT_H * sh, SLOT_W * sw, SLOT_H * sh);
                 let by = BAR_Y * sh;
-                // 12 spell slots; memorised spells fill the first N in order.
-                let mem: Vec<_> = self
-                    .sheet
-                    .as_ref()
-                    .map(|s| s.spells.iter().filter(|sp| sp.memorised).take(12).collect::<Vec<_>>())
-                    .unwrap_or_default();
+                // 12 spell slots, resolved from the explicit action-bar layout
+                // (drag-drop) or the memorised auto-fill default — one source of
+                // truth shared with the Digit-key / click cast path (`cast_slot`).
+                let bar_ids = effective_action_bar(&self.action_bar, self.sheet.as_ref());
+                // The slot under the cursor being dragged-over (drop highlight),
+                // and the source slot of an in-flight bar drag (dim it as it lifts).
+                let drag_target = self.drag.filter(|d| d.moved).and_then(|_| spell_slot_at(self.cursor.0, self.cursor.1, sw, sh));
+                let drag_from = match self.drag {
+                    Some(SpellDrag { moved: true, src: DragSrc::Slot(s), .. }) => Some(s),
+                    _ => None,
+                };
                 for i in 0..12usize {
                     let x = (SLOT_X0 + i as f32 * SLOT_PITCH) * sw;
                     // Real EmptySlot.bmp frame under each slot (interleaved draw
@@ -6592,27 +6815,40 @@ impl App {
                     } else {
                         overlay.rect(x, by, sw_, sh_, [0.08, 0.08, 0.13, 0.78]);
                     }
-                    if let Some(sp) = mem.get(i) {
+                    // Drop-target highlight while dragging a spell over this slot.
+                    if drag_target == Some(i) {
+                        overlay.rect(x, by, sw_, sh_, [0.4, 0.7, 1.0, 0.28]);
+                    }
+                    if let Some(spell_id) = bar_ids[i] {
+                        // Rich spell info from the sheet (icon/recharge/name); fall
+                        // back to the live known-spell list for a name-only slot.
+                        let sp = self.sheet.as_ref().and_then(|s| s.spells.iter().find(|x| x.id == spell_id));
+                        let name = sp.map(|s| s.name.clone()).or_else(|| {
+                            self.net.as_ref().and_then(|n| n.world.known_spells.iter().find(|s| s.id == spell_id)).map(|s| s.name.clone())
+                        }).unwrap_or_default();
+                        let recharge = sp.map(|s| s.recharge).unwrap_or(0);
                         // Real spell icon (Spell.ThumbnailTexID → Textures.dat),
-                        // lazily registered, drawn over the slot frame; cooldown
-                        // shade + number + name layer on top.
-                        let key = format!("spell:{}", sp.id);
+                        // lazily registered, drawn over the slot frame.
+                        let key = format!("spell:{spell_id}");
                         if !overlay.has_texture(&key) {
                             if let Some(img) =
-                                store.texture_path(sp.thumb_tex).and_then(|p| rcce_data::texture::load(&p))
+                                sp.and_then(|s| store.texture_path(s.thumb_tex)).and_then(|p| rcce_data::texture::load(&p))
                             {
                                 overlay.register_texture(&gfx.device, &gfx.queue, &key, img.width, img.height, &img.rgba);
                             }
                         }
                         let has_icon = overlay.has_texture(&key);
+                        // Source slot of a bar→bar drag: dim it so the spell looks
+                        // "picked up" while it follows the cursor.
+                        let icon_a = if drag_from == Some(i) { 0.35 } else { 1.0 };
                         if has_icon {
                             let pad = (sw_ * 0.08).min(2.0);
-                            overlay.image(x + pad, by + pad, sw_ - pad * 2.0, sh_ - pad * 2.0, &key, [1.0, 1.0, 1.0, 1.0]);
+                            overlay.image(x + pad, by + pad, sw_ - pad * 2.0, sh_ - pad * 2.0, &key, [1.0, 1.0, 1.0, icon_a]);
                         }
-                        let ready = self.spell_cooldowns.get(&sp.id).copied().unwrap_or(0.0);
+                        let ready = self.spell_cooldowns.get(&spell_id).copied().unwrap_or(0.0);
                         let remaining = (ready - elapsed).max(0.0);
                         if remaining > 0.0 {
-                            let span = (sp.recharge as f32 / 1000.0).max(0.1);
+                            let span = (recharge as f32 / 1000.0).max(0.1);
                             let frac = (remaining / span).clamp(0.0, 1.0);
                             overlay.rect(x, by, sw_, sh_ * frac, [0.0, 0.0, 0.0, 0.6]);
                         }
@@ -6620,8 +6856,8 @@ impl App {
                             overlay.text_shadow(x + 2.0, by + 1.0, 1.0, &format!("{}", i + 1), [1.0, 1.0, 0.6, 1.0]);
                         }
                         if !has_icon {
-                            let abbr: String = sp.name.chars().take(4).collect();
-                            overlay.text(x + 2.0, by + sh_ - 9.0, 1.0, &abbr, white);
+                            let abbr: String = name.chars().take(4).collect();
+                            overlay.text(x + 2.0, by + sh_ - 9.0, 1.0, &abbr, [white[0], white[1], white[2], icon_a]);
                         }
                     }
                 }
@@ -6708,16 +6944,16 @@ impl App {
                 }
                 if lines.is_empty() {
                     if let Some(slot) = spell_slot_at(cx, cy, sw, sh) {
-                        let mem: Vec<_> = self
-                            .sheet
-                            .as_ref()
-                            .map(|s| s.spells.iter().filter(|sp| sp.memorised).take(12).collect::<Vec<_>>())
-                            .unwrap_or_default();
-                        if let Some(sp) = mem.get(slot) {
-                            lines.push((sp.name.clone(), white));
-                            lines.push((format!("Level {} · Recharge {:.1}s", sp.level, sp.recharge as f32 / 1000.0), accent));
-                            for chunk in wrap_text(&sp.description, 44).into_iter().take(6) {
-                                lines.push((chunk, [0.78, 0.78, 0.78, 1.0]));
+                        if let Some(spell_id) = effective_action_bar(&self.action_bar, self.sheet.as_ref()).get(slot).copied().flatten() {
+                            if let Some(sp) = self.sheet.as_ref().and_then(|s| s.spells.iter().find(|x| x.id == spell_id)) {
+                                lines.push((sp.name.clone(), white));
+                                lines.push((format!("Level {} · Recharge {:.1}s", sp.level, sp.recharge as f32 / 1000.0), accent));
+                                for chunk in wrap_text(&sp.description, 44).into_iter().take(6) {
+                                    lines.push((chunk, [0.78, 0.78, 0.78, 1.0]));
+                                }
+                            } else if let Some(ks) = self.net.as_ref().and_then(|n| n.world.known_spells.iter().find(|s| s.id == spell_id)) {
+                                lines.push((ks.name.clone(), white));
+                                lines.push((format!("Rank {}", ks.level), accent));
                             }
                         }
                     }
@@ -6787,6 +7023,29 @@ impl App {
                         overlay.rect(menu.x, ry, CTX_W, CTX_ROW, [0.2, 0.32, 0.55, 0.85]);
                     }
                     overlay.text_shadow(menu.x + 8.0, ry + 6.0, 1.0, label, [0.94, 0.94, 0.72, 1.0]);
+                }
+            }
+
+            // Dragged spell icon following the cursor (drag-drop hotbar assign):
+            // drawn over the whole HUD so it reads as "carried". Only once the
+            // press has become a real drag (moved past the dead-zone).
+            if let Some(drag) = self.drag.filter(|d| d.moved) {
+                let (cx, cy) = self.cursor;
+                let isz = FBTN_W * sw * 0.9;
+                let key = format!("spell:{}", drag.spell_id);
+                if overlay.has_texture(&key) {
+                    overlay.image(cx - isz * 0.5, cy - isz * 0.5, isz, isz, &key, [1.0, 1.0, 1.0, 0.85]);
+                } else {
+                    // No icon registered: a labelled chip so the drag is still legible.
+                    let name = self
+                        .sheet
+                        .as_ref()
+                        .and_then(|s| s.spells.iter().find(|x| x.id == drag.spell_id).map(|x| x.name.clone()))
+                        .or_else(|| self.net.as_ref().and_then(|n| n.world.known_spells.iter().find(|s| s.id == drag.spell_id).map(|s| s.name.clone())))
+                        .unwrap_or_default();
+                    let cw = rcce_render::font::text_width(&name, 1.0) + 8.0;
+                    overlay.rect(cx - cw * 0.5, cy - 8.0, cw, 16.0, [0.1, 0.14, 0.22, 0.9]);
+                    overlay.text_shadow(cx - cw * 0.5 + 4.0, cy - 6.0, 1.0, &name, [0.9, 0.95, 1.0, 1.0]);
                 }
             }
 
@@ -7434,6 +7693,44 @@ mod tests {
         assert_eq!(spell_slot_at(0.2 * sw, by - sh_, sw, sh), None);
         let past = (SPELLBAR_X0 + 12.0 * SPELLBAR_PITCH) * sw + 4.0;
         assert_eq!(spell_slot_at(past, cy, sw, sh), None);
+    }
+
+    #[test]
+    fn action_bar_autofill_vs_explicit() {
+        use rcce_client::fetch::{CharacterSheet, SpellInfo};
+        let sp = |id: u16, mem: bool| SpellInfo {
+            id,
+            level: 1,
+            thumb_tex: 0,
+            recharge: 1000,
+            name: format!("S{id}"),
+            description: String::new(),
+            memorised: mem,
+        };
+        // Sheet with 3 memorised spells (ids 10,30) + 1 un-memorised (20) between.
+        let sheet = CharacterSheet {
+            spells: vec![sp(10, true), sp(20, false), sp(30, true)],
+            ..Default::default()
+        };
+
+        // All-None bar → auto-fill from the memorised spells, in sheet order, with
+        // the un-memorised one skipped.
+        let empty = [None; 12];
+        let auto = effective_action_bar(&empty, Some(&sheet));
+        assert_eq!(auto[0], Some(10));
+        assert_eq!(auto[1], Some(30));
+        assert_eq!(auto[2], None);
+
+        // Any explicit assignment switches the whole bar to the explicit layout —
+        // the auto-fill no longer leaks in, and gaps are honoured.
+        let mut explicit = [None; 12];
+        explicit[4] = Some(30);
+        let resolved = effective_action_bar(&explicit, Some(&sheet));
+        assert_eq!(resolved[0], None, "auto-fill must not leak once customised");
+        assert_eq!(resolved[4], Some(30));
+
+        // No sheet → empty bar stays empty (no panic).
+        assert_eq!(effective_action_bar(&empty, None), [None; 12]);
     }
 
     #[test]
