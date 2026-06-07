@@ -3258,11 +3258,13 @@ impl App {
                         self.chat_input = Some(String::new());
                     }
                 }
-                // The character panel shows gear + backpack + spells, so the
-                // Inventory / Character / Spells icons all toggle it.
-                HudAction::Inventory | HudAction::Character | HudAction::Spells => {
+                // Inventory / Character open the gear+backpack panel.
+                HudAction::Inventory | HudAction::Character => {
                     self.show_inventory = !self.show_inventory;
                 }
+                // The Abilities button opens the Spellbook (memorise window), like
+                // Blitz's WSpells — not the character panel.
+                HudAction::Spells => self.show_spellbook = !self.show_spellbook,
                 // Quest log (QST-1) / Party (PTY-1) toggle their own panels.
                 HudAction::Quests => self.show_quests = !self.show_quests,
                 HudAction::Party => self.show_party = !self.show_party,
