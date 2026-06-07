@@ -290,6 +290,8 @@ struct App {
     target: Option<u16>,
     /// Open "Actions" context menu over the selected actor (TGT-3), if any.
     context_menu: Option<ContextMenu>,
+    /// Open item context menu over a right-clicked inventory slot (Use/Equip/Drop).
+    item_menu: Option<ItemMenu>,
     /// Screen rects (x,y,w,h) of the current NPC-dialog option lines, rebuilt
     /// each frame as the dialog draws, so hud_click can hit-test them (TGT-5).
     dialog_hitboxes: Vec<(f32, f32, f32, f32)>,
@@ -502,6 +504,7 @@ impl App {
             chat_scroll: 0,
             target: None,
             context_menu: None,
+            item_menu: None,
             dialog_hitboxes: Vec::new(),
             attacking: false,
             last_attack: now,
@@ -605,6 +608,51 @@ enum MenuAction {
     Attack,
     Examine,
     Trade,
+}
+
+/// Actions on a right-clicked inventory item (the item-slot context menu).
+#[derive(Clone, Copy, PartialEq)]
+enum ItemAction {
+    Use,
+    Equip,
+    Drop,
+    DropAll,
+}
+
+/// An open context menu over a right-clicked inventory item slot. Mirrors the
+/// actor `ContextMenu` but keyed by inventory slot + item-specific actions.
+struct ItemMenu {
+    slot: u8,
+    x: f32,
+    y: f32,
+    items: Vec<(&'static str, ItemAction)>,
+}
+
+impl ItemMenu {
+    /// Build the menu for the item in `slot` at `(x,y)`: Use, Equip (equippable
+    /// only), Drop, and Drop All (stacks only). Clamped to stay on screen.
+    fn build(slot: u8, equippable: bool, stack: bool, x: f32, y: f32, sw: f32, sh: f32) -> ItemMenu {
+        let mut items: Vec<(&'static str, ItemAction)> = vec![("Use", ItemAction::Use)];
+        if equippable {
+            items.push(("Equip", ItemAction::Equip));
+        }
+        items.push(("Drop", ItemAction::Drop));
+        if stack {
+            items.push(("Drop All", ItemAction::DropAll));
+        }
+        let h = CTX_ROW * items.len() as f32;
+        let x = x.min(sw - CTX_W - 2.0).max(2.0);
+        let y = y.min(sh - h - 2.0).max(2.0);
+        ItemMenu { slot, x, y, items }
+    }
+
+    fn hit(&self, cx: f32, cy: f32) -> Option<ItemAction> {
+        if cx < self.x || cx > self.x + CTX_W || cy < self.y {
+            return None;
+        }
+        let row = ((cy - self.y) / CTX_ROW).floor() as usize;
+        self.items.get(row).map(|&(_, a)| a)
+    }
 }
 
 /// An open "Actions" context menu anchored at a screen position over a target
@@ -1066,6 +1114,7 @@ struct EscOpen {
     script_input: bool,
     dialog: bool,
     context_menu: bool,
+    item_menu: bool,
     trade: bool,
     spellbook: bool,
     inventory: bool,
@@ -1084,6 +1133,7 @@ enum EscLayer {
     ScriptInput,
     Dialog,
     ContextMenu,
+    ItemMenu,
     Trade,
     Spellbook,
     Inventory,
@@ -1108,6 +1158,8 @@ fn esc_layer(o: EscOpen) -> EscLayer {
         EscLayer::Dialog
     } else if o.context_menu {
         EscLayer::ContextMenu
+    } else if o.item_menu {
+        EscLayer::ItemMenu
     } else if o.trade {
         EscLayer::Trade
     } else if o.spellbook {
@@ -2871,6 +2923,7 @@ impl ApplicationHandler for App {
                                 script_input: script_input_open,
                                 dialog: dialog_open,
                                 context_menu: self.context_menu.is_some(),
+                                item_menu: self.item_menu.is_some(),
                                 trade: trade_open,
                                 spellbook: self.show_spellbook,
                                 inventory: self.show_inventory,
@@ -2892,6 +2945,7 @@ impl ApplicationHandler for App {
                                     }
                                 }
                                 EscLayer::ContextMenu => self.context_menu = None,
+                                EscLayer::ItemMenu => self.item_menu = None,
                                 EscLayer::Trade => {
                                     if let Some(net) = self.net.as_mut() {
                                         net.transport.send(
@@ -2948,7 +3002,13 @@ impl ApplicationHandler for App {
                 } else if button == MouseButton::Left && state == ElementState::Released {
                     self.end_drag();
                 } else if button == MouseButton::Right {
-                    self.set_mouse_look(state == ElementState::Pressed);
+                    // Right-click over an inventory item opens its context menu
+                    // (Use/Equip/Drop) instead of grabbing the camera.
+                    if state == ElementState::Pressed && !self.mouse_look && self.try_open_item_menu() {
+                        // menu opened; no camera grab
+                    } else {
+                        self.set_mouse_look(state == ElementState::Pressed);
+                    }
                 } else if button == MouseButton::Middle && state == ElementState::Pressed {
                     // CAM-5: middle-click snaps the camera directly behind the
                     // character (cam_yaw -> me_yaw, cam_pitch -> 0). me_yaw is in
@@ -3727,6 +3787,14 @@ impl App {
             }
             return;
         }
+        // Item context menu: same priority — pick an action or dismiss, consumed.
+        if let Some(menu) = self.item_menu.take() {
+            let (cx, cy) = self.cursor;
+            if let Some(action) = menu.hit(cx, cy) {
+                self.exec_item_action(action, menu.slot);
+            }
+            return;
+        }
         // Spellbook memorise (SPL-4): a click on a spell row memorises it (or
         // un-memorises an already-memorised one), and is consumed.
         if self.show_spellbook {
@@ -3927,6 +3995,79 @@ impl App {
             MenuAction::Attack => return, // engaged above
         };
         net.transport.send(net.peer, ptype, &payload, true);
+    }
+
+    /// Right-click in the inventory: open the item context menu over the slot
+    /// under the cursor (if it holds an item). Returns true if a menu opened, so
+    /// the caller skips the camera grab. Closes any open menu when re-clicked off.
+    fn try_open_item_menu(&mut self) -> bool {
+        if !self.show_inventory {
+            return false;
+        }
+        let Some(gfx) = self.gfx.as_ref() else { return false };
+        let (sw, sh) = (gfx.config.width as f32, gfx.config.height as f32);
+        let (cx, cy) = self.cursor;
+        let slot = self
+            .store
+            .as_ref()
+            .and_then(|s| s.interface())
+            .and_then(|iface| inventory_slot_at(cx, cy, iface.inventory_window, &iface.inventory_buttons, sw, sh));
+        let Some(slot) = slot else { return false };
+        let item = self
+            .net
+            .as_ref()
+            .and_then(|n| n.world.me_inventory.values().find(|it| it.slot == slot as u8))
+            .map(|it| (it.item_id, it.amount));
+        let Some((item_id, amount)) = item else { return false };
+        let equippable = self.store.as_ref().and_then(|s| s.item_equip_slot(item_id)).is_some();
+        self.item_menu = Some(ItemMenu::build(slot as u8, equippable, amount > 1, cx, cy, sw, sh));
+        true
+    }
+
+    /// Execute an item context-menu action on inventory slot `slot`.
+    fn exec_item_action(&mut self, action: ItemAction, slot: u8) {
+        let item_id = self.net.as_ref().and_then(|n| n.world.me_inventory.values().find(|it| it.slot == slot).map(|it| it.item_id));
+        let Some(item_id) = item_id else { return };
+        match action {
+            ItemAction::Use => {
+                let (item_type, image_id) = self
+                    .store
+                    .as_ref()
+                    .and_then(|s| s.item_def(item_id))
+                    .map(|d| (d.item_type, d.image_id))
+                    .unwrap_or((0, -1));
+                let edible = item_type == 4 || item_type == 5;
+                let target = self.target;
+                if let Some(net) = self.net.as_mut() {
+                    if edible {
+                        net.transport.send(net.peer, rcce_net::packet_id::EAT_ITEM, &rcce_client::net::eat_item_packet(slot, 1), true);
+                    } else {
+                        net.transport.send(net.peer, rcce_net::packet_id::ITEM_SCRIPT, &rcce_client::net::item_script_packet(slot, target), true);
+                    }
+                }
+                if item_type == 6 && image_id >= 0 {
+                    self.image_window = Some(image_id as u16);
+                }
+            }
+            ItemAction::Equip => {
+                if let Some(dest) = self.store.as_ref().and_then(|s| s.item_equip_slot(item_id)) {
+                    let rid = self.net.as_ref().map(|n| n.world.my_runtime_id).unwrap_or(0);
+                    if let Some(net) = self.net.as_mut() {
+                        net.transport.send(net.peer, rcce_net::packet_id::INVENTORY_UPDATE, &rcce_client::net::inv_move_packet(rid, slot, dest, 0, true), true);
+                    }
+                }
+            }
+            ItemAction::Drop | ItemAction::DropAll => {
+                let amount = if action == ItemAction::DropAll {
+                    self.net.as_ref().and_then(|n| n.world.me_inventory.values().find(|it| it.slot == slot)).map(|it| it.amount.max(1)).unwrap_or(1)
+                } else {
+                    1
+                };
+                if let Some(net) = self.net.as_mut() {
+                    net.transport.send(net.peer, rcce_net::packet_id::INVENTORY_UPDATE, &rcce_client::net::inv_drop_packet(slot, amount), true);
+                }
+            }
+        }
     }
 
     /// World click: select the living actor whose projected position is nearest
@@ -6204,6 +6345,32 @@ impl App {
                 }
             }
         }
+        // Headless item-menu self-test: inject a backpack item + open its
+        // right-click context menu (Use/Equip/Drop/Drop All) for capture. No-op
+        // unless RCCE_ITEMMENU=<frame> is set.
+        if let Ok(im) = std::env::var("RCCE_ITEMMENU") {
+            if let Ok(at) = im.parse::<u64>() {
+                if self.frames == at {
+                    use rcce_client::fetch::InvItem;
+                    if let Some(net) = self.net.as_mut() {
+                        net.world.me_inventory.insert(14, InvItem { slot: 14, item_id: 1, amount: 5, health: 100 });
+                    }
+                    self.show_inventory = true;
+                    self.item_menu = Some(ItemMenu {
+                        slot: 14,
+                        x: 360.0,
+                        y: 280.0,
+                        items: vec![
+                            ("Use", ItemAction::Use),
+                            ("Equip", ItemAction::Equip),
+                            ("Drop", ItemAction::Drop),
+                            ("Drop All", ItemAction::DropAll),
+                        ],
+                    });
+                    println!("[itemmenu] frame {} opened item menu over slot 14", self.frames);
+                }
+            }
+        }
         // Headless buff self-test: inject status effects (two with real icon
         // textures borrowed from item thumbnails, one without) so the buff icons +
         // name-pill fallback are capturable. No-op unless RCCE_BUFFTEST=<frame>.
@@ -7607,6 +7774,22 @@ impl App {
                 }
             }
 
+            // Item context menu (Use/Equip/Drop): same style as the actor menu.
+            if let Some(menu) = &self.item_menu {
+                let (mcx, mcy) = self.cursor;
+                let mh = CTX_ROW * menu.items.len() as f32;
+                overlay.rect(menu.x - 1.0, menu.y - 1.0, CTX_W + 2.0, mh + 2.0, [1.0, 0.85, 0.2, 0.95]);
+                overlay.rect(menu.x, menu.y, CTX_W, mh, [0.05, 0.05, 0.09, 0.96]);
+                for (i, (label, _)) in menu.items.iter().enumerate() {
+                    let ry = menu.y + i as f32 * CTX_ROW;
+                    let hovered = mcx >= menu.x && mcx <= menu.x + CTX_W && mcy >= ry && mcy < ry + CTX_ROW;
+                    if hovered {
+                        overlay.rect(menu.x, ry, CTX_W, CTX_ROW, [0.2, 0.32, 0.55, 0.85]);
+                    }
+                    overlay.text_shadow(menu.x + 8.0, ry + 6.0, 1.0, label, [0.94, 0.94, 0.72, 1.0]);
+                }
+            }
+
             // Dragged spell/item icon following the cursor (drag-drop hotbar
             // assign): drawn over the whole HUD so it reads as "carried". Only once
             // the press has become a real drag (moved past the dead-zone).
@@ -7904,6 +8087,7 @@ mod tests {
             script_input: true,
             dialog: true,
             context_menu: true,
+            item_menu: true,
             trade: true,
             spellbook: true,
             inventory: true,
@@ -7924,6 +8108,8 @@ mod tests {
         o.dialog = false;
         assert_eq!(esc_layer(o), EscLayer::ContextMenu);
         o.context_menu = false;
+        assert_eq!(esc_layer(o), EscLayer::ItemMenu);
+        o.item_menu = false;
         assert_eq!(esc_layer(o), EscLayer::Trade);
         o.trade = false;
         assert_eq!(esc_layer(o), EscLayer::Spellbook);
