@@ -83,6 +83,14 @@ struct Gfx {
     device: wgpu::Device,
     queue: wgpu::Queue,
     config: wgpu::SurfaceConfiguration,
+    /// Physical-to-logical UI divisor. On a HiDPI/Retina display the window's
+    /// backing store is `scale`× the logical size; we render the surface at the
+    /// logical size (so the bitmap-font UI and 3D are sized as on a 1× display)
+    /// and let the compositor scale the drawable up to the panel. `config`
+    /// dimensions are therefore LOGICAL, and every UI/overlay/pick path that
+    /// reads them is automatically in logical space — the only other physical
+    /// input is the raw cursor position, which `CursorMoved` divides by this.
+    ui_scale: f32,
 }
 
 impl Gfx {
@@ -130,13 +138,29 @@ impl Gfx {
         // captures (the offscreen RCCE_SHOT renders at config.width/height and the
         // overlay lays out against them, so this gives a full-res HUD screenshot
         // even when the headless window's physical size is tiny).
-        let (cfg_w, cfg_h) = std::env::var("RCCE_RES")
-            .ok()
-            .and_then(|s| {
-                let p: Vec<u32> = s.split(['x', 'X']).filter_map(|t| t.trim().parse().ok()).collect();
-                (p.len() == 2 && p[0] > 0 && p[1] > 0).then(|| (p[0], p[1]))
-            })
-            .unwrap_or((size.width.max(1), size.height.max(1)));
+        let res_override = std::env::var("RCCE_RES").ok().and_then(|s| {
+            let p: Vec<u32> = s.split(['x', 'X']).filter_map(|t| t.trim().parse().ok()).collect();
+            (p.len() == 2 && p[0] > 0 && p[1] > 0).then(|| (p[0], p[1]))
+        });
+        // High-DPI handling: render at logical resolution (physical / scale) so
+        // the UI/3D are sized as on a 1× display. RCCE_UISCALE overrides the
+        // factor (1 = native physical res = crisp but small on Retina; 1.5 = a
+        // middle ground). An explicit RCCE_RES bypasses scaling entirely.
+        let ui_scale = if res_override.is_some() {
+            1.0
+        } else {
+            std::env::var("RCCE_UISCALE")
+                .ok()
+                .and_then(|s| s.trim().parse::<f32>().ok())
+                .filter(|v| *v > 0.0)
+                .unwrap_or(window.scale_factor() as f32)
+        };
+        let (cfg_w, cfg_h) = res_override.unwrap_or_else(|| {
+            (
+                ((size.width as f32 / ui_scale).round() as u32).max(1),
+                ((size.height as f32 / ui_scale).round() as u32).max(1),
+            )
+        });
         let config = wgpu::SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
             format,
@@ -153,13 +177,17 @@ impl Gfx {
             "[client-window] {}x{} via {} [{:?}] ({:?}) present={:?}",
             config.width, config.height, info.name, info.backend, format, present_mode
         );
-        (Gfx { surface, device, queue, config }, format)
+        (Gfx { surface, device, queue, config, ui_scale }, format)
     }
 
+    /// `w`/`h` are physical pixels (from winit's `Resized`); store the logical
+    /// size so the surface keeps rendering at logical resolution after a resize.
     fn resize(&mut self, w: u32, h: u32) {
-        if w > 0 && h > 0 {
-            self.config.width = w;
-            self.config.height = h;
+        let lw = (w as f32 / self.ui_scale).round() as u32;
+        let lh = (h as f32 / self.ui_scale).round() as u32;
+        if lw > 0 && lh > 0 {
+            self.config.width = lw;
+            self.config.height = lh;
             self.surface.configure(&self.device, &self.config);
         }
     }
@@ -2639,7 +2667,9 @@ impl ApplicationHandler for App {
                     gfx.resize(size.width, size.height);
                 }
                 if let (Some(view), Some(gfx)) = (self.view.as_mut(), self.gfx.as_ref()) {
-                    view.resize(&gfx.device, size.width, size.height);
+                    // Logical dims (gfx.resize already divided by ui_scale) so the
+                    // 3D viewport matches the logical surface, not the raw physical size.
+                    view.resize(&gfx.device, gfx.config.width, gfx.config.height);
                 }
             }
             WindowEvent::KeyboardInput { event, .. } => {
@@ -3070,7 +3100,11 @@ impl ApplicationHandler for App {
                 }
             }
             WindowEvent::CursorMoved { position, .. } => {
-                self.cursor = (position.x as f32, position.y as f32);
+                // winit reports physical pixels; the UI/pick space is logical
+                // (the surface renders at config dims = physical / ui_scale), so
+                // divide to keep clicks aligned with what's drawn.
+                let s = self.gfx.as_ref().map(|g| g.ui_scale).unwrap_or(1.0);
+                self.cursor = (position.x as f32 / s, position.y as f32 / s);
                 // Promote an armed press to a real drag once it moves past a small
                 // dead-zone, so a click (memorise / cast) and a drag stay distinct.
                 if let Some(drag) = self.drag.as_mut() {
@@ -8374,8 +8408,18 @@ impl App {
 
 fn main() {
     let mut args = std::env::args().skip(1);
-    let host = args.next().unwrap_or_else(|| "127.0.0.1".to_string());
-    let port: u16 = args.next().and_then(|s| s.parse().ok()).unwrap_or(25000);
+    // Server address: positional arg wins, else RCCE_HOST / RCCE_PORT, else the
+    // 127.0.0.1:25000 default. Lets a macOS/Linux client point at a Windows
+    // server host without passing CLI args (e.g. launched via compile.sh).
+    let host = args
+        .next()
+        .or_else(|| std::env::var("RCCE_HOST").ok().filter(|s| !s.trim().is_empty()))
+        .unwrap_or_else(|| "127.0.0.1".to_string());
+    let port: u16 = args
+        .next()
+        .and_then(|s| s.parse().ok())
+        .or_else(|| std::env::var("RCCE_PORT").ok().and_then(|s| s.trim().parse().ok()))
+        .unwrap_or(25000);
     let zone = args.next().unwrap_or_else(|| "Plains".to_string());
     let event_loop = EventLoop::new().expect("event loop");
     event_loop.set_control_flow(ControlFlow::Poll);
