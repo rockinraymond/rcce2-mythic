@@ -3212,6 +3212,11 @@ impl App {
             for it in &s.inventory {
                 world.me_inventory.insert(it.slot, *it);
             }
+            // Seed the LIVE gold balance from the sheet. `me_gold` is a delta
+            // accumulator (P_GoldChange adds U/D deltas); without this seed it
+            // started at 0, so the HUD gold (which now reads me_gold) would have
+            // shown a balance relative to login instead of the real total.
+            world.me_gold = s.gold as i32;
         }
         // Load the persisted hotbar (P_ActionBarUpdate round-trip): resolve each
         // stored spell NAME back to its id via the sheet / known spells; item slots
@@ -6653,6 +6658,23 @@ impl App {
                 }
             }
         }
+        // Headless live-gold self-test: drive me_gold to a value distinct from the
+        // sheet's login gold + open the inventory, so the HUD gold readouts can be
+        // checked to follow the LIVE balance. No-op unless RCCE_GOLDTEST=<frame>.
+        if let Ok(gv) = std::env::var("RCCE_GOLDTEST") {
+            if let Ok(at) = gv.parse::<u64>() {
+                if self.frames == at {
+                    if let Some(net) = self.net.as_mut() {
+                        // Drive the LIVE balance below the seeded login gold (as a
+                        // P_GoldChange "D" would) so the HUD must read me_gold.
+                        net.world.me_gold = (net.world.me_gold - 758).max(0);
+                    }
+                    self.show_inventory = true;
+                    let g = self.net.as_ref().map(|n| n.world.me_gold).unwrap_or(0);
+                    println!("[goldtest] frame {} me_gold now {g}", self.frames);
+                }
+            }
+        }
         // Headless quantity-prompt self-test: inject a stack + open the sell
         // quantity modal at a partial value. No-op unless RCCE_QTYPROMPT=<frame>.
         if let Ok(qp) = std::env::var("RCCE_QTYPROMPT") {
@@ -7413,10 +7435,13 @@ impl App {
                 // plus the multi-denomination Money$ string (HUD-3) on the line
                 // below, formatted via Money.dat (Platinum/Gold/Silver/Copper).
                 if let Some(sheet) = &self.sheet {
-                    let line = format!("Lv {}   {}g", sheet.level, sheet.gold);
+                    // LIVE gold (me_gold, seeded from the sheet at login + updated by
+                    // P_GoldChange) so buy/sell/loot are reflected immediately.
+                    let gold = self.net.as_ref().map(|n| n.world.me_gold).unwrap_or(sheet.gold as i32);
+                    let line = format!("Lv {}   {}g", sheet.level, gold);
                     let tw = rcce_render::font::text_width(&line, 1.0);
                     overlay.text_shadow(sw - tw - 12.0, 24.0, 1.0, &line, [1.0, 0.88, 0.4, 1.0]);
-                    let money = store.money().format(sheet.gold as i64);
+                    let money = store.money().format(gold as i64);
                     let mw = rcce_render::font::text_width(&money, 1.0);
                     overlay.text_shadow(sw - mw - 12.0, 36.0, 1.0, &money, [0.95, 0.82, 0.55, 1.0]);
                 }
@@ -7608,9 +7633,10 @@ impl App {
 
                 if let Some(iface) = iface {
                     let iw = &iface.inventory_window;
-                    // Header line: level / gold / xp.
+                    // Header line: level / gold (live) / xp.
                     if let Some(s) = &self.sheet {
-                        overlay.text_shadow(px + 10.0, py + 26.0, 1.0, &format!("Lv {}   {} gold   {} xp", s.level, s.gold, s.xp), [1.0, 0.88, 0.4, 1.0]);
+                        let gold = self.net.as_ref().map(|n| n.world.me_gold).unwrap_or(s.gold as i32);
+                        overlay.text_shadow(px + 10.0, py + 26.0, 1.0, &format!("Lv {}   {} gold   {} xp", s.level, gold, s.xp), [1.0, 0.88, 0.4, 1.0]);
                     }
                     for (i, b) in iface.inventory_buttons.iter().enumerate() {
                         // Window-relative fraction -> screen pixels.
@@ -7695,7 +7721,7 @@ impl App {
                     let to_scr = |c: rcce_data::IComp| -> (f32, f32, f32, f32) {
                         ((iw.x + c.x * iw.w) * sw, (iw.y + c.y * iw.h) * sh, c.w * iw.w * sw, c.h * iw.h * sh)
                     };
-                    let gold = self.sheet.as_ref().map(|s| s.gold).unwrap_or(0);
+                    let gold = self.net.as_ref().map(|n| n.world.me_gold).unwrap_or_else(|| self.sheet.as_ref().map(|s| s.gold as i32).unwrap_or(0));
                     let (gx, gy, _, _) = to_scr(iface.inventory_gold);
                     overlay.text_shadow(gx, gy, 1.0, &format!("Gold: {gold}"), [1.0, 0.88, 0.4, 1.0]);
                     for (comp, label) in [(iface.inventory_drop, "Drop"), (iface.inventory_eat, "Eat")] {
@@ -7709,7 +7735,8 @@ impl App {
                     overlay.text(px + 10.0, py + ph - 13.0, 1.0, "1-9 drop  ·  Shift+1-9 equip", dim);
                 } else if let Some(s) = &self.sheet {
                     // Fallback text list when Interface.dat is absent.
-                    overlay.text_shadow(px + 10.0, py + 30.0, 1.0, &format!("Lv {}   {} gold", s.level, s.gold), [1.0, 0.88, 0.4, 1.0]);
+                    let gold = self.net.as_ref().map(|n| n.world.me_gold).unwrap_or(s.gold as i32);
+                    overlay.text_shadow(px + 10.0, py + 30.0, 1.0, &format!("Lv {}   {} gold", s.level, gold), [1.0, 0.88, 0.4, 1.0]);
                 } else {
                     overlay.text(px + 10.0, py + 30.0, 1.0, "(no character data)", dim);
                 }
