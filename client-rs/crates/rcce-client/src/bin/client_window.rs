@@ -6333,8 +6333,13 @@ impl App {
                     let aw = 152.0f32;
                     let ax = (px - aw - 6.0).max(4.0);
                     let boxh = 24.0 + rows.len() as f32 * 13.0 + 6.0;
-                    overlay.rect(ax, py, aw, boxh, [0.05, 0.06, 0.10, 0.92]);
-                    overlay.rect(ax, py, aw, 20.0, [0.15, 0.18, 0.28, 0.96]);
+                    if overlay.has_texture("gui:CharBG") {
+                        overlay.image(ax, py, aw, boxh, "gui:CharBG", [1.0, 1.0, 1.0, 1.0]);
+                        overlay.rect(ax, py, aw, 20.0, [0.0, 0.0, 0.0, 0.45]);
+                    } else {
+                        overlay.rect(ax, py, aw, boxh, [0.05, 0.06, 0.10, 0.92]);
+                        overlay.rect(ax, py, aw, 20.0, [0.15, 0.18, 0.28, 0.96]);
+                    }
                     overlay.text_shadow(ax + 8.0, py + 5.0, 1.0, &cname, white);
                     let mut ay = py + 24.0;
                     for (line, col) in &rows {
@@ -6355,8 +6360,13 @@ impl App {
                         let shown = if total > cap { cap - 1 } else { total };
                         let rows_drawn = shown + if total > cap { 1 } else { 0 };
                         let boxh = 24.0 + rows_drawn as f32 * rowh + 4.0;
-                        overlay.rect(sx, py, cw2, boxh, [0.05, 0.06, 0.10, 0.92]);
-                        overlay.rect(sx, py, cw2, 20.0, [0.15, 0.18, 0.28, 0.96]);
+                        if overlay.has_texture("gui:AbilitiesBG") {
+                            overlay.image(sx, py, cw2, boxh, "gui:AbilitiesBG", [1.0, 1.0, 1.0, 1.0]);
+                            overlay.rect(sx, py, cw2, 20.0, [0.0, 0.0, 0.0, 0.45]);
+                        } else {
+                            overlay.rect(sx, py, cw2, boxh, [0.05, 0.06, 0.10, 0.92]);
+                            overlay.rect(sx, py, cw2, 20.0, [0.15, 0.18, 0.28, 0.96]);
+                        }
                         overlay.text_shadow(sx + 8.0, py + 5.0, 1.0, &format!("Spells ({total})"), white);
                         let mut sy = py + 24.0;
                         for sp in sheet.spells.iter().take(shown) {
