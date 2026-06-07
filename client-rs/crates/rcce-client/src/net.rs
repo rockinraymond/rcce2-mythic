@@ -58,6 +58,24 @@ pub fn unmemorise_packet(num: u16) -> Vec<u8> {
     w.into_bytes()
 }
 
+/// `P_ActionBarUpdate "S"` (ServerNet.bb:1105) — persist a spell on hotbar slot
+/// `slot` (0..35) for the logged-in character: `"S"` + slot byte + spell NAME
+/// (the rest of the packet, server-capped to 255 bytes). The server keys the bar
+/// by spell name (not id), so the caller passes the resolved name. Sent reliable.
+pub fn action_bar_spell_packet(slot: u8, name: &str) -> Vec<u8> {
+    let mut v = Vec::with_capacity(2 + name.len());
+    v.push(b'S');
+    v.push(slot);
+    v.extend_from_slice(name.as_bytes());
+    v
+}
+
+/// `P_ActionBarUpdate "N"` (ServerNet.bb:1122) — clear hotbar slot `slot`,
+/// storing "" server-side. `"N"` + slot byte. Sent reliable.
+pub fn action_bar_clear_packet(slot: u8) -> Vec<u8> {
+    vec![b'N', slot]
+}
+
 /// Build a `P_InventoryUpdate` pickup request (`ServerNet.bb:1611`): `"P"` +
 /// DroppedItem handle (u32) + target inventory slot (u8). The server validates
 /// same-area + distance + slot, then replies `"R"` to the picker and `"P"` to
@@ -213,6 +231,22 @@ mod tests {
     #[test]
     fn trade_close_is_empty() {
         assert!(trade_close_packet().is_empty());
+    }
+
+    #[test]
+    fn action_bar_spell_layout() {
+        // Server parse: type = Left$(data,1), slot = Mid$(data,2,1) [byte 1],
+        // name = Mid$(data,3) [bytes 2..]. (ServerNet.bb:1102-1119)
+        let p = action_bar_spell_packet(5, "Fireball");
+        assert_eq!(p[0], b'S');
+        assert_eq!(p[1], 5);
+        assert_eq!(&p[2..], b"Fireball");
+    }
+
+    #[test]
+    fn action_bar_clear_layout() {
+        let p = action_bar_clear_packet(7);
+        assert_eq!(p, vec![b'N', 7]);
     }
 
     #[test]

@@ -60,6 +60,10 @@ pub mod packet_id {
     pub const NAME_CHANGE: u8 = 25;
     pub const KNOWN_SPELL_UPDATE: u8 = 26;
     pub const SPELL_UPDATE: u8 = 27;
+    /// Per-character action-bar slot assignment (`P_ActionBarUpdate`,
+    /// ServerNet.bb:1098). Client→server persists one hotbar slot:
+    /// `"S"+slot_byte+spellname` / `"I"+slot_byte+itemid2` / `"N"+slot_byte`.
+    pub const ACTION_BAR_UPDATE: u8 = 31;
     pub const XP_UPDATE: u8 = 32;
     pub const SCREEN_FLASH: u8 = 33;
     pub const OPEN_TRADING: u8 = 35;

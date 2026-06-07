@@ -2960,6 +2960,54 @@ impl App {
                 world.me_inventory.insert(it.slot, *it);
             }
         }
+        // Load the persisted hotbar (P_ActionBarUpdate round-trip): resolve each
+        // stored spell NAME back to its id via the sheet / known spells. Slots
+        // past the 12 visible are dropped; item slots aren't placeable on the Rust
+        // bar yet (counted for the log). A non-empty result makes the bar explicit,
+        // so `effective_action_bar` shows exactly the saved layout (no auto-fill).
+        {
+            let mut bar = [None; 12];
+            let mut items_skipped = 0usize;
+            for (slot, sl) in &outcome.action_bar {
+                if *slot >= 12 {
+                    continue;
+                }
+                match sl {
+                    rcce_client::login::ActionSlot::Spell(name) => {
+                        let id = outcome
+                            .sheet
+                            .as_ref()
+                            .and_then(|s| s.spells.iter().find(|sp| sp.name.eq_ignore_ascii_case(name)).map(|sp| sp.id))
+                            .or_else(|| world.known_spells.iter().find(|k| k.name.eq_ignore_ascii_case(name)).map(|k| k.id));
+                        if let Some(id) = id {
+                            bar[*slot] = Some(id);
+                        }
+                    }
+                    rcce_client::login::ActionSlot::Item(_) => items_skipped += 1,
+                }
+            }
+            let loaded = bar.iter().filter(|s| s.is_some()).count();
+            if !outcome.action_bar.is_empty() {
+                // Raw slot names as they came back off the wire (before id
+                // resolution), so a relog visibly proves the save→load round-trip
+                // even when the live sheet can't map every name to an id.
+                let raw: Vec<String> = outcome
+                    .action_bar
+                    .iter()
+                    .map(|(i, sl)| match sl {
+                        rcce_client::login::ActionSlot::Spell(n) => format!("{i}:S '{n}'"),
+                        rcce_client::login::ActionSlot::Item(id) => format!("{i}:I {id}"),
+                    })
+                    .collect();
+                println!(
+                    "[client-window] action bar: {} saved slot(s) [{}] -> {loaded} resolved{}",
+                    outcome.action_bar.len(),
+                    raw.join(", "),
+                    if items_skipped > 0 { format!(", {items_skipped} item skipped") } else { String::new() }
+                );
+            }
+            self.action_bar = bar;
+        }
         self.sheet = outcome.sheet;
         self.net = Some(Net { transport, world, peer: outcome.peer, updates: 0, env_requested: false });
         self.mode = Mode::InWorld;
@@ -3265,6 +3313,43 @@ impl App {
         }
     }
 
+    /// Resolve a spell id to its name (for the `P_ActionBarUpdate` send, which
+    /// keys the server bar by name) via the sheet, falling back to known spells.
+    fn spell_name_for_id(&self, id: u16) -> Option<String> {
+        self.sheet
+            .as_ref()
+            .and_then(|s| s.spells.iter().find(|sp| sp.id == id).map(|sp| sp.name.clone()))
+            .or_else(|| {
+                self.net.as_ref().and_then(|n| n.world.known_spells.iter().find(|k| k.id == id).map(|k| k.name.clone()))
+            })
+    }
+
+    /// Persist the whole 12-slot hotbar to the server (`P_ActionBarUpdate`, one
+    /// reliable packet per slot: spell-by-name or clear). Sending the full bar
+    /// after any edit keeps the server's stored layout == what the player sees, so
+    /// the next login's load (`enter_outcome`) reproduces it exactly — no drift
+    /// between the materialised auto-fill and the saved slots. Cheap: at most 12
+    /// reliable packets on an occasional drag, not a per-frame cost.
+    fn persist_action_bar(&mut self) {
+        if self.net.is_none() {
+            return;
+        }
+        for slot in 0..12usize {
+            let pkt = match self.action_bar[slot] {
+                Some(id) => match self.spell_name_for_id(id) {
+                    Some(name) => rcce_client::net::action_bar_spell_packet(slot as u8, &name),
+                    // Unknown name (shouldn't happen for an assigned spell) — skip
+                    // rather than clobber the server slot with a bad value.
+                    None => continue,
+                },
+                None => rcce_client::net::action_bar_clear_packet(slot as u8),
+            };
+            if let Some(net) = self.net.as_mut() {
+                net.transport.send(net.peer, rcce_net::packet_id::ACTION_BAR_UPDATE, &pkt, true);
+            }
+        }
+    }
+
     /// Cast the spell on action-bar slot `i` (Digit key or click), respecting the
     /// per-spell cooldown. Recharge comes from the character sheet when known.
     fn cast_slot(&mut self, i: usize) {
@@ -3361,11 +3446,13 @@ impl App {
                     }
                 }
                 self.action_bar[slot] = Some(drag.spell_id);
+                self.persist_action_bar();
             }
             (DragSrc::Slot(from), None) => {
                 // Dragged a slot off the bar: clear it (un-assign).
                 self.materialize_action_bar();
                 self.action_bar[from] = None;
+                self.persist_action_bar();
             }
             (DragSrc::Spellbook(_), None) => { /* dropped nowhere — cancel */ }
         }
@@ -5758,7 +5845,22 @@ impl App {
                     self.action_bar[1] = Some(7); // Heal on slot 2
                     self.action_bar[4] = Some(21); // Lightning on slot 5 (gap at 3,4)
                     self.show_spellbook = true;
-                    println!("[actionbartest] frame {} explicit hotbar [0]=Fireball [1]=Heal [4]=Lightning", self.frames);
+                    // Persist to the server (P_ActionBarUpdate) so a relog loads it
+                    // back. Inlined (not persist_action_bar): self.gfx is mutably
+                    // borrowed in this render scope, so only disjoint-field access
+                    // is legal — a `&mut self` method call would conflict.
+                    for slot in 0..12usize {
+                        if let Some(id) = self.action_bar[slot] {
+                            let name = self.sheet.as_ref().and_then(|s| s.spells.iter().find(|sp| sp.id == id).map(|sp| sp.name.clone()));
+                            if let Some(name) = name {
+                                let pkt = rcce_client::net::action_bar_spell_packet(slot as u8, &name);
+                                if let Some(net) = self.net.as_mut() {
+                                    net.transport.send(net.peer, rcce_net::packet_id::ACTION_BAR_UPDATE, &pkt, true);
+                                }
+                            }
+                        }
+                    }
+                    println!("[actionbartest] frame {} explicit hotbar [0]=Fireball [1]=Heal [4]=Lightning + persisted", self.frames);
                 }
             }
         }

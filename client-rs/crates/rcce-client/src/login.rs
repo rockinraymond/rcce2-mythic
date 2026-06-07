@@ -174,6 +174,7 @@ pub fn enter_world<T: Transport>(
     let mut runtime_id = 0u16;
     let mut replies = 0;
     let mut world_packets = Vec::new();
+    let mut action_bar = Vec::new();
     let deadline = Instant::now() + Duration::from_secs(5);
     while Instant::now() < deadline && replies < 13 {
         for m in t.poll() {
@@ -183,6 +184,10 @@ pub fn enter_world<T: Transport>(
                 }
                 if m.data.len() <= 2 {
                     runtime_id = MsgReader::new(&m.data).u16().unwrap_or(0);
+                } else {
+                    // Action-bar chunk (3 persisted slots); the 2-byte runtime-id
+                    // packet is the only short `P_StartGame`, so len > 2 == a chunk.
+                    parse_action_bar_chunk(&m.data, &mut action_bar);
                 }
                 replies += 1;
             } else {
@@ -194,7 +199,39 @@ pub fn enter_world<T: Transport>(
     if runtime_id == 0 {
         return Err("no RuntimeID assigned".into());
     }
-    Ok(LoginOutcome { runtime_id, peer: peer2, world_packets, sheet })
+    Ok(LoginOutcome { runtime_id, peer: peer2, world_packets, sheet, action_bar })
+}
+
+/// One persisted action-bar slot as stored server-side: a spell (keyed by name)
+/// or an item (by id). Items aren't placeable on the Rust hotbar yet, so the
+/// caller currently ignores `Item` slots (parsed for completeness / future use).
+#[derive(Debug, Clone)]
+pub enum ActionSlot {
+    Spell(String),
+    Item(u16),
+}
+
+/// Parse one `P_StartGame` action-bar chunk (ServerNet.bb:2170-2177): a 1-byte
+/// start slot index, then 3 × [2-byte-LE length + slot bytes]. Each slot is ""
+/// (empty), `"S"+name`, or `"I"+2-byte item id`. Non-empty slots are appended to
+/// `out` as `(slot_index, ActionSlot)`. Read with raw `bytes()` (not `str16`) so
+/// the item id's non-UTF-8 bytes survive. Tolerant of a short/garbled chunk.
+fn parse_action_bar_chunk(data: &[u8], out: &mut Vec<(usize, ActionSlot)>) {
+    let mut r = MsgReader::new(data);
+    let Some(start) = r.u8() else { return };
+    for k in 0..3usize {
+        let Some(len) = r.u16() else { return };
+        let Some(bytes) = r.bytes(len as usize) else { return };
+        if bytes.is_empty() {
+            continue;
+        }
+        let idx = start as usize + k;
+        match bytes[0] {
+            b'S' => out.push((idx, ActionSlot::Spell(String::from_utf8_lossy(&bytes[1..]).into_owned()))),
+            b'I' if bytes.len() >= 3 => out.push((idx, ActionSlot::Item(u16::from_le_bytes([bytes[1], bytes[2]])))),
+            _ => {}
+        }
+    }
 }
 
 pub struct LoginOutcome {
@@ -207,6 +244,10 @@ pub struct LoginOutcome {
     /// Character sheet (stats/inventory/spells) from `P_FetchCharacter`, if the
     /// fetch on connection #1 succeeded. `None` if the server didn't answer.
     pub sheet: Option<CharacterSheet>,
+    /// Persisted action-bar slots streamed during `P_StartGame` login (the 12
+    /// 3-slot chunks). `(slot_index, slot)`; the caller resolves spell names to
+    /// ids against the sheet/known spells. Empty if the server sent none.
+    pub action_bar: Vec<(usize, ActionSlot)>,
 }
 
 /// Request + collect the `P_FetchCharacter` stream on connection #1 for
@@ -359,6 +400,7 @@ pub fn login<T: Transport>(
     let mut runtime_id = 0u16;
     let mut replies = 0;
     let mut world_packets = Vec::new();
+    let mut action_bar = Vec::new();
     let deadline = Instant::now() + Duration::from_secs(5);
     while Instant::now() < deadline && replies < 13 {
         for m in t.poll() {
@@ -368,6 +410,8 @@ pub fn login<T: Transport>(
                 }
                 if m.data.len() <= 2 {
                     runtime_id = MsgReader::new(&m.data).u16().unwrap_or(0);
+                } else {
+                    parse_action_bar_chunk(&m.data, &mut action_bar);
                 }
                 replies += 1;
             } else {
@@ -384,5 +428,53 @@ pub fn login<T: Transport>(
         peer: peer2,
         world_packets,
         sheet,
+        action_bar,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rcce_net::codec::MsgWriter;
+
+    /// Build one chunk the way the server does (ServerNet.bb:2170-2177): a start
+    /// slot byte then 3 × [2-byte-LE length + slot bytes].
+    fn build_chunk(start: u8, slots: [&[u8]; 3]) -> Vec<u8> {
+        let mut w = MsgWriter::new();
+        w.u8(start);
+        for s in slots {
+            w.u16(s.len() as u16).raw(s);
+        }
+        w.into_bytes()
+    }
+
+    #[test]
+    fn action_bar_chunk_roundtrip() {
+        // slot 3 = Fireball, slot 4 = empty, slot 5 = item id 1000.
+        let item = [b'I', 0xE8, 0x03]; // "I" + 1000 LE
+        let chunk = build_chunk(3, [b"SFireball", b"", &item]);
+        let mut out = Vec::new();
+        parse_action_bar_chunk(&chunk, &mut out);
+        assert_eq!(out.len(), 2, "empty slot is skipped");
+        match &out[0] {
+            (3, ActionSlot::Spell(n)) => assert_eq!(n, "Fireball"),
+            other => panic!("slot0 wrong: {other:?}"),
+        }
+        match &out[1] {
+            (5, ActionSlot::Item(id)) => assert_eq!(*id, 1000),
+            other => panic!("slot2 wrong: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn action_bar_chunk_truncated_is_safe() {
+        // A chunk that claims a 9-byte slot but is cut short must not panic and
+        // must yield nothing past the truncation.
+        let mut bad = vec![0u8]; // start = 0
+        bad.extend_from_slice(&9u16.to_le_bytes()); // len 9
+        bad.extend_from_slice(b"Fire"); // only 4 bytes present
+        let mut out = Vec::new();
+        parse_action_bar_chunk(&bad, &mut out);
+        assert!(out.is_empty(), "truncated slot yields nothing, no panic");
+    }
 }
