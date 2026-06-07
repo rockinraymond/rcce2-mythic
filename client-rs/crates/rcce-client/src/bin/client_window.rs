@@ -6412,9 +6412,16 @@ impl App {
                             };
                             overlay.rect(bx, bgy, bw, bh, bg);
                         }
-                        // Equipment slots show their slot-name when empty.
+                        // Empty equipment slots show their Blitz placeholder ICON
+                        // (Hat/Chest/Ring/…), dimmed, so you can see what goes where —
+                        // like Blitz. Slot 0 ("Weapon") has no icon → name fallback.
                         if equip && !occupied {
-                            if let Some(name) = rcce_data::equip_slot_name(i as u8) {
+                            let name = rcce_data::equip_slot_name(i as u8);
+                            let key = name.map(|n| format!("gui:slot:{n}"));
+                            if let Some(k) = key.as_ref().filter(|k| overlay.has_texture(k)) {
+                                let pad = (bw * 0.14).min(3.0);
+                                overlay.image(bx + pad, bgy + pad, bw - pad * 2.0, bh - pad * 2.0, k, [1.0, 1.0, 1.0, 0.55]);
+                            } else if let Some(name) = name {
                                 let abbr: String = name.chars().take(((bw / 6.0) as usize).max(2)).collect();
                                 overlay.text(bx + 2.0, bgy + bh * 0.5 - 4.0, 1.0, &abbr, [0.45, 0.45, 0.5, 1.0]);
                             }
