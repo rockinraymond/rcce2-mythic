@@ -692,6 +692,13 @@ fn clamp_qty(qty: i64, max: u16) -> u16 {
     qty.clamp(1, max.max(1) as i64) as u16
 }
 
+/// First free backpack slot (14..=45) given the currently `occupied` slots, or 14
+/// as a fallback when the bag is full (the server then rejects/relocates). Pure —
+/// shared by `[E]` and click-to-pickup and unit-tested.
+fn first_free_backpack_slot(occupied: &std::collections::HashSet<u8>) -> u8 {
+    (14u8..=45).find(|s| !occupied.contains(s)).unwrap_or(14)
+}
+
 /// An open "Actions" context menu anchored at a screen position over a target
 /// actor — the Rust analogue of Client.exe's WContextMenu (Interface3D.bb:851).
 struct ContextMenu {
@@ -2791,30 +2798,18 @@ impl ApplicationHandler for App {
                         }
                         // Pick up the nearest dropped item within range.
                         KeyCode::KeyE if pressed => {
-                            let occupied: std::collections::HashSet<u8> = self
-                                .sheet
-                                .as_ref()
-                                .map(|s| s.inventory.iter().map(|i| i.slot).collect())
-                                .unwrap_or_default();
-                            let slot = (14u8..=45).find(|s| !occupied.contains(s)).unwrap_or(14);
-                            if let Some(net) = self.net.as_mut() {
+                            let nearest = self.net.as_ref().and_then(|net| {
                                 let (mx, mz) = (net.world.me_x, net.world.me_z);
-                                let nearest = net
-                                    .world
+                                net.world
                                     .dropped_items
                                     .values()
                                     .map(|d| (d.handle, (d.x - mx).powi(2) + (d.z - mz).powi(2)))
                                     .filter(|(_, d2)| *d2 < 60.0 * 60.0)
                                     .min_by(|a, b| a.1.total_cmp(&b.1))
-                                    .map(|(h, _)| h);
-                                if let Some(h) = nearest {
-                                    net.transport.send(
-                                        net.peer,
-                                        rcce_net::packet_id::INVENTORY_UPDATE,
-                                        &rcce_client::net::pickup_packet(h, slot),
-                                        true,
-                                    );
-                                }
+                                    .map(|(h, _)| h)
+                            });
+                            if let Some(h) = nearest {
+                                self.pickup_item(h);
                             }
                         }
                         // Action bar: cast the Nth memorised spell (1-9).
@@ -4218,6 +4213,26 @@ impl App {
     /// the cursor (within a pixel radius) as the target highlight. Uses the
     /// cached view-projection from the last rendered frame. No-op without a
     /// network world. The 'R'/'X' keys then interact with / examine the target.
+    /// Send a pickup request for dropped-item `handle`, targeting the first free
+    /// backpack slot computed from the LIVE inventory (`me_inventory`) — not the
+    /// stale login snapshot, which went wrong after the first loot.
+    fn pickup_item(&mut self, handle: u32) {
+        let occupied: std::collections::HashSet<u8> = self
+            .net
+            .as_ref()
+            .map(|n| n.world.me_inventory.keys().copied().collect())
+            .unwrap_or_default();
+        let slot = first_free_backpack_slot(&occupied);
+        if let Some(net) = self.net.as_mut() {
+            net.transport.send(
+                net.peer,
+                rcce_net::packet_id::INVENTORY_UPDATE,
+                &rcce_client::net::pickup_packet(handle, slot),
+                true,
+            );
+        }
+    }
+
     fn world_pick(&mut self, sw: f32, sh: f32, cx: f32, cy: f32) {
         const PICK_RADIUS: f32 = 48.0;
         // Project each actor at the SAME height the body is rendered: feet on the
@@ -4266,7 +4281,32 @@ impl App {
                     .unwrap_or(false);
                 self.context_menu = Some(ContextMenu::build(rid, is_player, cx, cy, sw, sh));
             }
-        } else {
+            return;
+        }
+        // No actor under the cursor → a dropped item under it (and in pickup range)
+        // is looted directly, so you can target a specific pile instead of only the
+        // nearest [E]. Otherwise fall through to click-to-move.
+        let item_pick = self.net.as_ref().and_then(|net| {
+            let (mx, mz) = (net.world.me_x, net.world.me_z);
+            let mut best: Option<(u32, f32)> = None;
+            for d in net.world.dropped_items.values() {
+                if (d.x - mx).powi(2) + (d.z - mz).powi(2) >= 60.0 * 60.0 {
+                    continue; // out of pickup range
+                }
+                if let Some((px, py)) = rcce_render::project(&self.vp, [d.x, d.y + 1.2, d.z], sw, sh) {
+                    let sd = (px - cx).powi(2) + (py - cy).powi(2);
+                    if sd < PICK_RADIUS * PICK_RADIUS && best.map(|(_, b)| sd < b).unwrap_or(true) {
+                        best = Some((d.handle, sd));
+                    }
+                }
+            }
+            best.map(|(h, _)| h)
+        });
+        if let Some(h) = item_pick {
+            self.pickup_item(h);
+            return;
+        }
+        {
             // No actor under the cursor → click-to-move: walk to the ground
             // point the camera ray hits at the player's feet height (MOVE-5).
             // A double-click runs there instead (MOVE-6). A manual move also
@@ -8601,6 +8641,20 @@ mod tests {
         // Unknown attacker name falls back.
         let (l, _) = compose_damage_line(me, 99, 2, me, name);
         assert_eq!(l, "Someone hits you for 2 damage!");
+    }
+
+    #[test]
+    fn free_backpack_slot_picks_first_gap() {
+        use std::collections::HashSet;
+        // Empty bag → first backpack slot (14).
+        assert_eq!(first_free_backpack_slot(&HashSet::new()), 14);
+        // 14 taken → 15.
+        assert_eq!(first_free_backpack_slot(&HashSet::from([14])), 15);
+        // A gap at 16 (14,15 taken) → 16; equipment slots (0..13) don't count.
+        assert_eq!(first_free_backpack_slot(&HashSet::from([0, 1, 14, 15])), 16);
+        // Full backpack → fallback 14 (server then relocates/rejects).
+        let full: HashSet<u8> = (14u8..=45).collect();
+        assert_eq!(first_free_backpack_slot(&full), 14);
     }
 
     #[test]
