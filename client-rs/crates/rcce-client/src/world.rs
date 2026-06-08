@@ -695,6 +695,18 @@ impl World {
         // A zone change invalidates the old actor set (the server re-announces
         // everyone via P_NewActor for the new zone).
         self.actors.clear();
+        // Close any interaction window tied to an entity in the OLD zone — you
+        // can't trade with / talk to / answer a script prompt from an NPC or
+        // partner you just warped away from. The server cancels these
+        // server-side on warp, but the local panel lingers if the warp packet
+        // races (or precedes) the close, leaving a stale window. (Reviewer-
+        // flagged for trades on #477/#479; dialog + script_input are the same
+        // class.) World/projectile state is NOT cleared here — like actors, the
+        // server re-announces/re-simulates it for the new zone.
+        self.current_trade = None;
+        self.player_trade = None;
+        self.dialog = None;
+        self.script_input = None;
         self.zone = Zone {
             area_id,
             name,
@@ -2182,6 +2194,34 @@ mod tests {
         p.u16(50);
         w.apply(&msg(pk::ACTOR_GONE, p.into_bytes()));
         assert!(w.actors.is_empty());
+    }
+
+    // A zone change must close every interaction window tied to an old-zone
+    // entity (trade / dialog / script prompt). You can't trade with / talk to /
+    // answer a prompt from an NPC or partner you just warped away from, so a
+    // lingering panel is stale. Reviewer-flagged for trades (#477/#479); dialog
+    // + script_input are the same class.
+    #[test]
+    fn change_area_closes_stale_interaction_windows() {
+        let mut w = World { my_runtime_id: 1, ..Default::default() };
+        w.current_trade = Some(crate::trade::TradeWindow {
+            kind: crate::trade::TradeKind::Player,
+            offers: vec![],
+        });
+        w.player_trade = Some(crate::trade::PlayerTrade::default());
+        w.dialog = Some(Dialog::default());
+        w.script_input = Some(ScriptInput::default());
+
+        let mut p = MsgWriter::new();
+        p.f32(0.0).f32(0.0).f32(0.0).f32(0.0);
+        p.u8(0).u16(200).u32(9).u8(0).str8("NewZone");
+        w.apply(&msg(pk::CHANGE_AREA, p.into_bytes()));
+
+        assert_eq!(w.zone.name, "NewZone", "zone changed");
+        assert!(w.current_trade.is_none(), "vendor/trade window closed on warp");
+        assert!(w.player_trade.is_none(), "player trade closed on warp");
+        assert!(w.dialog.is_none(), "NPC dialog closed on warp");
+        assert!(w.script_input.is_none(), "script prompt closed on warp");
     }
 
     /// Build a payload (the builders return `&mut Self`, so chaining
