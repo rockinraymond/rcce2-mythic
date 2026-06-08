@@ -5926,6 +5926,10 @@ impl App {
         let mut open_inventory_for_trade = false;
         if let Some(net) = self.net.as_mut() {
             let was_trading = net.world.current_trade.is_some();
+            // Capture (pre-apply) whether ANY trade was open, so that if this
+            // batch contains a P_ChangeArea warp we can finish the teardown the
+            // warp can't reach (server IsTrading flag + the App-side basket).
+            let trade_active_before = net.world.current_trade.is_some() || net.world.player_trade.is_some();
             for m in net.transport.poll() {
                 net.updates += 1;
                 net.world.apply(&m);
@@ -5978,6 +5982,25 @@ impl App {
                 // Mark loaded even if the area file was missing, so we don't
                 // retry the reload (and its disk I/O) every frame.
                 self.loaded_zone = zone;
+                // If the warp interrupted an open trade, finish the teardown the
+                // way an Esc-cancel does. `World::on_change_area` already closed
+                // the local window, but the server still has us flagged
+                // `IsTrading` (its `SetArea` doesn't reset it), and the staged
+                // vendor basket (App-side `pending_*`) would otherwise survive
+                // and resolve stale offer indices against the next vendor. Send
+                // the close (a no-op server-side if we're no longer trading —
+                // safe under the soft-fail packet doctrine) and discard the
+                // basket.
+                if trade_active_before {
+                    net.transport.send(
+                        net.peer,
+                        rcce_net::packet_id::OPEN_TRADING,
+                        &rcce_client::net::trade_close_packet(),
+                        true,
+                    );
+                    self.pending_buys.clear();
+                    self.pending_sells.clear();
+                }
             }
             // Flush any replies the apply() logic queued (e.g. the "GY" accept
             // when the server gives us an item).
