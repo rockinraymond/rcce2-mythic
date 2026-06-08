@@ -47,7 +47,7 @@ Function SetMovementSpeed(Player)
 	PlayerHeavyLoad = 150 + PlayerCarryBonus
     
     If PlayerMass > PlayerHeavyLoad
-		PlayerMovement = 0
+		PlayerMovement = -1000
         Output(Player, "You are over-encumbered", 255, 0, 0)
 	ElseIf PlayerMass > PlayerLightLoad
 		PlayerMovement = PlayerMovement - 10

@@ -1983,7 +1983,7 @@ EndIf
 						Case R_Mythic
 							NameR = 255
 							NameG = 255
-							NameB = 
+							NameB = 0
 						Case R_Legendary
 							NameR = 255
 							NameG = 165

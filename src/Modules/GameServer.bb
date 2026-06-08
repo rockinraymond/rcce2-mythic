@@ -98,8 +98,10 @@ Function KillActor(A.ActorInstance, Killer.ActorInstance)
 	; Tell players in the same area if it was an AI actor dying
 	If A\RNID < 0
 		Pa$ = RCE_StrFromInt$(A\RuntimeID, 2)
-		If Killer <> Null Then Pa$ = Pa$ + RCE_StrFromInt$(Killer\RuntimeID, 2)
-		If Killer\Leader <> Null Then Pa$ = Pa$ + RCE_StrFromInt$(Killer\Leader\RuntimeID, 2)
+		If Killer <> Null
+			Pa$ = Pa$ + RCE_StrFromInt$(Killer\RuntimeID, 2)
+			If Killer\Leader <> Null Then Pa$ = Pa$ + RCE_StrFromInt$(Killer\Leader\RuntimeID, 2)
+		EndIf
 		AInstance.AreaInstance = Object.AreaInstance(A\ServerArea)
 		A2.ActorInstance = AInstance\FirstInZone
 		While A2 <> Null
