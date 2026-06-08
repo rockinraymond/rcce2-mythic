@@ -107,6 +107,19 @@ jobs:
         working-directory: client-rs
         run: cargo test -p rcce-data -p rcce-net -p rcce-render -p rcce-client --locked
 
+      # Clippy gate over the same four crates the tests cover (lib + bins +
+      # tests via --all-targets), failing on ANY lint (`-D warnings`). The
+      # workspace allows three lints that fight idiomatic graphics/parser code
+      # (too_many_arguments, type_complexity, field_reassign_with_default — see
+      # client-rs/Cargo.toml [workspace.lints.clippy]); everything else is
+      # denied. The i686-only rcenet-ffi-probe and enet-sys are excluded, same
+      # as the test gate. This gate already caught two real correctness bugs (a
+      # dead `|| true` find-predicate and an approximate-TAU literal).
+      - name: Clippy (Rust client logic crates)
+        shell: bash
+        working-directory: client-rs
+        run: cargo clippy -p rcce-data -p rcce-net -p rcce-render -p rcce-client --all-targets --locked -- -D warnings
+
       # Two reference docs (the wire-protocol packet catalog and the BVM
       # scripting-API catalog) are produced by generator scripts that read
       # line numbers + signatures out of the source. Their `--check` mode

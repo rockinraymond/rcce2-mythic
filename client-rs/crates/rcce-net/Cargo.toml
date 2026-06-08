@@ -36,3 +36,6 @@ path = "src/bin/wire_probe.rs"
 [[bin]]
 name = "capture-listener"
 path = "src/bin/capture_listener.rs"
+
+[lints]
+workspace = true
