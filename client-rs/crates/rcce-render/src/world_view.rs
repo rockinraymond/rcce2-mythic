@@ -109,6 +109,11 @@ pub struct WorldView {
     /// upload ONCE instead of every frame (the verts rebuild per frame, the
     /// texture does not). Cleared on zone change in `set_scene`.
     particle_tex: HashMap<u16, Rc<wgpu::BindGroup>>,
+    /// Directional sun colour for the next `render` (the project's active
+    /// `Suns.dat` light, normalised). `[1,1,1]` = neutral white. Set per frame via
+    /// `set_sun_color` — a `Cell` so it works through `&self` (the menu render path
+    /// holds the view immutably). WorldView is render-thread-only, so `Cell` is fine.
+    sun_color: std::cell::Cell<[f32; 3]>,
     /// Reusable per-actor skinning uniform buffers + binds (grown as needed).
     actor_pool: Vec<(wgpu::Buffer, wgpu::BindGroup)>,
     /// This frame's skinned draws.
@@ -200,7 +205,7 @@ impl WorldView {
         let uniform_buf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("u"),
             contents: bytemuck::bytes_of(&Uniforms::new(
-                [0.0; 16], [0.0; 3], [0.0; 3], 1.0, 2.0, [0.5; 3], [0.0, 1.0, 0.0],
+                [0.0; 16], [0.0; 3], [0.0; 3], 1.0, 2.0, [0.5; 3], [0.0, 1.0, 0.0], [1.0; 3],
                 glam::Mat4::IDENTITY.to_cols_array(),
             )),
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
@@ -271,6 +276,7 @@ impl WorldView {
             idx_cache: IndexCache::new(),
             skin_static: HashMap::new(),
             particle_tex: HashMap::new(),
+            sun_color: std::cell::Cell::new([1.0; 3]),
             actor_pool: Vec::new(),
             skinned: Vec::new(),
             zone_lights: Vec::new(),
@@ -366,6 +372,12 @@ impl WorldView {
                 }
             }
         }
+    }
+
+    /// Set the directional sun colour for subsequent `render` calls (the active
+    /// `Suns.dat` light, normalised; `[1,1,1]` = neutral white).
+    pub fn set_sun_color(&self, color: [f32; 3]) {
+        self.sun_color.set(color);
     }
 
     /// Replace the static scene geometry (terrain/scenery + ground plane).
@@ -502,7 +514,7 @@ impl WorldView {
             (proj * view).to_cols_array()
         };
         queue.write_buffer(&self.light_buf, 0, bytemuck::cast_slice(&light_vp));
-        let mut u = Uniforms::new(view_proj, eye, fog_color, fog_near, fog_far, ambient, light_dir, light_vp);
+        let mut u = Uniforms::new(view_proj, eye, fog_color, fog_near, fog_far, ambient, light_dir, self.sun_color.get(), light_vp);
         // Upload the nearest point lights to the focus point (the shadow centre).
         if !self.zone_lights.is_empty() {
             let c = glam::Vec3::from(shadow_center);
