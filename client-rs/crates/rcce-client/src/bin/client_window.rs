@@ -2990,6 +2990,40 @@ impl ApplicationHandler for App {
                                 KeyCode::Digit8 => 7,
                                 _ => 8,
                             };
+                            // Player↔player trade open: number keys stage the Nth
+                            // backpack item (slots >= 14) into my offer, toggling it.
+                            // Takes priority over the inventory drop + vendor buy —
+                            // the trade is the active context. Sends P_UpdateTrading
+                            // with the staged amount (or 0 to withdraw); the partner
+                            // sees it via their inbound handler.
+                            let player_trading = self.net.as_ref().map(|n| n.world.player_trade.is_some()).unwrap_or(false);
+                            if player_trading {
+                                // The Nth backpack item, ordered by slot so this matches
+                                // the panel's numbered "Your items" list deterministically.
+                                let item = {
+                                    let mut bp: Vec<(u8, u16, u16)> = self
+                                        .net
+                                        .as_ref()
+                                        .map(|n| n.world.me_inventory.values().filter(|it| it.slot >= 14).map(|it| (it.slot, it.item_id, it.amount.max(1))).collect())
+                                        .unwrap_or_default();
+                                    bp.sort_by_key(|&(slot, _, _)| slot);
+                                    bp.get(idx).copied()
+                                };
+                                if let Some((slot, item_id, amount)) = item {
+                                    if let Some(net) = self.net.as_mut() {
+                                        if let Some(pt) = net.world.player_trade.as_mut() {
+                                            let send_amt = pt.toggle_mine(slot, item_id, amount);
+                                            net.transport.send(
+                                                net.peer,
+                                                rcce_net::packet_id::UPDATE_TRADING,
+                                                &rcce_client::net::trade_offer_packet(slot, send_amt),
+                                                true,
+                                            );
+                                        }
+                                    }
+                                }
+                                return;
+                            }
                             // Inventory panel open: number keys act on the Nth
                             // item — Shift = equip (move to its gear slot), plain
                             // = drop one.
@@ -4216,6 +4250,25 @@ impl App {
         self.pending_sells.clear();
     }
 
+    /// Send the player↔player trade confirmation (`P_OpenTrading` TradeType=2).
+    /// Unlike the vendor confirm, the server completes the swap only once BOTH
+    /// players have confirmed, then ends the trade via `P_CloseTrading` — so this
+    /// does NOT close the window locally (that happens on the server's
+    /// CLOSE_TRADING, or when the player cancels with Esc). TradeCost is 0; gold in
+    /// the trade is a Phase 2 concern.
+    fn player_confirm_trade(&mut self) {
+        let Some(net) = self.net.as_ref() else { return };
+        let Some(pt) = net.world.player_trade.as_ref() else { return };
+        // "His" = the partner's offered trade-slots I accept; "mine" = my staged
+        // offers keyed by backpack slot.
+        let his: Vec<(u8, u16)> = pt.his.iter().map(|o| (o.slot, o.amount)).collect();
+        let mine: Vec<(u8, u16)> = pt.mine.iter().map(|o| (o.slot, o.amount)).collect();
+        let pkt = rcce_client::net::player_trade_confirm_packet(&his, &mine, 0);
+        if let Some(net) = self.net.as_mut() {
+            net.transport.send(net.peer, rcce_net::packet_id::OPEN_TRADING, &pkt, true);
+        }
+    }
+
     fn hud_click(&mut self) {
         // An open NPC dialog is modal (TGT-5): a click either selects an option
         // or is swallowed (no move/select while talking).
@@ -4282,12 +4335,16 @@ impl App {
         let (sw, sh) = (gfx.config.width as f32, gfx.config.height as f32);
         let (cx, cy) = self.cursor;
 
-        // Vendor Confirm button: sends the staged basket (buys + sells) as one
-        // P_OpenTrading confirm. Checked while a trade is open and is consumed.
+        // Confirm button: a player trade sends the player confirm, a vendor trade
+        // sends the staged basket. Both are one P_OpenTrading. Consumed when hit.
         if self.net.as_ref().map(|n| n.world.current_trade.is_some()).unwrap_or(false)
             && point_in_confirm(cx, cy, sw, sh)
         {
-            self.confirm_trade();
+            if self.net.as_ref().map(|n| n.world.player_trade.is_some()).unwrap_or(false) {
+                self.player_confirm_trade();
+            } else {
+                self.confirm_trade();
+            }
             return;
         }
 
@@ -6985,6 +7042,7 @@ impl App {
         if let Ok(pv) = std::env::var("RCCE_PLAYERTRADETEST") {
             if let Ok(at) = pv.parse::<u64>() {
                 if self.frames == at {
+                    use rcce_client::fetch::InvItem;
                     use rcce_client::trade::{PlayerTrade, PlayerTradeSlot, TradeKind, TradeWindow};
                     if let Some(net) = self.net.as_mut() {
                         net.world.current_trade = Some(TradeWindow { kind: TradeKind::Player, offers: Vec::new() });
@@ -6993,10 +7051,15 @@ impl App {
                                 PlayerTradeSlot { slot: 0, item_id: 1, amount: 1 },
                                 PlayerTradeSlot { slot: 1, item_id: 2, amount: 5 },
                             ],
-                            mine: Vec::new(),
+                            // One backpack slot (14) staged into my offer.
+                            mine: vec![PlayerTradeSlot { slot: 14, item_id: 3, amount: 1 }],
                         });
+                        // A couple of backpack items so the numbered "Your items" list
+                        // renders (slot 14 is the staged one).
+                        net.world.me_inventory.insert(14, InvItem { slot: 14, item_id: 3, amount: 1, health: 100 });
+                        net.world.me_inventory.insert(15, InvItem { slot: 15, item_id: 2, amount: 3, health: 100 });
                     }
-                    println!("[playertradetest] frame {} injected player trade with 2 partner offers", self.frames);
+                    println!("[playertradetest] frame {} injected player trade (2 partner offers + 2 backpack, 1 staged)", self.frames);
                 }
             }
         }
@@ -8206,6 +8269,30 @@ impl App {
                     .and_then(|n| n.world.player_trade.as_ref())
                     .map(|pt| pt.his.clone())
                     .unwrap_or_default();
+                // My backpack items (slots >= 14, ordered by slot) and which of them
+                // I've staged into my offer — for the player-trade "Your items" list.
+                let (my_backpack, my_staged): (Vec<(u8, u16, u16)>, std::collections::HashSet<u8>) = self
+                    .net
+                    .as_ref()
+                    .map(|n| {
+                        let mut bp: Vec<(u8, u16, u16)> = n
+                            .world
+                            .me_inventory
+                            .values()
+                            .filter(|it| it.slot >= 14)
+                            .map(|it| (it.slot, it.item_id, it.amount.max(1)))
+                            .collect();
+                        bp.sort_by_key(|&(slot, _, _)| slot);
+                        bp.truncate(9);
+                        let staged = n
+                            .world
+                            .player_trade
+                            .as_ref()
+                            .map(|pt| pt.mine.iter().map(|o| o.slot).collect())
+                            .unwrap_or_default();
+                        (bp, staged)
+                    })
+                    .unwrap_or_default();
                 // Leather skin to match the other windows (ItemShop.png is a wide
                 // two-column layout that wouldn't fit this tall list, so reuse the
                 // generic InventoryBG); flat rect fallback.
@@ -8239,31 +8326,59 @@ impl App {
                 // Net gold delta = sell value (staged sells) − buy cost (staged buys).
                 let mut net_gold: i64 = 0;
                 if matches!(trade.kind, TradeKind::Player) {
-                    // Player↔player trade: show the partner's offered items (driven
-                    // by P_UpdateTrading). Staging my own offers + confirming the
-                    // swap is Phase 1B; for now this is a read-only view of their
-                    // side so you can see what they're putting up.
-                    if his_offers.is_empty() {
-                        overlay.text(px + 10.0, y, 1.0, "Waiting for their offer...", dimc);
-                    } else {
-                        overlay.text(px + 10.0, y, 1.0, "Their offer:", dimc);
-                        y += 16.0;
-                        for off in &his_offers {
-                            if y + row_h > foot { break; }
-                            let key = format!("item:{}", off.item_id);
+                    // Player↔player trade. Top: the partner's offered items (read-only,
+                    // driven by P_UpdateTrading). Bottom: my backpack items, numbered
+                    // 1-9 — pressing the number stages/unstages it into my offer
+                    // (a green "+" marks staged). The Confirm button commits the swap.
+                    let draw_item_row =
+                        |overlay: &mut rcce_render::overlay::Overlay, gfx: &Gfx, store: &AssetStore, x: f32, ry: f32, item_id: u16, label: &str, col: [f32; 4]| {
+                            let key = format!("item:{item_id}");
                             if !overlay.has_texture(&key) {
-                                if let Some(img) = store.item_icon_path(off.item_id).and_then(|p| rcce_data::texture::load(&p)) {
+                                if let Some(img) = store.item_icon_path(item_id).and_then(|p| rcce_data::texture::load(&p)) {
                                     overlay.register_texture(&gfx.device, &gfx.queue, &key, img.width, img.height, &img.rgba);
                                 }
                             }
-                            overlay.rect(px + 10.0, y - 1.0, row_h - 2.0, row_h - 2.0, [0.0, 0.0, 0.0, 0.35]);
+                            overlay.rect(x, ry - 1.0, row_h - 2.0, row_h - 2.0, [0.0, 0.0, 0.0, 0.35]);
                             if overlay.has_texture(&key) {
-                                overlay.image(px + 11.0, y, row_h - 4.0, row_h - 4.0, &key, [1.0, 1.0, 1.0, 1.0]);
+                                overlay.image(x + 1.0, ry, row_h - 4.0, row_h - 4.0, &key, [1.0, 1.0, 1.0, 1.0]);
                             }
+                            overlay.text(x + row_h, ry + 3.0, 1.0, label, col);
+                        };
+                    // Their offer.
+                    overlay.text(px + 10.0, y, 1.0, "Their offer:", dimc);
+                    y += 16.0;
+                    if his_offers.is_empty() {
+                        overlay.text(px + 16.0, y, 1.0, "(waiting...)", dimc);
+                        y += row_h;
+                    } else {
+                        for off in &his_offers {
+                            if y + row_h > foot { break; }
                             let name = store.item_name(off.item_id);
                             let qty = if off.amount > 1 { format!(" x{}", off.amount) } else { String::new() };
-                            let line: String = format!("{name}{qty}").chars().take(24).collect();
-                            overlay.text(px + 10.0 + row_h, y + 3.0, 1.0, &line, white);
+                            let label: String = format!("{name}{qty}").chars().take(22).collect();
+                            draw_item_row(overlay, gfx, store, px + 10.0, y, off.item_id, &label, white);
+                            y += row_h;
+                        }
+                    }
+                    // My items (numbered, stageable).
+                    y += 6.0;
+                    overlay.text(px + 10.0, y, 1.0, "Your items (1-9 to offer):", dimc);
+                    y += 16.0;
+                    if my_backpack.is_empty() {
+                        overlay.text(px + 16.0, y, 1.0, "(backpack empty)", dimc);
+                    } else {
+                        for (i, &(slot, item_id, amount)) in my_backpack.iter().enumerate() {
+                            if y + row_h > foot { break; }
+                            let staged = my_staged.contains(&slot);
+                            if staged {
+                                overlay.rect(px + 8.0, y - 1.0, pw - 16.0, row_h, [0.25, 0.5, 0.25, 0.5]);
+                            }
+                            let name = store.item_name(item_id);
+                            let qty = if amount > 1 { format!(" x{amount}") } else { String::new() };
+                            let mark = if staged { "+ " } else { "" };
+                            let label: String = format!("{mark}{}. {name}{qty}", i + 1).chars().take(22).collect();
+                            let col = if staged { [0.7, 1.0, 0.7, 1.0] } else { white };
+                            draw_item_row(overlay, gfx, store, px + 10.0, y, item_id, &label, col);
                             y += row_h;
                         }
                     }
@@ -8354,6 +8469,23 @@ impl App {
                     let btxt = if active { format!("Confirm ({staged_n})") } else { "Confirm".to_string() };
                     let btw = rcce_render::font::text_width(&btxt, 1.0);
                     overlay.text_shadow(bx + bw_ * 0.5 - btw * 0.5, by_ + 3.0, 1.0, &btxt, if active { white } else { dimc });
+                } else if matches!(trade.kind, TradeKind::Player) {
+                    // Player↔player Confirm button — commits my staged offer (+ accepts
+                    // theirs). The server completes the swap once BOTH sides confirm.
+                    let (bx, by_, bw_, bh_) = vendor_confirm_button_rect(sw, sh);
+                    let active = !his_offers.is_empty() || !my_staged.is_empty();
+                    let hovering = point_in_confirm(self.cursor.0, self.cursor.1, sw, sh);
+                    let bgc = if active && hovering {
+                        [0.3, 0.6, 0.3, 0.95]
+                    } else if active {
+                        [0.2, 0.45, 0.2, 0.9]
+                    } else {
+                        [0.18, 0.18, 0.2, 0.8]
+                    };
+                    overlay.rect(bx, by_, bw_, bh_, bgc);
+                    let btxt = "Confirm Trade";
+                    let btw = rcce_render::font::text_width(btxt, 1.0);
+                    overlay.text_shadow(bx + bw_ * 0.5 - btw * 0.5, by_ + 3.0, 1.0, btxt, if active { white } else { dimc });
                 }
             }
 
