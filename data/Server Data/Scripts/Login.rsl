@@ -10,6 +10,9 @@ Function Main()
 
 ;   Check to see if this is a 'NEW' player and if so set their ActorGlobal for League
 	Player = Actor()
+   ;Run inventoryScript
+   ThreadExecute("InventoryUpdate", "Main", Player, 0)
+   ;----------------
 	If Len(ActorGlobal(Player, 8)) < 10
 		SetActorGlobal(Player, 8, "0,0,1,0,0,0,0,0,0,0")
 	EndIf

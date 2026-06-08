@@ -11,6 +11,7 @@ SetMovementSpeed(Player)
 End Function
 
 Function SetMovementSpeed(Player)
+    DeleteActorEffect(Player, "Encumbrance")
 	;StandardMovement = 35
 	PlayerMovement = 0
 	PlayerMass = ZZACTORINVMASS(Player)
@@ -47,16 +48,12 @@ Function SetMovementSpeed(Player)
 	PlayerHeavyLoad = 150 + PlayerCarryBonus
     
     If PlayerMass > PlayerHeavyLoad
-		PlayerMovement = -1000
+		PlayerMovement = -1 * Attribute(Player, "Movement")
         Output(Player, "You are over-encumbered", 255, 0, 0)
 	ElseIf PlayerMass > PlayerLightLoad
 		PlayerMovement = PlayerMovement - 10
 	EndIf
-
-    ;Output(Player, "current Speed: " + PlayerMovement, 255, 255, 0)
-
-	;SETATTRIBUTE(Player, "Movement", PlayerMovement)
-	WeightMod = Attribute(Player,"Carry Weight Mod")
+    
 	AddActorEffect(Player, "Encumbrance", "Movement", PlayerMovement, 0, 0)
 
 
