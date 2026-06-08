@@ -1071,6 +1071,15 @@ fn lightning_fires(storm: bool, now: f32, next: f32) -> bool {
     storm && now >= next
 }
 
+/// Whether a screen flash of this colour should render ADDITIVELY (a light
+/// burst that brightens the scene) rather than alpha-blended. A bright flash
+/// (white lightning, a spell burst — Rec.709 luminance > 0.5) is light; a dark
+/// flash (a red damage vignette, a fade) is not — and additive black is a
+/// no-op, so a dark flash MUST stay alpha. Pure — unit-tested.
+fn flash_is_additive(color: [f32; 3]) -> bool {
+    0.2126 * color[0] + 0.7152 * color[1] + 0.0722 * color[2] > 0.5
+}
+
 /// A text-field edit operation (chat line). Mirrors the keys the Blitz Gooey
 /// text field handles (`Gooey.bb:4734-4796`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -7099,12 +7108,16 @@ impl App {
             if let Ok(at) = fv.parse::<u64>() {
                 if self.frames == at {
                     if let Some(net) = self.net.as_mut() {
+                        // Bright white → exercises the ADDITIVE flash path (the
+                        // luminance split sends this through rect_add), so a
+                        // headless capture during the flash shows the scene
+                        // brightening like a light burst.
                         net.world.flash = Some(rcce_client::world::ScreenFlash {
-                            color: [1.0, 0.1, 0.1],
+                            color: [1.0, 1.0, 1.0],
                             alpha: 0.6,
                             length: 3.0,
                         });
-                        println!("[flashtest] frame {} red flash", self.frames);
+                        println!("[flashtest] frame {} bright (additive) flash", self.frames);
                     }
                 }
             }
@@ -8960,12 +8973,22 @@ impl App {
             }
 
             // Screen flash (ENV-6): a full-screen colour fading out over its
-            // length, drawn on top of the whole HUD.
+            // length, drawn on top of the whole HUD. A BRIGHT flash (lightning,
+            // spell burst) is a light event → render it ADDITIVELY so it
+            // brightens the scene like real light, instead of the old alpha wash
+            // that flattened everything toward the flash colour. A DARK flash
+            // (e.g. a red damage vignette, a fade) stays alpha-blended — additive
+            // black would be a no-op. Split by Rec.709 luminance.
             if let Some((f, start)) = self.flash {
                 let t = (elapsed - start) / f.length;
                 if t < 1.0 {
                     let a = f.alpha * (1.0 - t).max(0.0);
-                    overlay.rect(0.0, 0.0, sw, sh, [f.color[0], f.color[1], f.color[2], a]);
+                    let rgba = [f.color[0], f.color[1], f.color[2], a];
+                    if flash_is_additive(f.color) {
+                        overlay.rect_add(0.0, 0.0, sw, sh, rgba);
+                    } else {
+                        overlay.rect(0.0, 0.0, sw, sh, rgba);
+                    }
                 } else {
                     self.flash = None;
                 }
@@ -9952,5 +9975,21 @@ mod tests {
         // Equidistant-ish but closer to B; and a far point → None.
         assert_eq!(actor_at(700.0, 500.0, &actors, &vp, sw, sh, 60.0), Some(20));
         assert_eq!(actor_at(500.0, 100.0, &actors, &vp, sw, sh, 32.0), None);
+    }
+
+    // Bright flashes (white lightning, spell bursts) render additively; dark
+    // flashes (a red damage vignette, a fade) must stay alpha-blended — additive
+    // black is a no-op, so misrouting a dark flash would make it vanish.
+    #[test]
+    fn flash_additive_only_when_bright() {
+        assert!(flash_is_additive([1.0, 1.0, 1.0]), "white lightning is a light burst");
+        assert!(flash_is_additive([0.9, 0.9, 0.6]), "bright warm flash is additive");
+        assert!(!flash_is_additive([1.0, 0.1, 0.1]), "red damage flash stays alpha (lum ~0.29)");
+        assert!(!flash_is_additive([0.0, 0.0, 0.0]), "a fade-to-black must NOT be additive");
+        assert!(!flash_is_additive([0.2, 0.2, 0.2]), "a dim flash stays alpha");
+        // Pure green is bright enough (lum 0.7152 > 0.5) → additive.
+        assert!(flash_is_additive([0.0, 1.0, 0.0]));
+        // Pure blue is dim (lum 0.0722) → alpha.
+        assert!(!flash_is_additive([0.0, 0.0, 1.0]));
     }
 }
