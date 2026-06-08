@@ -252,6 +252,13 @@ pub struct World {
     // Local player progression / stats.
     pub me_xp: i32,
     pub me_xp_bar: u8,
+    /// Local player level. Seeded from the login sheet (`enter_outcome`) and kept
+    /// live by `P_XPUpdate "U"` (level changed → XP resets to 0). The character
+    /// sheet panel reads this, not the frozen login snapshot.
+    pub me_level: u16,
+    /// Local player reputation (signed). Seeded from the login sheet and kept live
+    /// by `P_StatUpdate "R"` (which the handler previously dropped).
+    pub me_reputation: i32,
     pub me_gold: i32,
     /// Server day/night clock from the `P_FetchActors` `"E"` env block. When
     /// `time_known`, the client advances it locally (one game-minute = `60000 /
@@ -790,7 +797,15 @@ impl World {
         }
     }
 
-    /// `P_XPUpdate` (ClientNet.bb:689): `'B'`+barLevel(u8), or `'M'`+xpGain(i32).
+    /// `P_XPUpdate` (ClientNet.bb:689):
+    ///   `'B'` + barLevel(u8)  — XP bar position.
+    ///   `'M'` + xpGain(i32)   — XP points received (added to total).
+    ///   `'U'` + level(u16)    — MY level changed (XP resets to 0).
+    /// `'U'` was previously dropped, so the character sheet's Level stayed frozen
+    /// at the login snapshot all session. The server sends the level as a 2-byte
+    /// field (ScriptingCommands.bb:2085) — read u16, not i32, or the parse fails
+    /// and the level silently never updates. (`'L'`, another actor's level, is
+    /// not handled: the Rust client has no per-actor level display to feed.)
     fn on_xp_update(&mut self, d: &[u8]) {
         match d.first() {
             Some(b'B') => {
@@ -801,6 +816,12 @@ impl World {
             Some(b'M') => {
                 if let Some(gain) = MsgReader::new(&d[1..]).i32() {
                     self.me_xp = self.me_xp.saturating_add(gain);
+                }
+            }
+            Some(b'U') => {
+                if let Some(level) = MsgReader::new(&d[1..]).u16() {
+                    self.me_level = level;
+                    self.me_xp = 0;
                 }
             }
             _ => {}
@@ -817,13 +838,29 @@ impl World {
         }
     }
 
-    /// `P_StatUpdate` (ClientNet.bb:996): byte0 `'A'`(value)/`'M'`(max) +
-    /// RuntimeID(u16) + attrIndex(u8) + value(u16). (`'R'` resistances ignored.)
+    /// `P_StatUpdate` (ClientNet.bb:996):
+    ///   `'A'`/`'M'` + rid(u16) + attrIndex(u8) + value(u16) — attribute value/max.
+    ///   `'R'` + rid(u16) + reputation(i16 signed) — reputation (NO attr byte).
+    /// The `'R'` case was previously dropped (and the doc mislabelled it
+    /// "resistances"), so the character sheet's Reputation stayed frozen at login.
     fn on_stat_update(&mut self, d: &[u8]) {
         let kind = match d.first() {
             Some(&k) => k,
             None => return,
         };
+        // 'R' has a distinct layout (no attribute byte) and is signed — handle it
+        // before the attribute parse below.
+        if kind == b'R' {
+            let mut r = MsgReader::new(&d[1..]);
+            if let (Some(rid), Some(rep)) = (r.u16(), r.u16()) {
+                if rid == self.my_runtime_id {
+                    // Reinterpret the 16-bit field as signed (reputation can be
+                    // negative), then widen — mirrors RCE_SignedShortFromStr.
+                    self.me_reputation = rep as i16 as i32;
+                }
+            }
+            return;
+        }
         let mut r = MsgReader::new(&d[1..]);
         let (Some(rid), Some(attr), Some(val)) = (r.u16(), r.u8(), r.u16()) else {
             return;
@@ -2108,6 +2145,41 @@ mod tests {
         // ActorDead marks the NPC dead.
         w.apply(&msg(pk::ACTOR_DEAD, pkt(|p| { p.u16(50); })));
         assert!(!w.actors[&50].alive);
+    }
+
+    #[test]
+    fn xp_update_my_level_change_resets_xp() {
+        let mut w = World { my_runtime_id: 7, ..Default::default() };
+        // Accumulate some XP first.
+        w.apply(&msg(pk::XP_UPDATE, pkt(|p| { p.u8(b'M').i32(150); })));
+        assert_eq!(w.me_xp, 150);
+
+        // 'U' = MY level changed → level updates and XP resets to 0. The server
+        // sends the level as a 2-byte field (ScriptingCommands.bb:2085); reading
+        // it as i32 would fail the parse and silently never update the level.
+        w.apply(&msg(pk::XP_UPDATE, pkt(|p| { p.u8(b'U').u16(5); })));
+        assert_eq!(w.me_level, 5, "'U' sets my level");
+        assert_eq!(w.me_xp, 0, "'U' resets XP to 0 (matches Me\\XP = 0)");
+
+        // A truncated 'U' (no level bytes) is a safe no-op (soft-fail, no panic).
+        w.apply(&msg(pk::XP_UPDATE, pkt(|p| { p.u8(b'U'); })));
+        assert_eq!(w.me_level, 5, "truncated 'U' leaves the level unchanged");
+    }
+
+    #[test]
+    fn stat_update_reputation_is_signed_and_self_only() {
+        let mut w = World { my_runtime_id: 7, ..Default::default() };
+        // 'R' = reputation: rid(u16) + reputation(i16 signed), NO attr byte.
+        // Negative reputation must sign-extend (RCE_SignedShortFromStr).
+        w.apply(&msg(pk::STAT_UPDATE, pkt(|p| { p.u8(b'R').u16(7).u16((-30i16) as u16); })));
+        assert_eq!(w.me_reputation, -30, "negative reputation sign-extends");
+        w.apply(&msg(pk::STAT_UPDATE, pkt(|p| { p.u8(b'R').u16(7).u16(450); })));
+        assert_eq!(w.me_reputation, 450, "positive reputation");
+        // Another actor's reputation ('R' for a non-self rid) does not touch mine.
+        w.apply(&msg(pk::STAT_UPDATE, pkt(|p| { p.u8(b'R').u16(50).u16((-9i16) as u16); })));
+        assert_eq!(w.me_reputation, 450, "other actors' reputation leaves mine unchanged");
+        // The 'R' layout (no attr byte) must not be misparsed as an attribute.
+        assert!(w.me_attributes.is_empty(), "'R' does not write an attribute slot");
     }
 
     #[test]
