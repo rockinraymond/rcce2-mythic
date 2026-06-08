@@ -199,19 +199,17 @@ impl Transport for EnetTransport {
                     break;
                 }
                 match ev.type_ {
-                    ENET_EVENT_TYPE_RECEIVE => {
-                        if !ev.packet.is_null() {
-                            let pkt = &*ev.packet;
-                            if !pkt.data.is_null() && pkt.data_length >= 1 {
-                                let bytes = std::slice::from_raw_parts(pkt.data, pkt.data_length);
-                                out.push(RecvMessage {
-                                    msg_type: bytes[0],
-                                    connection: 0,
-                                    data: bytes[1..].to_vec(),
-                                });
-                            }
-                            enet_packet_destroy(ev.packet);
+                    ENET_EVENT_TYPE_RECEIVE if !ev.packet.is_null() => {
+                        let pkt = &*ev.packet;
+                        if !pkt.data.is_null() && pkt.data_length >= 1 {
+                            let bytes = std::slice::from_raw_parts(pkt.data, pkt.data_length);
+                            out.push(RecvMessage {
+                                msg_type: bytes[0],
+                                connection: 0,
+                                data: bytes[1..].to_vec(),
+                            });
                         }
+                        enet_packet_destroy(ev.packet);
                     }
                     ENET_EVENT_TYPE_DISCONNECT => {
                         self.peer = ptr::null_mut();

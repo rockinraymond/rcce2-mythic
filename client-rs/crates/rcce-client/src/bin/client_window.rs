@@ -3923,16 +3923,8 @@ impl App {
                 } else {
                     match code {
                         KeyCode::Enter | KeyCode::NumpadEnter => self.enter_selected(),
-                        KeyCode::ArrowUp => {
-                            if self.char_sel > 0 {
-                                self.char_sel -= 1;
-                            }
-                        }
-                        KeyCode::ArrowDown => {
-                            if self.char_sel + 1 < self.chars.len() {
-                                self.char_sel += 1;
-                            }
-                        }
+                        KeyCode::ArrowUp if self.char_sel > 0 => self.char_sel -= 1,
+                        KeyCode::ArrowDown if self.char_sel + 1 < self.chars.len() => self.char_sel += 1,
                         KeyCode::KeyC => self.begin_create(),
                         KeyCode::Delete => self.delete_selected(),
                         KeyCode::Escape => {
