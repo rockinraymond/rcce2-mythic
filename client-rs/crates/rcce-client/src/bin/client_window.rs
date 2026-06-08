@@ -1029,6 +1029,101 @@ fn snap_camera(me_yaw: f32) -> (f32, f32) {
     (me_yaw, 0.0)
 }
 
+/// What a clickable menu button does. Each maps onto an existing keyboard
+/// action, so the mouse path (MENU-2) is purely additive.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum MenuBtnAction {
+    Login,
+    Quit,
+    EnterWorld,
+    Create,
+    Delete,
+    Back,
+}
+
+/// A clickable menu button: pixel rect, sprite stem (`"BLogin"` →
+/// `BLoginU.PNG` up / `BLoginH.PNG` hover), and the action it triggers.
+struct MenuButton {
+    rect: (f32, f32, f32, f32),
+    sprite: &'static str,
+    action: MenuBtnAction,
+}
+
+/// The clickable buttons for `mode`, anchored to the window rect (wx,wy,ww,wh).
+/// Pure (no I/O) so the draw and hit-test paths share one layout — unit-tested.
+/// Empty for non-button modes and while the create-character sub-flow is active
+/// (that stays keyboard-driven). On CharSelect the Select/Delete buttons are
+/// omitted when the roster is empty.
+fn menu_buttons(
+    mode: Mode,
+    creating: bool,
+    have_chars: bool,
+    wx: f32,
+    wy: f32,
+    ww: f32,
+    wh: f32,
+) -> Vec<MenuButton> {
+    let mut v = Vec::new();
+    match mode {
+        Mode::Login => {
+            let (bw, bh) = (ww * 0.40, wh * 0.13);
+            v.push(MenuButton {
+                rect: (wx + (ww - bw) * 0.5, wy + wh * 0.68, bw, bh),
+                sprite: "BLogin",
+                action: MenuBtnAction::Login,
+            });
+            let (qw, qh) = (ww * 0.30, wh * 0.11);
+            v.push(MenuButton {
+                rect: (wx + (ww - qw) * 0.5, wy + wh * 0.84, qw, qh),
+                sprite: "BQuit",
+                action: MenuBtnAction::Quit,
+            });
+        }
+        Mode::CharSelect if !creating => {
+            let mut row: Vec<(&'static str, MenuBtnAction)> = Vec::new();
+            if have_chars {
+                row.push(("BSelectCharacter", MenuBtnAction::EnterWorld));
+            }
+            row.push(("BCreateChar", MenuBtnAction::Create));
+            if have_chars {
+                row.push(("BDeleteCharacter", MenuBtnAction::Delete));
+            }
+            row.push(("BBack", MenuBtnAction::Back));
+            let n = row.len() as f32;
+            let (bw, bh, gap) = (ww * 0.21, wh * 0.10, ww * 0.02);
+            let total = bw * n + gap * (n - 1.0);
+            let mut x = wx + (ww - total) * 0.5;
+            let y = wy + wh * 0.87;
+            for (sprite, action) in row {
+                v.push(MenuButton { rect: (x, y, bw, bh), sprite, action });
+                x += bw + gap;
+            }
+        }
+        _ => {}
+    }
+    v
+}
+
+/// Topmost button whose rect contains `(cx, cy)`, or `None`. Pure — unit-tested.
+fn menu_button_hit(buttons: &[MenuButton], cx: f32, cy: f32) -> Option<MenuBtnAction> {
+    buttons.iter().rev().find_map(|b| {
+        let (x, y, w, h) = b.rect;
+        (cx >= x && cx < x + w && cy >= y && cy < y + h).then_some(b.action)
+    })
+}
+
+/// Window rect for `mode`, matching `draw_menu_overlay` (the Login window drops
+/// a little to leave room for the logo above it). Shared by the draw and click
+/// paths so the button hit-rects line up exactly with what's drawn.
+fn menu_window_for(mode: Mode, sw: f32, sh: f32) -> (f32, f32, f32, f32) {
+    let wfrac = if mode == Mode::Login { 0.50 } else { 0.80 };
+    let (wx, mut wy, ww, wh) = menu_window_rect(sw, sh, wfrac);
+    if mode == Mode::Login {
+        wy = ((sh - wh) * 0.5 + sh * 0.08).min(sh - wh - 8.0);
+    }
+    (wx, wy, ww, wh)
+}
+
 /// Centred menu-window rect at the 625×447 frame aspect (MENU-SCENE-b). The
 /// EULA / Login window-frame PNGs are drawn here (NOT full-screen), so the 3D
 /// menu scene shows around them — they are window graphics, not backdrops.
@@ -3109,10 +3204,13 @@ impl ApplicationHandler for App {
                     // The quantity modal is keyboard-driven; swallow mouse buttons
                     // so a stray click doesn't act on the HUD behind it.
                 } else if button == MouseButton::Left && state == ElementState::Pressed && !self.mouse_look {
-                    // Arm a spell drag if the press is over a draggable source
-                    // (memorised spellbook row / occupied hotbar slot); the release
-                    // decides click-vs-drag. Otherwise act on the click immediately.
-                    if !self.begin_drag() {
+                    if matches!(self.mode, Mode::Login | Mode::CharSelect) {
+                        // MENU-2: click the on-screen Login / character-select buttons.
+                        self.menu_click(event_loop);
+                    } else if !self.begin_drag() {
+                        // Arm a spell drag if the press is over a draggable source
+                        // (memorised spellbook row / occupied hotbar slot); the release
+                        // decides click-vs-drag. Otherwise act on the click immediately.
                         self.hud_click();
                     }
                 } else if button == MouseButton::Left && state == ElementState::Released {
@@ -3519,6 +3617,48 @@ impl App {
             Err(e) => self.login_msg = e,
         }
         self.login_transport = Some(t);
+    }
+
+    /// Left-click handling for the Login / Character-Select screens (MENU-2):
+    /// hit-test the on-screen buttons against the cursor and dispatch to the
+    /// same actions the keyboard triggers. No-op if a login is already in flight
+    /// (the menu_key guard) or the click misses every button.
+    fn menu_click(&mut self, event_loop: &ActiveEventLoop) {
+        if self.login_rx.is_some() {
+            return;
+        }
+        let (sw, sh) = match self.gfx.as_ref() {
+            Some(g) => (g.config.width as f32, g.config.height as f32),
+            None => return,
+        };
+        let (wx, wy, ww, wh) = menu_window_for(self.mode, sw, sh);
+        let buttons = menu_buttons(
+            self.mode,
+            self.creating.is_some(),
+            !self.chars.is_empty(),
+            wx,
+            wy,
+            ww,
+            wh,
+        );
+        let (cx, cy) = self.cursor;
+        let Some(action) = menu_button_hit(&buttons, cx, cy) else {
+            return;
+        };
+        match action {
+            MenuBtnAction::Login => self.submit_login(),
+            MenuBtnAction::Quit => {
+                self.shutdown_net();
+                event_loop.exit();
+            }
+            MenuBtnAction::EnterWorld => self.enter_selected(),
+            MenuBtnAction::Create => self.begin_create(),
+            MenuBtnAction::Delete => self.delete_selected(),
+            MenuBtnAction::Back => {
+                self.mode = Mode::Login;
+                self.login_msg = String::new();
+            }
+        }
     }
 
     /// Keyboard handling for the login + character-select screens.
@@ -5163,12 +5303,9 @@ impl App {
         // (the project ships no dedicated frame art for them).
         // The login window is compact (Blitz frames it small with the logo above
         // and the 3D scene around); EULA is larger (it holds the license text).
-        let wfrac = if self.mode == Mode::Login { 0.50 } else { 0.80 };
-        let (wx, mut wy, ww, wh) = menu_window_rect(sw, sh, wfrac);
-        // Drop the login window so the game logo fits above it.
-        if self.mode == Mode::Login {
-            wy = ((sh - wh) * 0.5 + sh * 0.08).min(sh - wh - 8.0);
-        }
+        // Window rect (Login drops a little for the logo above it). Shared with
+        // the click hit-test via menu_window_for so buttons line up with draws.
+        let (wx, wy, ww, wh) = menu_window_for(self.mode, sw, sh);
         let frame = match self.mode {
             Mode::Eula => Some("EULA.PNG"),
             Mode::Login => Some("Login.PNG"),
@@ -5206,6 +5343,40 @@ impl App {
                     let lx = (sw - lw) * 0.5;
                     let ly = (wy - lh - 6.0).max(4.0);
                     overlay.image(lx, ly, lw, lh, lkey, [1.0, 1.0, 1.0, 1.0]);
+                }
+            }
+        }
+        // MENU-2: mouse-clickable buttons drawn over the window using the shipped
+        // B*.PNG sprites (hover swaps the U sprite for H). Drawn here (before the
+        // per-mode content blocks, which `return` early) so it's reached by both
+        // Login and CharSelect; the buttons sit in clear areas so draw order with
+        // the fields/roster doesn't matter. Hit-tested in `menu_click`; keyboard
+        // shortcuts remain fully functional. Falls back to a flat rect if a
+        // project ships no button art.
+        {
+            let buttons =
+                menu_buttons(self.mode, self.creating.is_some(), !self.chars.is_empty(), wx, wy, ww, wh);
+            if let (Some(gfx), Some(store)) = (self.gfx.as_ref(), self.store.as_ref()) {
+                let (cx, cy) = self.cursor;
+                for b in &buttons {
+                    let (bx, by, bw, bh) = b.rect;
+                    let hover = cx >= bx && cx < bx + bw && cy >= by && cy < by + bh;
+                    let file = format!("{}{}.PNG", b.sprite, if hover { "H" } else { "U" });
+                    let key = format!("menubtn:{file}");
+                    if !overlay.has_texture(&key) {
+                        if let Some(im) =
+                            store.menu_backdrop_path(&file).and_then(|p| rcce_data::texture::load(&p))
+                        {
+                            overlay.register_texture(
+                                &gfx.device, &gfx.queue, &key, im.width, im.height, &im.rgba,
+                            );
+                        }
+                    }
+                    if overlay.has_texture(&key) {
+                        overlay.image(bx, by, bw, bh, &key, [1.0, 1.0, 1.0, 1.0]);
+                    } else {
+                        overlay.rect(bx, by, bw, bh, [0.18, 0.22, 0.32, 0.92]);
+                    }
                 }
             }
         }
@@ -8508,6 +8679,47 @@ mod tests {
         fn assert_send<T: Send>() {}
         assert_send::<EnetTransport>();
         assert_send::<LoginResult>();
+    }
+
+    #[test]
+    fn menu_buttons_layout_and_hit() {
+        // Login screen: a Login button + a Quit button.
+        let lb = menu_buttons(Mode::Login, false, false, 0.0, 0.0, 1000.0, 800.0);
+        assert_eq!(lb.len(), 2);
+        let login = lb.iter().find(|b| b.action == MenuBtnAction::Login).unwrap();
+        let (x, y, w, h) = login.rect;
+        // A click inside the Login rect dispatches Login; a miss returns None.
+        assert_eq!(
+            menu_button_hit(&lb, x + w * 0.5, y + h * 0.5),
+            Some(MenuBtnAction::Login)
+        );
+        assert_eq!(menu_button_hit(&lb, x - 10.0, y - 10.0), None);
+        assert_eq!(menu_button_hit(&lb, x + w * 0.5, y - 1.0), None); // just above
+
+        // Character-select with a roster: Enter / Create / Delete / Back.
+        let cs: Vec<MenuBtnAction> = menu_buttons(Mode::CharSelect, false, true, 0.0, 0.0, 1000.0, 800.0)
+            .iter()
+            .map(|b| b.action)
+            .collect();
+        assert_eq!(
+            cs,
+            vec![
+                MenuBtnAction::EnterWorld,
+                MenuBtnAction::Create,
+                MenuBtnAction::Delete,
+                MenuBtnAction::Back
+            ]
+        );
+        // An empty roster drops Enter + Delete (nothing to enter/delete).
+        let cs0: Vec<MenuBtnAction> = menu_buttons(Mode::CharSelect, false, false, 0.0, 0.0, 1000.0, 800.0)
+            .iter()
+            .map(|b| b.action)
+            .collect();
+        assert_eq!(cs0, vec![MenuBtnAction::Create, MenuBtnAction::Back]);
+        // The create-character sub-flow stays keyboard-driven → no buttons.
+        assert!(menu_buttons(Mode::CharSelect, true, true, 0.0, 0.0, 1000.0, 800.0).is_empty());
+        // Non-button modes draw no buttons.
+        assert!(menu_buttons(Mode::Eula, false, false, 0.0, 0.0, 1000.0, 800.0).is_empty());
     }
 
     // Scenery rotation maps Blitz [pitch,yaw,roll] degrees to render radians with
