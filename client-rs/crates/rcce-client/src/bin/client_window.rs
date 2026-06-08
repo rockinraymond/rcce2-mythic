@@ -2089,7 +2089,7 @@ fn particle_batches(
     eye: [f32; 3],
     target: [f32; 3],
     dt: f32,
-) -> Vec<(Option<rcce_data::Image>, bool, Vec<rcce_render::gpu::Vertex>)> {
+) -> Vec<(u16, Option<rcce_data::Image>, bool, Vec<rcce_render::gpu::Vertex>)> {
     let cross = |a: [f32; 3], b: [f32; 3]| [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
     let normd = |v: [f32; 3]| {
         let l = (v[0] * v[0] + v[1] * v[1] + v[2] * v[2]).sqrt().max(1e-4);
@@ -2106,7 +2106,7 @@ fn particle_batches(
         e.update(delta);
         let mut verts = Vec::new();
         e.billboards(right, up, gain, &mut verts);
-        batches.push((tex.clone(), e.blend_add, verts));
+        batches.push((e.tex_id, tex.clone(), e.blend_add, verts));
     }
     batches
 }
@@ -4930,7 +4930,7 @@ impl App {
             let mut batches = particle_batches(&mut self.emitters, eye, target, 1.0 / 60.0);
             let mut verts = Vec::new();
             projectile_billboards(std::slice::from_ref(&pr), eye, target, &mut verts);
-            batches.push((Some(projectile_glow_image()), true, verts));
+            batches.push((u16::MAX, Some(projectile_glow_image()), true, verts));
             if let (Some(gfx), Some(view)) = (self.gfx.as_ref(), self.view.as_mut()) {
                 view.set_particles(&gfx.device, &gfx.queue, &batches);
             }
@@ -7126,7 +7126,7 @@ impl App {
                 let mut verts = Vec::new();
                 projectile_billboards(&net.world.projectiles, eye, cam_target, &mut verts);
                 if !verts.is_empty() {
-                    pbatches.push((Some(projectile_glow_image()), true, verts));
+                    pbatches.push((u16::MAX, Some(projectile_glow_image()), true, verts));
                 }
             }
         }
