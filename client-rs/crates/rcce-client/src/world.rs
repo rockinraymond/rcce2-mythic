@@ -277,6 +277,11 @@ pub struct World {
     pub dropped_items: HashMap<u32, DroppedItem>,
     /// The open vendor/trade window, if any (P_OpenTrading).
     pub current_trade: Option<crate::trade::TradeWindow>,
+    /// Player↔player trade state (the partner's offers + my staged offers), live
+    /// only while a `TradeKind::Player` window is open. Set when `OPEN_TRADING`
+    /// parses a player trade, driven by `P_UpdateTrading`, cleared on
+    /// `P_CloseTrading`. `None` for vendor (NPC/scenery) trades.
+    pub player_trade: Option<crate::trade::PlayerTrade>,
     /// The open NPC dialog window, if any (P_Dialog). See [`Dialog`].
     pub dialog: Option<Dialog>,
     /// The open scripted free-text input dialog, if any (P_ScriptInput). The
@@ -626,7 +631,26 @@ impl World {
             pk::SOUND => self.on_sound(&m.data),
             pk::SPEECH => self.on_speech(&m.data),
             pk::MUSIC => self.on_music(&m.data),
-            pk::OPEN_TRADING => self.current_trade = crate::trade::TradeWindow::parse(&m.data),
+            pk::OPEN_TRADING => {
+                self.current_trade = crate::trade::TradeWindow::parse(&m.data);
+                // A player↔player trade opens an empty offer board both sides fill
+                // in via P_UpdateTrading; vendor trades have no such board.
+                self.player_trade = match &self.current_trade {
+                    Some(t) if t.kind == crate::trade::TradeKind::Player => {
+                        Some(crate::trade::PlayerTrade::default())
+                    }
+                    _ => None,
+                };
+            }
+            pk::UPDATE_TRADING => {
+                if let Some(pt) = self.player_trade.as_mut() {
+                    pt.apply_his_update(&m.data);
+                }
+            }
+            pk::CLOSE_TRADING => {
+                self.current_trade = None;
+                self.player_trade = None;
+            }
             pk::DIALOG => self.on_dialog(&m.data),
             pk::SCRIPT_INPUT => self.on_script_input(&m.data),
             pk::PROGRESS_BAR => self.on_progress_bar(&m.data),
@@ -2180,6 +2204,41 @@ mod tests {
         assert_eq!(w.me_reputation, 450, "other actors' reputation leaves mine unchanged");
         // The 'R' layout (no attr byte) must not be misparsed as an attribute.
         assert!(w.me_attributes.is_empty(), "'R' does not write an attribute slot");
+    }
+
+    #[test]
+    fn player_trade_lifecycle_via_dispatch() {
+        use crate::trade::TradeKind;
+        let mut w = World { my_runtime_id: 7, ..Default::default() };
+
+        // A vendor OPEN_TRADING ('N') opens a window but NO player_trade board.
+        let mut npc = MsgWriter::new();
+        npc.u8(b'N');
+        w.apply(&msg(pk::OPEN_TRADING, npc.into_bytes()));
+        assert!(w.player_trade.is_none(), "vendor trade has no player board");
+
+        // A player OPEN_TRADING ('P') opens an empty player_trade board.
+        w.apply(&msg(pk::OPEN_TRADING, pkt(|p| { p.u8(b'P'); })));
+        assert_eq!(w.current_trade.as_ref().map(|t| t.kind), Some(TradeKind::Player));
+        assert!(w.player_trade.as_ref().is_some_and(|pt| pt.his.is_empty()));
+
+        // P_UpdateTrading drives the partner's side: add item 42 x2 in slot 3.
+        let mut add = MsgWriter::new();
+        add.u8(3).u16(2).u16(42); // slot, amount, ItemInstance leading u16 (item id)
+        for _ in 0..40 { add.u16(0); } // pad the 83-byte ItemInstance
+        add.u8(0);
+        w.apply(&msg(pk::UPDATE_TRADING, add.into_bytes()));
+        let his = &w.player_trade.as_ref().unwrap().his;
+        assert_eq!(his.len(), 1);
+        assert_eq!((his[0].slot, his[0].item_id, his[0].amount), (3, 42, 2));
+
+        // P_CloseTrading clears both the window and the player board.
+        w.apply(&msg(pk::CLOSE_TRADING, Vec::new()));
+        assert!(w.current_trade.is_none() && w.player_trade.is_none());
+
+        // An UPDATE_TRADING with no open board is a safe no-op (soft-fail).
+        w.apply(&msg(pk::UPDATE_TRADING, pkt(|p| { p.u8(3).u16(0); })));
+        assert!(w.player_trade.is_none());
     }
 
     #[test]
