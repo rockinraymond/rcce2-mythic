@@ -1044,19 +1044,24 @@ impl World {
                 });
                 // The target cries out in PAIN (Hit) only on a CONNECTING hit —
                 // a parried / 0-damage swing draws no pain cry. Matches Blitz
-                // ClientNet.bb:1131 (`PlayActorSound(A, Speech_Hit*)` is inside
-                // `If Damage > 0`). The attacker's own swing GRUNT (Attack), by
-                // contrast, is exertion and plays on any swing (see 'Y'/broadcast).
+                // ClientNet.bb:1135 (`PlayActorSound(A, Speech_Hit*)` is inside
+                // `If Damage > 0`, :1131).
                 if damage > 0 {
                     self.pending_combat_sounds.push((rid, SPEECH_HIT1));
                 }
             }
             b'Y' => {
-                // RID is the attacker who hit me: animate + voice its swing (Attack1),
-                // floater on me.
-                self.attack_anims.insert(rid, ATTACK_ANIM_SECS);
-                self.pending_combat_sounds.push((rid, SPEECH_ATTACK1));
-                if let (Some(raw_dmg), Some(dtype)) = (r.u16(), r.u8()) {
+                // RID is the attacker who hit (or swung at) me. Blitz gates the
+                // attacker's swing animation, its Attack grunt, AND the floater
+                // on Damage != 0 (Damage = raw_dmg - 1): they fire on a landed
+                // hit (Damage > 0) and on a miss (Damage < 0, i.e. raw_dmg 0),
+                // but NOT on the exactly-0-damage sentinel (raw_dmg 1 → Damage 0,
+                // where Blitz's `If/ElseIf` has no `Else`, so nothing happens).
+                // ClientNet.bb:1161-1182.
+                let (Some(raw_dmg), Some(dtype)) = (r.u16(), r.u8()) else { return };
+                if raw_dmg != 1 {
+                    self.attack_anims.insert(rid, ATTACK_ANIM_SECS);
+                    self.pending_combat_sounds.push((rid, SPEECH_ATTACK1));
                     self.combat_events.push(CombatEvent {
                         target: self.my_runtime_id,
                         attacker: rid,
@@ -2059,6 +2064,31 @@ mod tests {
         // A damaging hit (raw 6 → damage 5) DOES queue the Hit cry.
         w.apply(&msg(pk::ATTACK_ACTOR, pkt(|p| { p.u8(b'H').u16(9).u16(6).u8(0); })));
         assert_eq!(w.pending_combat_sounds, vec![(9, SPEECH_HIT1)]);
+    }
+
+    // 'Y' (an attacker swung at me): Blitz fires the attacker's swing animation,
+    // its Attack grunt, and the floater on Damage != 0 (a hit OR a miss), but
+    // NOT on the exactly-0-damage sentinel (raw_dmg 1 → Damage 0). ClientNet.bb
+    // :1161-1182 (no `Else`).
+    #[test]
+    fn y_attacker_swing_gated_on_zero_sentinel() {
+        let mut w = World { my_runtime_id: 1, ..Default::default() };
+        // raw 1 → Damage 0 sentinel: nothing happens.
+        w.apply(&msg(pk::ATTACK_ACTOR, pkt(|p| { p.u8(b'Y').u16(7).u16(1).u8(0); })));
+        assert!(w.attack_anims.is_empty(), "no swing on the 0-damage sentinel");
+        assert!(w.pending_combat_sounds.is_empty(), "no grunt on the 0-damage sentinel");
+        assert!(w.combat_events.is_empty(), "no floater on the 0-damage sentinel");
+
+        // raw 0 → Blitz Damage -1 (a MISS): attacker swings + grunts + a "0" floater.
+        w.apply(&msg(pk::ATTACK_ACTOR, pkt(|p| { p.u8(b'Y').u16(7).u16(0).u8(0); })));
+        assert!(w.attack_anims.contains_key(&7), "miss still shows the swing");
+        assert_eq!(w.pending_combat_sounds, vec![(7, SPEECH_ATTACK1)]);
+        assert_eq!(w.combat_events.last().unwrap().damage, 0);
+
+        // raw 6 → Damage 5 (a landed hit): swing + grunt + real damage floater.
+        w.apply(&msg(pk::ATTACK_ACTOR, pkt(|p| { p.u8(b'Y').u16(8).u16(6).u8(0); })));
+        assert!(w.attack_anims.contains_key(&8));
+        assert_eq!(w.combat_events.last().unwrap().damage, 5);
     }
 
     #[test]
