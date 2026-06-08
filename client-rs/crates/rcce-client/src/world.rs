@@ -233,6 +233,11 @@ pub struct World {
     pub me_beard: u8,
     pub me_health: i16,
     pub me_health_max: i16,
+    /// Which attribute slot carries Health for this project (read from
+    /// `Game Data/Fixed Attributes.dat` at enter-world; default 0). The server's
+    /// `P_StatUpdate` reports HP under this slot index, so it must match the
+    /// project — a hardcoded 0 froze HP bars on any project where Health != 0.
+    pub health_stat: u8,
     /// Template gender mode (`Actors.dat` `Genders`) keyed by template id.
     /// Populated by the host before applying packets so `on_new_actor` knows
     /// whether the wire carries a gender byte (only when mode == 0). Empty map
@@ -827,10 +832,10 @@ impl World {
             return;
         }
         let val = val as i16;
-        // Health is attribute 0 (Server.bb reads HealthStat from
-        // Fixed Attributes.dat → 0); mirror it onto the actor's health field so
-        // the HP bars reflect live combat damage.
-        const HEALTH_STAT: u8 = 0;
+        // Mirror the Health attribute onto the actor's health field so the HP
+        // bars reflect live combat damage. Which slot is Health is project-
+        // configurable (Fixed Attributes.dat → `health_stat`), NOT always 0.
+        let health_stat = self.health_stat;
         if rid == self.my_runtime_id {
             let e = self.me_attributes.entry(attr).or_default();
             match kind {
@@ -838,7 +843,7 @@ impl World {
                 b'M' => e.1 = val,
                 _ => {}
             }
-            if attr == HEALTH_STAT {
+            if attr == health_stat {
                 match kind {
                     b'A' => self.me_health = val,
                     b'M' => self.me_health_max = val,
@@ -852,7 +857,7 @@ impl World {
                 b'M' => e.1 = val,
                 _ => {}
             }
-            if attr == HEALTH_STAT {
+            if attr == health_stat {
                 match kind {
                     b'A' => a.health = val,
                     b'M' => a.health_max = val,
@@ -2103,6 +2108,24 @@ mod tests {
         // ActorDead marks the NPC dead.
         w.apply(&msg(pk::ACTOR_DEAD, pkt(|p| { p.u16(50); })));
         assert!(!w.actors[&50].alive);
+    }
+
+    #[test]
+    fn health_stat_is_project_configurable() {
+        // A project that assigns Health to slot 3 (not 0). The server's
+        // P_StatUpdate reports HP under slot 3, so the client must mirror THAT
+        // onto me_health (the HP-bar source) and must NOT treat slot 0 as Health.
+        // Regression for the old hardcoded `HEALTH_STAT = 0`, which froze HP bars
+        // (combat damage invisible) on any project where Health != 0.
+        let mut w = World { my_runtime_id: 1, health_stat: 3, ..Default::default() };
+        w.apply(&msg(pk::STAT_UPDATE, pkt(|p| { p.u8(b'M').u16(1).u8(3).u16(200); })));
+        w.apply(&msg(pk::STAT_UPDATE, pkt(|p| { p.u8(b'A').u16(1).u8(3).u16(150); })));
+        assert_eq!((w.me_health, w.me_health_max), (150, 200), "HP mirrors slot 3");
+
+        // Slot 0 is just another attribute here — it must not touch HP.
+        w.apply(&msg(pk::STAT_UPDATE, pkt(|p| { p.u8(b'A').u16(1).u8(0).u16(9); })));
+        assert_eq!(w.me_health, 150, "slot 0 must not touch HP when health_stat=3");
+        assert_eq!(w.me_attributes[&0], (9, 0), "slot 0 still recorded as a normal attribute");
     }
 
     #[test]
