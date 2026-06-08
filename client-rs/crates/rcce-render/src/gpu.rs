@@ -549,7 +549,13 @@ struct VO { @builtin(position) clip: vec4<f32>, @location(0) uv: vec2<f32>, @loc
     let H = normalize(L + V);
     let sun_up = smoothstep(0.0, 0.30, L.y);
     let spec = pow(max(dot(Ns, H), 0.0), 70.0) * sun_up;
-    let glint = vec3<f32>(1.0, 0.96, 0.86) * spec * 1.1;
+    // Tint the sun-glint by the active sun colour (Suns.dat, the same light that
+    // tints the terrain/actor diffuse since #480), so the water sparkle agrees
+    // with the sky's sun instead of a fixed warm-white. A `mix` (not a raw
+    // multiply) keeps a partial white floor so a dim/cool dusk sun shifts the hue
+    // without extinguishing the sparkle. White light (no Suns.dat) → unchanged.
+    let glint_tint = mix(vec3<f32>(1.0, 1.0, 1.0), u.light_color, 0.6);
+    let glint = vec3<f32>(1.0, 0.96, 0.86) * spec * 1.1 * glint_tint;
     return vec4<f32>(rgb + glint, a);
 }
 "#;
