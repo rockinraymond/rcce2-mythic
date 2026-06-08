@@ -857,8 +857,12 @@ impl World {
     fn on_gold_change(&mut self, d: &[u8]) {
         let decrease = d.first() == Some(&b'D');
         if let Some(amount) = MsgReader::new(&d[1.min(d.len())..]).i32() {
-            let delta = if decrease { -amount } else { amount };
-            self.me_gold = (self.me_gold + delta).max(0);
+            // Saturating arithmetic: a hostile/huge wire amount must not overflow
+            // (a debug panic / release wraparound). `saturating_neg` also guards
+            // the `i32::MIN` negate. Gold is server-authoritative, so clamping the
+            // displayed total is the correct soft-fail. (me_xp already does this.)
+            let delta = if decrease { amount.saturating_neg() } else { amount };
+            self.me_gold = self.me_gold.saturating_add(delta).max(0);
         }
     }
 
