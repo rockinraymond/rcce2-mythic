@@ -5,6 +5,7 @@
 //!   3. Both clients now hold a `player_trade` board (the HARD assertion).
 //!   4. A stages a backpack offer (`P_UpdateTrading`) → B's `player_trade.his`
 //!      populates (verified when A's character actually has a backpack item).
+//!
 //! Relies on the gameplay-attribution fix (PR #462) and the Phase 1A/1B trade work.
 //!
 //!   cargo run -p rcce-client --bin trade-test --release -- [host] [port]

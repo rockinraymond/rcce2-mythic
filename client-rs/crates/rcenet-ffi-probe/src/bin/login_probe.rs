@@ -58,7 +58,7 @@ fn main() {
         w.str8(UNAME).str8(&md5).u8(EMAIL.len() as u8).raw(&encrypt_email(EMAIL));
         t.send(peer, pk::CREATE_ACCOUNT, w.as_slice(), true);
         let resp = pump(&mut t, 1500);
-        let r = resp.iter().find(|m| m.connection == peer || true);
+        let r = resp.iter().find(|m| m.connection == peer);
         match r.map(sentinel) {
             Some('Y') => println!("[login] CreateAccount: created"),
             Some('N') => println!("[login] CreateAccount: already exists / refused (ok)"),

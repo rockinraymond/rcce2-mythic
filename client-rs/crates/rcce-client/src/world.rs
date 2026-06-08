@@ -1371,8 +1371,7 @@ impl World {
                 }
                 if let Some(dl) = self.dialog.as_mut() {
                     dl.options.clear();
-                    loop {
-                        let Some(n) = r.u8() else { break };
+                    while let Some(n) = r.u8() {
                         let Some(b) = r.bytes(n as usize) else { break };
                         dl.options.push(String::from_utf8_lossy(b).into_owned());
                     }
@@ -1597,8 +1596,7 @@ impl World {
                     // index). Display order is sorted; the index is preserved.
                     let known_index = self.known_spells.len() as u16;
                     self.known_spells.push(KnownSpell { id, name, level, known_index });
-                    self.known_spells
-                        .sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+                    self.known_spells.sort_by_key(|a| a.name.to_lowercase());
                 }
             }
             Some(b'D') => {

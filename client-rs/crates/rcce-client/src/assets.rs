@@ -778,7 +778,7 @@ mod tests {
         // Always within [start, end] (inclusive-ish, len+1 wrap).
         for i in 0..200 {
             let f = clip_frame(&clip, 10.0, i as f32 * 0.05);
-            assert!(f >= 10.0 && f < 21.0, "frame {f} out of [10,21)");
+            assert!((10.0..21.0).contains(&f), "frame {f} out of [10,21)");
         }
         // Single-frame clip pins to start.
         let one = AnimClip { name: "Sit".into(), start: 142, end: 142, speed: 1.0 };

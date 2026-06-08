@@ -107,6 +107,23 @@ jobs:
         working-directory: client-rs
         run: cargo test -p rcce-data -p rcce-net -p rcce-render -p rcce-client --locked
 
+      # Clippy gate over the four tested crates plus their vendored enet-sys
+      # transport (lib + bins + tests via --all-targets), failing on ANY lint
+      # (`-D warnings`). enet-sys is included explicitly so the gate is
+      # deterministic: it's a path-dep of rcce-net, so on a cache MISS clippy
+      # would lint it anyway — gating it directly means a green run can't depend
+      # on whether the cache happened to skip it. The workspace allows three
+      # lints that fight idiomatic graphics/parser code (too_many_arguments,
+      # type_complexity, field_reassign_with_default — see client-rs/Cargo.toml
+      # [workspace.lints.clippy]); everything else is denied. The i686-only
+      # rcenet-ffi-probe is excluded (CI is x86_64). This gate already caught
+      # two real correctness bugs (a dead `|| true` find-predicate and an
+      # approximate-TAU literal).
+      - name: Clippy (Rust client logic crates)
+        shell: bash
+        working-directory: client-rs
+        run: cargo clippy -p rcce-data -p rcce-net -p rcce-render -p rcce-client -p enet-sys --all-targets --locked -- -D warnings
+
       # Two reference docs (the wire-protocol packet catalog and the BVM
       # scripting-API catalog) are produced by generator scripts that read
       # line numbers + signatures out of the source. Their `--check` mode

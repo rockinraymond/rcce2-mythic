@@ -625,14 +625,14 @@ impl App {
 enum HudAction { Chat, Map, Inventory, Spells, Character, Quests, Party, Menu }
 
 const FUNCTION_BUTTONS: [(HudAction, f32, &str, &str); 8] = [
-    (HudAction::Chat, 0.631906250, "gui:Chat", "Cht"),
-    (HudAction::Map, 0.669015625, "gui:Map", "Map"),
-    (HudAction::Inventory, 0.705148437, "gui:Inventory", "Inv"),
-    (HudAction::Spells, 0.742257812, "gui:Abilities", "Spl"),
-    (HudAction::Character, 0.780343750, "gui:Character", "Chr"),
-    (HudAction::Quests, 0.816476562, "gui:Quests", "Qst"),
-    (HudAction::Party, 0.853585937, "gui:Party", "Pty"),
-    (HudAction::Menu, 0.893000000, "gui:Menu", "Mnu"),
+    (HudAction::Chat, 0.631_906_3, "gui:Chat", "Cht"),
+    (HudAction::Map, 0.669_015_65, "gui:Map", "Map"),
+    (HudAction::Inventory, 0.705_148_46, "gui:Inventory", "Inv"),
+    (HudAction::Spells, 0.742_257_83, "gui:Abilities", "Spl"),
+    (HudAction::Character, 0.780_343_8, "gui:Character", "Chr"),
+    (HudAction::Quests, 0.816_476_6, "gui:Quests", "Qst"),
+    (HudAction::Party, 0.853_585_96, "gui:Party", "Pty"),
+    (HudAction::Menu, 0.893, "gui:Menu", "Mnu"),
 ];
 /// Function-button baseline + size (fractions of screen) — the real GY button
 /// geometry from CreateActionBarButton (4:3 branch).
@@ -780,7 +780,7 @@ impl ContextMenu {
 
 /// Spell action-bar slot grid (shared by the draw + hover-tooltip paths). The
 /// 12 slots are left-anchored on the FBTN_Y baseline at FBTN_W×FBTN_H each.
-const SPELLBAR_X0: f32 = 0.089867187;
+const SPELLBAR_X0: f32 = 0.089_867_19;
 const SPELLBAR_PITCH: f32 = 0.036132812;
 
 /// Index of the inventory slot (0..=45) whose rect contains `(cx, cy)`, given the
@@ -3506,9 +3506,7 @@ impl App {
                         known_index: i as u16,
                     })
                     .collect();
-                world
-                    .known_spells
-                    .sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+                world.known_spells.sort_by_key(|a| a.name.to_lowercase());
             }
         }
         // Load the persisted hotbar (P_ActionBarUpdate round-trip): resolve each
@@ -3925,16 +3923,8 @@ impl App {
                 } else {
                     match code {
                         KeyCode::Enter | KeyCode::NumpadEnter => self.enter_selected(),
-                        KeyCode::ArrowUp => {
-                            if self.char_sel > 0 {
-                                self.char_sel -= 1;
-                            }
-                        }
-                        KeyCode::ArrowDown => {
-                            if self.char_sel + 1 < self.chars.len() {
-                                self.char_sel += 1;
-                            }
-                        }
+                        KeyCode::ArrowUp if self.char_sel > 0 => self.char_sel -= 1,
+                        KeyCode::ArrowDown if self.char_sel + 1 < self.chars.len() => self.char_sel += 1,
                         KeyCode::KeyC => self.begin_create(),
                         KeyCode::Delete => self.delete_selected(),
                         KeyCode::Escape => {
@@ -8638,7 +8628,7 @@ impl App {
                     Some(SpellDrag { moved: true, src: DragSrc::Slot(s), .. }) => Some(s),
                     _ => None,
                 };
-                for i in 0..12usize {
+                for (i, slot) in bar_ids.iter().enumerate() {
                     let x = (SLOT_X0 + i as f32 * SLOT_PITCH) * sw;
                     // Real EmptySlot.bmp frame under each slot (interleaved draw
                     // list lets the shading + number layer on top); coloured-rect
@@ -8652,7 +8642,7 @@ impl App {
                     if drag_target == Some(i) {
                         overlay.rect(x, by, sw_, sh_, [0.4, 0.7, 1.0, 0.28]);
                     }
-                    if let Some(entry) = bar_ids[i] {
+                    if let Some(entry) = *slot {
                         // Source slot of a bar→bar drag: dim it so the entry looks
                         // "picked up" while it follows the cursor.
                         let icon_a = if drag_from == Some(i) { 0.35 } else { 1.0 };
@@ -9690,7 +9680,7 @@ mod tests {
         // its eye enters at z=8 — within one 0.4 step below 8.
         let occ = [([0.0, 0.0, 10.0], 2.0)];
         let d = camera_boom([0.0; 3], dir, 13.0, &occ);
-        assert!(d >= 7.6 && d < 8.0, "expected ~7.6..8, got {d}");
+        assert!((7.6..8.0).contains(&d), "expected ~7.6..8, got {d}");
         // Sphere off to the side -> missed, full boom.
         let side = [([20.0, 0.0, 10.0], 2.0)];
         assert_eq!(camera_boom([0.0; 3], dir, 13.0, &side), 13.0);
@@ -9704,7 +9694,7 @@ mod tests {
         // Nearest occluder wins.
         let many = [([0.0, 0.0, 30.0], 2.0), ([0.0, 0.0, 6.0], 1.0), ([0.0, 0.0, 12.0], 1.0)];
         let d = camera_boom([0.0; 3], dir, 40.0, &many);
-        assert!(d >= 4.6 && d < 5.0, "nearest hit ~5 -> ~4.6..5, got {d}");
+        assert!((4.6..5.0).contains(&d), "nearest hit ~5 -> ~4.6..5, got {d}");
     }
 
     // The function-button row hit-test must agree with the draw geometry: a

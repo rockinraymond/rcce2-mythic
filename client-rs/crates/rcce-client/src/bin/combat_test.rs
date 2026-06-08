@@ -65,8 +65,7 @@ fn main() {
 
     // Walk to the target (chase its live position) for up to ~16s.
     let deadline = Instant::now() + Duration::from_secs(16);
-    loop {
-        let Some(a) = w.actors.get(&tgt) else { break };
+    while let Some(a) = w.actors.get(&tgt) {
         let (tx, tz) = (a.x, a.z);
         let (dx, dz) = (tx - w.me_x, tz - w.me_z);
         let dist = (dx * dx + dz * dz).sqrt();

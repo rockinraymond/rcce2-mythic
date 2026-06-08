@@ -120,12 +120,9 @@ impl CharacterSheet {
 
     fn parse_spells(&mut self, body: &[u8]) {
         let mut r = MsgReader::new(body);
-        loop {
-            let (Some(level), Some(id), Some(thumb), Some(recharge)) =
-                (r.u16(), r.u16(), r.u16(), r.u16())
-            else {
-                break;
-            };
+        while let (Some(level), Some(id), Some(thumb), Some(recharge)) =
+            (r.u16(), r.u16(), r.u16(), r.u16())
+        {
             let (Some(name), Some(description), Some(mem)) = (r.str16(), r.str16(), r.u8()) else {
                 break;
             };

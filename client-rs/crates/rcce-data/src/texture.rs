@@ -335,7 +335,8 @@ pub fn decode_bmp(b: &[u8]) -> Option<Image> {
     let bottom_up = height_raw > 0;
     let height = height_raw.unsigned_abs();
     let bytes_pp = (bpp / 8) as usize;
-    let row_stride = ((width as usize * bytes_pp + 3) / 4) * 4;
+    // BMP rows are padded to a 4-byte boundary.
+    let row_stride = (width as usize * bytes_pp).div_ceil(4) * 4;
 
     let needed = data_offset + row_stride * height as usize;
     if b.len() < needed {
@@ -438,7 +439,7 @@ pub fn load_with_flags(path: &Path, flags: i32) -> Option<Image> {
 /// The basename of a (possibly Windows-absolute) texture path.
 pub fn basename(stale: &str) -> &str {
     stale
-        .rsplit(|c| c == '\\' || c == '/')
+        .rsplit(['\\', '/'])
         .next()
         .unwrap_or(stale)
 }
@@ -593,8 +594,8 @@ mod tests {
         assert_eq!((img.width, img.height), (2, 2));
         // output row 0, pixel0 = red
         assert_eq!(&img.rgba[0..4], &[255, 0, 0, 255]);
-        // output row 1, pixel0 = blue
-        let r1 = (2 * 1) * 4;
+        // output row 1, pixel0 = blue (2 px/row × 4 bytes = start of row 1)
+        let r1 = 2 * 4;
         assert_eq!(&img.rgba[r1..r1 + 4], &[0, 0, 255, 255]);
     }
 }

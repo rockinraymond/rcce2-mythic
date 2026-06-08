@@ -16,3 +16,6 @@ cc = "1"
 [[bin]]
 name = "enet-smoke"
 path = "src/bin/enet_smoke.rs"
+
+[lints]
+workspace = true

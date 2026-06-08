@@ -71,8 +71,8 @@ fn walk(b: &[u8], start: usize, end: usize, depth: u32, s: &mut Stats) {
                 if flags & 4 != 0 {
                     per += 16;
                 }
-                if per > 0 {
-                    s.keyframes += ((size - 4) / per) as u32;
+                if let Some(k) = (size - 4).checked_div(per) {
+                    s.keyframes += k as u32;
                 }
             }
             b"ANIM" => {

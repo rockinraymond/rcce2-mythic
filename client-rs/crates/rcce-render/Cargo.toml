@@ -24,3 +24,6 @@ path = "src/bin/model_view.rs"
 [[bin]]
 name = "gpu-probe"
 path = "src/bin/gpu_probe.rs"
+
+[lints]
+workspace = true

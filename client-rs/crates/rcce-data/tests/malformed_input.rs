@@ -432,12 +432,10 @@ fn area_scenery_count_bomb_does_not_panic() {
     // missing bytes) — the important property is that it errors rather than
     // panicking or fabricating 65535 sceneries. If a future impl instead returns
     // Ok, the scenery list must be empty.
-    match r.unwrap() {
-        Ok(area) => assert!(
-            area.sceneries.is_empty(),
-            "no record bytes -> no sceneries should be decoded"
-        ),
-        Err(_) => {} // erroring out on the truncated body is also graceful
+    // Erroring out on the truncated body is also graceful; only the Ok path
+    // has an invariant to check.
+    if let Ok(area) = r.unwrap() {
+        assert!(area.sceneries.is_empty(), "no record bytes -> no sceneries should be decoded");
     }
 }
 
