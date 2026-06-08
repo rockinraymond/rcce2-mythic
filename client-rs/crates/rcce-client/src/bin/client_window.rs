@@ -3370,6 +3370,13 @@ impl App {
             // started at 0, so the HUD gold (which now reads me_gold) would have
             // shown a balance relative to login instead of the real total.
             world.me_gold = s.gold as i32;
+            // Seed the LIVE progression fields the same way. The character sheet
+            // panel now reads these (kept live by P_XPUpdate "U" / P_StatUpdate
+            // "R") instead of the frozen login snapshot; without the seed they'd
+            // read 0 until the first in-world update.
+            world.me_level = s.level;
+            world.me_xp = s.xp as i32;
+            world.me_reputation = s.reputation as i32;
             // Populate the spellbook's known-spell list from the login sheet.
             // Login spells arrive via P_FetchCharacter, NOT P_KnownSpellUpdate, so
             // without this the spellbook was EMPTY at login for any character that
@@ -7839,7 +7846,8 @@ impl App {
                     // LIVE gold (me_gold, seeded from the sheet at login + updated by
                     // P_GoldChange) so buy/sell/loot are reflected immediately.
                     let gold = self.net.as_ref().map(|n| n.world.me_gold).unwrap_or(sheet.gold as i32);
-                    let line = format!("Lv {}   {}g", sheet.level, gold);
+                    let level = self.net.as_ref().map(|n| n.world.me_level).unwrap_or(sheet.level);
+                    let line = format!("Lv {}   {}g", level, gold);
                     let tw = rcce_render::font::text_width(&line, 1.0);
                     overlay.text_shadow(sw - tw - 12.0, 24.0, 1.0, &line, [1.0, 0.88, 0.4, 1.0]);
                     let money = store.money().format(gold as i64);
@@ -7936,14 +7944,25 @@ impl App {
                         .filter(|n| !n.is_empty())
                         .unwrap_or(self.login_user.as_str())
                         .to_string();
+                    // Live progression (seeded from the sheet at login, kept live by
+                    // P_XPUpdate "U" / P_StatUpdate "R") — disjoint `self.net` access
+                    // so it coexists with the `self.overlay` mutable borrow.
+                    let live = self.net.as_ref().map(|n| &n.world);
+                    let level = live.map(|w| w.me_level).unwrap_or(sheet.level);
+                    let xp = live.map(|w| w.me_xp as i64).unwrap_or(sheet.xp as i64);
+                    let rep = live.map(|w| w.me_reputation).unwrap_or(sheet.reputation as i32);
                     let mut rows: Vec<(String, [f32; 4])> = Vec::new();
-                    rows.push((format!("Level {}", sheet.level), [0.7, 1.0, 0.7, 1.0]));
-                    rows.push((format!("XP {}", sheet.xp), [0.92, 0.86, 0.6, 1.0]));
-                    rows.push((format!("Reputation {}", sheet.reputation), [0.85, 0.85, 1.0, 1.0]));
+                    rows.push((format!("Level {}", level), [0.7, 1.0, 0.7, 1.0]));
+                    rows.push((format!("XP {}", xp), [0.92, 0.86, 0.6, 1.0]));
+                    rows.push((format!("Reputation {}", rep), [0.85, 0.85, 1.0, 1.0]));
                     rows.push((String::new(), white)); // spacer before attributes
                     for i in 0..sheet.attributes.len().min(rcce_data::AttributeNames::COUNT) {
                         if let Some(name) = store.attribute_name(i) {
-                            let (val, mx) = sheet.attributes[i];
+                            // Prefer the live attribute (P_StatUpdate keeps `me_attributes`
+                            // current); fall back to the login snapshot before any update.
+                            let (val, mx) = live
+                                .and_then(|w| w.me_attributes.get(&(i as u8)).copied())
+                                .unwrap_or(sheet.attributes[i]);
                             let line = if i <= 1 && mx > 0 {
                                 format!("{name}: {val}/{mx}")
                             } else {
@@ -8037,7 +8056,9 @@ impl App {
                     // Header line: level / gold (live) / xp.
                     if let Some(s) = &self.sheet {
                         let gold = self.net.as_ref().map(|n| n.world.me_gold).unwrap_or(s.gold as i32);
-                        overlay.text_shadow(px + 10.0, py + 26.0, 1.0, &format!("Lv {}   {} gold   {} xp", s.level, gold, s.xp), [1.0, 0.88, 0.4, 1.0]);
+                        let level = self.net.as_ref().map(|n| n.world.me_level).unwrap_or(s.level);
+                        let xp = self.net.as_ref().map(|n| n.world.me_xp as i64).unwrap_or(s.xp as i64);
+                        overlay.text_shadow(px + 10.0, py + 26.0, 1.0, &format!("Lv {}   {} gold   {} xp", level, gold, xp), [1.0, 0.88, 0.4, 1.0]);
                     }
                     for (i, b) in iface.inventory_buttons.iter().enumerate() {
                         // Window-relative fraction -> screen pixels.
@@ -8137,7 +8158,8 @@ impl App {
                 } else if let Some(s) = &self.sheet {
                     // Fallback text list when Interface.dat is absent.
                     let gold = self.net.as_ref().map(|n| n.world.me_gold).unwrap_or(s.gold as i32);
-                    overlay.text_shadow(px + 10.0, py + 30.0, 1.0, &format!("Lv {}   {} gold", s.level, gold), [1.0, 0.88, 0.4, 1.0]);
+                    let level = self.net.as_ref().map(|n| n.world.me_level).unwrap_or(s.level);
+                    overlay.text_shadow(px + 10.0, py + 30.0, 1.0, &format!("Lv {}   {} gold", level, gold), [1.0, 0.88, 0.4, 1.0]);
                 } else {
                     overlay.text(px + 10.0, py + 30.0, 1.0, "(no character data)", dim);
                 }
