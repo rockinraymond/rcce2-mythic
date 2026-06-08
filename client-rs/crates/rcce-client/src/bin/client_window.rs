@@ -1046,6 +1046,14 @@ fn lightning_fires(storm: bool, now: f32, next: f32) -> bool {
     storm && now >= next
 }
 
+/// Resolve the effective weather byte, honouring the `RCCE_WEATHER` debug
+/// override (a number 0-5, the same way `RCCE_PHASE` overrides day/night) so
+/// rain/snow/fog/storm can be forced for a headless `RCCE_SHOT` capture. An
+/// unset or unparseable value falls through to the zone's own weather byte.
+fn weather_byte_override(zone: u8) -> u8 {
+    std::env::var("RCCE_WEATHER").ok().and_then(|s| s.parse::<u8>().ok()).unwrap_or(zone)
+}
+
 /// CAM-5: snap the orbit camera directly behind the character — camera yaw set
 /// to the character's facing, pitch levelled. Mirrors the Blitz MMB handler
 /// (`CamYaw = EntityYaw(Me)`, `CamPitch = 0`). Pure — unit-tested.
@@ -6134,7 +6142,7 @@ impl App {
             let wx = self
                 .net
                 .as_ref()
-                .map(|n| rcce_client::weather::weather_from_byte(n.world.zone.weather))
+                .map(|n| rcce_client::weather::weather_from_byte(weather_byte_override(n.world.zone.weather)))
                 .unwrap_or(rcce_client::weather::Weather::Clear);
             let storm = wx == rcce_client::weather::Weather::Storm;
             // Storm-cloud swap: upload the darker storm clouds while storming,
@@ -7087,15 +7095,24 @@ impl App {
                 }
             });
         let sky = rcce_client::daynight::daynight(phase);
-        let mut fog_dn = rcce_client::daynight::modulate(self.fog_color, &sky);
+        // Weather-driven fog (Blitz Environment3D.bb SetWeather): rain/snow/storm
+        // pull the far plane in and snow whitens the fog colour; fog weather pulls
+        // it in hard. Clear/Wind leave the authored fog untouched (default path is
+        // byte-identical). Applied to the zone's base fog BEFORE the day/night
+        // tint so the result still cross-fades with time-of-day.
+        let weather_byte = self.net.as_ref().map(|n| weather_byte_override(n.world.zone.weather)).unwrap_or(0);
+        let wfog_kind = rcce_client::weather::weather_from_byte(weather_byte);
+        let (wfog_near, wfog_far, wfog_color) =
+            rcce_client::weather::weather_fog(wfog_kind, self.fog_near, self.fog_far, self.fog_color);
+        let mut fog_dn = rcce_client::daynight::modulate(wfog_color, &sky);
         let ambient_dn = rcce_client::daynight::modulate(self.ambient, &sky);
         // Underwater (Blitz CameraUnderwater): when the camera dips below a water
         // plane, tint the fog/clear to the water colour and clamp to a short murky
         // view distance. The full-screen water wash added to the overlay below also
         // hides the sky/sun (Blitz hides Sky/Stars/Cloud entities underwater).
         let underwater = underwater_color(&self.water_planes, eye);
-        let mut fog_near_eff = self.fog_near;
-        let mut fog_far_eff = self.fog_far;
+        let mut fog_near_eff = wfog_near;
+        let mut fog_far_eff = wfog_far;
         if let Some(wc) = underwater {
             fog_dn = [wc[0] * 0.7, wc[1] * 0.7, wc[2] * 0.7];
             fog_near_eff = 2.0;
@@ -7176,7 +7193,7 @@ impl App {
             let wkind = self
                 .net
                 .as_ref()
-                .map(|n| rcce_client::weather::weather_from_byte(n.world.zone.weather))
+                .map(|n| rcce_client::weather::weather_from_byte(weather_byte_override(n.world.zone.weather)))
                 .unwrap_or(rcce_client::weather::Weather::Clear);
             let dt = (elapsed - self.prev_elapsed).clamp(0.0, 0.1);
             self.prev_elapsed = elapsed;
@@ -7198,7 +7215,11 @@ impl App {
                         overlay.rect(p.x, p.y, 3.0, 3.0, [1.0, 1.0, 1.0, 0.8]);
                     }
                 }
-                rcce_client::weather::Weather::Clear => {}
+                // Clear / Fog / Wind draw no falling particles (Fog/Wind affect
+                // fog distance + audio only, handled elsewhere).
+                rcce_client::weather::Weather::Clear
+                | rcce_client::weather::Weather::Fog
+                | rcce_client::weather::Weather::Wind => {}
             }
 
             // Compass strip (top-centre) at the real Interface.dat `compass` rect,
@@ -8607,7 +8628,9 @@ impl App {
                     });
                     let sview = stex.create_view(&Default::default());
                     let clear = wgpu::Color { r: fog_dn[0] as f64, g: fog_dn[1] as f64, b: fog_dn[2] as f64, a: 1.0 };
-                    view.render(&gfx.device, &gfx.queue, &sview, vp, eye, fog_dn, self.fog_near, self.fog_far, ambient_dn, light_dir, clear, self.cam_yaw, elapsed, rcce_client::daynight::night_factor(phase), cam_target);
+                    // Use the effective (weather/underwater-adjusted) fog distances so
+                    // the captured PNG matches what's drawn to the surface.
+                    view.render(&gfx.device, &gfx.queue, &sview, vp, eye, fog_dn, fog_near_eff, fog_far_eff, ambient_dn, light_dir, clear, self.cam_yaw, elapsed, rcce_client::daynight::night_factor(phase), cam_target);
                     overlay.render(&gfx.device, &gfx.queue, &sview, sw, sh);
                     match rcce_render::save_texture_png(&gfx.device, &gfx.queue, &stex, w, h, gfx.config.format, &shot) {
                         Ok(()) => println!("[client-window] screenshot -> {shot}"),
