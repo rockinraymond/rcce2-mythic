@@ -133,6 +133,17 @@ pub struct WorldView {
     /// is rebuilt every frame for its scrolling UV — reuses its upload instead of
     /// re-creating the texture (+ mip chain) every frame. Cleared on `set_scene`.
     static_tex_cache: TexCache,
+    /// Render-path debug/config toggles, read ONCE from the environment at
+    /// construction instead of on every `render` call. They are launch-static
+    /// (process env doesn't change at runtime), so re-reading them per frame
+    /// just took the global env lock + an allocation ~6× a frame for nothing.
+    /// Each stores the EFFECTIVE boolean used at the draw site.
+    cfg_shadow_cull: bool,  // RCCE_NOSHADOWCULL absent → cull shadow casters
+    cfg_skin_shadow: bool,  // RCCE_NOSKINSHADOW absent → skinned actors cast shadows
+    cfg_shadow_stats: bool, // RCCE_SHADOWSTATS present → print shadow stats
+    cfg_frustum_cull: bool, // RCCE_NOFRUSTUMCULL absent → frustum-cull the scene
+    cfg_flat_water: bool,   // RCCE_FLATWATER present → flat (non-Fresnel) water
+    cfg_draw_stats: bool,   // RCCE_DRAWSTATS present → print per-frame draw stats
 }
 
 /// One frame's particle geometry for an emitter: its texture bind + blend +
@@ -285,6 +296,13 @@ impl WorldView {
             water_pipeline,
             bloom: crate::bloom::Bloom::maybe_new(device, color_format, w, h),
             static_tex_cache: TexCache::new(),
+            // Read the render-path env toggles once (launch-static).
+            cfg_shadow_cull: std::env::var_os("RCCE_NOSHADOWCULL").is_none(),
+            cfg_skin_shadow: std::env::var_os("RCCE_NOSKINSHADOW").is_none(),
+            cfg_shadow_stats: std::env::var_os("RCCE_SHADOWSTATS").is_some(),
+            cfg_frustum_cull: std::env::var_os("RCCE_NOFRUSTUMCULL").is_none(),
+            cfg_flat_water: std::env::var_os("RCCE_FLATWATER").is_some(),
+            cfg_draw_stats: std::env::var_os("RCCE_DRAWSTATS").is_some(),
         }
     }
 
@@ -572,7 +590,7 @@ impl WorldView {
             let lvp = glam::Mat4::from_cols_array(&light_vp);
             // Escape hatch: `RCCE_NOSHADOWCULL` draws every caster (proves the cull
             // is visually lossless when the two renders diff to zero).
-            let cull_on = std::env::var_os("RCCE_NOSHADOWCULL").is_none();
+            let cull_on = self.cfg_shadow_cull;
             let in_shadow_box = |c: &[f32; 3], r: f32| -> bool {
                 if !cull_on {
                     return true;
@@ -598,7 +616,7 @@ impl WorldView {
             // GPU-skinned actors cast shadows too: same linear-blend skin, depth
             // only. (The CPU-skin path already casts via `dynamics` above; this
             // covers the faster GPU-skin path so it isn't a silent regression.)
-            if !self.skinned.is_empty() && std::env::var_os("RCCE_NOSKINSHADOW").is_none() {
+            if !self.skinned.is_empty() && self.cfg_skin_shadow {
                 sp.set_pipeline(&self.skin_shadow_pipeline.pipeline);
                 sp.set_bind_group(0, &self.light_bind, &[]);
                 for sd in &self.skinned {
@@ -609,7 +627,7 @@ impl WorldView {
                     sp.draw_indexed(0..sd.n_idx, 0, 0..1);
                 }
             }
-            if std::env::var_os("RCCE_SHADOWSTATS").is_some() {
+            if self.cfg_shadow_stats {
                 eprintln!("[shadow] casters drawn={drawn} culled={culled} skinned={}", self.skinned.len());
             }
         }
@@ -652,7 +670,7 @@ impl WorldView {
             // image is unchanged; it just skips the textured+shaded draw of props
             // behind the camera or off the sides. `RCCE_NOFRUSTUMCULL` disables it.
             let frustum = frustum_planes(&view_proj);
-            let fcull = std::env::var_os("RCCE_NOFRUSTUMCULL").is_none();
+            let fcull = self.cfg_frustum_cull;
             let visible = |d: &Drawable| !fcull || sphere_in_frustum(&frustum, &d.center, d.radius);
             let (mut wdrawn, mut wculled) = (0u32, 0u32);
             // 1) Opaque pass: terrain base + props (everything except the splat
@@ -708,7 +726,7 @@ impl WorldView {
             // 4) Water surfaces — dedicated pipeline (Fresnel sky reflection +
             //    procedural ripples), alpha-blended over terrain + splats.
             //    RCCE_FLATWATER falls back to the old flat alpha pipeline (A/B).
-            if std::env::var_os("RCCE_FLATWATER").is_some() {
+            if self.cfg_flat_water {
                 rp.set_pipeline(&self.pipeline.alpha_pipeline);
             } else {
                 rp.set_pipeline(&self.water_pipeline.pipeline);
@@ -725,7 +743,7 @@ impl WorldView {
                 rp.set_index_buffer(d.ibuf.slice(..), wgpu::IndexFormat::Uint32);
                 rp.draw_indexed(0..d.n_idx, 0, 0..1);
             }
-            if std::env::var_os("RCCE_DRAWSTATS").is_some() {
+            if self.cfg_draw_stats {
                 let uploads = gpu::TEX_UPLOADS.load(std::sync::atomic::Ordering::Relaxed);
                 let dyn_rebuilds = gpu::DYN_REBUILDS.load(std::sync::atomic::Ordering::Relaxed);
                 eprintln!("[world] drawables drawn={wdrawn} culled={wculled} tex_uploads={uploads} dyn_rebuilds={dyn_rebuilds} tex_cache={}", self.static_tex_cache.len());
