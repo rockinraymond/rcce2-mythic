@@ -5704,8 +5704,12 @@ impl App {
             if !self.login_msg.is_empty() {
                 overlay.text(fx, y, 1.05, &self.login_msg, [1.0, 0.7, 0.5, 1.0]);
             }
+            // Flow the server line right under the fields/message — NOT at
+            // `wy + wh*0.88`, which collides with the BQuit button (`0.84..0.95`)
+            // at the 16:10 default window (the old position only cleared at the
+            // 16:9 smoke-test aspect).
             let srv = format!("server {}:{}", self.host, self.port);
-            overlay.text(fx, wy + wh * 0.88, 0.9, &srv, [0.5, 0.55, 0.65, 0.85]);
+            overlay.text(fx, y + 22.0, 0.9, &srv, [0.5, 0.55, 0.65, 0.85]);
             let hint = "Tab switch field   Enter login   F1 sound options   Esc quit";
             overlay.text(sw * 0.5 - hint.len() as f32 * 9.0 * 0.5, wy + wh + 12.0, 1.0, hint, [0.6, 0.66, 0.8, 0.9]);
             return;
@@ -5773,7 +5777,12 @@ impl App {
                 } else {
                     "Up/Down select   Enter play   C create   Del delete   Esc back"
                 };
-                overlay.text(sw * 0.5 - hint.len() as f32 * 9.0 * 0.5, py + ph + 14.0, 1.0, hint, [0.6, 0.66, 0.8, 0.9]);
+                // Anchor the hint just below the BUTTON ROW (`wy + wh*0.87..0.97`,
+                // the centred window), NOT `py + ph + 14` (the roster panel) — the
+                // two anchors collide at the 16:10 default window, drawing the hint
+                // on top of the Start/Create/Delete/Cancel buttons. `wy + wh` sits
+                // below the buttons at every aspect.
+                overlay.text(sw * 0.5 - hint.len() as f32 * 9.0 * 0.5, wy + wh + 6.0, 1.0, hint, [0.6, 0.66, 0.8, 0.9]);
             }
             Mode::InWorld => {}
         }
