@@ -151,7 +151,7 @@ fn parse_record(r: &mut BlitzReader) -> Result<ActorTemplate, ReadError> {
     for _ in 0..20 {
         r.read_short()?;
     }
-    let genders = r.read_byte()? as u8;
+    let genders = r.read_byte()?;
     let playable = r.read_byte()? != 0;
     let _rideable = r.read_byte()?;
     let _aggressiveness = r.read_byte()?;

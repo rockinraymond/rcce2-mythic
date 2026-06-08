@@ -128,7 +128,7 @@ impl WeatherSystem {
     fn respread(&mut self, w: f32, h: f32) {
         for i in 0..self.particles.len() {
             let (rx, ry, rp) = (self.rand(), self.rand(), self.rand());
-            self.particles[i] = Particle { x: rx * w, y: ry * h, phase: rp * 6.283 };
+            self.particles[i] = Particle { x: rx * w, y: ry * h, phase: rp * std::f32::consts::TAU };
         }
         self.last_w = w;
         self.last_h = h;

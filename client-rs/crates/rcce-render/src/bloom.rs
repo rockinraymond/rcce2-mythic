@@ -115,9 +115,7 @@ pub struct Bloom {
 impl Bloom {
     /// Build bloom resources, or `None` if `RCCE_BLOOM` is unset (default).
     pub fn maybe_new(device: &wgpu::Device, format: wgpu::TextureFormat, w: u32, h: u32) -> Option<Bloom> {
-        if std::env::var_os("RCCE_BLOOM").is_none() {
-            return None;
-        }
+        std::env::var_os("RCCE_BLOOM")?;
         let envf = |k: &str, d: f32| std::env::var(k).ok().and_then(|s| s.trim().parse().ok()).unwrap_or(d);
         let threshold = envf("RCCE_BLOOM_THRESHOLD", 0.72);
         let intensity = envf("RCCE_BLOOM_INTENSITY", 0.65);
@@ -154,7 +152,7 @@ impl Bloom {
         };
         let bgl_1 = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("bloom-1tex"),
-            entries: &[u_entry.clone(), tex_entry(1), samp_entry(2)],
+            entries: &[u_entry, tex_entry(1), samp_entry(2)],
         });
         let bgl_2 = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("bloom-2tex"),

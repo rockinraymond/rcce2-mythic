@@ -438,7 +438,7 @@ pub fn load_with_flags(path: &Path, flags: i32) -> Option<Image> {
 /// The basename of a (possibly Windows-absolute) texture path.
 pub fn basename(stale: &str) -> &str {
     stale
-        .rsplit(|c| c == '\\' || c == '/')
+        .rsplit(['\\', '/'])
         .next()
         .unwrap_or(stale)
 }
@@ -593,8 +593,8 @@ mod tests {
         assert_eq!((img.width, img.height), (2, 2));
         // output row 0, pixel0 = red
         assert_eq!(&img.rgba[0..4], &[255, 0, 0, 255]);
-        // output row 1, pixel0 = blue
-        let r1 = (2 * 1) * 4;
+        // output row 1, pixel0 = blue (2 px/row × 4 bytes = start of row 1)
+        let r1 = 2 * 4;
         assert_eq!(&img.rgba[r1..r1 + 4], &[0, 0, 255, 255]);
     }
 }
