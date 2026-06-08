@@ -61,6 +61,53 @@ impl TradeWindow {
     }
 }
 
+/// One item staged in a player↔player trade.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PlayerTradeSlot {
+    /// Trade slot id. For the partner's side this is the `slot` byte the server
+    /// sends in `P_UpdateTrading` (`ServerTradeID`); for my side it is my backpack
+    /// slot index.
+    pub slot: u8,
+    pub item_id: u16,
+    pub amount: u16,
+}
+
+/// State of an open player↔player trade window. `his` holds the partner's offered
+/// items (driven by inbound `P_UpdateTrading`); `mine` holds what I have staged
+/// (echoed locally — the server forwards my offers to the partner, not back to me).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct PlayerTrade {
+    pub his: Vec<PlayerTradeSlot>,
+    pub mine: Vec<PlayerTradeSlot>,
+}
+
+impl PlayerTrade {
+    /// Apply an inbound `P_UpdateTrading` to the partner's side (ClientNet.bb:533):
+    /// `slot u8 + amount u16 [+ 83-byte ItemInstance when amount>0]`. `amount==0`
+    /// withdraws the offer in that slot; `amount>0` adds/updates it (the item id is
+    /// the ItemInstance's leading u16). Malformed or short packets are ignored —
+    /// the soft-fail discipline for server-controlled data.
+    pub fn apply_his_update(&mut self, d: &[u8]) {
+        let mut r = MsgReader::new(d);
+        let (Some(slot), Some(amount)) = (r.u8(), r.u16()) else { return };
+        if amount == 0 {
+            self.his.retain(|o| o.slot != slot);
+            return;
+        }
+        let Some(item) = r.bytes(ITEM_INSTANCE_LEN) else { return };
+        let item_id = u16::from_le_bytes([item[0], item[1]]);
+        // Upsert by slot: update an existing offer or append a new one. The engine
+        // does remove-then-add into the first free slot; an upsert is equivalent
+        // for the normal flow and tolerant of a repeated add for the same slot.
+        if let Some(o) = self.his.iter_mut().find(|o| o.slot == slot) {
+            o.item_id = item_id;
+            o.amount = amount;
+        } else {
+            self.his.push(PlayerTradeSlot { slot, item_id, amount });
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -117,5 +164,48 @@ mod tests {
     #[test]
     fn empty_packet_is_none() {
         assert!(TradeWindow::parse(&[]).is_none());
+    }
+
+    /// Build an inbound `P_UpdateTrading` "add" body: slot + amount + ItemInstance.
+    fn his_add(slot: u8, amount: u16, item_id: u16) -> Vec<u8> {
+        let mut w = MsgWriter::new();
+        w.u8(slot).u16(amount).raw(&item_instance(item_id));
+        w.into_bytes()
+    }
+
+    #[test]
+    fn player_trade_add_update_remove() {
+        let mut pt = PlayerTrade::default();
+        pt.apply_his_update(&his_add(3, 2, 42));
+        pt.apply_his_update(&his_add(5, 1, 7));
+        assert_eq!(pt.his.len(), 2);
+        assert_eq!(pt.his[0], PlayerTradeSlot { slot: 3, item_id: 42, amount: 2 });
+        assert_eq!(pt.his[1], PlayerTradeSlot { slot: 5, item_id: 7, amount: 1 });
+
+        // Re-offering the same slot upserts (amount/item updated, no duplicate).
+        pt.apply_his_update(&his_add(3, 9, 99));
+        assert_eq!(pt.his.len(), 2);
+        assert_eq!(pt.his[0], PlayerTradeSlot { slot: 3, item_id: 99, amount: 9 });
+
+        // amount==0 withdraws that slot (no ItemInstance bytes needed).
+        let mut remove = MsgWriter::new();
+        remove.u8(3).u16(0);
+        pt.apply_his_update(remove.as_slice());
+        assert_eq!(pt.his.len(), 1);
+        assert_eq!(pt.his[0].slot, 5, "slot 3 withdrawn, slot 5 remains");
+        // `mine` is untouched by inbound updates (it is staged locally).
+        assert!(pt.mine.is_empty());
+    }
+
+    #[test]
+    fn player_trade_malformed_is_ignored() {
+        let mut pt = PlayerTrade::default();
+        // Too short for slot+amount.
+        pt.apply_his_update(&[0x03]);
+        // amount>0 but the ItemInstance is truncated → no offer added (no panic).
+        let mut short = MsgWriter::new();
+        short.u8(3).u16(2).raw(&[0u8; 10]);
+        pt.apply_his_update(short.as_slice());
+        assert!(pt.his.is_empty());
     }
 }

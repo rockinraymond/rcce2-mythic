@@ -3195,6 +3195,7 @@ impl ApplicationHandler for App {
                                             true,
                                         );
                                         net.world.current_trade = None;
+                                        net.world.player_trade = None;
                                     }
                                     // Discard the staged basket on cancel.
                                     self.pending_buys.clear();
@@ -4209,6 +4210,7 @@ impl App {
             net.transport.send(net.peer, rcce_net::packet_id::OPEN_TRADING, &pkt, true);
             // The server ends trading on confirm; reflect that client-side.
             net.world.current_trade = None;
+            net.world.player_trade = None;
         }
         self.pending_buys.clear();
         self.pending_sells.clear();
@@ -6976,6 +6978,28 @@ impl App {
                 }
             }
         }
+        // Headless player-trade self-test: inject a player↔player trade window and
+        // a couple of partner offers (his-side) so the player-trade panel's
+        // "Their offer:" view is capturable. No-op unless
+        // RCCE_PLAYERTRADETEST=<frame> is set.
+        if let Ok(pv) = std::env::var("RCCE_PLAYERTRADETEST") {
+            if let Ok(at) = pv.parse::<u64>() {
+                if self.frames == at {
+                    use rcce_client::trade::{PlayerTrade, PlayerTradeSlot, TradeKind, TradeWindow};
+                    if let Some(net) = self.net.as_mut() {
+                        net.world.current_trade = Some(TradeWindow { kind: TradeKind::Player, offers: Vec::new() });
+                        net.world.player_trade = Some(PlayerTrade {
+                            his: vec![
+                                PlayerTradeSlot { slot: 0, item_id: 1, amount: 1 },
+                                PlayerTradeSlot { slot: 1, item_id: 2, amount: 5 },
+                            ],
+                            mine: Vec::new(),
+                        });
+                    }
+                    println!("[playertradetest] frame {} injected player trade with 2 partner offers", self.frames);
+                }
+            }
+        }
         // Headless vitals self-test: inject Health + Energy (attr 1) values so
         // both vital bars render with their numeric "cur/max" + name. No-op unless
         // RCCE_VITALSTEST=<frame> is set.
@@ -8174,6 +8198,14 @@ impl App {
                 let gold = [1.0, 0.88, 0.4, 1.0];
                 let (px, py, pw, ph) = vendor_window_rect(sw, sh);
                 let sellable = matches!(trade.kind, TradeKind::Npc | TradeKind::Scenery);
+                // Partner's offered items in a player↔player trade (his-side). A
+                // small owned snapshot so it coexists with the `overlay` borrow.
+                let his_offers: Vec<rcce_client::trade::PlayerTradeSlot> = self
+                    .net
+                    .as_ref()
+                    .and_then(|n| n.world.player_trade.as_ref())
+                    .map(|pt| pt.his.clone())
+                    .unwrap_or_default();
                 // Leather skin to match the other windows (ItemShop.png is a wide
                 // two-column layout that wouldn't fit this tall list, so reuse the
                 // generic InventoryBG); flat rect fallback.
@@ -8206,7 +8238,36 @@ impl App {
                 let foot = py + ph - 58.0;
                 // Net gold delta = sell value (staged sells) − buy cost (staged buys).
                 let mut net_gold: i64 = 0;
-                if trade.offers.is_empty() {
+                if matches!(trade.kind, TradeKind::Player) {
+                    // Player↔player trade: show the partner's offered items (driven
+                    // by P_UpdateTrading). Staging my own offers + confirming the
+                    // swap is Phase 1B; for now this is a read-only view of their
+                    // side so you can see what they're putting up.
+                    if his_offers.is_empty() {
+                        overlay.text(px + 10.0, y, 1.0, "Waiting for their offer...", dimc);
+                    } else {
+                        overlay.text(px + 10.0, y, 1.0, "Their offer:", dimc);
+                        y += 16.0;
+                        for off in &his_offers {
+                            if y + row_h > foot { break; }
+                            let key = format!("item:{}", off.item_id);
+                            if !overlay.has_texture(&key) {
+                                if let Some(img) = store.item_icon_path(off.item_id).and_then(|p| rcce_data::texture::load(&p)) {
+                                    overlay.register_texture(&gfx.device, &gfx.queue, &key, img.width, img.height, &img.rgba);
+                                }
+                            }
+                            overlay.rect(px + 10.0, y - 1.0, row_h - 2.0, row_h - 2.0, [0.0, 0.0, 0.0, 0.35]);
+                            if overlay.has_texture(&key) {
+                                overlay.image(px + 11.0, y, row_h - 4.0, row_h - 4.0, &key, [1.0, 1.0, 1.0, 1.0]);
+                            }
+                            let name = store.item_name(off.item_id);
+                            let qty = if off.amount > 1 { format!(" x{}", off.amount) } else { String::new() };
+                            let line: String = format!("{name}{qty}").chars().take(24).collect();
+                            overlay.text(px + 10.0 + row_h, y + 3.0, 1.0, &line, white);
+                            y += row_h;
+                        }
+                    }
+                } else if trade.offers.is_empty() {
                     overlay.text(px + 10.0, y, 1.0, "(nothing for sale)", dimc);
                 } else {
                     overlay.text(px + 10.0, y, 1.0, "1-9 to add/remove:", dimc);
@@ -8266,29 +8327,34 @@ impl App {
                     let label: String = label.chars().take(34).collect();
                     overlay.text(px + 12.0, sell_y, 1.0, &label, lc);
                 }
-                // Net gold delta.
-                let (ng_txt, ng_col) = if net_gold >= 0 {
-                    (format!("Net: +{net_gold}g"), [0.6, 1.0, 0.7, 1.0])
-                } else {
-                    (format!("Net: {net_gold}g"), [1.0, 0.6, 0.5, 1.0])
-                };
-                overlay.text(px + 12.0, py + ph - 42.0, 1.0, &ng_txt, ng_col);
-                // Confirm button — sends the whole basket. Bright when staged.
-                let (bx, by_, bw_, bh_) = vendor_confirm_button_rect(sw, sh);
-                let staged_n = self.pending_buys.len() + self.pending_sells.len();
-                let active = staged_n > 0;
-                let hovering = point_in_confirm(self.cursor.0, self.cursor.1, sw, sh);
-                let bgc = if active && hovering {
-                    [0.3, 0.6, 0.3, 0.95]
-                } else if active {
-                    [0.2, 0.45, 0.2, 0.9]
-                } else {
-                    [0.18, 0.18, 0.2, 0.8]
-                };
-                overlay.rect(bx, by_, bw_, bh_, bgc);
-                let btxt = if active { format!("Confirm ({staged_n})") } else { "Confirm".to_string() };
-                let btw = rcce_render::font::text_width(&btxt, 1.0);
-                overlay.text_shadow(bx + bw_ * 0.5 - btw * 0.5, by_ + 3.0, 1.0, &btxt, if active { white } else { dimc });
+                // Vendor footer: net-gold delta + the basket Confirm button. Only
+                // for sellable (NPC/scenery) trades — the player↔player Confirm/offer
+                // controls are Phase 1B, so the player panel shows no (no-op) button.
+                if sellable {
+                    // Net gold delta.
+                    let (ng_txt, ng_col) = if net_gold >= 0 {
+                        (format!("Net: +{net_gold}g"), [0.6, 1.0, 0.7, 1.0])
+                    } else {
+                        (format!("Net: {net_gold}g"), [1.0, 0.6, 0.5, 1.0])
+                    };
+                    overlay.text(px + 12.0, py + ph - 42.0, 1.0, &ng_txt, ng_col);
+                    // Confirm button — sends the whole basket. Bright when staged.
+                    let (bx, by_, bw_, bh_) = vendor_confirm_button_rect(sw, sh);
+                    let staged_n = self.pending_buys.len() + self.pending_sells.len();
+                    let active = staged_n > 0;
+                    let hovering = point_in_confirm(self.cursor.0, self.cursor.1, sw, sh);
+                    let bgc = if active && hovering {
+                        [0.3, 0.6, 0.3, 0.95]
+                    } else if active {
+                        [0.2, 0.45, 0.2, 0.9]
+                    } else {
+                        [0.18, 0.18, 0.2, 0.8]
+                    };
+                    overlay.rect(bx, by_, bw_, bh_, bgc);
+                    let btxt = if active { format!("Confirm ({staged_n})") } else { "Confirm".to_string() };
+                    let btw = rcce_render::font::text_width(&btxt, 1.0);
+                    overlay.text_shadow(bx + bw_ * 0.5 - btw * 0.5, by_ + 3.0, 1.0, &btxt, if active { white } else { dimc });
+                }
             }
 
             // Bottom action bar + function buttons, placed at the real
