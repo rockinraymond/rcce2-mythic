@@ -730,6 +730,20 @@ struct ContextMenu {
 }
 const CTX_W: f32 = 104.0;
 const CTX_ROW: f32 = 22.0;
+/// First backpack inventory slot (`SlotI_Backpack`, Inventories.bb:29). Slots
+/// 0..13 are equipment; 14..45 are the backpack. The trade wire offers a
+/// BACKPACK-RELATIVE slot (0..31), so an item at absolute slot `s` is offered as
+/// `s - SLOT_BACKPACK`.
+const SLOT_BACKPACK: u8 = 14;
+
+/// Convert an absolute inventory slot to the backpack-relative slot used on the
+/// trade wire (`P_UpdateTrading` `Slot`, `Interface3D.bb:2404`; the server bounds
+/// it `<= 31` and indexes `Amounts[Slot + SlotI_Backpack]`, `ServerNet.bb:798`).
+/// Equipment slots (< `SLOT_BACKPACK`) clamp to 0, but they are never offered —
+/// the offer list filters to `slot >= SLOT_BACKPACK`.
+fn backpack_wire_slot(abs_slot: u8) -> u8 {
+    abs_slot.saturating_sub(SLOT_BACKPACK)
+}
 
 impl ContextMenu {
     /// Build the menu for an actor at `(x,y)`; non-players also get Attack +
@@ -3010,13 +3024,18 @@ impl ApplicationHandler for App {
                                     bp.get(idx).copied()
                                 };
                                 if let Some((slot, item_id, amount)) = item {
+                                    // The wire offer slot is BACKPACK-RELATIVE (0..31);
+                                    // `mine`/`his` are keyed in that same space so the
+                                    // confirm blocks need no per-slot conversion. The
+                                    // panel render converts back for the staged mark.
+                                    let rel = backpack_wire_slot(slot);
                                     if let Some(net) = self.net.as_mut() {
                                         if let Some(pt) = net.world.player_trade.as_mut() {
-                                            let send_amt = pt.toggle_mine(slot, item_id, amount);
+                                            let send_amt = pt.toggle_mine(rel, item_id, amount);
                                             net.transport.send(
                                                 net.peer,
                                                 rcce_net::packet_id::UPDATE_TRADING,
-                                                &rcce_client::net::trade_offer_packet(slot, send_amt),
+                                                &rcce_client::net::trade_offer_packet(rel, send_amt),
                                                 true,
                                             );
                                         }
@@ -7051,8 +7070,8 @@ impl App {
                                 PlayerTradeSlot { slot: 0, item_id: 1, amount: 1 },
                                 PlayerTradeSlot { slot: 1, item_id: 2, amount: 5 },
                             ],
-                            // One backpack slot (14) staged into my offer.
-                            mine: vec![PlayerTradeSlot { slot: 14, item_id: 3, amount: 1 }],
+                            // Backpack-relative slot 0 (= absolute slot 14) staged.
+                            mine: vec![PlayerTradeSlot { slot: 0, item_id: 3, amount: 1 }],
                         });
                         // A couple of backpack items so the numbered "Your items" list
                         // renders (slot 14 is the staged one).
@@ -8369,7 +8388,9 @@ impl App {
                     } else {
                         for (i, &(slot, item_id, amount)) in my_backpack.iter().enumerate() {
                             if y + row_h > foot { break; }
-                            let staged = my_staged.contains(&slot);
+                            // `my_staged` is keyed by backpack-relative slot (the wire
+                            // space); convert this item's absolute slot to match.
+                            let staged = my_staged.contains(&slot.saturating_sub(SLOT_BACKPACK));
                             if staged {
                                 overlay.rect(px + 8.0, y - 1.0, pw - 16.0, row_h, [0.25, 0.5, 0.25, 0.5]);
                             }
@@ -8967,6 +8988,18 @@ mod tests {
         fn assert_send<T: Send>() {}
         assert_send::<EnetTransport>();
         assert_send::<LoginResult>();
+    }
+
+    #[test]
+    fn backpack_wire_slot_is_relative() {
+        // The trade wire offers a BACKPACK-RELATIVE slot: absolute 14 → 0, 21 → 7
+        // (the server rejects > 31 and indexes Amounts[Slot + 14]). Regression for
+        // the bug where the absolute slot was sent, trading the wrong/empty slot.
+        assert_eq!(backpack_wire_slot(SLOT_BACKPACK), 0);
+        assert_eq!(backpack_wire_slot(SLOT_BACKPACK + 7), 7);
+        assert_eq!(backpack_wire_slot(45), 31, "last backpack slot maps to 31");
+        // Equipment slots never reach here, but the conversion must not underflow.
+        assert_eq!(backpack_wire_slot(0), 0);
     }
 
     #[test]
