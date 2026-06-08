@@ -229,9 +229,15 @@ struct App {
     /// Terrain height field — actors sample it to stand on the ground (their
     /// server Y is only a stale spawn height; `P_StandardUpdate` omits Y).
     height_field: Option<rcce_client::terrain::HeightField>,
-    /// Zone water planes (params + texture) + the current scroll offset — rebuilt
-    /// per frame so the surface texture scrolls (Blitz `PositionTexture`).
+    /// Zone water planes (params + texture). Only the scrolling vertex buffer is
+    /// rebuilt per frame (Blitz `PositionTexture`); the texture is constant.
     water_planes: Vec<(rcce_data::WaterPlane, rcce_data::Image)>,
+    /// Per-plane `SceneInstance::textures` wrappers, built ONCE per zone load (in
+    /// `set_water_planes`) and reused every frame. The water texture never
+    /// changes for the zone's lifetime, so cloning the full-RGBA `Image` into a
+    /// fresh `Vec<Option<Image>>` each frame (as the render loop used to) was pure
+    /// churn. Borrowed as `&self.water_texs[i][..]` at the two water draw sites.
+    water_texs: Vec<Vec<Option<Image>>>,
     water_scroll: [f32; 2],
     /// Live particle emitters for the current zone (simulated each frame).
     emitters: Vec<ZoneEmitter>,
@@ -500,6 +506,7 @@ impl App {
             ground_y: 0.0,
             height_field: None,
             water_planes: Vec::new(),
+            water_texs: Vec::new(),
             water_scroll: [0.0, 0.0],
             emitters: Vec::new(),
             cam_occluders: Vec::new(),
@@ -2188,6 +2195,14 @@ fn particle_batches(
     batches
 }
 
+/// Per-plane `SceneInstance::textures` wrappers for a zone's water planes, built
+/// ONCE at zone load. The water texture is constant for the zone's lifetime, so
+/// the render loop borrows these (`&water_texs[i][..]`) instead of deep-cloning
+/// the full-RGBA `Image` into a fresh `Vec` every frame.
+fn build_water_texs(planes: &[(rcce_data::WaterPlane, rcce_data::Image)]) -> Vec<Vec<Option<Image>>> {
+    planes.iter().map(|(_, img)| vec![Some(img.clone())]).collect()
+}
+
 /// The water-tint colour if the camera `eye` is underwater — below a water
 /// plane's surface Y and within its X/Z bounds (Blitz `CameraUnderwater`,
 /// Client.bb:895-914). `None` when above water; the first containing plane wins.
@@ -2759,6 +2774,7 @@ impl ApplicationHandler for App {
             self.ground_y = z.ground_y;
             self.height_field = Some(z.height_field);
             self.water_planes = z.waters;
+            self.water_texs = build_water_texs(&self.water_planes);
             self.emitters = z.emitters;
             self.cam_occluders = z.occluders;
             self.fog_color = z.env.fog_color;
@@ -4888,15 +4904,14 @@ impl App {
                     (WATER_SCROLL_V * elapsed).rem_euclid(1.0),
                 ];
                 let models: Vec<B3dModel> = self.water_planes.iter().map(|(w, _)| water_quad(w, scroll)).collect();
-                let texs: Vec<Vec<Option<Image>>> =
-                    self.water_planes.iter().map(|(_, img)| vec![Some(img.clone())]).collect();
+                // Textures are cached at zone load (see `water_texs`) — borrow, don't clone.
                 let instances: Vec<SceneInstance> = self
                     .water_planes
                     .iter()
                     .enumerate()
                     .map(|(i, (w, _))| SceneInstance {
                         model: &models[i],
-                        textures: &texs[i][..],
+                        textures: &self.water_texs[i][..],
                         lightmaps: &[],
                         translation: w.pos,
                         rot: [0.0, 0.0, 0.0],
@@ -5935,6 +5950,7 @@ impl App {
                     self.ground_y = z.ground_y;
                     self.height_field = Some(z.height_field);
                     self.water_planes = z.waters;
+                    self.water_texs = build_water_texs(&self.water_planes);
                     self.emitters = z.emitters;
                     self.cam_occluders = z.occluders;
                     self.fog_color = z.env.fog_color;
@@ -6289,15 +6305,14 @@ impl App {
             self.water_scroll[1] = (self.water_scroll[1] + WATER_SCROLL_V * dt).rem_euclid(1.0);
             let scroll = self.water_scroll;
             let models: Vec<B3dModel> = self.water_planes.iter().map(|(w, _)| water_quad(w, scroll)).collect();
-            let texs: Vec<Vec<Option<Image>>> =
-                self.water_planes.iter().map(|(_, img)| vec![Some(img.clone())]).collect();
+            // Textures are cached at zone load (see `water_texs`) — borrow, don't clone.
             let instances: Vec<SceneInstance> = self
                 .water_planes
                 .iter()
                 .enumerate()
                 .map(|(i, (w, _))| SceneInstance {
                     model: &models[i],
-                    textures: &texs[i][..],
+                    textures: &self.water_texs[i][..],
                     lightmaps: &[],
                     translation: w.pos,
                     rot: [0.0, 0.0, 0.0],
@@ -9080,6 +9095,36 @@ mod tests {
         fn assert_send<T: Send>() {}
         assert_send::<EnetTransport>();
         assert_send::<LoginResult>();
+    }
+
+    // `build_water_texs` caches the per-plane texture wrapper once at zone load;
+    // the render loop indexes it by the SAME `i` as `water_planes`, so the two
+    // must stay length-aligned and each entry must be the plane's own texture.
+    #[test]
+    fn build_water_texs_aligns_and_wraps() {
+        use rcce_data::{Image, WaterPlane};
+        let plane = |tex_id: u16| WaterPlane {
+            tex_id,
+            tex_scale: 1.0,
+            pos: [0.0, 0.0, 0.0],
+            scale_x: 1.0,
+            scale_z: 1.0,
+            color: [0.0, 0.0, 0.0],
+            opacity: 1.0,
+        };
+        let img = |b: u8| Image { width: 1, height: 1, rgba: vec![b, b, b, 255] };
+
+        // Empty in → empty out (the render loop's `is_empty()` guard short-circuits).
+        assert!(build_water_texs(&[]).is_empty());
+
+        // Two planes → two single-texture wrappers, in order, each carrying its
+        // own image (so `&water_texs[i][..]` matches `water_planes[i]`).
+        let planes = vec![(plane(10), img(1)), (plane(20), img(2))];
+        let texs = build_water_texs(&planes);
+        assert_eq!(texs.len(), planes.len());
+        assert_eq!(texs[0].len(), 1);
+        assert_eq!(texs[0][0].as_ref().unwrap().rgba, vec![1, 1, 1, 255]);
+        assert_eq!(texs[1][0].as_ref().unwrap().rgba, vec![2, 2, 2, 255]);
     }
 
     #[test]
