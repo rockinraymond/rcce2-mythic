@@ -3485,6 +3485,9 @@ impl App {
         let mut world = World {
             my_runtime_id: outcome.runtime_id,
             template_genders: store.template_genders(),
+            // Localizable chat strings (Language.txt) — empty unless the project
+            // ships a translation, in which case toasts honor it.
+            language: store.language(),
             // Which attribute slot is Health for this project (default 0);
             // P_StatUpdate reports HP under this slot.
             health_stat: store.health_stat(),

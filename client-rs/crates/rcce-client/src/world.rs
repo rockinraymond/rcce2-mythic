@@ -249,6 +249,10 @@ pub struct World {
     /// whether the wire carries a gender byte (only when mode == 0). Empty map
     /// ⇒ assume 0 (byte present), the players-and-most-NPCs default.
     pub template_genders: HashMap<u16, u8>,
+    /// The project's localizable string table (`Game Data/Language.txt`),
+    /// threaded in at enter-world. Empty (the `Default`) → chat strings use
+    /// their hardcoded-English fallback. See [`World::lang`].
+    pub language: rcce_data::Language,
     pub zone: Zone,
     /// Other actors keyed by runtime id (excludes the local player).
     pub actors: HashMap<u16, Actor>,
@@ -846,6 +850,14 @@ impl World {
         }
     }
 
+    /// A localizable client string by `LS_*` index, or the hardcoded English
+    /// `default` when the project ships no `Language.txt` (or leaves the entry
+    /// blank). Lets chat strings honor a project's translation while the default
+    /// project (English) renders byte-identically.
+    fn lang<'a>(&'a self, idx: usize, default: &'a str) -> &'a str {
+        self.language.get_or(idx, default)
+    }
+
     /// `P_XPUpdate` (ClientNet.bb:689):
     ///   `'B'` + barLevel(u8)  — XP bar position.
     ///   `'M'` + xpGain(i32)   — XP points received (added to total).
@@ -877,8 +889,11 @@ impl World {
                     // is a quieter, genuine improvement; me_xp itself still tracks
                     // every gain (the saturating_add above is unconditional).
                     if gain > 0 {
-                        self.chat
-                            .push((format!("{gain} experience points received!"), [1.0, 0.882, 0.392, 1.0]));
+                        let msg = format!(
+                            "{gain} {}",
+                            self.lang(rcce_data::language::ls::XP_RECEIVED, "experience points received!")
+                        );
+                        self.chat.push((msg, [1.0, 0.882, 0.392, 1.0]));
                     }
                 }
             }
@@ -996,7 +1011,11 @@ impl World {
             self.pending_combat_sounds.push((rid, SPEECH_DEATH));
         }
         if killer == Some(self.my_runtime_id) {
-            self.chat.push((format!("You killed {name}!"), [0.3, 1.0, 0.3, 1.0]));
+            // Blitz: `LanguageString$(LS_YouKilled) + " " + Name$ + "!"` (green,
+            // ClientNet.bb:1091) → "You killed: <name>!". The default keeps the
+            // colon to match Blitz (the prior hardcoded line dropped it).
+            let msg = format!("{} {name}!", self.lang(rcce_data::language::ls::YOU_KILLED, "You killed:"));
+            self.chat.push((msg, [0.3, 1.0, 0.3, 1.0]));
         }
     }
 
@@ -1895,18 +1914,19 @@ mod tests {
         w.actors.insert(9, Actor { runtime_id: 9, name: "Goblin".into(), alive: true, ..Default::default() });
         w.actors.insert(8, Actor { runtime_id: 8, alive: true, ..Default::default() }); // unnamed
 
-        // I (rid 1) killed the Goblin (rid 9): green "You killed Goblin!".
+        // I (rid 1) killed the Goblin (rid 9): green "You killed: Goblin!"
+        // (LS_YouKilled = "You killed:", matching Blitz ClientNet.bb:1091).
         let mut k = MsgWriter::new();
         k.u16(9).u16(1);
         w.apply(&msg(pk::ACTOR_DEAD, k.into_bytes()));
         assert!(!w.actors[&9].alive);
-        assert_eq!(w.chat.last().unwrap().0, "You killed Goblin!");
+        assert_eq!(w.chat.last().unwrap().0, "You killed: Goblin!");
 
         // Unnamed actor killed by me → fallback name.
         let mut k2 = MsgWriter::new();
         k2.u16(8).u16(1);
         w.apply(&msg(pk::ACTOR_DEAD, k2.into_bytes()));
-        assert_eq!(w.chat.last().unwrap().0, "You killed Someone!");
+        assert_eq!(w.chat.last().unwrap().0, "You killed: Someone!");
 
         // A death I didn't cause (killer 7 ≠ me) → marked dead, no chat line.
         w.actors.insert(5, Actor { runtime_id: 5, name: "Rat".into(), alive: true, ..Default::default() });
@@ -1923,6 +1943,33 @@ mod tests {
         let before2 = w.chat.len();
         w.apply(&msg(pk::ACTOR_DEAD, k4.into_bytes()));
         assert_eq!(w.chat.len(), before2);
+    }
+
+    // The XP + kill chat toasts honor a project's translated `Language.txt`
+    // (the "customizable nature" goal). With no language set they use the
+    // hardcoded English (covered by the other toast tests); here a translated
+    // table flows through `World::lang` into the rendered strings.
+    #[test]
+    fn chat_toasts_honor_translated_language() {
+        use rcce_data::language::ls;
+        // A table where only the two LS indices we use are translated (parse
+        // skips blanks, so fill 0..64 with placeholders to keep the indices).
+        let mut lines: Vec<String> = (0..64).map(|i| format!("s{i}")).collect();
+        lines[ls::XP_RECEIVED] = "Erfahrungspunkte erhalten!".into();
+        lines[ls::YOU_KILLED] = "Du hast getoetet:".into();
+        let language = rcce_data::Language::parse(&lines.join("\n"));
+        assert_eq!(language.get(ls::XP_RECEIVED), Some("Erfahrungspunkte erhalten!"));
+
+        let mut w = World { my_runtime_id: 1, language, ..Default::default() };
+
+        // XP gain → "<N> <translated>".
+        w.apply(&msg(pk::XP_UPDATE, pkt(|p| { p.u8(b'M').i32(7); })));
+        assert_eq!(w.chat.last().unwrap().0, "7 Erfahrungspunkte erhalten!");
+
+        // Kill → "<translated> <name>!".
+        w.actors.insert(9, Actor { runtime_id: 9, name: "Goblin".into(), alive: true, ..Default::default() });
+        w.apply(&msg(pk::ACTOR_DEAD, pkt(|p| { p.u16(9).u16(1); })));
+        assert_eq!(w.chat.last().unwrap().0, "Du hast getoetet: Goblin!");
     }
 
     #[test]

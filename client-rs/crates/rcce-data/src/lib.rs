@@ -16,6 +16,7 @@ pub mod catalog;
 pub mod fixed_attributes;
 pub mod interface;
 pub mod items;
+pub mod language;
 pub mod money;
 pub mod reader;
 pub mod suns;
@@ -36,6 +37,7 @@ pub use fixed_attributes::FixedAttributes;
 pub use suns::{Sun, Suns};
 pub use items::{equip_slot, equip_slot_name, ItemCatalog, ItemDef};
 pub use interface::{IComp, InterfaceLayout};
+pub use language::Language;
 pub use money::MoneyConfig;
 pub use reader::{BlitzReader, ReadError};
 
