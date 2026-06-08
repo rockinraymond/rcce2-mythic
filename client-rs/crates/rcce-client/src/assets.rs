@@ -463,6 +463,14 @@ impl AssetStore {
         self.mesh_model(mesh_id)
     }
 
+    /// The voice sound id for an actor `template_id`+`gender` at `Speech_*` `slot`,
+    /// or `None` when unknown/unset. Pair with `sound_path_by_id` to resolve a
+    /// playable file (which returns `None` for a project that ships no such voice
+    /// sound — so combat voices are silent-safe on the default data).
+    pub fn actor_speech_id(&self, template_id: u16, gender: u8, slot: u8) -> Option<u16> {
+        self.actors.speech_id(template_id, gender, slot as usize)
+    }
+
     /// Playable races offered in character create: `(template_id, race_name)`
     /// for every `playable` template that has a usable body mesh, sorted by id.
     pub fn playable_templates(&self) -> Vec<(u16, String)> {
