@@ -3218,6 +3218,9 @@ impl App {
         let mut world = World {
             my_runtime_id: outcome.runtime_id,
             template_genders: store.template_genders(),
+            // Which attribute slot is Health for this project (default 0);
+            // P_StatUpdate reports HP under this slot.
+            health_stat: store.health_stat(),
             ..Default::default()
         };
         for m in &outcome.world_packets {

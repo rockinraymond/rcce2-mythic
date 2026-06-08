@@ -35,6 +35,10 @@ pub struct AssetStore {
     /// Defaults to the stock Copper/Silver/Gold/Platinum if the file is absent.
     money: MoneyConfig,
     attribute_names: Option<rcce_data::AttributeNames>,
+    /// Project-assigned role→slot indices (Health/Energy/… ) from
+    /// `Game Data/Fixed Attributes.dat`. `None` when the file is absent (the
+    /// `health_stat()` accessor then falls back to the index-0 default).
+    fixed_attributes: Option<rcce_data::FixedAttributes>,
     cache: HashMap<u16, Option<Rc<B3dModel>>>,
     /// Memoised decoded actor skins, keyed by appearance, so per-frame actor
     /// rebuilds don't re-read + re-decode the skin files from disk.
@@ -147,6 +151,10 @@ impl AssetStore {
         let attribute_names = std::fs::read(data_root.join("Server Data/Attributes.dat"))
             .ok()
             .and_then(|b| rcce_data::AttributeNames::parse(&b).ok());
+        // Which attribute slot is Health/Energy/etc. (project-configurable).
+        let fixed_attributes = std::fs::read(data_root.join("Game Data/Fixed Attributes.dat"))
+            .ok()
+            .and_then(|b| rcce_data::FixedAttributes::parse(&b).ok());
         Ok(Self {
             data_root,
             actors,
@@ -159,9 +167,18 @@ impl AssetStore {
             interface,
             money,
             attribute_names,
+            fixed_attributes,
             cache: HashMap::new(),
             actor_tex_cache: HashMap::new(),
         })
+    }
+
+    /// Which attribute slot is Health for this project (from
+    /// `Fixed Attributes.dat`). Falls back to `0` when the file is absent or
+    /// Health is unassigned, matching the prior hardcoded behaviour and the
+    /// shipped default project (Health = slot 0).
+    pub fn health_stat(&self) -> u8 {
+        self.fixed_attributes.and_then(|f| f.health).unwrap_or(0)
     }
 
     /// Display name for attribute slot `i` (Health, Mana, Strength, …), or
