@@ -18,6 +18,7 @@ pub mod interface;
 pub mod items;
 pub mod money;
 pub mod reader;
+pub mod suns;
 pub mod texture;
 
 pub use actors::{ActorCatalog, ActorTemplate};
@@ -32,6 +33,7 @@ pub use catalog::{
 };
 pub use attributes::{AttributeDef, AttributeNames};
 pub use fixed_attributes::FixedAttributes;
+pub use suns::{Sun, Suns};
 pub use items::{equip_slot, equip_slot_name, ItemCatalog, ItemDef};
 pub use interface::{IComp, InterfaceLayout};
 pub use money::MoneyConfig;

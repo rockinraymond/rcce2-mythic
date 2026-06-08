@@ -138,6 +138,12 @@ pub struct Uniforms {
     pub light_intensity: f32,
     pub light_dir: [f32; 3],
     pub num_lights: f32,
+    /// Directional sun colour (the project's active `Suns.dat` light, normalised).
+    /// `[1,1,1]` = neutral white. Packed with a trailing pad to keep the 16-byte
+    /// slot alignment; every WGSL `struct U` MUST add this field in the same place
+    /// or the uniform buffer mis-binds (the point lights / actors render wrong).
+    pub light_color: [f32; 3],
+    pub _pad_lc: f32,
     pub lights: [GpuLight; MAX_LIGHTS],
 }
 
@@ -150,6 +156,7 @@ impl Uniforms {
         fog_far: f32,
         ambient: [f32; 3],
         light_dir: [f32; 3],
+        light_color: [f32; 3],
         light_vp: [f32; 16],
     ) -> Uniforms {
         Uniforms {
@@ -163,6 +170,8 @@ impl Uniforms {
             light_intensity: LIGHT_INTENSITY,
             light_dir,
             num_lights: 0.0,
+            light_color,
+            _pad_lc: 0.0,
             lights: [GpuLight { pos_range: [0.0; 4], color: [0.0; 4] }; MAX_LIGHTS],
         }
     }
@@ -497,6 +506,8 @@ struct U {
     light_intensity: f32,
     light_dir: vec3<f32>,
     num_lights: f32,
+    light_color: vec3<f32>,
+    _pad_lc: f32,
     lights: array<Light, 16>,
 };
 @group(0) @binding(0) var<uniform> u: U;
@@ -612,6 +623,8 @@ struct U {
     light_intensity: f32,
     light_dir: vec3<f32>,
     num_lights: f32,
+    light_color: vec3<f32>,
+    _pad_lc: f32,
     lights: array<Light, 16>,
 };
 @group(0) @binding(0) var<uniform> u: U;
@@ -716,7 +729,9 @@ fn cloud_dapple(p: vec2<f32>) -> f32 {
     let sky_amb = u.ambient * vec3<f32>(0.90, 1.02, 1.32);   // cool + brighter (sky)
     let gnd_amb = u.ambient * vec3<f32>(1.02, 0.84, 0.60);   // warm + darker (ground bounce)
     let amb = mix(gnd_amb, sky_amb, up);
-    let shade = amb + vec3<f32>(diff) + point;
+    // Tint the directional (sun) term with the project's active sun colour
+    // (Suns.dat); ambient + point lights keep their own colour. White = neutral.
+    let shade = amb + vec3<f32>(diff) * u.light_color + point;
     // Baked lightmap (1.0 for non-lightmapped meshes via the grey default).
     let lm = textureSample(lmtex, samp, in.uv2).rgb * 2.0;
     let lit = c.rgb * in.color.rgb * shade * lm;
@@ -1611,6 +1626,11 @@ struct U {
     light_intensity: f32,
     light_dir: vec3<f32>,
     _pad: f32,
+    // Mirrors the shared Uniforms slot after num_lights (here `_pad`); the skin
+    // pass tints its diffuse with the directional sun colour. `lights` is still
+    // omitted (skinned actors take no point lights), so this is the last field.
+    light_color: vec3<f32>,
+    _pad_lc: f32,
 };
 @group(0) @binding(0) var<uniform> u: U;
 // Sun shadow map (same group-0 bind0 the scene pass uses) so GPU-skinned actors
@@ -1693,7 +1713,9 @@ struct VsOut {
     // sun-shadow map so GPU-skinned actors fall into shade like the CPU path.
     let ndl = abs(dot(N, L));
     let diff = ndl * u.light_intensity * sun_shadow(in.world, ndl);
-    let shade = u.ambient + vec3<f32>(diff);
+    // Directional sun term tinted by the active sun colour (Suns.dat); ambient
+    // keeps its own colour. White = neutral (matches the pre-Suns.dat behaviour).
+    let shade = u.ambient + vec3<f32>(diff) * u.light_color;
     let lit = c.rgb * in.color * shade;
     let dist = distance(in.world, u.eye);
     let f = clamp((dist - u.fog_near) / max(u.fog_far - u.fog_near, 1.0), 0.0, 1.0);

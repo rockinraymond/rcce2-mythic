@@ -5377,6 +5377,9 @@ impl App {
             // Far shadow centre → menu geometry projects out of the shadow region
             // (always lit): the Set.b3d keeps its baked-lightmap look, no dynamic
             // shadows from the frontal key light.
+            // Neutral white sun for the menu/char-select preview (don't inherit the
+            // world's time-of-day tint after a world→menu transition).
+            view.set_sun_color([1.0; 3]);
             view.render(&gfx.device, &gfx.queue, &oview, vp, eye, fog, menu_fog_near, menu_fog_far, menu_ambient, menu_light, clear, ang, elapsed, 0.0, [1.0e6, 0.0, 1.0e6]);
             overlay.render(&gfx.device, &gfx.queue, &oview, sw, sh);
             match rcce_render::save_texture_png(&gfx.device, &gfx.queue, &tex, w, h, gfx.config.format, &path) {
@@ -5398,6 +5401,8 @@ impl App {
             }
         };
         let tview = frame.texture.create_view(&Default::default());
+        // Neutral white sun for the menu/char-select preview (see above).
+        view.set_sun_color([1.0; 3]);
         view.render(&gfx.device, &gfx.queue, &tview, vp, eye, fog, menu_fog_near, menu_fog_far, menu_ambient, menu_light, clear, ang, elapsed, 0.0, [1.0e6, 0.0, 1.0e6]);
         overlay.render(&gfx.device, &gfx.queue, &tview, sw, sh);
         frame.present();
@@ -7227,6 +7232,13 @@ impl App {
                 }
             });
         let sky = rcce_client::daynight::daynight(phase);
+        // Directional sun colour for the current time-of-day from the project's
+        // Suns.dat (warm amber by day, cool blue at night in the shipped project);
+        // neutral white when the file is absent. The Blitz client colours its
+        // directional light the same way (Environment3D.bb LightColor) — the Rust
+        // client previously lit with a fixed white sun.
+        let sun_minutes = ((phase.rem_euclid(1.0) * 1440.0) as u16) % 1440;
+        view.set_sun_color(store.sun_light(sun_minutes).unwrap_or([1.0; 3]));
         // Weather-driven fog (Blitz Environment3D.bb SetWeather): rain/snow/storm
         // pull the far plane in and snow whitens the fog colour; fog weather pulls
         // it in hard. Clear/Wind leave the authored fog untouched (default path is

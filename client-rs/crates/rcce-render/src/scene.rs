@@ -103,6 +103,7 @@ pub fn render_scene_png(
         fog_far,
         ambient,
         light_dir,
+        [1.0; 3], // neutral sun colour for the offscreen tool render
         no_shadow_vp(),
     );
 
@@ -304,7 +305,7 @@ pub fn render_skinned_png(
     let aspect = width as f32 / height as f32;
     let proj = Mat4::perspective_rh(50f32.to_radians(), aspect, 1.0, 100_000.0);
     let view = Mat4::look_at_rh(Vec3::from(eye), Vec3::from(target), Vec3::Y);
-    let uniforms = Uniforms::new((proj * view).to_cols_array(), eye, fog_color, fog_near, fog_far, ambient, light_dir, no_shadow_vp());
+    let uniforms = Uniforms::new((proj * view).to_cols_array(), eye, fog_color, fog_near, fog_far, ambient, light_dir, [1.0; 3], no_shadow_vp());
 
     let instance = wgpu::Instance::default();
     let adapter = block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
