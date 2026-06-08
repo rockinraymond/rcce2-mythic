@@ -5724,9 +5724,16 @@ impl App {
         // layout (the 3D character fills the open right area). Only CharSelect
         // reaches here — the other modes draw + return above.
         let pw = (sw * 0.30).clamp(300.0, 520.0);
-        let ph = sh * 0.66;
         let px = sw * 0.025;
         let py = sh * 0.17;
+        // Clamp the panel height so its bottom-anchored content (the last roster
+        // rows, the select/delete message at `py+ph-30`, the creation box at
+        // `py+ph-96`) stays ABOVE the centred button row (`wy + wh*0.87`). The
+        // panel is anchored to SCREEN fractions while the buttons are anchored to
+        // the centred window, so on tall / 4:3 windows (e.g. 1280x1024) the
+        // unclamped `sh*0.66` bottom slides into the button band and draws under
+        // the Start/Create/Delete/Cancel buttons.
+        let ph = (sh * 0.66).min((wy + wh * 0.87) - py - 12.0).max(160.0);
         overlay.rect(px, py, pw, ph, [0.05, 0.06, 0.10, 0.86]);
         overlay.rect(px, py, pw, 2.5, [0.45, 0.5, 0.65, 0.95]);
         overlay.rect(px, py + ph - 2.5, pw, 2.5, [0.45, 0.5, 0.65, 0.95]);
