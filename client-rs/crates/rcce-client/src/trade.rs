@@ -106,6 +106,25 @@ impl PlayerTrade {
             self.his.push(PlayerTradeSlot { slot, item_id, amount });
         }
     }
+
+    /// Toggle one of my backpack items in/out of my offer (`mine`). Returns the
+    /// amount to send in the outbound `P_UpdateTrading` offer: the staged amount
+    /// when adding, `0` when withdrawing (the wire convention for "remove this
+    /// slot"). The caller pairs this with `net::trade_offer_packet(slot, amount)`.
+    pub fn toggle_mine(&mut self, slot: u8, item_id: u16, amount: u16) -> u16 {
+        if let Some(pos) = self.mine.iter().position(|o| o.slot == slot) {
+            self.mine.remove(pos);
+            0
+        } else {
+            self.mine.push(PlayerTradeSlot { slot, item_id, amount });
+            amount
+        }
+    }
+
+    /// Whether one of my backpack slots is currently staged in my offer.
+    pub fn mine_has(&self, slot: u8) -> bool {
+        self.mine.iter().any(|o| o.slot == slot)
+    }
 }
 
 #[cfg(test)]
@@ -195,6 +214,26 @@ mod tests {
         assert_eq!(pt.his[0].slot, 5, "slot 3 withdrawn, slot 5 remains");
         // `mine` is untouched by inbound updates (it is staged locally).
         assert!(pt.mine.is_empty());
+    }
+
+    #[test]
+    fn player_trade_toggle_mine() {
+        let mut pt = PlayerTrade::default();
+        // Stage backpack slot 14 (item 42, full stack of 5) → send amount 5.
+        assert_eq!(pt.toggle_mine(14, 42, 5), 5);
+        assert!(pt.mine_has(14));
+        assert_eq!(pt.mine.len(), 1);
+        assert_eq!(pt.mine[0], PlayerTradeSlot { slot: 14, item_id: 42, amount: 5 });
+        // Stage a second slot.
+        assert_eq!(pt.toggle_mine(15, 7, 1), 1);
+        assert_eq!(pt.mine.len(), 2);
+        // Toggling slot 14 again withdraws it → send amount 0, removed from mine.
+        assert_eq!(pt.toggle_mine(14, 42, 5), 0);
+        assert!(!pt.mine_has(14));
+        assert_eq!(pt.mine.len(), 1);
+        assert_eq!(pt.mine[0].slot, 15);
+        // Inbound (his) is independent of my staging.
+        assert!(pt.his.is_empty());
     }
 
     #[test]

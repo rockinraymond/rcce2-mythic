@@ -60,6 +60,10 @@ name = "combat-test"
 path = "src/bin/combat_test.rs"
 
 [[bin]]
+name = "trade-test"
+path = "src/bin/trade_test.rs"
+
+[[bin]]
 name = "sound-test"
 path = "src/bin/sound_test.rs"
 
