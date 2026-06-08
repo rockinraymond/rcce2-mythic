@@ -16,7 +16,7 @@ use enet_sys::EnetTransport;
 use rcce_net::{packet_id as pk, Transport};
 
 use rcce_client::login::{login, Credentials};
-use rcce_client::net::trade_offer_packet;
+use rcce_client::net::{inv_move_packet, trade_offer_packet};
 use rcce_client::world::World;
 
 fn creds(user: &str) -> Credentials {
@@ -94,13 +94,29 @@ fn main() {
         std::process::exit(1);
     }
 
-    // 3. A stages backpack offers (slots 14..=20). The server forwards each that
-    //    A actually owns to B as an inbound P_UpdateTrading.
-    for slot in 14u8..=20 {
-        ta.send(a.peer, pk::UPDATE_TRADING, &trade_offer_packet(slot, 1), true);
+    // 3. Give A something to offer. The wire offer slot is BACKPACK-RELATIVE
+    //    (0..31 = absolute 14..45). If A has no backpack item, move an equipped
+    //    one into backpack slot 14 first.
+    let inv: Vec<(u8, u16)> = a.sheet.as_ref().map(|s| s.inventory.iter().map(|it| (it.slot, it.item_id)).collect()).unwrap_or_default();
+    println!("[trade] A inventory (slot,item): {inv:?}");
+    let has_backpack = inv.iter().any(|&(slot, _)| slot >= 14);
+    let mut tried_offer = has_backpack;
+    if !has_backpack {
+        if let Some(&(eqslot, _)) = inv.iter().find(|&&(slot, _)| slot < 14) {
+            println!("[trade] A has no backpack item; moving equipped slot {eqslot} -> backpack slot 14");
+            ta.send(a.peer, pk::INVENTORY_UPDATE, &inv_move_packet(a.runtime_id, eqslot, 14, 0, false), true);
+            settle(&mut ta, &mut wa, 700);
+            tried_offer = true;
+        }
+    }
+
+    // Offer backpack-RELATIVE slots 0..=7 (absolute 14..=21). The server forwards
+    // each one A actually owns to B as an inbound P_UpdateTrading.
+    for rel in 0u8..=7 {
+        ta.send(a.peer, pk::UPDATE_TRADING, &trade_offer_packet(rel, 1), true);
         for _ in 0..2 { ta.poll(); sleep(Duration::from_millis(40)); }
     }
-    settle(&mut tb, &mut wb, 1200);
+    settle(&mut tb, &mut wb, 1400);
 
     let his = wb.player_trade.as_ref().map(|pt| pt.his.len()).unwrap_or(0);
     println!("[trade] B sees {his} offered item(s) from A: {:?}",
@@ -109,8 +125,13 @@ fn main() {
     ta.disconnect(a.peer);
     tb.disconnect(b.peer);
 
-    // The handshake (both boards open) is the hard pass. Offer-visibility is a
-    // bonus that only fires when A's character has a backpack item to give.
-    println!("[trade] RESULT: PASS — player-trade handshake opened both windows{}.",
-        if his > 0 { format!("; B saw {his} offered item(s)") } else { " (A had no backpack item to offer)".to_string() });
+    // The handshake (both boards open) is the hard pass. When A had an item to
+    // offer, B must observe it — that proves the backpack-relative offer slot is
+    // correct end-to-end (the bug where an absolute slot was sent showed his==0).
+    if tried_offer && his == 0 {
+        eprintln!("[trade] RESULT: FAIL — A offered an item but B saw none (offer slot space wrong?).");
+        std::process::exit(1);
+    }
+    println!("[trade] RESULT: PASS — handshake opened both windows{}.",
+        if his > 0 { format!("; B saw {his} offered item(s) — relative offer slot verified E2E") } else { " (A had no item to offer)".to_string() });
 }
