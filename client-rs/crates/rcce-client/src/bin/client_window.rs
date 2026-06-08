@@ -3506,9 +3506,7 @@ impl App {
                         known_index: i as u16,
                     })
                     .collect();
-                world
-                    .known_spells
-                    .sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+                world.known_spells.sort_by_key(|a| a.name.to_lowercase());
             }
         }
         // Load the persisted hotbar (P_ActionBarUpdate round-trip): resolve each

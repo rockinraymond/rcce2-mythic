@@ -159,10 +159,8 @@ impl Transport for EnetTransport {
                             connected = true;
                             break;
                         }
-                        ENET_EVENT_TYPE_RECEIVE => {
-                            if !ev.packet.is_null() {
-                                enet_packet_destroy(ev.packet);
-                            }
+                        ENET_EVENT_TYPE_RECEIVE if !ev.packet.is_null() => {
+                            enet_packet_destroy(ev.packet);
                         }
                         _ => {}
                     }

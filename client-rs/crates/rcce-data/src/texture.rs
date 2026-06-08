@@ -335,7 +335,8 @@ pub fn decode_bmp(b: &[u8]) -> Option<Image> {
     let bottom_up = height_raw > 0;
     let height = height_raw.unsigned_abs();
     let bytes_pp = (bpp / 8) as usize;
-    let row_stride = ((width as usize * bytes_pp + 3) / 4) * 4;
+    // BMP rows are padded to a 4-byte boundary.
+    let row_stride = (width as usize * bytes_pp).div_ceil(4) * 4;
 
     let needed = data_offset + row_stride * height as usize;
     if b.len() < needed {
