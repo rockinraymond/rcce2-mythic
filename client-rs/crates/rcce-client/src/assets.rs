@@ -42,6 +42,9 @@ pub struct AssetStore {
     /// Project sun/moon directional lights from `Game Data/Suns.dat`. `None` when
     /// absent → the renderer uses a neutral white sun. See `sun_light`.
     suns: Option<rcce_data::Suns>,
+    /// Localizable client strings from `Game Data/Language.txt`. Empty when the
+    /// file is absent → callers fall back to hardcoded English. See `language`.
+    language: rcce_data::Language,
     cache: HashMap<u16, Option<Rc<B3dModel>>>,
     /// Memoised decoded actor skins, keyed by appearance, so per-frame actor
     /// rebuilds don't re-read + re-decode the skin files from disk.
@@ -162,6 +165,11 @@ impl AssetStore {
         let suns = std::fs::read(data_root.join("Game Data/Suns.dat"))
             .ok()
             .and_then(|b| rcce_data::Suns::parse(&b).ok());
+        // Localizable client strings (Language.txt is UTF-8/ASCII text, not a
+        // .dat). Absent / unreadable → empty table → hardcoded-English fallback.
+        let language = std::fs::read_to_string(data_root.join("Game Data/Language.txt"))
+            .map(|t| rcce_data::Language::parse(&t))
+            .unwrap_or_default();
         Ok(Self {
             data_root,
             actors,
@@ -176,6 +184,7 @@ impl AssetStore {
             attribute_names,
             fixed_attributes,
             suns,
+            language,
             cache: HashMap::new(),
             actor_tex_cache: HashMap::new(),
         })
@@ -187,6 +196,14 @@ impl AssetStore {
     /// shipped default project (Health = slot 0).
     pub fn health_stat(&self) -> u8 {
         self.fixed_attributes.and_then(|f| f.health).unwrap_or(0)
+    }
+
+    /// The project's localizable string table (`Game Data/Language.txt`), for
+    /// threading into `World` at enter-world so chat strings honor the project's
+    /// translation. Empty when the file is absent → callers fall back to
+    /// hardcoded English. Cloned (a few KB of small strings, once per login).
+    pub fn language(&self) -> rcce_data::Language {
+        self.language.clone()
     }
 
     /// The project's active directional sun colour at `minutes` (game-minutes
