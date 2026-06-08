@@ -1,7 +1,8 @@
 //! `Attributes.dat` (Server Data) — the project's 40 attribute slot names plus
-//! skill / hidden flags, loaded by `Actors.bb` `LoadAttributes`. By convention
-//! index 0 = Health and 1 = Energy (matching the Interface.dat vitals bars); the
-//! rest are project-defined attributes/skills.
+//! skill / hidden flags, loaded by `Actors.bb` `LoadAttributes`. The slot *names*
+//! live here; which slot plays a role like Health/Energy/Strength/Speed is
+//! project-configurable and read separately from `Game Data/Fixed Attributes.dat`
+//! (see [`crate::fixed_attributes`]) — do NOT assume Health is index 0.
 //!
 //! Layout: `AttributeAssignment` (u8), then 40 records of `Name`
 //! (4-byte-length-prefixed file string) + `IsSkill` (u8) + `Hidden` (u8).

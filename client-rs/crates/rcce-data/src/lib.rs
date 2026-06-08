@@ -13,6 +13,7 @@ pub mod attributes;
 pub mod b3d;
 pub mod emitter;
 pub mod catalog;
+pub mod fixed_attributes;
 pub mod interface;
 pub mod items;
 pub mod money;
@@ -30,6 +31,7 @@ pub use catalog::{
     TextureCatalog, TextureEntry, CATALOG_SLOTS,
 };
 pub use attributes::{AttributeDef, AttributeNames};
+pub use fixed_attributes::FixedAttributes;
 pub use items::{equip_slot, equip_slot_name, ItemCatalog, ItemDef};
 pub use interface::{IComp, InterfaceLayout};
 pub use money::MoneyConfig;
