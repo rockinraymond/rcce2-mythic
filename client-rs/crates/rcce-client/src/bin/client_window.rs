@@ -289,6 +289,9 @@ struct App {
     /// `Some` while the chat line is open (the typed buffer); movement keys are
     /// suppressed. Enter sends + closes, Esc cancels.
     chat_input: Option<String>,
+    /// Caret position in `chat_input`, as a CHAR index (`0..=char_count`). Drives
+    /// Left/Right/Home/End/Delete + mid-string insert (Blitz Gooey text field).
+    chat_caret: usize,
     /// Chat scrollback offset: how many newest lines to skip (PageUp/PageDown),
     /// so older history scrolls into the chat window (CHAT-3).
     chat_scroll: usize,
@@ -530,6 +533,7 @@ impl App {
             last_move: now,
             was_moving: false,
             chat_input: None,
+            chat_caret: 0,
             chat_scroll: 0,
             target: None,
             context_menu: None,
@@ -1058,6 +1062,57 @@ fn nearest_living_actor(world: &rcce_client::world::World, mx: f32, mz: f32) -> 
 /// storm, once the scheduled `next` time is reached. Pure — unit-tested.
 fn lightning_fires(storm: bool, now: f32, next: f32) -> bool {
     storm && now >= next
+}
+
+/// A text-field edit operation (chat line). Mirrors the keys the Blitz Gooey
+/// text field handles (`Gooey.bb:4734-4796`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum EditOp {
+    Insert(char),
+    Backspace,
+    Delete,
+    Left,
+    Right,
+    Home,
+    End,
+}
+
+/// Apply a text-field edit to `buf` at char-index `caret` (`0..=char_count`),
+/// returning the new `(buffer, caret)`. Caret is a CHAR index, so this is
+/// Unicode-safe (the chat buffer can hold any typed char). Control chars and
+/// inserts past `max_chars` are no-ops; movement clamps at the bounds. Pure +
+/// unit-tested — the whole text-editing logic lives here, not in the event loop.
+fn edit_text(buf: &str, caret: usize, op: EditOp, max_chars: usize) -> (String, usize) {
+    let mut chars: Vec<char> = buf.chars().collect();
+    let n = chars.len();
+    let caret = caret.min(n);
+    match op {
+        EditOp::Insert(c) => {
+            if c.is_control() || n >= max_chars {
+                return (buf.to_string(), caret);
+            }
+            chars.insert(caret, c);
+            (chars.into_iter().collect(), caret + 1)
+        }
+        EditOp::Backspace => {
+            if caret == 0 {
+                return (buf.to_string(), 0);
+            }
+            chars.remove(caret - 1);
+            (chars.into_iter().collect(), caret - 1)
+        }
+        EditOp::Delete => {
+            if caret >= n {
+                return (buf.to_string(), caret);
+            }
+            chars.remove(caret);
+            (chars.into_iter().collect(), caret)
+        }
+        EditOp::Left => (buf.to_string(), caret.saturating_sub(1)),
+        EditOp::Right => (buf.to_string(), (caret + 1).min(n)),
+        EditOp::Home => (buf.to_string(), 0),
+        EditOp::End => (buf.to_string(), n),
+    }
 }
 
 /// Resolve the effective weather byte, honouring the `RCCE_WEATHER` debug
@@ -2866,19 +2921,21 @@ impl ApplicationHandler for App {
                                 }
                             }
                             PhysicalKey::Code(KeyCode::Escape) => self.chat_input = None,
-                            PhysicalKey::Code(KeyCode::Backspace) => {
-                                if let Some(b) = self.chat_input.as_mut() {
-                                    b.pop();
-                                }
-                            }
+                            // Caret-aware line editing (matches the Blitz Gooey text
+                            // field): Backspace/Delete at the caret, arrows + Home/End
+                            // move it, typing inserts mid-string. Arrow/Home/End/Delete
+                            // are otherwise unbound while chat is open (this block
+                            // returns before the camera/WASD bindings).
+                            PhysicalKey::Code(KeyCode::Backspace) => self.apply_chat_edit(EditOp::Backspace),
+                            PhysicalKey::Code(KeyCode::Delete) => self.apply_chat_edit(EditOp::Delete),
+                            PhysicalKey::Code(KeyCode::ArrowLeft) => self.apply_chat_edit(EditOp::Left),
+                            PhysicalKey::Code(KeyCode::ArrowRight) => self.apply_chat_edit(EditOp::Right),
+                            PhysicalKey::Code(KeyCode::Home) => self.apply_chat_edit(EditOp::Home),
+                            PhysicalKey::Code(KeyCode::End) => self.apply_chat_edit(EditOp::End),
                             _ => {
-                                if let (Some(t), Some(b)) =
-                                    (event.text.as_ref(), self.chat_input.as_mut())
-                                {
+                                if let Some(t) = event.text.as_ref() {
                                     for c in t.chars() {
-                                        if !c.is_control() && b.chars().count() < 100 {
-                                            b.push(c);
-                                        }
+                                        self.apply_chat_edit(EditOp::Insert(c));
                                     }
                                 }
                             }
@@ -2940,6 +2997,7 @@ impl ApplicationHandler for App {
                         // Open the chat line.
                         KeyCode::Enter | KeyCode::KeyT if pressed => {
                             self.chat_input = Some(String::new());
+                            self.chat_caret = 0;
                             self.keys_wasd = [false; 4]; // stop moving while typing
                         }
                         // Attack the nearest living actor.
@@ -3941,6 +3999,15 @@ impl App {
         }
     }
 
+    /// Apply a text-edit op to the open chat line (buffer + caret), if any.
+    fn apply_chat_edit(&mut self, op: EditOp) {
+        if let Some(buf) = self.chat_input.as_ref() {
+            let (nb, nc) = edit_text(buf, self.chat_caret, op, 100);
+            self.chat_input = Some(nb);
+            self.chat_caret = nc;
+        }
+    }
+
     /// Resolve a spell id to its name (for the `P_ActionBarUpdate` send, which
     /// keys the server bar by name) via the sheet, falling back to known spells.
     fn spell_name_for_id(&self, id: u16) -> Option<String> {
@@ -4373,6 +4440,7 @@ impl App {
                 HudAction::Chat => {
                     if self.chat_input.is_none() {
                         self.chat_input = Some(String::new());
+                        self.chat_caret = 0;
                     }
                 }
                 // Inventory / Character open the gear+backpack panel.
@@ -8013,8 +8081,14 @@ impl App {
                     None => (14.0, sh - 160.0, 388.0, 152.0),
                 };
                 overlay.rect(cx0, cy0 + chh, cw, 16.0, [0.0, 0.0, 0.0, 0.6]);
-                let caret = if (elapsed * 2.0) as i64 % 2 == 0 { "_" } else { " " };
-                overlay.text_shadow(cx0 + 4.0, cy0 + chh + 2.0, 1.0, &format!("> {buf}{caret}"), [1.0, 1.0, 1.0, 1.0]);
+                // Draw the blinking caret AT its char position (so mid-string edits
+                // are visible), splitting the buffer left|right of the caret.
+                let bchars: Vec<char> = buf.chars().collect();
+                let cpos = self.chat_caret.min(bchars.len());
+                let left: String = bchars[..cpos].iter().collect();
+                let right: String = bchars[cpos..].iter().collect();
+                let caret = if (elapsed * 2.0) as i64 % 2 == 0 { "|" } else { " " };
+                overlay.text_shadow(cx0 + 4.0, cy0 + chh + 2.0, 1.0, &format!("> {left}{caret}{right}"), [1.0, 1.0, 1.0, 1.0]);
             }
 
             // Inventory / spellbook panel (toggle with I). Item names resolve
@@ -9000,6 +9074,40 @@ mod tests {
         fn assert_send<T: Send>() {}
         assert_send::<EnetTransport>();
         assert_send::<LoginResult>();
+    }
+
+    #[test]
+    fn chat_edit_text_caret_ops() {
+        // Helper: apply an op and return (buf, caret).
+        let ins = |b: &str, c: usize, ch: char| edit_text(b, c, EditOp::Insert(ch), 100);
+        // Insert mid-string: "helo" with caret after the first 'l' (index 3) + 'l'.
+        let (b, c) = ins("helo", 3, 'l');
+        assert_eq!((b.as_str(), c), ("hello", 4));
+        // Append at the end (caret == len) is the old behaviour.
+        assert_eq!(ins("hell", 4, 'o'), ("hello".to_string(), 5));
+        // Control char / over-length inserts are no-ops.
+        assert_eq!(edit_text("hi", 2, EditOp::Insert('\n'), 100), ("hi".to_string(), 2));
+        assert_eq!(edit_text("ab", 2, EditOp::Insert('c'), 2), ("ab".to_string(), 2));
+
+        // Backspace removes the char BEFORE the caret; no-op at 0.
+        assert_eq!(edit_text("hello", 3, EditOp::Backspace, 100), ("helo".to_string(), 2));
+        assert_eq!(edit_text("hello", 0, EditOp::Backspace, 100), ("hello".to_string(), 0));
+        // Delete removes the char AT the caret; no-op at end.
+        assert_eq!(edit_text("hello", 1, EditOp::Delete, 100), ("hllo".to_string(), 1));
+        assert_eq!(edit_text("hello", 5, EditOp::Delete, 100), ("hello".to_string(), 5));
+
+        // Movement clamps at the bounds.
+        assert_eq!(edit_text("hi", 0, EditOp::Left, 100).1, 0);
+        assert_eq!(edit_text("hi", 1, EditOp::Left, 100).1, 0);
+        assert_eq!(edit_text("hi", 2, EditOp::Right, 100).1, 2);
+        assert_eq!(edit_text("hi", 1, EditOp::Right, 100).1, 2);
+        assert_eq!(edit_text("hello", 3, EditOp::Home, 100).1, 0);
+        assert_eq!(edit_text("hello", 1, EditOp::End, 100).1, 5);
+
+        // Unicode-safe: caret is a CHAR index, not a byte index.
+        let (b, c) = ins("café", 2, 'X'); // insert between 'a' and 'f'
+        assert_eq!((b.as_str(), c), ("caXfé", 3));
+        assert_eq!(edit_text("café", 4, EditOp::Backspace, 100), ("caf".to_string(), 3));
     }
 
     #[test]
