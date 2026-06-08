@@ -163,6 +163,50 @@ pub fn trade_confirm_packet(buys: &[(u32, u16)], sells: &[(u8, u16)]) -> Vec<u8>
     w.into_bytes()
 }
 
+/// Build a player↔player trade offer (`P_UpdateTrading` outbound,
+/// Interface3D.bb:2404): `backpackSlot u8 + amount u16`. Stages one of my backpack
+/// items to give; `amount==0` withdraws it. Sent reliable on P_UpdateTrading (41).
+pub fn trade_offer_packet(slot: u8, amount: u16) -> Vec<u8> {
+    let mut w = MsgWriter::new();
+    w.u8(slot).u16(amount);
+    w.into_bytes()
+}
+
+/// Build a player↔player trade confirmation (`P_OpenTrading` TradeType=2,
+/// Interface3D.bb:2365-2372): `TradeCost i32`, then 32 "his" slots of
+/// `ServerTradeID u8 + amount u16` (the partner's items I accept; unused `0,0`),
+/// then 32 "mine" slots of `amount u16` (what I give, positioned by backpack slot;
+/// unused `0`). This differs from the vendor `trade_confirm_packet`: a TradeCost
+/// prefix, a 1-byte (not 4-byte) trade id, and an amount-only "mine" block. The
+/// server validates on TradeCost + its own tracked offer amounts, so the per-slot
+/// blocks need only be present and well-formed. Sent reliable on P_OpenTrading (35).
+pub fn player_trade_confirm_packet(his: &[(u8, u16)], mine: &[(u8, u16)], cost: i32) -> Vec<u8> {
+    let mut w = MsgWriter::new();
+    w.i32(cost);
+    for i in 0..TRADE_SLOTS {
+        match his.get(i) {
+            Some(&(id, amt)) => {
+                w.u8(id).u16(amt);
+            }
+            None => {
+                w.u8(0).u16(0);
+            }
+        }
+    }
+    // The "mine" block is amount-only, positioned by backpack slot index (the
+    // server reads TradeAmountsMine(i) by position, not by an explicit slot byte).
+    let mut mine_amounts = [0u16; TRADE_SLOTS];
+    for &(slot, amt) in mine {
+        if (slot as usize) < TRADE_SLOTS {
+            mine_amounts[slot as usize] = amt;
+        }
+    }
+    for amt in mine_amounts {
+        w.u16(amt);
+    }
+    w.into_bytes()
+}
+
 /// Build a `P_InventoryUpdate` move/swap request (`ServerNet.bb:1740`): `"S"`
 /// (swap) or `"A"` (add/merge) + the player's RuntimeID u16 + source slot u8 +
 /// dest slot u8 + amount u16 (0 = whole stack). Equipping is a swap from a
@@ -255,6 +299,33 @@ mod tests {
     #[test]
     fn trade_close_is_empty() {
         assert!(trade_close_packet().is_empty());
+    }
+
+    #[test]
+    fn trade_offer_layout() {
+        // Stage backpack slot 5, amount 3: slot u8 + amount u16 (LE) = 3 bytes.
+        let p = trade_offer_packet(5, 3);
+        assert_eq!(p, vec![5, 3, 0]);
+        // Withdraw (amount 0).
+        assert_eq!(trade_offer_packet(5, 0), vec![5, 0, 0]);
+    }
+
+    #[test]
+    fn player_trade_confirm_layout() {
+        // TradeCost i32 + 32*(id u8 + amt u16) + 32*(amt u16) = 4 + 96 + 64 = 164.
+        let p = player_trade_confirm_packet(&[(7, 2)], &[(5, 3)], -10);
+        assert_eq!(p.len(), 164);
+        // Cost -10 as LE i32.
+        assert_eq!(&p[0..4], &(-10i32).to_le_bytes());
+        // His slot 0: trade id 7 + amount 2.
+        assert_eq!(&p[4..7], &[7, 2, 0]);
+        // His slot 1: empty 0,0,0.
+        assert_eq!(&p[7..10], &[0, 0, 0]);
+        // "Mine" block starts at 4 + 96 = 100; amount-only, positioned by backpack
+        // slot. Slot 5 = amount 3 → bytes at 100 + 5*2 = 110.
+        assert_eq!(&p[110..112], &[3, 0]);
+        // Slot 0 of mine is unset → 0.
+        assert_eq!(&p[100..102], &[0, 0]);
     }
 
     #[test]

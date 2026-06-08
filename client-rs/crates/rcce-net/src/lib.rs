@@ -67,6 +67,13 @@ pub mod packet_id {
     pub const XP_UPDATE: u8 = 32;
     pub const SCREEN_FLASH: u8 = 33;
     pub const OPEN_TRADING: u8 = 35;
+    /// Trade window closed (`P_CloseTrading`, Packets.bb:41).
+    pub const CLOSE_TRADING: u8 = 40;
+    /// Player-trade offer sync (`P_UpdateTrading`, Packets.bb:42). Inbound: the
+    /// partner added/removed an offered item (`slot u8 + amount u16 [+ 83B
+    /// ItemInstance if amount>0]`, ClientNet.bb:533). Outbound: I stage/unstage one
+    /// of my backpack items (`slot u8 + amount u16`, Interface3D.bb:2404).
+    pub const UPDATE_TRADING: u8 = 41;
     pub const ACTOR_EFFECT: u8 = 36;
     pub const PROJECTILE: u8 = 37;
     pub const PARTY_UPDATE: u8 = 38;
