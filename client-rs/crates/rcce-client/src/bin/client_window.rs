@@ -998,6 +998,30 @@ fn function_button_at(cx: f32, cy: f32, sw: f32, sh: f32) -> Option<HudAction> {
     None
 }
 
+/// Value/max to draw on HUD vitals bar `i` (a slot index into Interface.dat's
+/// 40 attribute bars). The Health bar reads the authoritative `me_health`
+/// mirror at the project-configured slot (`health_stat`, from
+/// `Fixed Attributes.dat`), NOT a hardcoded slot 0 — so a customized project's
+/// Health bar tracks live HP/damage. Other bars read their attribute from
+/// `me_attributes`; `None` means "skip this bar". Mirrors the model-side gate in
+/// `World::on_stat_update`, which mirrors HP onto `me_health` for `health_stat`.
+/// Pure — unit-tested.
+fn vitals_value(
+    i: usize,
+    health_stat: u8,
+    me_health: i16,
+    me_health_max: i16,
+    me_attributes: &std::collections::HashMap<u8, (i16, i16)>,
+) -> Option<(f32, f32)> {
+    if i == health_stat as usize {
+        Some((me_health.max(0) as f32, me_health_max.max(1) as f32))
+    } else if let Some(&(v, m)) = me_attributes.get(&(i as u8)) {
+        Some((v.max(0) as f32, m.max(1) as f32))
+    } else {
+        None
+    }
+}
+
 /// Build animated actor instances (the local player + tracked actors) for the
 /// current frame. Returns owned models/textures (the instances borrow them) and
 /// placement tuples (idx, translation, rot, color, scale).
@@ -7735,11 +7759,13 @@ impl App {
                         if a.w <= 0.001 || a.h <= 0.001 {
                             continue;
                         }
-                        let (val, max) = if i == 0 {
-                            (w.me_health.max(0) as f32, w.me_health_max.max(1) as f32)
-                        } else if let Some(&(v, m)) = w.me_attributes.get(&(i as u8)) {
-                            (v.max(0) as f32, m.max(1) as f32)
-                        } else {
+                        let Some((val, max)) = vitals_value(
+                            i,
+                            w.health_stat,
+                            w.me_health,
+                            w.me_health_max,
+                            &w.me_attributes,
+                        ) else {
                             continue;
                         };
                         let (vx, vy, vw, vh) = a.px(sw, sh);
@@ -8679,6 +8705,27 @@ mod tests {
         fn assert_send<T: Send>() {}
         assert_send::<EnetTransport>();
         assert_send::<LoginResult>();
+    }
+
+    #[test]
+    fn vitals_value_uses_configured_health_slot() {
+        use std::collections::HashMap;
+        let mut attrs: HashMap<u8, (i16, i16)> = HashMap::new();
+        attrs.insert(0, (40, 40)); // slot 0 holds some non-Health attribute
+        attrs.insert(3, (7, 7)); // slot 3 also has a raw attribute entry
+
+        // Customized project: Health on slot 3. The Health bar (i=3) reads the
+        // authoritative me_health mirror (NOT the raw attribute at slot 3); the
+        // bar at slot 0 reads its own attribute, NOT HP.
+        assert_eq!(vitals_value(3, 3, 85, 100, &attrs), Some((85.0, 100.0)));
+        assert_eq!(vitals_value(0, 3, 85, 100, &attrs), Some((40.0, 40.0)));
+        // A bar that is neither the health slot nor has an attribute → skipped.
+        assert_eq!(vitals_value(5, 3, 85, 100, &attrs), None);
+
+        // Default project (Health = slot 0): unchanged behaviour — regression guard.
+        assert_eq!(vitals_value(0, 0, 90, 100, &attrs), Some((90.0, 100.0)));
+        // HP clamps: value >= 0, max >= 1 (no divide-by-zero on the bar fraction).
+        assert_eq!(vitals_value(0, 0, -5, 0, &attrs), Some((0.0, 1.0)));
     }
 
     #[test]
