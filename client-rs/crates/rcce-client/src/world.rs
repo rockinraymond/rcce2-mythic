@@ -853,6 +853,14 @@ impl World {
             Some(b'M') => {
                 if let Some(gain) = MsgReader::new(&d[1..]).i32() {
                     self.me_xp = self.me_xp.saturating_add(gain);
+                    // Blitz toast (ClientNet.bb:698): "<N> experience points
+                    // received!" in warm gold (255,225,100 → LS_XPReceived). Only
+                    // for a real positive gain, so a malformed/zero/negative 'M'
+                    // (the fuzz suite feeds these) shows no confusing message.
+                    if gain > 0 {
+                        self.chat
+                            .push((format!("{gain} experience points received!"), [1.0, 0.882, 0.392, 1.0]));
+                    }
                 }
             }
             Some(b'U') => {
@@ -2199,6 +2207,8 @@ mod tests {
         assert_eq!(w.me_xp_bar, 4);
         w.apply(&msg(pk::XP_UPDATE, pkt(|p| { p.u8(b'M').i32(150); })));
         assert_eq!(w.me_xp, 150);
+        // 'M' also pushes the Blitz "experience points received!" toast.
+        assert!(w.chat.iter().any(|(t, _)| t == "150 experience points received!"));
 
         // Gold: increase then decrease, clamped at 0.
         w.apply(&msg(pk::GOLD_CHANGE, pkt(|p| { p.u8(b'I').i32(100); })));
@@ -2243,6 +2253,34 @@ mod tests {
         // A truncated 'U' (no level bytes) is a safe no-op (soft-fail, no panic).
         w.apply(&msg(pk::XP_UPDATE, pkt(|p| { p.u8(b'U'); })));
         assert_eq!(w.me_level, 5, "truncated 'U' leaves the level unchanged");
+    }
+
+    // The 'M' XP toast (Blitz ClientNet.bb:698) only fires for a real positive
+    // gain — a 0 or negative gain (the malformed-input fuzzer feeds these) still
+    // updates me_xp but must not push a confusing "0 / -N ... received!" line.
+    #[test]
+    fn xp_received_toast_only_on_positive_gain() {
+        let mut w = World { my_runtime_id: 7, ..Default::default() };
+        w.apply(&msg(pk::XP_UPDATE, pkt(|p| { p.u8(b'M').i32(42); })));
+        assert_eq!(w.me_xp, 42);
+        assert_eq!(
+            w.chat.iter().filter(|(t, _)| t.contains("experience points received")).count(),
+            1,
+            "a positive gain pushes exactly one toast"
+        );
+        // Warm gold (255,225,100), matching Blitz Output(...,255,225,100).
+        let (_, col) = w.chat.iter().find(|(t, _)| t.contains("experience")).unwrap();
+        assert_eq!(*col, [1.0, 0.882, 0.392, 1.0]);
+
+        // Zero and negative gains update xp but push NO toast.
+        w.apply(&msg(pk::XP_UPDATE, pkt(|p| { p.u8(b'M').i32(0); })));
+        w.apply(&msg(pk::XP_UPDATE, pkt(|p| { p.u8(b'M').i32(-10); })));
+        assert_eq!(w.me_xp, 32, "xp still tracks the raw gain (42 + 0 - 10)");
+        assert_eq!(
+            w.chat.iter().filter(|(t, _)| t.contains("experience points received")).count(),
+            1,
+            "no extra toast for the 0 / negative gains"
+        );
     }
 
     #[test]
