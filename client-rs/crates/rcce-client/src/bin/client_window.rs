@@ -6067,6 +6067,22 @@ impl App {
                         audio.play_oneshot(&path, 0.7);
                     }
                 }
+                // Combat voice sounds (Attack/Hit/Death): resolve each (rid, slot)
+                // intent to the actor's template+gender voice id, then a file. All
+                // soft-fail to silence (unknown actor / unset slot / no sound file
+                // shipped), so the default project — which ships no combat voices —
+                // is silent, exactly like the engine's `If Result < 65535` gate.
+                // Collect first to release the drain borrow before the actor lookup.
+                let combat: Vec<(u16, u8)> = net.world.pending_combat_sounds.drain(..).collect();
+                for (rid, slot) in combat {
+                    if let Some(a) = net.world.actors.get(&rid) {
+                        if let Some(sid) = store.actor_speech_id(a.template_id, a.gender, slot) {
+                            if let Some(path) = store.sound_path_by_id(sid) {
+                                audio.play_oneshot(&path, 0.7);
+                            }
+                        }
+                    }
+                }
                 if let Some(mid) = net.world.pending_music.take() {
                     audio.set_music(mid, 0.4, |id| store.music_path(id));
                     println!("[audio] P_Music -> music id {mid}");

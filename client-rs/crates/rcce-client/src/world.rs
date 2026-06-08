@@ -13,6 +13,12 @@ use rcce_net::{packet_id as pk, RecvMessage};
 /// Roughly the airborne duration of the local jump arc.
 pub const JUMP_ANIM_SECS: f32 = 0.5;
 
+// Combat-voice `Speech_*` slots queued into `pending_combat_sounds` (the App
+// resolves them per actor template+gender). Tied to the rcce-data source of truth.
+const SPEECH_ATTACK1: u8 = rcce_data::actors::speech::ATTACK1 as u8;
+const SPEECH_HIT1: u8 = rcce_data::actors::speech::HIT1 as u8;
+const SPEECH_DEATH: u8 = rcce_data::actors::speech::DEATH as u8;
+
 /// How long a remote actor plays its attack swing after a `P_AttackActor`
 /// broadcast (CBT-3). Matches the local player's `me_attack_until` ~0.8 s window.
 pub const ATTACK_ANIM_SECS: f32 = 0.8;
@@ -331,6 +337,13 @@ pub struct World {
     /// App drains these to `audio.play_oneshot` each frame. 2D playback for the
     /// alpha; the `P_Speech`/3D positional attenuation is a noted follow-up.
     pub pending_sounds: Vec<u16>,
+    /// Pending combat voice sounds as `(runtime_id, Speech_* slot)` intents: an
+    /// actor's Attack/Hit/Death cry. The handlers can't resolve the sound id here
+    /// (the speech ids live in the actor *template* in the AssetStore, which the
+    /// `World` doesn't hold), so the App drains these, looks the actor up by
+    /// template+gender, resolves via `ActorCatalog::speech_id`, and plays. Mirrors
+    /// Blitz `PlayActorSound` on combat (ClientNet.bb:1094/1122/1166).
+    pub pending_combat_sounds: Vec<(u16, u8)>,
     /// A pending mid-zone music switch (`P_Music`, AUD-1): the App applies it via
     /// `audio.set_music`, replacing the looping track. `None` when unchanged.
     pub pending_music: Option<u16>,
@@ -951,6 +964,9 @@ impl World {
             .unwrap_or_else(|| "Someone".to_string());
         if let Some(a) = self.actors.get_mut(&rid) {
             a.alive = false;
+            // The dying actor cries out (Death). Only for a known actor (so a
+            // P_ActorDead for an unknown rid queues nothing).
+            self.pending_combat_sounds.push((rid, SPEECH_DEATH));
         }
         if killer == Some(self.my_runtime_id) {
             self.chat.push((format!("You killed {name}!"), [0.3, 1.0, 0.3, 1.0]));
@@ -971,7 +987,7 @@ impl World {
         let Some(rid) = r.u16() else { return };
         match sub {
             b'H' => {
-                // RID is the target I hit (I am the attacker).
+                // RID is the target I hit (I am the attacker): it grunts (Hit1).
                 let (Some(raw_dmg), Some(dtype)) = (r.u16(), r.u8()) else { return };
                 self.combat_events.push(CombatEvent {
                     target: rid,
@@ -979,10 +995,13 @@ impl World {
                     damage: raw_dmg.saturating_sub(1),
                     damage_type: dtype,
                 });
+                self.pending_combat_sounds.push((rid, SPEECH_HIT1));
             }
             b'Y' => {
-                // RID is the attacker who hit me: animate it + floater on me.
+                // RID is the attacker who hit me: animate + voice its swing (Attack1),
+                // floater on me.
                 self.attack_anims.insert(rid, ATTACK_ANIM_SECS);
+                self.pending_combat_sounds.push((rid, SPEECH_ATTACK1));
                 if let (Some(raw_dmg), Some(dtype)) = (r.u16(), r.u8()) {
                     self.combat_events.push(CombatEvent {
                         target: self.my_runtime_id,
@@ -993,8 +1012,10 @@ impl World {
                 }
             }
             _ => {
-                // Broadcast: RID is the attacker (target is RID2, not needed here).
+                // Broadcast: RID is the attacker (target is RID2, not needed here):
+                // animate + voice its swing (Attack1).
                 self.attack_anims.insert(rid, ATTACK_ANIM_SECS);
+                self.pending_combat_sounds.push((rid, SPEECH_ATTACK1));
             }
         }
     }
@@ -1908,6 +1929,38 @@ mod tests {
         // Tick expires the timers.
         w.tick_attack_anims(ATTACK_ANIM_SECS + 0.01);
         assert!(w.attack_anims.is_empty());
+    }
+
+    #[test]
+    fn combat_voice_sound_intents() {
+        let mut w = World { my_runtime_id: 1, ..Default::default() };
+        // Register an actor (rnid 50) so the death cry (which only fires for a
+        // known actor) has a target.
+        w.apply(&msg(
+            pk::NEW_ACTOR,
+            pkt(|p| {
+                p.u32(0).u16(50).u16(1).u32(0).u16(3);
+                p.f32(0.0).f32(0.0).f32(0.0).f32(0.0);
+                p.u8(0).str8("Stag");
+            }),
+        ));
+
+        // 'H' I hit target 9 → the target grunts (Hit1).
+        w.apply(&msg(pk::ATTACK_ACTOR, pkt(|p| { p.u8(b'H').u16(9).u16(6).u8(2); })));
+        // 'Y' attacker 7 hit me → attacker swings (Attack1).
+        w.apply(&msg(pk::ATTACK_ACTOR, pkt(|p| { p.u8(b'Y').u16(7).u16(4).u8(0); })));
+        // Broadcast: attacker 12 → swings (Attack1).
+        w.apply(&msg(pk::ATTACK_ACTOR, pkt(|p| { p.u8(b'X').u16(12).u16(8); })));
+        assert_eq!(
+            w.pending_combat_sounds,
+            vec![(9, SPEECH_HIT1), (7, SPEECH_ATTACK1), (12, SPEECH_ATTACK1)]
+        );
+
+        // Death of the known actor 50 → death cry; an unknown rid queues nothing.
+        w.apply(&msg(pk::ACTOR_DEAD, pkt(|p| { p.u16(50); })));
+        w.apply(&msg(pk::ACTOR_DEAD, pkt(|p| { p.u16(999); })));
+        assert_eq!(w.pending_combat_sounds.last(), Some(&(50, SPEECH_DEATH)));
+        assert_eq!(w.pending_combat_sounds.iter().filter(|(r, _)| *r == 999).count(), 0);
     }
 
     #[test]
