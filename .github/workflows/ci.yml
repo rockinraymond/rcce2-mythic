@@ -79,11 +79,17 @@ jobs:
 
       # The Rust client (client-rs/) ships its own deterministic unit + parser
       # robustness tests. windows-latest has the Rust toolchain preinstalled.
-      # Gate the pure-logic crates (rcce-data parsers + rcce-net wire codec) on
-      # every PR — these read server-controlled files and packets, so their
-      # "soft-fail, never panic on hostile input" invariant is exactly what must
-      # not regress. The GUI crates (rcce-render/rcce-client) are skipped here:
-      # they pull the full wgpu/winit toolchain and have no headless tests.
+      # Gate ALL four logic crates on every PR:
+      #   - rcce-data / rcce-net: parsers + wire codec — the "soft-fail, never
+      #     panic on hostile input" invariant must not regress.
+      #   - rcce-render / rcce-client: despite pulling wgpu/winit, they carry
+      #     ~150 PURELY HEADLESS unit tests (overlay projection math, world.rs
+      #     packet-handler regressions, HUD/menu geometry, the EnetTransport Send
+      #     contract, etc.) that run with no GPU/window in <1s. Compiling them
+      #     here also makes CI catch a build break in the client/renderer (the
+      #     crates the project changes most) on a fresh checkout. The one-time
+      #     wgpu/winit compile is amortised by the cache step below (which already
+      #     lists client-rs/target). The i686-only rcenet-ffi-probe is excluded.
       - name: Cache Rust build (client-rs)
         uses: actions/cache@v4
         with:
@@ -96,10 +102,10 @@ jobs:
           restore-keys: |
             cargo-${{ runner.os }}-
 
-      - name: Run Rust client tests (pure-logic crates)
+      - name: Run Rust client tests (logic crates)
         shell: bash
         working-directory: client-rs
-        run: cargo test -p rcce-data -p rcce-net --locked
+        run: cargo test -p rcce-data -p rcce-net -p rcce-render -p rcce-client --locked
 
       # Two reference docs (the wire-protocol packet catalog and the BVM
       # scripting-API catalog) are produced by generator scripts that read
