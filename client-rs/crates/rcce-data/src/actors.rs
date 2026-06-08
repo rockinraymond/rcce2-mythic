@@ -11,7 +11,7 @@ use std::collections::HashMap;
 
 use crate::reader::{BlitzReader, ReadError};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct ActorTemplate {
     pub id: u16,
     pub race: String,
@@ -34,6 +34,12 @@ pub struct ActorTemplate {
     pub female_face_ids: [u16; 5],
     pub male_body_ids: [u16; 5],
     pub female_body_ids: [u16; 5],
+    /// Per-gender speech/voice sound ids (`MSpeechIDs`/`FSpeechIDs`, 16 slots
+    /// each: Greet1/2, Bye1/2, Attack1/2, Hit1/2, RequestHelp, Death, Footstep×2,
+    /// …). `65535` = no sound for that slot. Indexed by the `Speech_*` constants
+    /// (Actors.bb:12-23). The client plays Attack/Hit/Death on combat events.
+    pub male_speech: [u16; 16],
+    pub female_speech: [u16; 16],
     /// Template gender mode: 0 = player-selectable (the P_NewActor wire then
     /// carries a gender byte), 1 = male-only, 2 = female-only.
     pub genders: u8,
@@ -73,6 +79,25 @@ impl ActorCatalog {
             Some(m)
         }
     }
+
+    /// Voice sound id for actor `id`'s `gender` (`0` male → `MSpeechIDs`, else
+    /// female → `FSpeechIDs`, matching `Actors3D.bb:790`) at `Speech_*` `slot`.
+    /// `None` if the template is unknown, the slot is out of range, or the slot is
+    /// unset (`65535`). Mirrors `mesh_for`'s soft-fail.
+    pub fn speech_id(&self, id: u16, gender: u8, slot: usize) -> Option<u16> {
+        let t = self.templates.get(&id)?;
+        let arr = if gender == 0 { &t.male_speech } else { &t.female_speech };
+        arr.get(slot).copied().filter(|&s| s != 65535)
+    }
+}
+
+/// `Speech_*` voice-slot indices into a template's speech arrays (Actors.bb:12-23).
+pub mod speech {
+    pub const ATTACK1: usize = 4;
+    pub const ATTACK2: usize = 5;
+    pub const HIT1: usize = 6;
+    pub const HIT2: usize = 7;
+    pub const DEATH: usize = 9;
 }
 
 fn parse_record(r: &mut BlitzReader) -> Result<ActorTemplate, ReadError> {
@@ -108,9 +133,14 @@ fn parse_record(r: &mut BlitzReader) -> Result<ActorTemplate, ReadError> {
     let female_face_ids = read5(r)?;
     let male_body_ids = read5(r)?;
     let female_body_ids = read5(r)?;
-    // Speech: MSpeech(16) + FSpeech(16) = 32 shorts.
-    for _ in 0..32 {
-        r.read_short()?;
+    // Speech: MSpeech(16) + FSpeech(16) = 32 shorts (voice sound ids, 65535=none).
+    let mut male_speech = [0u16; 16];
+    for slot in &mut male_speech {
+        *slot = r.read_short_u()?;
+    }
+    let mut female_speech = [0u16; 16];
+    for slot in &mut female_speech {
+        *slot = r.read_short_u()?;
     }
     let _blood_tex = r.read_short()?;
     // Attributes[40] × (Value + Maximum) = 80 shorts.
@@ -149,7 +179,35 @@ fn parse_record(r: &mut BlitzReader) -> Result<ActorTemplate, ReadError> {
         female_face_ids,
         male_body_ids,
         female_body_ids,
+        male_speech,
+        female_speech,
         genders,
         playable,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn speech_id_resolves_per_gender_and_soft_fails() {
+        let mut t = ActorTemplate { id: 3, ..Default::default() };
+        t.male_speech[speech::ATTACK1] = 100;
+        t.male_speech[speech::DEATH] = 105;
+        t.female_speech[speech::ATTACK1] = 200;
+        t.female_speech[speech::HIT1] = 65535; // explicitly "no sound"
+        let mut cat = ActorCatalog::default();
+        cat.templates.insert(3, t);
+
+        // gender 0 → male array; gender 1 (and anything non-zero) → female array.
+        assert_eq!(cat.speech_id(3, 0, speech::ATTACK1), Some(100));
+        assert_eq!(cat.speech_id(3, 0, speech::DEATH), Some(105));
+        assert_eq!(cat.speech_id(3, 1, speech::ATTACK1), Some(200));
+        // 65535 sentinel → None (no sound for that slot).
+        assert_eq!(cat.speech_id(3, 1, speech::HIT1), None);
+        // Unknown template → None; out-of-range slot → None (no panic).
+        assert_eq!(cat.speech_id(99, 0, speech::ATTACK1), None);
+        assert_eq!(cat.speech_id(3, 0, 999), None);
+    }
 }
