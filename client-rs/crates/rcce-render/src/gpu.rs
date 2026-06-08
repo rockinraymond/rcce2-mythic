@@ -26,6 +26,13 @@ pub type TexCache = HashMap<String, Rc<wgpu::BindGroup>>;
 /// water — which is rebuilt every frame — re-uploading its texture each frame).
 pub static TEX_UPLOADS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
+/// Cumulative count of dynamic-geometry rebakes (`WorldView::set_dynamic` calls).
+/// Each call re-bakes + re-uploads the vertex buffers for every actor attachment
+/// (hair/beard/weapon/shield) and dropped-loot mesh. Used by `RCCE_DRAWSTATS` to
+/// confirm the dyn_hash throttle suppresses redundant rebakes at idle: this should
+/// climb roughly once per frame while moving but plateau when the pose is settled.
+pub static DYN_REBUILDS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
 /// Cheap content fingerprint for a `(texture, lightmap)` pair so identical
 /// textures share one GPU upload. Dims + byte length + a spread of sampled bytes
 /// — collision-proof for distinct real textures, far cheaper than repeating the

@@ -395,6 +395,7 @@ impl WorldView {
         instances: &[SceneInstance],
         keys: &[String],
     ) {
+        gpu::DYN_REBUILDS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         self.dynamics = gpu::build_actor_drawables_cached(
             device,
             queue,
@@ -714,7 +715,8 @@ impl WorldView {
             }
             if std::env::var_os("RCCE_DRAWSTATS").is_some() {
                 let uploads = gpu::TEX_UPLOADS.load(std::sync::atomic::Ordering::Relaxed);
-                eprintln!("[world] drawables drawn={wdrawn} culled={wculled} tex_uploads={uploads} tex_cache={}", self.static_tex_cache.len());
+                let dyn_rebuilds = gpu::DYN_REBUILDS.load(std::sync::atomic::Ordering::Relaxed);
+                eprintln!("[world] drawables drawn={wdrawn} culled={wculled} tex_uploads={uploads} dyn_rebuilds={dyn_rebuilds} tex_cache={}", self.static_tex_cache.len());
             }
             // 5) Particles: unlit camera-facing billboards, additive/alpha blended,
             //    depth-tested against the world but writing no depth.

@@ -5984,68 +5984,28 @@ impl App {
                 ^ if me_jumping { 0x4A_4D_50_00 } else { 0 }
                 ^ if self.first_person { 0x46_50_00_00 } else { 0 }
                 ^ if me_fidget.is_some() { 0x46_49_44_00 } else { 0 };
-            if self.gpu_skin || hash != self.last_dyn_hash {
+            // ACTORS. The body and its gear update on two different cadences:
+            //   * GPU-skinned bodies (default) pose in the vertex shader from a tiny
+            //     per-frame bone-palette uniform — cheap, so `set_skinned` runs EVERY
+            //     frame for display-rate smoothness.
+            //   * The CPU-baked attachments (hair/beard/weapon/shield) + dropped-loot
+            //     meshes ride `set_dynamic`, which re-bakes AND re-uploads their vertex
+            //     buffers on every call. That is throttled to the dyn_hash (its pre-#468
+            //     cadence): while moving/animating the hash changes every frame so gear
+            //     still tracks the hand; at a settled idle pose the rebake is skipped.
+            // Before #468 the body was CPU-skinned and this whole block was already
+            // hash-throttled; #468 made the body GPU-skinned but the `|| self.gpu_skin`
+            // gate accidentally forced the gear/loot rebake every frame too. The
+            // RCCE_CPUSKIN path is unchanged: it only enters when a rebake is due and
+            // never runs `set_skinned`.
+            let need_rebake = hash != self.last_dyn_hash;
+            if self.gpu_skin || need_rebake {
                 let (models, textures, place, keys, skinned) = build_actors(
                     store, &net.world, elapsed, self.gpu_skin, moving, run, 0, me_attack, me_jumping,
                     me_jump_offset, self.first_person, me_fidget, self.height_field.as_ref(),
                 );
-                // CPU drawables: attachments (+ bodies when GPU skinning is off).
-                let mut instances: Vec<SceneInstance> = place
-                    .iter()
-                    .map(|&(idx, t, r, color, s)| SceneInstance {
-                        model: &models[idx],
-                        textures: &textures[idx][..],
-                        lightmaps: &[],
-                        translation: t,
-                        rot: r,
-                        scale: s,
-                        color,
-                    })
-                    .collect();
-                // Dropped loot (DROP-1): render each item's world mesh (its `mmesh`)
-                // seated on the ground, or the Loot Bag fallback for items with no
-                // world mesh (most shipped items) — like Blitz (ClientNet.bb:1378).
-                // Replaces the flat 2D pip with a real, terrain-occluded 3D object.
-                let mut loot_models: Vec<std::rc::Rc<rcce_data::B3dModel>> = Vec::new();
-                let mut loot_texs: Vec<Vec<Option<rcce_data::Image>>> = Vec::new();
-                let mut loot_xf: Vec<([f32; 3], f32, String)> = Vec::new();
-                if !net.world.dropped_items.is_empty() {
-                    if self.loot_bag.is_none() {
-                        self.loot_bag = store.mesh_by_path("Loot Bag.b3d").map(|(m, t, _)| (m, t));
-                    }
-                    for d in net.world.dropped_items.values() {
-                        let (model, texs, s, key) = match store.gear_attachment(d.item_id) {
-                            // Item's own world mesh (Blitz: LoadedMeshScales × 0.05).
-                            Some(att) => (att.model, att.textures, att.scale * 0.05, format!("loot:i{}", d.item_id)),
-                            // Fallback Loot Bag (Blitz scales it 0.075).
-                            None => match &self.loot_bag {
-                                Some((m, t)) => (m.clone(), t.clone(), 0.075, "loot:bag".to_string()),
-                                None => continue,
-                            },
-                        };
-                        // Seat the mesh's lowest vertex on the terrain under it.
-                        let (min, _) = model.bounds();
-                        let ground = self.height_field.as_ref().and_then(|h| h.height_at(d.x, d.z)).unwrap_or(d.y);
-                        loot_models.push(model);
-                        loot_texs.push(texs);
-                        loot_xf.push(([d.x, ground - min[1] * s, d.z], s, key));
-                    }
-                }
-                let mut keys = keys;
-                for (i, (pos, s, key)) in loot_xf.iter().enumerate() {
-                    instances.push(SceneInstance {
-                        model: &loot_models[i],
-                        textures: &loot_texs[i][..],
-                        lightmaps: &[],
-                        translation: *pos,
-                        rot: [0.0, 0.0, 0.0],
-                        scale: [*s, *s, *s],
-                        color: [1.0, 1.0, 1.0],
-                    });
-                    keys.push(key.clone());
-                }
-                view.set_dynamic(&gfx.device, &gfx.queue, &instances, &keys);
-                // GPU-skinned bodies (when enabled) — static mesh + pose uniform.
+                // GPU-skinned bodies (when enabled) — static mesh + pose uniform. Cheap;
+                // runs every frame so the body animates at display rate.
                 if self.gpu_skin {
                     let sinst: Vec<rcce_render::SkinnedInstance> = skinned
                         .iter()
@@ -6060,7 +6020,66 @@ impl App {
                         .collect();
                     view.set_skinned(&gfx.device, &gfx.queue, &sinst);
                 }
-                self.last_dyn_hash = hash;
+                // CPU drawables: attachments (+ bodies when GPU skinning is off) and
+                // dropped loot. Only re-baked when the dyn_hash changed.
+                if need_rebake {
+                    let mut instances: Vec<SceneInstance> = place
+                        .iter()
+                        .map(|&(idx, t, r, color, s)| SceneInstance {
+                            model: &models[idx],
+                            textures: &textures[idx][..],
+                            lightmaps: &[],
+                            translation: t,
+                            rot: r,
+                            scale: s,
+                            color,
+                        })
+                        .collect();
+                    // Dropped loot (DROP-1): render each item's world mesh (its `mmesh`)
+                    // seated on the ground, or the Loot Bag fallback for items with no
+                    // world mesh (most shipped items) — like Blitz (ClientNet.bb:1378).
+                    // Replaces the flat 2D pip with a real, terrain-occluded 3D object.
+                    let mut loot_models: Vec<std::rc::Rc<rcce_data::B3dModel>> = Vec::new();
+                    let mut loot_texs: Vec<Vec<Option<rcce_data::Image>>> = Vec::new();
+                    let mut loot_xf: Vec<([f32; 3], f32, String)> = Vec::new();
+                    if !net.world.dropped_items.is_empty() {
+                        if self.loot_bag.is_none() {
+                            self.loot_bag = store.mesh_by_path("Loot Bag.b3d").map(|(m, t, _)| (m, t));
+                        }
+                        for d in net.world.dropped_items.values() {
+                            let (model, texs, s, key) = match store.gear_attachment(d.item_id) {
+                                // Item's own world mesh (Blitz: LoadedMeshScales × 0.05).
+                                Some(att) => (att.model, att.textures, att.scale * 0.05, format!("loot:i{}", d.item_id)),
+                                // Fallback Loot Bag (Blitz scales it 0.075).
+                                None => match &self.loot_bag {
+                                    Some((m, t)) => (m.clone(), t.clone(), 0.075, "loot:bag".to_string()),
+                                    None => continue,
+                                },
+                            };
+                            // Seat the mesh's lowest vertex on the terrain under it.
+                            let (min, _) = model.bounds();
+                            let ground = self.height_field.as_ref().and_then(|h| h.height_at(d.x, d.z)).unwrap_or(d.y);
+                            loot_models.push(model);
+                            loot_texs.push(texs);
+                            loot_xf.push(([d.x, ground - min[1] * s, d.z], s, key));
+                        }
+                    }
+                    let mut keys = keys;
+                    for (i, (pos, s, key)) in loot_xf.iter().enumerate() {
+                        instances.push(SceneInstance {
+                            model: &loot_models[i],
+                            textures: &loot_texs[i][..],
+                            lightmaps: &[],
+                            translation: *pos,
+                            rot: [0.0, 0.0, 0.0],
+                            scale: [*s, *s, *s],
+                            color: [1.0, 1.0, 1.0],
+                        });
+                        keys.push(key.clone());
+                    }
+                    view.set_dynamic(&gfx.device, &gfx.queue, &instances, &keys);
+                    self.last_dyn_hash = hash;
+                }
             }
             // Follow the SMOOTHED player render position (MOVE-SMOOTH) — the body
             // renders there too, so camera + body move in lockstep and there's no
