@@ -854,9 +854,16 @@ impl World {
                 if let Some(gain) = MsgReader::new(&d[1..]).i32() {
                     self.me_xp = self.me_xp.saturating_add(gain);
                     // Blitz toast (ClientNet.bb:698): "<N> experience points
-                    // received!" in warm gold (255,225,100 → LS_XPReceived). Only
-                    // for a real positive gain, so a malformed/zero/negative 'M'
-                    // (the fuzz suite feeds these) shows no confusing message.
+                    // received!" in warm gold (255,225,100 → LS_XPReceived).
+                    // DELIBERATE deviation from Blitz (which prints it for ANY
+                    // value): gate on a positive gain. The server legitimately
+                    // sends gain==0 as normal traffic — party-split integer
+                    // division `PartyXP = XP / Members` is 0 when XP < Members
+                    // (GameServer.bb:80→106), and BVM_GIVEXP passes any value
+                    // through — so Blitz spams "0 experience points received!" on
+                    // small-kill party splits. Suppressing the zero/penalty toast
+                    // is a quieter, genuine improvement; me_xp itself still tracks
+                    // every gain (the saturating_add above is unconditional).
                     if gain > 0 {
                         self.chat
                             .push((format!("{gain} experience points received!"), [1.0, 0.882, 0.392, 1.0]));
