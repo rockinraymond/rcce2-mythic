@@ -105,6 +105,10 @@ pub struct WorldView {
     /// Static skinned geometry per `key:mesh` (vbuf + ibuf + n_idx + texture),
     /// uploaded ONCE — the GPU skinning path poses it via the per-actor uniform.
     skin_static: HashMap<String, (Rc<wgpu::Buffer>, Rc<wgpu::Buffer>, u32, Rc<wgpu::BindGroup>)>,
+    /// Particle-emitter billboard textures, cached by emitter `tex_id` so they
+    /// upload ONCE instead of every frame (the verts rebuild per frame, the
+    /// texture does not). Cleared on zone change in `set_scene`.
+    particle_tex: HashMap<u16, Rc<wgpu::BindGroup>>,
     /// Reusable per-actor skinning uniform buffers + binds (grown as needed).
     actor_pool: Vec<(wgpu::Buffer, wgpu::BindGroup)>,
     /// This frame's skinned draws.
@@ -129,7 +133,7 @@ pub struct WorldView {
 /// One frame's particle geometry for an emitter: its texture bind + blend +
 /// camera-facing billboard vertices.
 struct ParticleBatch {
-    tex_bind: wgpu::BindGroup,
+    tex_bind: Rc<wgpu::BindGroup>,
     add: bool,
     vbuf: wgpu::Buffer,
     n: u32,
@@ -266,6 +270,7 @@ impl WorldView {
             tex_cache: TexCache::new(),
             idx_cache: IndexCache::new(),
             skin_static: HashMap::new(),
+            particle_tex: HashMap::new(),
             actor_pool: Vec::new(),
             skinned: Vec::new(),
             zone_lights: Vec::new(),
@@ -284,9 +289,12 @@ impl WorldView {
 
     /// Replace this frame's particle billboards: `(texture, additive?, verts)` per
     /// emitter. Verts are camera-facing quads (6 per particle). Rebuilt each frame.
-    pub fn set_particles(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, batches: &[(Option<Image>, bool, Vec<gpu::Vertex>)]) {
+    pub fn set_particles(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, batches: &[(u16, Option<Image>, bool, Vec<gpu::Vertex>)]) {
         self.particles.clear();
-        for (img, add, verts) in batches {
+        // Disjoint-field borrows: the texture cache (mut) + the pipeline (shared).
+        let particle_tex = &mut self.particle_tex;
+        let pipeline = &self.pipeline;
+        for (tex_id, img, add, verts) in batches {
             if verts.is_empty() {
                 continue;
             }
@@ -295,7 +303,19 @@ impl WorldView {
                 contents: bytemuck::cast_slice(verts),
                 usage: wgpu::BufferUsages::VERTEX,
             });
-            let tex_bind = self.pipeline.texture_bind(device, queue, img.as_ref());
+            // A zone emitter's billboard texture is constant across frames (only
+            // the verts move), so upload + bind it ONCE per tex_id instead of
+            // every frame (cleared on zone change in `set_scene`). `u16::MAX` is
+            // reserved for app-procedural one-off batches (e.g. the projectile
+            // glow) that aren't stable zone emitters — bind those fresh.
+            let tex_bind = if *tex_id == u16::MAX {
+                Rc::new(pipeline.texture_bind(device, queue, img.as_ref()))
+            } else {
+                particle_tex
+                    .entry(*tex_id)
+                    .or_insert_with(|| Rc::new(pipeline.texture_bind(device, queue, img.as_ref())))
+                    .clone()
+            };
             self.particles.push(ParticleBatch { tex_bind, add: *add, vbuf, n: verts.len() as u32 });
         }
     }
@@ -357,8 +377,11 @@ impl WorldView {
         ground_y: f32,
     ) {
         // New zone: drop the previous zone's cached textures so stale entries can't
-        // be reused, then build (deduping identical scenery textures).
+        // be reused, then build (deduping identical scenery textures). Also drop
+        // the particle-emitter texture cache (keyed by tex_id, which a new zone
+        // can reuse for a different texture).
         self.static_tex_cache.clear();
+        self.particle_tex.clear();
         self.statics = gpu::build_drawables(device, queue, &self.pipeline, instances, ground_y, &mut self.static_tex_cache);
     }
 
