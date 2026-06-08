@@ -39,6 +39,9 @@ pub struct AssetStore {
     /// `Game Data/Fixed Attributes.dat`. `None` when the file is absent (the
     /// `health_stat()` accessor then falls back to the index-0 default).
     fixed_attributes: Option<rcce_data::FixedAttributes>,
+    /// Project sun/moon directional lights from `Game Data/Suns.dat`. `None` when
+    /// absent → the renderer uses a neutral white sun. See `sun_light`.
+    suns: Option<rcce_data::Suns>,
     cache: HashMap<u16, Option<Rc<B3dModel>>>,
     /// Memoised decoded actor skins, keyed by appearance, so per-frame actor
     /// rebuilds don't re-read + re-decode the skin files from disk.
@@ -155,6 +158,10 @@ impl AssetStore {
         let fixed_attributes = std::fs::read(data_root.join("Game Data/Fixed Attributes.dat"))
             .ok()
             .and_then(|b| rcce_data::FixedAttributes::parse(&b).ok());
+        // Project sun/moon directional light colours (warm day / cool night).
+        let suns = std::fs::read(data_root.join("Game Data/Suns.dat"))
+            .ok()
+            .and_then(|b| rcce_data::Suns::parse(&b).ok());
         Ok(Self {
             data_root,
             actors,
@@ -168,6 +175,7 @@ impl AssetStore {
             money,
             attribute_names,
             fixed_attributes,
+            suns,
             cache: HashMap::new(),
             actor_tex_cache: HashMap::new(),
         })
@@ -179,6 +187,15 @@ impl AssetStore {
     /// shipped default project (Health = slot 0).
     pub fn health_stat(&self) -> u8 {
         self.fixed_attributes.and_then(|f| f.health).unwrap_or(0)
+    }
+
+    /// The project's active directional sun colour at `minutes` (game-minutes
+    /// since midnight), normalised `0..1`, or `None` when no sun is visible /
+    /// `Suns.dat` is absent (caller falls back to neutral white). Season 0 (the
+    /// renderer doesn't yet track seasons). The shipped project gives a warm amber
+    /// by day and a cool blue at night.
+    pub fn sun_light(&self, minutes: u16) -> Option<[f32; 3]> {
+        self.suns.as_ref().and_then(|s| s.light_at(minutes, 0))
     }
 
     /// Display name for attribute slot `i` (Health, Mana, Strength, …), or
