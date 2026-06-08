@@ -111,8 +111,13 @@ struct VsOut { @builtin(position) clip: vec4<f32>, @location(0) uv: vec2<f32>, @
 /// follows call order — a coloured rect drawn after a textured quad sits on top
 /// of it (lets slot numbers / cooldown shading layer over a slot texture).
 enum Cmd {
-    /// Filled rect: x, y, w, h, RGBA.
+    /// Filled rect: x, y, w, h, RGBA (alpha-blended).
     Rect(f32, f32, f32, f32, [f32; 4]),
+    /// Additive filled rect: x, y, w, h, RGBA. Adds `rgb*a` to the framebuffer
+    /// (a light burst) instead of alpha-blending toward the colour. Used for
+    /// bright screen flashes (lightning, spell bursts) so they brighten the
+    /// scene like real light. Same vertex format as `Rect`.
+    RectAdd(f32, f32, f32, f32, [f32; 4]),
     /// Textured quad: x, y, w, h, uv (u0,v0,u1,v1), tint, texture key.
     Tex(f32, f32, f32, f32, [f32; 4], [f32; 4], String),
 }
@@ -121,6 +126,8 @@ enum Cmd {
 /// interleaving coloured and textured runs in submission order.
 pub struct Overlay {
     pipeline: wgpu::RenderPipeline,
+    /// Same as `pipeline` but additive-blended (for bright screen flashes).
+    pipeline_add: wgpu::RenderPipeline,
     cmds: Vec<Cmd>,
     // Textured-quad layer (GUI icons, the XP bar, item icons).
     tex_pipeline: wgpu::RenderPipeline,
@@ -160,6 +167,51 @@ impl Overlay {
                 targets: &[Some(wgpu::ColorTargetState {
                     format: color_format,
                     blend: Some(wgpu::BlendState::ALPHA_BLENDING),
+                    write_mask: wgpu::ColorWrites::ALL,
+                })],
+            }),
+            primitive: wgpu::PrimitiveState::default(),
+            depth_stencil: None,
+            multisample: wgpu::MultisampleState::default(),
+            multiview: None,
+            cache: None,
+        });
+        // Additive variant of the coloured pipeline (same shader + vertex layout,
+        // additive blend): output = dst + src.rgb * src.a. A bright screen flash
+        // drawn through this ADDS light instead of washing the scene toward the
+        // flash colour. (A dark flash must NOT use this — additive black is a
+        // no-op; the caller picks the pipeline by flash luminance.)
+        let pipeline_add = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("overlay-add"),
+            layout: Some(&layout),
+            vertex: wgpu::VertexState {
+                module: &shader,
+                entry_point: "vs",
+                compilation_options: Default::default(),
+                buffers: &[wgpu::VertexBufferLayout {
+                    array_stride: std::mem::size_of::<V2>() as u64,
+                    step_mode: wgpu::VertexStepMode::Vertex,
+                    attributes: &wgpu::vertex_attr_array![0 => Float32x2, 1 => Float32x4],
+                }],
+            },
+            fragment: Some(wgpu::FragmentState {
+                module: &shader,
+                entry_point: "fs",
+                compilation_options: Default::default(),
+                targets: &[Some(wgpu::ColorTargetState {
+                    format: color_format,
+                    blend: Some(wgpu::BlendState {
+                        color: wgpu::BlendComponent {
+                            src_factor: wgpu::BlendFactor::SrcAlpha,
+                            dst_factor: wgpu::BlendFactor::One,
+                            operation: wgpu::BlendOperation::Add,
+                        },
+                        alpha: wgpu::BlendComponent {
+                            src_factor: wgpu::BlendFactor::One,
+                            dst_factor: wgpu::BlendFactor::One,
+                            operation: wgpu::BlendOperation::Add,
+                        },
+                    }),
                     write_mask: wgpu::ColorWrites::ALL,
                 })],
             }),
@@ -241,6 +293,7 @@ impl Overlay {
 
         Overlay {
             pipeline,
+            pipeline_add,
             cmds: Vec::new(),
             tex_pipeline,
             tex_layout,
@@ -326,6 +379,14 @@ impl Overlay {
         self.cmds.push(Cmd::Rect(x, y, w, h, color));
     }
 
+    /// Queue an ADDITIVE filled rectangle: adds `rgb * a` to the framebuffer
+    /// instead of alpha-blending. Use for a bright light burst (a white
+    /// lightning / spell flash) so it brightens the scene. Do NOT use for a
+    /// dark flash (additive black is a no-op — use `rect`).
+    pub fn rect_add(&mut self, x: f32, y: f32, w: f32, h: f32, color: [f32; 4]) {
+        self.cmds.push(Cmd::RectAdd(x, y, w, h, color));
+    }
+
     /// Draw `s` as 8×8 bitmap glyphs (one quad per lit pixel) at `scale` px per
     /// font pixel, top-left at `(x, y)`. Newlines advance a line.
     pub fn text(&mut self, x: f32, y: f32, scale: f32, s: &str, color: [f32; 4]) {
@@ -386,6 +447,7 @@ impl Overlay {
         // A run is a contiguous range of vertices of one kind, drawn together.
         enum Run {
             Colored { start: u32, count: u32 },
+            ColoredAdd { start: u32, count: u32 },
             Textured { key: String, start: u32, count: u32 },
         }
         let mut cverts: Vec<V2> = Vec::new();
@@ -407,6 +469,22 @@ impl Overlay {
                     match runs.last_mut() {
                         Some(Run::Colored { count, .. }) => *count += 6,
                         _ => runs.push(Run::Colored { start, count: 6 }),
+                    }
+                }
+                Cmd::RectAdd(x, y, w, h, c) => {
+                    // Same vertex buffer as Rect (identical V2 layout); only the
+                    // pipeline (blend) differs at replay time.
+                    let start = cverts.len() as u32;
+                    let tl = to_ndc(*x, *y);
+                    let tr = to_ndc(*x + *w, *y);
+                    let br = to_ndc(*x + *w, *y + *h);
+                    let bl = to_ndc(*x, *y + *h);
+                    for p in [tl, tr, br, tl, br, bl] {
+                        cverts.push(V2 { pos: p, color: *c });
+                    }
+                    match runs.last_mut() {
+                        Some(Run::ColoredAdd { count, .. }) => *count += 6,
+                        _ => runs.push(Run::ColoredAdd { start, count: 6 }),
                     }
                 }
                 Cmd::Tex(x, y, w, h, uv, c, key) => {
@@ -461,6 +539,12 @@ impl Overlay {
                 match run {
                     Run::Colored { start, count } => {
                         rp.set_pipeline(&self.pipeline);
+                        rp.set_vertex_buffer(0, cvbuf.slice(..));
+                        rp.draw(*start..(*start + *count), 0..1);
+                    }
+                    Run::ColoredAdd { start, count } => {
+                        // Same coloured vertex buffer, additive pipeline.
+                        rp.set_pipeline(&self.pipeline_add);
                         rp.set_vertex_buffer(0, cvbuf.slice(..));
                         rp.draw(*start..(*start + *count), 0..1);
                     }
