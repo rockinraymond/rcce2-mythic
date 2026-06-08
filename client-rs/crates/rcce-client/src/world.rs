@@ -1033,15 +1033,23 @@ impl World {
         let Some(rid) = r.u16() else { return };
         match sub {
             b'H' => {
-                // RID is the target I hit (I am the attacker): it grunts (Hit1).
+                // RID is the target I hit (I am the attacker).
                 let (Some(raw_dmg), Some(dtype)) = (r.u16(), r.u8()) else { return };
+                let damage = raw_dmg.saturating_sub(1);
                 self.combat_events.push(CombatEvent {
                     target: rid,
                     attacker: self.my_runtime_id,
-                    damage: raw_dmg.saturating_sub(1),
+                    damage,
                     damage_type: dtype,
                 });
-                self.pending_combat_sounds.push((rid, SPEECH_HIT1));
+                // The target cries out in PAIN (Hit) only on a CONNECTING hit —
+                // a parried / 0-damage swing draws no pain cry. Matches Blitz
+                // ClientNet.bb:1131 (`PlayActorSound(A, Speech_Hit*)` is inside
+                // `If Damage > 0`). The attacker's own swing GRUNT (Attack), by
+                // contrast, is exertion and plays on any swing (see 'Y'/broadcast).
+                if damage > 0 {
+                    self.pending_combat_sounds.push((rid, SPEECH_HIT1));
+                }
             }
             b'Y' => {
                 // RID is the attacker who hit me: animate + voice its swing (Attack1),
@@ -2033,6 +2041,24 @@ mod tests {
         w.apply(&msg(pk::ACTOR_DEAD, pkt(|p| { p.u16(999); })));
         assert_eq!(w.pending_combat_sounds.last(), Some(&(50, SPEECH_DEATH)));
         assert_eq!(w.pending_combat_sounds.iter().filter(|(r, _)| *r == 999).count(), 0);
+    }
+
+    // The 'H' target Hit (pain) cry is gated on actual damage: a parried /
+    // 0-damage swing (raw_dmg = 1 → damage 0) still records the floater but
+    // queues NO pain cry. Matches Blitz ClientNet.bb:1131 (the cry is inside
+    // `If Damage > 0`). The damaging case is covered by combat_voice_sound_intents.
+    #[test]
+    fn hit_cry_gated_on_damage() {
+        let mut w = World { my_runtime_id: 1, ..Default::default() };
+        // 'H' I hit target 9 for 0 damage (raw 1): floater recorded, NO Hit cry.
+        w.apply(&msg(pk::ATTACK_ACTOR, pkt(|p| { p.u8(b'H').u16(9).u16(1).u8(0); })));
+        assert_eq!(w.combat_events.last().unwrap().target, 9);
+        assert_eq!(w.combat_events.last().unwrap().damage, 0);
+        assert!(w.pending_combat_sounds.is_empty(), "no pain cry on a 0-damage hit");
+
+        // A damaging hit (raw 6 → damage 5) DOES queue the Hit cry.
+        w.apply(&msg(pk::ATTACK_ACTOR, pkt(|p| { p.u8(b'H').u16(9).u16(6).u8(0); })));
+        assert_eq!(w.pending_combat_sounds, vec![(9, SPEECH_HIT1)]);
     }
 
     #[test]
