@@ -175,6 +175,9 @@ pub struct Actor {
     /// the nameplate and the target panel (Blitz tracks it as `AI\Level` and shows
     /// it in the CharInteract window).
     pub level: u16,
+    /// Actor reputation (signed; from `P_NewActor`). Shown in the target panel —
+    /// Blitz's CharInteract window shows `LS_Reputation + AI\Reputation`.
+    pub reputation: i16,
     pub name: String,
     pub tag: String,
     pub is_player: bool,
@@ -817,7 +820,11 @@ impl World {
         } else {
             0
         };
-        let _reputation = r.u16(); // skip 2 bytes (value unused here)
+        // Reputation is a SIGNED short on the wire (Blitz reads it via
+        // RCE_SignedShortFromStr, Actors.bb:1170) — a hostile-faction actor can be
+        // negative. Cast u16→i16 to sign-extend; reading it unsigned would show a
+        // huge positive for any negative reputation.
+        let reputation = r.u16().unwrap_or(0) as i16;
         let clamp4 = |v: Option<u16>| v.unwrap_or(0).min(4) as u8;
         let face_tex = clamp4(r.u16());
         let hair = clamp4(r.u16());
@@ -858,6 +865,7 @@ impl World {
                 runtime_id,
                 template_id,
                 level,
+                reputation,
                 name,
                 tag,
                 is_player,
@@ -3271,6 +3279,33 @@ mod tests {
         w.apply(&msg(pk::XP_UPDATE, pkt(|p| { p.u8(b'L').u16(999).u16(5); })));
         w.apply(&msg(pk::XP_UPDATE, pkt(|p| { p.u8(b'L').u16(50); }))); // missing level
         assert_eq!(w.actors[&50].level, 8, "unchanged on unknown actor / truncation");
+    }
+
+    // Actor reputation is captured from P_NewActor as a SIGNED short (a
+    // hostile-faction actor can be negative). Shown in the target panel.
+    #[test]
+    fn actor_reputation_signed_capture() {
+        let mut w = World::default();
+        // template 3 is mode 0 (selectable) → a gender byte precedes reputation.
+        // Negative reputation: -10000 = 0xD8F0 as the u16 wire bits.
+        w.apply(&msg(pk::NEW_ACTOR, pkt(|p| {
+            p.u32(0).u16(50).u16(1).u32(0).u16(3);
+            p.f32(0.0).f32(0.0).f32(0.0).f32(0.0);
+            p.u8(0).str8("Wolf").str8("");
+            p.u8(0); // gender byte (mode 0)
+            p.u16(0xD8F0); // reputation -10000
+        })));
+        assert_eq!(w.actors[&50].reputation, -10000, "negative reputation sign-extended");
+
+        // Positive reputation round-trips unchanged.
+        w.apply(&msg(pk::NEW_ACTOR, pkt(|p| {
+            p.u32(0).u16(51).u16(1).u32(0).u16(3);
+            p.f32(0.0).f32(0.0).f32(0.0).f32(0.0);
+            p.u8(0).str8("Guard").str8("");
+            p.u8(0);
+            p.u16(250);
+        })));
+        assert_eq!(w.actors[&51].reputation, 250);
     }
 
     // P_KickedPlayer (empty payload) flags the session so the App tears it down

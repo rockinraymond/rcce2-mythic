@@ -7777,7 +7777,7 @@ impl App {
                 // the target dies/zones (on_actor_dead clears self.target).
                 if let Some(rid) = target_rid {
                     if let Some(t) = net.world.actors.get(&rid).filter(|a| a.alive) {
-                        let (pw, ph) = (240.0f32, 48.0f32);
+                        let (pw, ph) = (240.0f32, 62.0f32);
                         let px0 = (sw - pw) * 0.5;
                         let py0 = 40.0;
                         overlay.rect(px0, py0, pw, ph, [0.0, 0.0, 0.0, 0.55]);
@@ -7800,6 +7800,18 @@ impl App {
                         let hp = format!("{} / {}", t.health.max(0), t.health_max.max(0));
                         let tw = rcce_render::font::text_width(&hp, 1.0);
                         overlay.text_shadow(px0 + pw * 0.5 - tw * 0.5, py0 + 29.0, 1.0, &hp, [1.0, 1.0, 1.0, 1.0]);
+                        // Reputation, bottom row (Blitz CharInteract: LS_Reputation +
+                        // AI\Reputation, Interface3D.bb:26). Signed; tinted by sign as
+                        // a readability nicety over Blitz's plain label.
+                        let rep = t.reputation;
+                        let rc = if rep < 0 {
+                            [1.0, 0.55, 0.5, 1.0]
+                        } else if rep > 0 {
+                            [0.6, 1.0, 0.6, 1.0]
+                        } else {
+                            [0.82, 0.82, 0.82, 1.0]
+                        };
+                        overlay.text_shadow(px0 + 8.0, py0 + 45.0, 1.0, &format!("Reputation: {rep}"), rc);
                     }
                 }
 
