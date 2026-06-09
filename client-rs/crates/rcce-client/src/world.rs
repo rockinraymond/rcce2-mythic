@@ -734,6 +734,7 @@ impl World {
             pk::APPEARANCE_UPDATE => self.on_appearance_update(&m.data),
             pk::REPOSITION_ACTOR => self.on_reposition_actor(&m.data),
             pk::ANIMATE_ACTOR => self.on_animate_actor(&m.data),
+            pk::ITEM_HEALTH => self.on_item_health(&m.data),
             _ => {}
         }
     }
@@ -1826,6 +1827,24 @@ impl World {
             a.dest_z = a.z;
         }
         self.pending_anims.push((rid, name));
+    }
+
+    /// `P_ItemHealth` (ClientNet.bb:249): the server reports a durability change
+    /// on one of the local player's equipped items — the **combat** wear channel
+    /// (GameServer.bb:544/560), distinct from the script-driven `P_InventoryUpdate`
+    /// `"H"` sub-packet. Layout: slot(u8) · health(u16). The value is durability
+    /// (0..100), so it fits the `u8` health field; clamp defensively. Keeping it
+    /// live matters because `effective_attack_range` falls a ranged weapon back to
+    /// melee once its `item_health` hits 0. Soft-fails on a short packet or an
+    /// empty slot (mirrors Blitz `If … <> Null`).
+    fn on_item_health(&mut self, d: &[u8]) {
+        let mut r = MsgReader::new(d);
+        let (Some(slot), Some(health)) = (r.u8(), r.u16()) else {
+            return;
+        };
+        if let Some(it) = self.me_inventory.get_mut(&slot) {
+            it.health = health.min(255) as u8;
+        }
     }
 
     /// Advance server-commanded animations and expire them the Blitz mode-3 way:
@@ -3181,6 +3200,31 @@ mod tests {
         assert_eq!(w.me_inventory[&14].amount, 3);
         w.apply(&msg(pk::INVENTORY_UPDATE, pkt(|p| { p.u8(b'T').u8(14).u16(3); })));
         assert!(w.me_inventory.is_empty());
+    }
+
+    // P_ItemHealth is the combat durability channel (slot u8 + health u16),
+    // separate from the script-driven P_InventoryUpdate "H" sub-packet. It updates
+    // the local player's equipped item so effective_attack_range stays correct as
+    // gear wears. Soft-fails on an empty slot or a short packet.
+    #[test]
+    fn item_health_combat_durability() {
+        let mut w = World::default();
+        // Seed an item at backpack slot 14 via a "G" give (health starts 100).
+        w.apply(&msg(pk::INVENTORY_UPDATE, pkt(|p| { p.u8(b'G').u32(1).u16(10).u16(1); })));
+        assert_eq!(w.me_inventory[&14].health, 100);
+
+        // Combat wear: slot 14 → health 73 (u16 on the wire).
+        w.apply(&msg(pk::ITEM_HEALTH, pkt(|p| { p.u8(14).u16(73); })));
+        assert_eq!(w.me_inventory[&14].health, 73);
+
+        // A broken item reads 0 (effective_attack_range then drops a bow to melee).
+        w.apply(&msg(pk::ITEM_HEALTH, pkt(|p| { p.u8(14).u16(0); })));
+        assert_eq!(w.me_inventory[&14].health, 0);
+
+        // An empty slot and a truncated packet both soft-fail (no panic, no-op).
+        w.apply(&msg(pk::ITEM_HEALTH, pkt(|p| { p.u8(99).u16(50); })));
+        w.apply(&msg(pk::ITEM_HEALTH, pkt(|p| { p.u8(14); }))); // missing health
+        assert_eq!(w.me_inventory[&14].health, 0, "truncated packet left health unchanged");
     }
 
     #[test]
