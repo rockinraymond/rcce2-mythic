@@ -1025,10 +1025,15 @@ impl World {
         if kind == b'R' {
             let mut r = MsgReader::new(&d[1..]);
             if let (Some(rid), Some(rep)) = (r.u16(), r.u16()) {
+                // Reinterpret the 16-bit field as signed (reputation can be
+                // negative) — mirrors RCE_SignedShortFromStr. The server broadcasts
+                // a player's reputation change to everyone in the zone (Server.bb
+                // UpdateReputation), so apply it to a remote actor too, keeping the
+                // target panel live (Blitz ClientNet.bb:1014 sets it for any rid).
                 if rid == self.my_runtime_id {
-                    // Reinterpret the 16-bit field as signed (reputation can be
-                    // negative), then widen — mirrors RCE_SignedShortFromStr.
                     self.me_reputation = rep as i16 as i32;
+                } else if let Some(a) = self.actors.get_mut(&rid) {
+                    a.reputation = rep as i16;
                 }
             }
             return;
@@ -2890,9 +2895,21 @@ mod tests {
         assert_eq!(w.me_reputation, -30, "negative reputation sign-extends");
         w.apply(&msg(pk::STAT_UPDATE, pkt(|p| { p.u8(b'R').u16(7).u16(450); })));
         assert_eq!(w.me_reputation, 450, "positive reputation");
-        // Another actor's reputation ('R' for a non-self rid) does not touch mine.
+        // An 'R' for a non-self rid updates THAT actor's reputation (the server
+        // broadcasts a player's reputation change zone-wide) but never touches
+        // mine. An unknown rid is a harmless no-op.
+        w.apply(&msg(pk::NEW_ACTOR, pkt(|p| {
+            p.u32(0).u16(50).u16(1).u32(0).u16(3);
+            p.f32(0.0).f32(0.0).f32(0.0).f32(0.0);
+            p.u8(1).str8("Rival").str8("");
+            p.u8(0).u16(100); // gender byte + spawn reputation 100
+        })));
+        assert_eq!(w.actors[&50].reputation, 100);
         w.apply(&msg(pk::STAT_UPDATE, pkt(|p| { p.u8(b'R').u16(50).u16((-9i16) as u16); })));
+        assert_eq!(w.actors[&50].reputation, -9, "remote actor reputation updates (signed)");
         assert_eq!(w.me_reputation, 450, "other actors' reputation leaves mine unchanged");
+        w.apply(&msg(pk::STAT_UPDATE, pkt(|p| { p.u8(b'R').u16(999).u16(5); }))); // unknown rid
+        assert_eq!(w.me_reputation, 450);
         // The 'R' layout (no attr byte) must not be misparsed as an attribute.
         assert!(w.me_attributes.is_empty(), "'R' does not write an attribute slot");
     }
