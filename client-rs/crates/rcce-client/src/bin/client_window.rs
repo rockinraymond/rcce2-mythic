@@ -1537,6 +1537,18 @@ enum CombatStep {
     Wait,
 }
 
+/// How an override clip advances when present, vs the looping locomotion default.
+#[derive(Clone, Copy)]
+enum ClipPlay {
+    /// Loop the clip on the global timeline (jump/attack swings).
+    Loop,
+    /// Pin the last frame statically (a death/corpse pose).
+    HoldEnd,
+    /// Play once from frame 0 given seconds-since-start, then hold the last frame
+    /// (a server-commanded emote/pose, `P_AnimateActor` mode 3).
+    OnceFrom(f32),
+}
+
 /// Combat animation clip names (ANIM-8), tried in order (exact match first, then
 /// substring). The shipped data labels them "Default attack"/"Death 1"; Hit
 /// ranges are empty so there's no hit-react clip.
@@ -1704,7 +1716,7 @@ fn build_actors(
                     rid: u16,
                     moving: bool,
                     running: bool,
-                    combat: Option<(&[&str], bool)>,
+                    combat: Option<(&[&str], ClipPlay)>,
                     pos: [f32; 3],
                     yaw: f32,
                     color: [f32; 3]| {
@@ -1714,10 +1726,19 @@ fn build_actors(
         // clips (this data's Hit ranges are [0..0]) are skipped; `hold` pins the
         // clip's last frame for a static corpse pose (ANIM-8).
         let frame = match combat {
-            Some((names, hold)) => store
+            Some((names, play)) => store
                 .actor_clip(tmpl, gender, names)
                 .filter(|c| c.end > c.start)
-                .map(|c| if hold { c.end as f32 } else { clip_frame(c, fps, elapsed + rid as f32 * 0.13) }),
+                .map(|c| match play {
+                    ClipPlay::HoldEnd => c.end as f32,
+                    ClipPlay::Loop => clip_frame(c, fps, elapsed + rid as f32 * 0.13),
+                    // Advance from frame 0 at the clip's native rate, clamping at the
+                    // last frame so the pose holds once it has played through. Guard
+                    // fps/speed like clip_frame so pathological data can't stall it.
+                    ClipPlay::OnceFrom(t) => {
+                        (c.start as f32 + t * fps.max(0.001) * c.speed.max(0.001)).min(c.end as f32)
+                    }
+                }),
             None => {
                 let names: &[&str] = if running {
                     &["Run"]
@@ -1863,18 +1884,18 @@ fn build_actors(
     // (ANIM-6) overrides only when nothing more important is playing.
     // A server-commanded animation on the local player (P_AnimateActor for our own
     // rid) overrides jump/attack/fidget, same as remote actors. Runtime name → a
-    // 1-element slice borrowing it for this build.
-    let me_server_anim = world.server_anims.get(&world.my_runtime_id).map(|s| s.name.as_str());
+    // 1-element slice borrowing it for this build; OnceFrom plays it from frame 0.
+    let me_server_anim = world.server_anims.get(&world.my_runtime_id);
     let me_sa_slot;
-    let me_combat = if let Some(name) = me_server_anim {
-        me_sa_slot = [name];
-        Some((&me_sa_slot[..], false))
+    let me_combat = if let Some(sa) = me_server_anim {
+        me_sa_slot = [sa.name.as_str()];
+        Some((&me_sa_slot[..], ClipPlay::OnceFrom(sa.elapsed)))
     } else if me_jumping {
-        Some((JUMP_CLIP, false))
+        Some((JUMP_CLIP, ClipPlay::Loop))
     } else if me_attack {
-        Some((ATTACK_CLIP, false))
+        Some((ATTACK_CLIP, ClipPlay::Loop))
     } else {
-        me_fidget.map(|f| (f, false))
+        me_fidget.map(|f| (f, ClipPlay::Loop))
     };
     if !hide_me {
         push(store, &mut models, &mut textures, &mut place, &mut keys, &mut skinned, me_template, world.me_gender, world.me_face_tex, world.me_body_tex, world.me_hair, world.me_beard, me_weapon, me_shield, weapon_override, world.my_runtime_id, me_moving, me_running, me_combat, [world.me_render_x, world.me_y + me_jump_offset, world.me_render_z], world.me_yaw, [0.85, 0.95, 0.85]);
@@ -1893,17 +1914,17 @@ fn build_actors(
         // explicit emote/pose and overrides locomotion, jump, and attack — but not
         // death. Priority: dead > server-anim > jump > attack > none. The clip name
         // is a runtime String, so build a 1-element slice borrowing it for this call.
-        let server_anim = world.server_anims.get(&a.runtime_id).map(|s| s.name.as_str());
+        let server_anim = world.server_anims.get(&a.runtime_id);
         let sa_slot;
         let combat = if !a.alive {
-            Some((death_clip(a.runtime_id), true))
-        } else if let Some(name) = server_anim {
-            sa_slot = [name];
-            Some((&sa_slot[..], false))
+            Some((death_clip(a.runtime_id), ClipPlay::HoldEnd))
+        } else if let Some(sa) = server_anim {
+            sa_slot = [sa.name.as_str()];
+            Some((&sa_slot[..], ClipPlay::OnceFrom(sa.elapsed)))
         } else if jump_left.is_some() {
-            Some((JUMP_CLIP, false))
+            Some((JUMP_CLIP, ClipPlay::Loop))
         } else if world.attack_anims.contains_key(&a.runtime_id) {
-            Some((ATTACK_CLIP, false))
+            Some((ATTACK_CLIP, ClipPlay::Loop))
         } else {
             None
         };
@@ -6170,12 +6191,16 @@ impl App {
                         let dur = (end - start) as f32 / (fps.max(0.001) * speed.max(0.001));
                         net.world.server_anims.insert(
                             rid,
-                            rcce_client::world::ServerAnim { name, remaining: dur.max(0.05) },
+                            rcce_client::world::ServerAnim {
+                                name,
+                                elapsed: 0.0,
+                                duration: dur.max(0.05),
+                            },
                         );
                     }
                 }
             }
-            net.world.tick_server_anims(proj_dt);
+            net.world.tick_server_anims(proj_dt, moving);
             if !self.grounded {
                 let (o, v, g) = jump_step(self.jump_offset, self.jump_vel);
                 self.jump_offset = o;
