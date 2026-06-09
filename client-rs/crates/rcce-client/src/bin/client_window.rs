@@ -2212,6 +2212,23 @@ fn build_water_texs(planes: &[(rcce_data::WaterPlane, rcce_data::Image)]) -> Vec
     planes.iter().map(|(_, img)| vec![Some(img.clone())]).collect()
 }
 
+/// Assign a zone's water `planes` and rebuild the cached per-plane texture
+/// wrappers in LOCKSTEP. Every zone-load path sets the two through this so
+/// neither can be updated without the other: the water draw loop indexes
+/// `water_texs[i]` by the same `i` as `water_planes`, so a length divergence
+/// would panic (out of bounds). (Free fn taking the two field refs, not an
+/// `&mut self` method, so it composes with the `gfx`/`view`/`store` split
+/// borrows held at the in-render zone-reload call site. Hardens the iter-21 /
+/// #487 review nit — the pairing was previously inlined at each call site.)
+fn set_water_planes(
+    planes: Vec<(rcce_data::WaterPlane, rcce_data::Image)>,
+    water_planes: &mut Vec<(rcce_data::WaterPlane, rcce_data::Image)>,
+    water_texs: &mut Vec<Vec<Option<Image>>>,
+) {
+    *water_texs = build_water_texs(&planes);
+    *water_planes = planes;
+}
+
 /// The water-tint colour if the camera `eye` is underwater — below a water
 /// plane's surface Y and within its X/Z bounds (Blitz `CameraUnderwater`,
 /// Client.bb:895-914). `None` when above water; the first containing plane wins.
@@ -2782,8 +2799,7 @@ impl ApplicationHandler for App {
             self.span = z.span;
             self.ground_y = z.ground_y;
             self.height_field = Some(z.height_field);
-            self.water_planes = z.waters;
-            self.water_texs = build_water_texs(&self.water_planes);
+            set_water_planes(z.waters, &mut self.water_planes, &mut self.water_texs);
             self.emitters = z.emitters;
             self.cam_occluders = z.occluders;
             self.fog_color = z.env.fog_color;
@@ -5981,8 +5997,7 @@ impl App {
                     self.span = z.span;
                     self.ground_y = z.ground_y;
                     self.height_field = Some(z.height_field);
-                    self.water_planes = z.waters;
-                    self.water_texs = build_water_texs(&self.water_planes);
+                    set_water_planes(z.waters, &mut self.water_planes, &mut self.water_texs);
                     self.emitters = z.emitters;
                     self.cam_occluders = z.occluders;
                     self.fog_color = z.env.fog_color;
