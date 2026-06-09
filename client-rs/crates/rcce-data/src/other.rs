@@ -54,6 +54,24 @@ impl OtherConfig {
     pub fn nametags_hidden(&self) -> bool {
         self.hide_nametags == 1
     }
+
+    /// Whether the camera should start in first-person. Blitz `ViewMode`: 1 =
+    /// first-person only (`If ViewMode = 1 Then CamMode = 1`, ClientLoaders.bb:41);
+    /// 2 = both (third-person default, toggleable); 3 = third-person only. So the
+    /// camera starts first-person ONLY for ViewMode 1.
+    pub fn default_first_person(&self) -> bool {
+        self.view_mode == 1
+    }
+
+    /// Whether the player may toggle first/third-person. Blitz flips `CamMode` on
+    /// the toggle key only `If ... And ViewMode = 2` (Interface3D.bb:466); ViewMode
+    /// 1 (first-only) and 3 (third-only) LOCK the camera. Expressed as "not locked to
+    /// a single mode" so an absent file (soft-failed to view_mode 0, which Blitz —
+    /// requiring the file — never has) leaves the toggle enabled rather than trapping
+    /// the player in third-person. For the real values 1/2/3 this equals `== 2`.
+    pub fn view_toggle_allowed(&self) -> bool {
+        self.view_mode != 1 && self.view_mode != 3
+    }
 }
 
 #[cfg(test)]
@@ -68,6 +86,18 @@ mod tests {
         assert!(!cfg(0).nametags_hidden(), "0 shows");
         assert!(!cfg(2).nametags_hidden(), "2 (the shipped default) shows");
         assert!(!cfg(255).nametags_hidden(), "any other value shows");
+    }
+
+    #[test]
+    fn view_mode_semantics() {
+        // Byte 2 = ViewMode. 1 = first-person only, 2 = both (default), 3 = third only.
+        let cfg = |vm: u8| OtherConfig::parse(&[0, 0, vm, 0, 0, 0, 0, 0, 0]);
+        assert!(cfg(1).default_first_person() && !cfg(1).view_toggle_allowed(), "1 = first-only, locked");
+        assert!(!cfg(2).default_first_person() && cfg(2).view_toggle_allowed(), "2 = third default, toggleable");
+        assert!(!cfg(3).default_first_person() && !cfg(3).view_toggle_allowed(), "3 = third-only, locked");
+        // Absent file (soft-failed to 0) → third-person start, but toggle stays
+        // ENABLED (don't trap the player; only an explicit 1/3 locks).
+        assert!(!cfg(0).default_first_person() && cfg(0).view_toggle_allowed());
     }
 
     #[test]

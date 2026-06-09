@@ -2987,6 +2987,9 @@ impl ApplicationHandler for App {
                 self.login_user = name;
             }
         }
+        // Project camera default (Other.dat ViewMode): start first-person when the
+        // project requests first-only (1). ViewMode 2/3/absent start third-person.
+        self.first_person = store.default_first_person();
         self.store = Some(store);
         self.gfx = Some(gfx);
         self.view = Some(view);
@@ -3343,7 +3346,14 @@ impl ApplicationHandler for App {
                             self.target = next_target(self.target, &rids);
                         }
                         KeyCode::KeyK if pressed => self.show_spellbook = !self.show_spellbook,
-                        KeyCode::KeyV if pressed => self.first_person = !self.first_person, // CAM-4
+                        // CAM-4: toggle first/third-person — unless the project locks
+                        // the view (Other.dat ViewMode 1=first-only / 3=third-only).
+                        KeyCode::KeyV
+                            if pressed
+                                && self.store.as_ref().is_none_or(|s| s.view_toggle_allowed()) =>
+                        {
+                            self.first_person = !self.first_person
+                        }
                         KeyCode::KeyJ if pressed && self.grounded => {
                             // MOVE-7: jump only when grounded. Kick the vertical
                             // velocity, leave the ground, and tell the server
