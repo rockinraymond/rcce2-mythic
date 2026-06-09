@@ -3346,13 +3346,8 @@ impl ApplicationHandler for App {
                                                 true,
                                             );
                                         }
-                                    } else if let Some(net) = self.net.as_mut() {
-                                        net.transport.send(
-                                            net.peer,
-                                            rcce_net::packet_id::INVENTORY_UPDATE,
-                                            &rcce_client::net::inv_drop_packet(slot, 1),
-                                            true,
-                                        );
+                                    } else {
+                                        self.send_drop(slot, 1);
                                     }
                                 }
                                 return;
@@ -4522,6 +4517,25 @@ impl App {
         }
     }
 
+    /// Drop `amount` from inventory `slot`: tell the server (P_InventoryUpdate
+    /// "D") AND optimistically remove it locally, mirroring Blitz `InventoryDrop`
+    /// (Inventories.bb:86, called with `TellServer=True`). The server broadcasts
+    /// the drop to everyone in the area but sends the *dropper* no "taken" echo,
+    /// so without the local removal the slot icon lingers and a subsequent pickup
+    /// lands in the next free slot — the "phantom duplicate" the user reported.
+    /// No-op if not connected.
+    fn send_drop(&mut self, slot: u8, amount: u16) {
+        if let Some(net) = self.net.as_mut() {
+            net.transport.send(
+                net.peer,
+                rcce_net::packet_id::INVENTORY_UPDATE,
+                &rcce_client::net::inv_drop_packet(slot, amount),
+                true,
+            );
+            net.world.inv_remove(slot, amount);
+        }
+    }
+
     /// Apply the open quantity prompt (Enter): stage the sell `(slot, qty)` or
     /// drop `qty` from the slot, then close the prompt.
     fn confirm_qty(&mut self) {
@@ -4533,9 +4547,7 @@ impl App {
                 self.pending_sells.push((p.slot, qty));
             }
             QtyAction::Drop => {
-                if let Some(net) = self.net.as_mut() {
-                    net.transport.send(net.peer, rcce_net::packet_id::INVENTORY_UPDATE, &rcce_client::net::inv_drop_packet(p.slot, qty), true);
-                }
+                self.send_drop(p.slot, qty);
             }
         }
     }
@@ -4726,14 +4738,7 @@ impl App {
                 if let Some(item_id) = item {
                     match action {
                         InvAction::Drop => {
-                            if let Some(net) = self.net.as_mut() {
-                                net.transport.send(
-                                    net.peer,
-                                    rcce_net::packet_id::INVENTORY_UPDATE,
-                                    &rcce_client::net::inv_drop_packet(slot, 1),
-                                    true,
-                                );
-                            }
+                            self.send_drop(slot, 1);
                         }
                         InvAction::Eat => {
                             // Faithful to Blitz UseItem (Interface3D.bb:4138-4216):
@@ -4821,14 +4826,9 @@ impl App {
                     true,
                 );
             }
-        } else if let Some(net) = self.net.as_mut() {
+        } else {
             // Plain click a backpack item → drop one.
-            net.transport.send(
-                net.peer,
-                rcce_net::packet_id::INVENTORY_UPDATE,
-                &rcce_client::net::inv_drop_packet(slot, 1),
-                true,
-            );
+            self.send_drop(slot, 1);
         }
     }
 
@@ -4914,17 +4914,15 @@ impl App {
             }
             ItemAction::DropAll => {
                 let amount = self.net.as_ref().and_then(|n| n.world.me_inventory.values().find(|it| it.slot == slot)).map(|it| it.amount.max(1)).unwrap_or(1);
-                if let Some(net) = self.net.as_mut() {
-                    net.transport.send(net.peer, rcce_net::packet_id::INVENTORY_UPDATE, &rcce_client::net::inv_drop_packet(slot, amount), true);
-                }
+                self.send_drop(slot, amount);
             }
             ItemAction::Drop => {
                 let amount = self.net.as_ref().and_then(|n| n.world.me_inventory.values().find(|it| it.slot == slot)).map(|it| it.amount.max(1)).unwrap_or(1);
                 if amount > 1 {
                     // Stack → ask how many to drop.
                     self.qty_prompt = Some(QtyPrompt { slot, item_id, max: amount, qty: 1, action: QtyAction::Drop });
-                } else if let Some(net) = self.net.as_mut() {
-                    net.transport.send(net.peer, rcce_net::packet_id::INVENTORY_UPDATE, &rcce_client::net::inv_drop_packet(slot, 1), true);
+                } else {
+                    self.send_drop(slot, 1);
                 }
             }
         }
@@ -7748,6 +7746,33 @@ impl App {
                         ],
                     });
                     println!("[itemmenu] frame {} opened item menu over slot 14", self.frames);
+                }
+            }
+        }
+        // Headless drop self-test: inject two backpack items (slots 14, 15) + open
+        // the inventory, then DROP slot 14 via the real send_drop path. After the
+        // drop, slot 14 must be EMPTY (the icon disappears) and slot 15 untouched —
+        // proving the optimistic local removal that the user's "icon stays after
+        // Drop / phantom duplicate on pickup" bug was missing. No-op unless
+        // RCCE_DROPTEST=<frame> is set; capture a frame or two later.
+        if let Ok(dt) = std::env::var("RCCE_DROPTEST") {
+            if let Ok(at) = dt.parse::<u64>() {
+                if self.frames == at {
+                    use rcce_client::fetch::InvItem;
+                    self.show_inventory = true;
+                    // Inline the send_drop logic via the disjoint `self.net` field
+                    // (gfx/view/store are already borrowed in this render scope, so
+                    // a `&mut self` method call isn't possible here).
+                    if let Some(net) = self.net.as_mut() {
+                        net.world.me_inventory.insert(14, InvItem { slot: 14, item_id: 1, amount: 1, health: 100 });
+                        net.world.me_inventory.insert(15, InvItem { slot: 15, item_id: 2, amount: 3, health: 100 });
+                        let before = net.world.me_inventory.contains_key(&14);
+                        net.transport.send(net.peer, rcce_net::packet_id::INVENTORY_UPDATE, &rcce_client::net::inv_drop_packet(14, 1), true);
+                        net.world.inv_remove(14, 1);
+                        let after = net.world.me_inventory.contains_key(&14);
+                        let s15 = net.world.me_inventory.get(&15).map(|it| it.amount);
+                        println!("[droptest] frame {} slot14 before={before} after={after} slot15_amount={s15:?}", self.frames);
+                    }
                 }
             }
         }

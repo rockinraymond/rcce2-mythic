@@ -1333,12 +1333,7 @@ impl World {
             Some(b'T') => {
                 let mut r = MsgReader::new(&d[1..]);
                 let (Some(slot), Some(amount)) = (r.u8(), r.u16()) else { return };
-                if let Some(it) = self.me_inventory.get_mut(&slot) {
-                    it.amount = it.amount.saturating_sub(amount);
-                    if it.amount == 0 {
-                        self.me_inventory.remove(&slot);
-                    }
-                }
+                self.inv_remove(slot, amount);
             }
             // Equipped-gear update for an actor: rid u16 + weapon/shield/chest/
             // hat item ids (u16 each, 65535 = none) + 6 gubbin bytes (ignored).
@@ -1377,6 +1372,21 @@ impl World {
             e.health = health;
         } else {
             *e = crate::fetch::InvItem { slot, item_id, amount, health };
+        }
+    }
+
+    /// Remove up to `amount` from inventory `slot`, deleting the entry when the
+    /// stack reaches zero. Mirrors the local side of Blitz `InventoryDrop`
+    /// (Inventories.bb:86) and the inbound "T" (taken) handler — the server
+    /// sends no "taken" echo to the *dropper*, so the client must remove its own
+    /// dropped item locally or the slot icon lingers (and a later pickup phantom-
+    /// duplicates into the next free slot).
+    pub fn inv_remove(&mut self, slot: u8, amount: u16) {
+        if let Some(it) = self.me_inventory.get_mut(&slot) {
+            it.amount = it.amount.saturating_sub(amount);
+            if it.amount == 0 {
+                self.me_inventory.remove(&slot);
+            }
         }
     }
 
@@ -3636,5 +3646,31 @@ mod tests {
         // A change for a different area is ignored.
         w.apply(&msg(pk::WEATHER_CHANGE, pkt(|p| { p.u32(99).u8(2); })));
         assert_eq!(w.zone.weather, 1);
+    }
+
+    // Optimistic drop removal: the server sends the dropper no "taken" echo, so
+    // the client must remove its own dropped item locally (Blitz InventoryDrop).
+    // Without this the slot icon lingered and a pickup phantom-duplicated.
+    #[test]
+    fn inv_remove_decrements_and_clears_slot() {
+        use crate::fetch::InvItem;
+        let mut w = World::default();
+        w.me_inventory.insert(14, InvItem { slot: 14, item_id: 7, amount: 5, health: 100 });
+
+        // Partial drop from a stack: amount drops, the entry stays.
+        w.inv_remove(14, 2);
+        assert_eq!(w.me_inventory.get(&14).map(|it| it.amount), Some(3));
+
+        // Dropping the rest clears the slot entirely (no lingering ghost icon),
+        // freeing it for a subsequent pickup so nothing phantom-duplicates.
+        w.inv_remove(14, 3);
+        assert!(!w.me_inventory.contains_key(&14));
+        assert_eq!(w.inv_free_slot(7), Some(14), "freed slot is reused, not skipped");
+
+        // Over-drop and dropping an empty slot are safe (saturating, no panic).
+        w.me_inventory.insert(20, InvItem { slot: 20, item_id: 9, amount: 1, health: 100 });
+        w.inv_remove(20, 99);
+        assert!(!w.me_inventory.contains_key(&20));
+        w.inv_remove(20, 1); // already gone — no-op
     }
 }
