@@ -36,11 +36,13 @@ End Function
 ```
 *(`Default.rsl`)*
 
-- **`Using "RC_Core.rcm"`** pulls in the standard library — the high-level helpers
-  (`OpenDialog`, `WaitKill`, `Output`, …) every script uses. Start every file with it.
-  `RC_Core.rcm` is a *compiled* module that ships with the engine; its source is not in
-  the project, so treat its helpers as a black-box API you call (this page documents the
-  ones that matter; the rest are in [`bvm-reference.md`](../bvm-reference.md)).
+- **`Using "RC_Core.rcm"`** pulls in the standard library — high-level helpers like
+  `OpenDialog`, `DialogInput`, `WaitKill`, and `DoEvents` that most scripts use. Start
+  every file with it. `RC_Core.rcm` is the *compiled* form of **`RC_Core.rsl`**, which
+  ships right alongside your scripts in `Data\Server Data\Scripts\` — so when you want
+  the exact behaviour of one of these helpers, read its body there. (The lower-level
+  native commands they build on — `Output`, `GiveItem`, `Attribute`, … — are catalogued
+  in [`bvm-reference.md`](../bvm-reference.md).)
 - **`Function Name() … End Function`** declares a function. The engine calls specific
   function names on specific events (§5). Your own helper functions can have any name.
 - **`;`** begins a line comment.
@@ -253,15 +255,20 @@ this is how multi-step quests and interactive dialogs work. The helpers come fro
 
 ```blitz
 Persistent(1)
-; ...
 ID = ActorID("Orc", "Raider")
-WaitKill(Player, ID, 3)        ; suspend until the player has killed 3 Orc Raiders
-; ...execution continues here once the third kill lands...
+WaitKill(Player, ID, 1)                                       ; wait for the 1st kill
+UpdateQuest(Player, QuestName, "Slay 2 more Orc Raiders", 200, 90, 60)
+WaitKill(Player, ID, 1)                                       ; ...then the 2nd
+UpdateQuest(Player, QuestName, "Slay 1 more Orc Raider", 200, 90, 60)
+WaitKill(Player, ID, 1)                                       ; ...then the 3rd
+UpdateQuest(Player, QuestName, "Return to the Captain.", 60, 200, 90)
 ```
 *(`Quest_OrcRaiders.rsl`)*
 
 - **`WaitKill(actor, actorID, count)`** suspends until `actor` has killed `count` of the
-  given actor type. Sibling waits: **`WaitSpeak(actor, target)`** (until `target` is
+  given actor type. The shipped quests call it with `count = 1` once per step and update
+  the quest text in between (above) so the player sees progress, rather than waiting on a
+  single `count = 3`. Sibling waits: **`WaitSpeak(actor, target)`** (until `target` is
   right-clicked) and **`WaitItem(actor, name, qty)`** (until the inventory holds the item).
 - **`Persistent(1)`** marks the script to survive the player logging out and back in —
   essential for a quest that spans a session. Without it, a logout ends the script.
@@ -294,10 +301,10 @@ CloseDialog(Player, D)
   of their choice (`1` for the first option). Branch on it with `If`/`ElseIf`.
 - **`CloseDialog(player, D)`** dismisses the window.
 
-> `OpenDialog`/`DialogInput`/`WaitKill` and friends live in the compiled `RC_Core.rcm`
-> standard library, so you won't find their bodies in the project source. The contract
-> above is what they guarantee to a script author; the engine-side packet handling that
-> backs them is in `ServerNet.bb` / `ScriptingCommands.bb`.
+> `OpenDialog`/`DialogInput`/`WaitKill` and friends are defined in **`RC_Core.rsl`** (the
+> source that compiles to `RC_Core.rcm`), shipped in `Data\Server Data\Scripts\` — open it
+> to read the exact body of any helper. They in turn wrap the engine-side packet handling
+> in `ServerNet.bb` / `ScriptingCommands.bb`.
 
 ---
 
@@ -347,7 +354,10 @@ because `Click_Merchant` is on `Privileged Scripts.dat`.
 ## Where to go next
 
 - **The function catalog:** [`bvm-reference.md`](../bvm-reference.md) — every callable
-  command, its parameters, and whether it needs privilege.
+  native command, its parameters, and whether it needs privilege.
+- **The standard-library helpers** (`OpenDialog`, `DialogInput`, `WaitKill`, `DoEvents`,
+  …): read `RC_Core.rsl` in `Data\Server Data\Scripts\` — the source that compiles to
+  `RC_Core.rcm`.
 - **A guided tour of a real project's scripts:** [`sample-project-guide.md`](../sample-project-guide.md).
 - **Engine internals** (compilation, `ScriptInstance` lifecycle, dispatch):
   [`modules/scripting.md`](../modules/scripting.md) and
