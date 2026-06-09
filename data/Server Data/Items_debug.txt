@@ -822,3 +822,7 @@ Item ID: 205
 Item Name: Platemail Armor +4
 Range: 0.0
 
+Item ID: 206
+Item Name: Dagger +5
+Range: 0.0
+
