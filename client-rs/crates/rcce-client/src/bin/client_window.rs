@@ -2117,13 +2117,21 @@ fn register_gui_textures(overlay: &mut rcce_render::Overlay, device: &wgpu::Devi
     println!("[client-window] registered {ok}/{} GUI textures from {}", files.len(), gui.display());
 }
 
-#[allow(clippy::type_complexity)]
-/// A live emitter + its resolved billboard texture, simulated per frame.
-/// A live particle emitter in the sim: the emitter, its billboard texture, and an
-/// optional remaining lifetime in milliseconds. `None` = a permanent zone emitter
-/// (from the area file); `Some(ms)` = a finite server-spawned `P_CreateEmitter`
-/// effect that stops + is dropped when the timer runs out.
-type ZoneEmitter = (rcce_client::particles::Emitter, Option<rcce_data::Image>, Option<f32>);
+/// A live particle emitter in the sim: the emitter, its billboard texture, an
+/// optional remaining lifetime, and an optional actor it follows.
+struct ZoneEmitter {
+    emitter: rcce_client::particles::Emitter,
+    /// Resolved billboard texture (`None` → the pipeline's default).
+    tex: Option<rcce_data::Image>,
+    /// Remaining lifetime in milliseconds. `None` = a permanent zone emitter (from
+    /// the area file); `Some(ms)` = a finite server-spawned `P_CreateEmitter` effect
+    /// that stops + is dropped when the timer runs out.
+    life: Option<f32>,
+    /// Actor RuntimeID this emitter follows each frame (`P_CreateEmitter` attach).
+    /// `None` = world-anchored at a fixed position. When the actor leaves the zone
+    /// or dies the emitter is stopped (tapers + is reaped) rather than derefed.
+    attach: Option<u16>,
+}
 
 type ZoneStatic = (
     [f32; 3],
@@ -2234,6 +2242,17 @@ fn test_box_model(skinned: bool) -> B3dModel {
 /// Advance emitters by `dt` seconds and build their camera-facing billboard
 /// batches `(texture, additive?, verts)`. A free function so the in-world render
 /// can call it while holding `gfx`/`view` borrows of other `self` fields.
+/// Interpolated world position of an actor by RuntimeID, for an attached emitter
+/// to follow. Returns `None` when the actor isn't present (left the zone, despawned,
+/// or not yet spawned) — the caller then stops the emitter instead of derefing a
+/// stale handle. Matches the position nameplates render at (`render_x/y/render_z`).
+fn actor_world_pos(world: &rcce_client::world::World, rid: u16) -> Option<[f32; 3]> {
+    if rid == world.my_runtime_id {
+        return Some([world.me_render_x, world.me_y, world.me_render_z]);
+    }
+    world.actors.get(&rid).map(|a| [a.render_x, a.y, a.render_z])
+}
+
 fn particle_batches(
     emitters: &mut [ZoneEmitter],
     eye: [f32; 3],
@@ -2252,11 +2271,11 @@ fn particle_batches(
     // Softness vs Blitz: scale particle alpha (RCCE_PARTICLE_GAIN, default 0.6).
     let gain = std::env::var("RCCE_PARTICLE_GAIN").ok().and_then(|s| s.parse().ok()).unwrap_or(0.6_f32);
     let mut batches = Vec::with_capacity(emitters.len());
-    for (e, tex, _life) in emitters.iter_mut() {
-        e.update(delta);
+    for ze in emitters.iter_mut() {
+        ze.emitter.update(delta);
         let mut verts = Vec::new();
-        e.billboards(right, up, gain, &mut verts);
-        batches.push((e.tex_id, tex.clone(), e.blend_add, verts));
+        ze.emitter.billboards(right, up, gain, &mut verts);
+        batches.push((ze.emitter.tex_id, ze.tex.clone(), ze.emitter.blend_add, verts));
     }
     batches
 }
@@ -2780,7 +2799,12 @@ fn load_zone_static(store: &mut AssetStore, view: &mut WorldView, gfx: &Gfx, dat
         let Ok(config) = rcce_data::EmitterConfig::parse(&bytes) else { continue };
         let tex = store.texture_path(em.tex_id).and_then(|p| rcce_data::texture::load(&p));
         let seed = 0x9E3779B97F4A7C15u64.wrapping_mul(ei as u64 + 1) ^ (em.pos[0].to_bits() as u64);
-        emitters.push((rcce_client::particles::Emitter::new(config, em.tex_id, em.pos, em.rot, seed), tex, None));
+        emitters.push(ZoneEmitter {
+            emitter: rcce_client::particles::Emitter::new(config, em.tex_id, em.pos, em.rot, seed),
+            tex,
+            life: None,
+            attach: None,
+        });
     }
     if !emitters.is_empty() {
         println!("[client-window] zone '{zone}': {} particle emitter(s)", emitters.len());
@@ -4940,11 +4964,11 @@ impl App {
         // Age finite (P_CreateEmitter) emitters: count their lifetime down and
         // stop them spawning when it elapses (live particles then taper off).
         let dt_ms = dt * 1000.0;
-        for (e, _, life) in self.emitters.iter_mut() {
-            if let Some(ms) = life {
+        for ze in self.emitters.iter_mut() {
+            if let Some(ms) = ze.life.as_mut() {
                 *ms -= dt_ms;
                 if *ms <= 0.0 {
-                    e.stop();
+                    ze.emitter.stop();
                 }
             }
         }
@@ -4954,7 +4978,7 @@ impl App {
         }
         // Drop stopped emitters whose particles have all died (permanent zone
         // emitters, life == None, are kept).
-        self.emitters.retain(|(e, _, life)| life.is_none() || !e.is_done());
+        self.emitters.retain(|ze| ze.life.is_none() || !ze.emitter.is_done());
     }
 
     /// Headless zone preview (`RCCE_VIEWZONE`): render the startup-loaded gameplay
@@ -5165,8 +5189,8 @@ impl App {
         // plume, then build this frame's billboards facing the preview camera.
         if !self.emitters.is_empty() {
             for _ in 0..180 {
-                for (e, _, _) in self.emitters.iter_mut() {
-                    e.update(1.0);
+                for ze in self.emitters.iter_mut() {
+                    ze.emitter.update(1.0);
                 }
             }
             self.tick_particles(eye, target, 1.0 / 60.0);
@@ -6241,6 +6265,9 @@ impl App {
             // billboard texture via the store (which World can't reach) and build a
             // FINITE emitter (Some(lifetime_ms)) so tick aging stops + reaps it.
             // A missing/unparseable config or texture soft-fails to no emitter.
+            // An attached emitter (req.attach Some) gets its world position from the
+            // actor each frame (see the attach-follow pass before particle_batches),
+            // so its build position is a placeholder the first frame overwrites.
             if !net.world.pending_emitters.is_empty() {
                 let reqs: Vec<rcce_client::world::PendingEmitter> =
                     net.world.pending_emitters.drain(..).collect();
@@ -6255,8 +6282,12 @@ impl App {
                     let emitter = rcce_client::particles::Emitter::new(
                         config, req.tex_id, req.pos, [0.0, 0.0, 0.0], seed,
                     );
-                    self.emitters
-                        .push((emitter, tex, Some(req.lifetime_ms as f32)));
+                    self.emitters.push(ZoneEmitter {
+                        emitter,
+                        tex,
+                        life: Some(req.lifetime_ms as f32),
+                        attach: req.attach,
+                    });
                 }
             }
             net.world.tick_server_anims(proj_dt, moving);
@@ -7654,11 +7685,27 @@ impl App {
         // them spawning when it elapses (live particles then taper off). Permanent
         // zone emitters (life == None) are unaffected.
         let pdt_ms = pdt * 1000.0;
-        for (e, _, life) in self.emitters.iter_mut() {
-            if let Some(ms) = life {
+        for ze in self.emitters.iter_mut() {
+            if let Some(ms) = ze.life.as_mut() {
                 *ms -= pdt_ms;
                 if *ms <= 0.0 {
-                    e.stop();
+                    ze.emitter.stop();
+                }
+            }
+        }
+        // Actor-attached emitters (P_CreateEmitter with an attach RuntimeID) follow
+        // their actor: re-point the spawn position to the actor's current location so
+        // new particles emit from it (live particles keep their own trajectory, like a
+        // Blitz parented emitter). A missing actor (left zone / died) stops the emitter
+        // so it tapers + is reaped — never derefs a stale RuntimeID. (`self.net` and
+        // `self.emitters` are disjoint field borrows, like the projectile block below.)
+        if let Some(net) = self.net.as_ref() {
+            for ze in self.emitters.iter_mut() {
+                if let Some(rid) = ze.attach {
+                    match actor_world_pos(&net.world, rid) {
+                        Some(pos) => ze.emitter.set_pos(pos),
+                        None => ze.emitter.stop(),
+                    }
                 }
             }
         }
@@ -7679,7 +7726,7 @@ impl App {
         view.set_particles(&gfx.device, &gfx.queue, &pbatches);
         // Reap finite emitters that have stopped and whose particles have all died
         // (permanent zone emitters, life == None, are kept). Disjoint field borrow.
-        self.emitters.retain(|(e, _, life)| life.is_none() || !e.is_done());
+        self.emitters.retain(|ze| ze.life.is_none() || !ze.emitter.is_done());
         view.render(
             &gfx.device,
             &gfx.queue,
