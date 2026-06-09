@@ -575,6 +575,18 @@ impl AssetStore {
         self.actors.templates.get(&template_id).map(|t| t.aggressiveness).unwrap_or(0)
     }
 
+    /// The template's blood-spurt texture id (`Actors.dat` BloodTexID), or `None`
+    /// when the race has no blood (id <= 0). When present, a connecting combat hit
+    /// spawns a `Blood.rpc` emitter textured with this id (Blitz ClientNet.bb:1136).
+    pub fn actor_blood_tex(&self, template_id: u16) -> Option<u16> {
+        self.actors
+            .templates
+            .get(&template_id)
+            .map(|t| t.blood_tex)
+            .filter(|&b| b > 0)
+            .map(|b| b as u16)
+    }
+
     pub fn actor_render_scale(&self, template_id: u16, gender: u8) -> Option<f32> {
         let mesh_id = self.actors.mesh_for(template_id, gender)?;
         let mesh = self.meshes.get(mesh_id)?;
