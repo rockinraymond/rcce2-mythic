@@ -11,7 +11,6 @@ Function Main()
 	Persistent(1)
 	QuestName$ = "Rat Catcher"
 	QuestResults$ = QuestStatus(Player, QuestName)
-Output(Player, QuestResult$)
 	QuestReturn$ = "Return to " + TargetName + " to complete this quest."
 
 
@@ -53,8 +52,6 @@ Output(Player, QuestResult$)
 			Output(Player, QuestTemp, 255, 255, 255)
 			CloseDialog(Player, D)
 			; Wait for Kills
-			Output(Player, "In quest Waitloop")
-			Output(Player, "Waiting to kill " + WaitRace + " " + WaitClass + " " + WaitKillQuantity)
 			UpdateQuest(Player, QuestName, "Kill " + " 2 "+ WaitRace$, 106, 159, 100)
 			WaitKill(Player, ID, 1)
 			UpdateQuest(Player, QuestName, "Kill " + " 1 "+ WaitRace$, 106, 159, 100)
@@ -125,5 +122,11 @@ Output(Player, QuestResult$)
 		CloseDialog(Player, D)
 	EndIf
 	Return
+
+End Function
+
+Function Examine()
+
+	Output(Actor(), "A harried townsman, plagued by vermin. He'll pay to see the rats culled.")
 
 End Function

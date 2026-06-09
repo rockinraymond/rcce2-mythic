@@ -10,6 +10,12 @@ Function Main()
 
 ;   Check to see if this is a 'NEW' player and if so set their ActorGlobal for League
 	Player = Actor()
+
+;   --- RCCE2 sample-project welcome (orients new players to the demo content) ---
+	Output(Player, "Welcome to RealmCrafter Community Edition!", 120, 200, 255)
+	Output(Player, "In the Plains: a Spell Trainer teaches 8 spells, a Captain offers the 'Raiders at the Gate' quest, and a merchant sells gear.", 255, 255, 255)
+	Output(Player, "Beyond the portal lie the wilds - rats and orc raiders to fight for loot, gold and XP. Good luck!", 255, 255, 255)
+
 	If Len(ActorGlobal(Player, 8)) < 10
 		SetActorGlobal(Player, 8, "0,0,1,0,0,0,0,0,0,0")
 	EndIf
@@ -20,6 +26,18 @@ Function Main()
 		PushGlobal(Player, 8, 1, CurrentDate$, ",", 10)
 		PushGlobal(Player, 8, 2, "1", ",", 10)
 		League = 1
+
+;       --- RCCE2 first-ever-login starting kit (so new players aren't helpless) ---
+;       Runs once (first login only). GiveItem is privileged -> "Login" is on
+;       Data\Server Data\Privileged Scripts.dat. Items must exist in Items.dat.
+		GiveItem(Player, "Long Sword", 1)
+		GiveItem(Player, "Scarred Shield", 1)
+		GiveItem(Player, "Potion of Healing", 3)
+		ChangeGold(Player, 50)
+		If AbilityKnown(Player, "Heal") = 0
+			AddAbility(Player, "Heal", 1)
+		EndIf
+		Output(Player, "A starting kit is in your pack: a Long Sword, a Scarred Shield, 3 potions and 50 gold. Press I to open your inventory and equip them.", 0, 255, 0)
 	Else
 		League = Int(PullGlobal$(Player, 8, 2, ","))
 		Result = CheckDate%(PullGlobal$(Player, 8, 1, ","), 182)

@@ -111,3 +111,9 @@ Function Main()
 	EndIf
 
 End Function
+
+Function Examine()
+
+	Output(Actor(), "A priest of the old faith. He can wed two willing souls, for a tithe of 10,000 gold.")
+
+End Function

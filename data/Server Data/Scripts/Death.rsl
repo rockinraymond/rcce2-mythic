@@ -20,12 +20,15 @@ Function Main()
 	; Wait
 	DoEvents(5000)
 
-	; Restore some health and take away some gold
-	SetAttribute(Actor(), "Health", 50)
+	; Respawn at half health (proportional to max, so it stays sensible regardless of
+	; the actor's max-HP value -- the old hardcoded 50 was ~5% once max HP became 1000).
+	SetAttribute(Actor(), "Health", MaxAttribute(Actor(), "Health") / 2)
 ;	ChangeGold(Actor(), -10)
 
-	; Warp back to area start
-	Warp(Actor(), ActorZone(Actor()), "Begin")
+	; Respawn at the town. The original warped to the CURRENT zone's "Begin"
+	; portal, but only the Plains has a "Begin" portal -- dying anywhere else
+	; left the player un-warped. Send them to the Plains start portal instead.
+	Warp(Actor(), "Plains", "Begin")
 
 	; Done
 	Return
