@@ -69,11 +69,11 @@ Including `ClientAreas.bb` from Loom would mean either:
 
 The right unblock is **extracting `LoadArea`'s data path from its UI overhead** as a refactor inside the engine (not a Loom PR). Approximate shape:
 
-1. **Phase A** — Extract `GetFilename$` to `src/Modules/Path.bb` (or similar shared utility). Trivial; one PR. GUE updates its callers.
-2. **Phase B** — Carve `LoadArea` into `LoadAreaData(Name$)` (parses .dat, builds the in-memory mesh + scenery instances) and `LoadAreaUI(...)` (does the progress bar + loading screen). GUE calls both; Loom calls just `LoadAreaData`.
-3. **Phase C** — Loom gets a `WorldView.bb` module that takes a loaded Area and renders it through its own camera. Reuses the same mesh entities GUE uses (no double-loading).
+1. **Phase A** — Extract `GetFilename$` to `src/Modules/Path.bb` (or similar shared utility). Trivial; one PR. GUE updates its callers. **Shipped** (PR #429).
+2. **Phase B** — Carve `LoadArea` into `LoadAreaData(Name$)` (parses .dat, builds the in-memory mesh + scenery instances) and `LoadAreaUI(...)` (does the progress bar + loading screen). GUE calls both; Loom calls just `LoadAreaData`. **Shipped**, with one delta from the sketch above: instead of two sequential functions (which couldn't show progress *during* the load), the data path moved to `src/Modules/AreaLoader.bb` as `LoadAreaData(Name$, CameraEN, DisplayItems, UpdateRottNet)`, and the UI comes back in through three hook functions the including target must define — `AreaLoadBegin(DisplayItems)`, `AreaLoadProgress(Pct)`, `AreaLoadEnd()`. GUE's Gooey implementations (progress bar, loading screen, loading music) live in `ClientAreas.bb`, which also keeps the signature-identical `LoadArea` wrapper and `SaveArea`. `UnloadArea`, `SetViewDistance`, `ChunkTerrain` and the area Types moved with the data path. The no-Gooey property is pinned by `src/Tests/Modules/AreaLoaderGooeyFreeTest.bb`, which Includes `AreaLoader.bb` with pure data stubs and no UI modules — adding a `GY_*` reference to the module breaks that test's compile.
+3. **Phase C** — Loom gets a `WorldView.bb` module that takes a loaded Area and renders it through its own camera. Reuses the same mesh entities GUE uses (no double-loading). Loom Includes `AreaLoader.bb` and provides its own (no-op or custom-drawn) `AreaLoad*` hooks. **Next up.** Include-graph note for whoever builds it: `LoadAreaData` still calls `RP_*` (RottParticles.bb), `UnloadTrees` (RCTrees.bb), `MeshMinMaxVerticesTransformed`/`Get*` (Media.bb) and `ReadBoundedString$` (Logging.bb) — Loom already includes Media/Logging; particles and trees need either Includes or a decision to stub.
 
-Phases A and B are engine refactors that don't depend on Loom. Phase C is Loom-side once A and B land.
+Phases A and B are engine refactors that don't depend on Loom (both shipped). Phase C is Loom-side.
 
 Estimated total: 3 PRs, none of them in Loom proper. The Loom viewport ships as a fourth PR after those land.
 
