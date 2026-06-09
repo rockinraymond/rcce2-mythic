@@ -171,6 +171,10 @@ pub struct ServerAnim {
 pub struct Actor {
     pub runtime_id: u16,
     pub template_id: u16,
+    /// Actor level, from `P_NewActor` and kept live by `P_XPUpdate "L"`. Shown on
+    /// the nameplate and the target panel (Blitz tracks it as `AI\Level` and shows
+    /// it in the CharInteract window).
+    pub level: u16,
     pub name: String,
     pub tag: String,
     pub is_player: bool,
@@ -792,7 +796,7 @@ impl World {
         let mut r = MsgReader::new(d);
         let _server_area = r.u32();
         let Some(runtime_id) = r.u16() else { return };
-        let _level = r.u16();
+        let level = r.u16().unwrap_or(0);
         let _xp = r.u32();
         let template_id = r.u16().unwrap_or(0);
         let x = r.f32().unwrap_or(0.0);
@@ -853,6 +857,7 @@ impl World {
             Actor {
                 runtime_id,
                 template_id,
+                level,
                 name,
                 tag,
                 is_player,
@@ -967,6 +972,16 @@ impl World {
                 if let Some(level) = MsgReader::new(&d[1..]).u16() {
                     self.me_level = level;
                     self.me_xp = 0;
+                }
+            }
+            // Another actor's level changed (ClientNet.bb:699): RuntimeID(u16) +
+            // Level(u16). Keep the actor's displayed level live on level-up.
+            Some(b'L') => {
+                let mut r = MsgReader::new(&d[1..]);
+                if let (Some(rid), Some(level)) = (r.u16(), r.u16()) {
+                    if let Some(a) = self.actors.get_mut(&rid) {
+                        a.level = level;
+                    }
                 }
             }
             _ => {}
@@ -3232,6 +3247,30 @@ mod tests {
         w.apply(&msg(pk::ITEM_HEALTH, pkt(|p| { p.u8(99).u16(50); })));
         w.apply(&msg(pk::ITEM_HEALTH, pkt(|p| { p.u8(14); }))); // missing health
         assert_eq!(w.me_inventory[&14].health, 0, "truncated packet left health unchanged");
+    }
+
+    // Actor level: captured from P_NewActor (previously dropped) and kept live by
+    // the P_XPUpdate "L" sub-packet (another actor levelled up). Shown on the
+    // nameplate + target panel.
+    #[test]
+    fn actor_level_captured_and_updated() {
+        let mut w = World::default();
+        // Spawn actor 50 at level 7 (level is the 2nd u16 after server_area+rid).
+        w.apply(&msg(pk::NEW_ACTOR, pkt(|p| {
+            p.u32(0).u16(50).u16(7).u32(0).u16(3);
+            p.f32(0.0).f32(0.0).f32(0.0).f32(0.0);
+            p.u8(0).str8("Stag").str8("");
+        })));
+        assert_eq!(w.actors[&50].level, 7, "spawn level captured");
+
+        // P_XPUpdate "L": actor 50 levelled to 8.
+        w.apply(&msg(pk::XP_UPDATE, pkt(|p| { p.u8(b'L').u16(50).u16(8); })));
+        assert_eq!(w.actors[&50].level, 8, "level-up applied");
+
+        // "L" for an unknown actor and a truncated packet both soft-fail.
+        w.apply(&msg(pk::XP_UPDATE, pkt(|p| { p.u8(b'L').u16(999).u16(5); })));
+        w.apply(&msg(pk::XP_UPDATE, pkt(|p| { p.u8(b'L').u16(50); }))); // missing level
+        assert_eq!(w.actors[&50].level, 8, "unchanged on unknown actor / truncation");
     }
 
     // P_KickedPlayer (empty payload) flags the session so the App tears it down
