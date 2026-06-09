@@ -532,7 +532,18 @@ struct VO { @builtin(position) clip: vec4<f32>, @location(0) uv: vec2<f32>, @loc
     let V = normalize(u.eye - in.world);
     // Fresnel: ~0 looking straight down (clear), ~1 at grazing angles (reflective).
     let fres = pow(1.0 - clamp(dot(N, V), 0.0, 1.0), 5.0);
-    let base = textureSample(tex, samp, in.uv) * in.color;
+    // Anti-tiling: blend the water texture with a second copy that is both
+    // ROTATED (~33 degrees) and scaled (0.37x). The .dat tex-scale repeats the
+    // texture ~15x across the plane, and what reads as a "grid" is the tell-tale
+    // axis-aligned rows/columns of that repeat. A rotated, differently-scaled
+    // second layer has neither the same cell size nor the same grid axes, so the
+    // alignment dissolves into a non-repeating surface. `in.uv` already carries
+    // the per-frame scroll, so the second layer scrolls slower and the two drift
+    // apart over time — the interference animates for free with no time uniform.
+    let texA = textureSample(tex, samp, in.uv);
+    let ruv = vec2<f32>(in.uv.x * 0.839 - in.uv.y * 0.545, in.uv.x * 0.545 + in.uv.y * 0.839);
+    let texB = textureSample(tex, samp, ruv * 0.37 + vec2<f32>(0.37, 0.61));
+    let base = mix(texA, texB, 0.5) * in.color;
     // Reflect the sky/fog colour; brighten toward it at grazing angles.
     let rgb = mix(base.rgb, u.fog_color, clamp(fres * 0.7, 0.0, 1.0));
     // A touch more opaque edge-on (water hides the bottom at grazing angles).
