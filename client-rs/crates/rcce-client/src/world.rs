@@ -231,6 +231,11 @@ pub struct World {
     /// Local player's buffered authoritative positions `[time, x, z]` for
     /// time-based render interpolation (see [`World::tick_movement`]).
     pub me_samples: Vec<[f32; 3]>,
+    /// Local player's actor template id (= race), from our own P_NewActor. The
+    /// in-world body mesh/scale/hair are resolved from this (like every other
+    /// actor); without it the local body fell back to template 0, rendering the
+    /// wrong race for any non-default-race character.
+    pub me_actor_id: u16,
     /// Local player's appearance (from our own P_NewActor).
     pub me_gender: u8,
     pub me_face_tex: u8,
@@ -779,6 +784,9 @@ impl World {
             self.me_render_z = z;
             self.me_render_init = true;
             self.me_samples.clear(); // fresh trail at spawn (snaps, then interpolates)
+            // Capture our own template (race) so the in-world body renders with
+            // the correct race mesh — the server sends it in our P_NewActor.
+            self.me_actor_id = template_id;
             self.me_gender = gender;
             self.me_face_tex = face_tex;
             self.me_body_tex = body_tex;
@@ -2127,6 +2135,30 @@ mod tests {
         // An 'R' for a handle that isn't in the world queues no toast.
         w.apply(&msg(pk::INVENTORY_UPDATE, pkt(|p| { p.u8(b'R').u32(999).u8(0); })));
         assert_eq!(w.pending_pickup_toasts.len(), 1, "no toast for an unknown handle");
+    }
+
+    // Our own P_NewActor (rid == my_runtime_id) carries our actor template
+    // (race); capture it into `me_actor_id` so the in-world body uses the right
+    // race mesh. Previously the template was dropped and the body fell back to 0.
+    #[test]
+    fn own_new_actor_captures_race_template() {
+        let mut w = World { my_runtime_id: 42, ..Default::default() };
+        assert_eq!(w.me_actor_id, 0, "defaults to 0 before our spawn packet");
+        // P_NewActor for ME (rid 42), template 7.
+        w.apply(&msg(pk::NEW_ACTOR, pkt(|p| {
+            p.u32(0).u16(42).u16(1).u32(0).u16(7); // area rid level xp template
+            p.f32(1.0).f32(2.0).f32(3.0).f32(0.5); // x y z yaw
+            p.u8(1).str8("MyChar"); // isPlayer name
+        })));
+        assert_eq!(w.me_actor_id, 7, "captured our race template from our own P_NewActor");
+        // Another actor's P_NewActor must NOT overwrite our template.
+        w.apply(&msg(pk::NEW_ACTOR, pkt(|p| {
+            p.u32(0).u16(50).u16(1).u32(0).u16(3);
+            p.f32(0.0).f32(0.0).f32(0.0).f32(0.0);
+            p.u8(0).str8("Stag");
+        })));
+        assert_eq!(w.me_actor_id, 7, "an NPC's template doesn't change ours");
+        assert_eq!(w.actors[&50].template_id, 3, "the NPC still records its own");
     }
 
     #[test]
