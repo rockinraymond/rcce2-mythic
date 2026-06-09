@@ -704,6 +704,7 @@ impl World {
             pk::JUMP => self.on_jump(&m.data),
             pk::FETCH_ACTORS => self.on_fetch_actors(&m.data),
             pk::FLOATING_NUMBER => self.on_floating_number(&m.data),
+            pk::APPEARANCE_UPDATE => self.on_appearance_update(&m.data),
             _ => {}
         }
     }
@@ -1629,6 +1630,82 @@ impl World {
             return;
         };
         self.pending_floaters.push((rid, amount, [cr, cg, cb]));
+    }
+
+    /// `P_AppearanceUpdate` (ClientNet.bb:268): a live appearance change on an
+    /// already-spawned actor. Layout: subtype(u8) · RuntimeID(u16) · value, where
+    /// value is a u16 race id for "C" and a single u8 for the rest:
+    ///   "C" race · "G" gender · "D" beard · "H" hair · "F" face · "B" body.
+    ///
+    /// We mutate the actor's appearance field in place (the local player's via the
+    /// `me_*` mirror that the in-world body reads); the per-frame actor re-bake
+    /// (`dyn_hash`, ~12 Hz) then rebuilds the mesh/skin with the new look — no
+    /// explicit mesh reload needed. Soft-fails to nothing on a short packet, an
+    /// unknown subtype, or an unknown actor (mirrors Blitz `If AI <> Null`).
+    ///
+    /// The wire bytes are clamped at the receive site exactly as Blitz does:
+    /// gender to 0/1 (:323) and the cosmetic indices to 0..=4 (:351/:391/:402/:444,
+    /// since beard/hair/face/body index `Field [4]` = 5-slot arrays).
+    fn on_appearance_update(&mut self, d: &[u8]) {
+        let mut r = MsgReader::new(d);
+        let (Some(sub), Some(rid)) = (r.u8(), r.u16()) else {
+            return;
+        };
+        let is_me = rid == self.my_runtime_id;
+        match sub {
+            b'C' => {
+                // Race change: new template id (u16). Re-derive gender from the
+                // NEW template's gender mode (Blitz ClientNet.bb:276-277: Genders
+                // 2 → female, 1/3 → male, 0 → keep). `template_genders` holds the
+                // raw Blitz Genders value (0 both · 1 male · 2 female · 3 none).
+                let Some(id) = r.u16() else {
+                    return;
+                };
+                let genders = self.template_genders.get(&id).copied().unwrap_or(0);
+                let fix = |g: u8| -> u8 {
+                    if genders == 2 {
+                        1
+                    } else if genders == 1 || genders == 3 {
+                        0
+                    } else {
+                        g
+                    }
+                };
+                if is_me {
+                    self.me_actor_id = id;
+                    self.me_gender = fix(self.me_gender);
+                } else if let Some(a) = self.actors.get_mut(&rid) {
+                    a.template_id = id;
+                    a.gender = fix(a.gender);
+                }
+            }
+            b'G' | b'D' | b'H' | b'F' | b'B' => {
+                let Some(raw) = r.u8() else {
+                    return;
+                };
+                let v = if sub == b'G' { raw.min(1) } else { raw.min(4) };
+                if is_me {
+                    match sub {
+                        b'G' => self.me_gender = v,
+                        b'D' => self.me_beard = v,
+                        b'H' => self.me_hair = v,
+                        b'F' => self.me_face_tex = v,
+                        b'B' => self.me_body_tex = v,
+                        _ => {}
+                    }
+                } else if let Some(a) = self.actors.get_mut(&rid) {
+                    match sub {
+                        b'G' => a.gender = v,
+                        b'D' => a.beard = v,
+                        b'H' => a.hair = v,
+                        b'F' => a.face_tex = v,
+                        b'B' => a.body_tex = v,
+                        _ => {}
+                    }
+                }
+            }
+            _ => {}
+        }
     }
 
     /// Tick down remote jump-anim timers, dropping any that have elapsed.
@@ -2715,6 +2792,61 @@ mod tests {
         let b = &w.actors[&51];
         assert_eq!(b.gender, 1);
         assert_eq!((b.face_tex, b.body_tex), (4, 1));
+    }
+
+    // P_AppearanceUpdate mutates a live actor's look in place; the per-frame
+    // re-bake picks it up. Covers every subtype, the receive-site clamps, the
+    // race-change gender re-derivation, the Me mirror, and the soft-fail paths.
+    #[test]
+    fn appearance_update_all_subtypes() {
+        let mut w = World { my_runtime_id: 1, ..Default::default() };
+        w.template_genders.insert(3, 1); // male-only
+        w.template_genders.insert(7, 2); // female-only
+        w.template_genders.insert(9, 0); // player-selectable
+
+        // Spawn actor 50 (template 3, male) with a known appearance.
+        w.apply(&msg(pk::NEW_ACTOR, pkt(|p| {
+            p.u32(0).u16(50).u16(1).u32(0).u16(3);
+            p.f32(0.0).f32(0.0).f32(0.0).f32(0.0);
+            p.u8(0).str8("Knight").str8("");
+            p.u16(0); // reputation (no gender byte: mode 1)
+            p.u16(2).u16(1).u16(3).u16(4); // face hair body beard
+        })));
+        assert_eq!((w.actors[&50].face_tex, w.actors[&50].hair, w.actors[&50].body_tex, w.actors[&50].beard), (2, 1, 3, 4));
+
+        // Single-byte subtypes mutate the matching field; out-of-range clamps to 4.
+        w.apply(&msg(pk::APPEARANCE_UPDATE, pkt(|p| { p.u8(b'F').u16(50).u8(3); })));
+        w.apply(&msg(pk::APPEARANCE_UPDATE, pkt(|p| { p.u8(b'H').u16(50).u8(2); })));
+        w.apply(&msg(pk::APPEARANCE_UPDATE, pkt(|p| { p.u8(b'B').u16(50).u8(200); }))); // clamp -> 4
+        w.apply(&msg(pk::APPEARANCE_UPDATE, pkt(|p| { p.u8(b'D').u16(50).u8(0); })));
+        assert_eq!((w.actors[&50].face_tex, w.actors[&50].hair, w.actors[&50].body_tex, w.actors[&50].beard), (3, 2, 4, 0));
+
+        // Gender clamps to 0/1.
+        w.apply(&msg(pk::APPEARANCE_UPDATE, pkt(|p| { p.u8(b'G').u16(50).u8(9); })));
+        assert_eq!(w.actors[&50].gender, 1);
+
+        // Race change "C" to a female-only template forces gender female (1).
+        w.apply(&msg(pk::APPEARANCE_UPDATE, pkt(|p| { p.u8(b'C').u16(50).u16(7); })));
+        assert_eq!(w.actors[&50].template_id, 7);
+        assert_eq!(w.actors[&50].gender, 1);
+        // Race change to a SELECTABLE template leaves gender as-is.
+        w.apply(&msg(pk::APPEARANCE_UPDATE, pkt(|p| { p.u8(b'C').u16(50).u16(9); })));
+        assert_eq!(w.actors[&50].template_id, 9);
+        assert_eq!(w.actors[&50].gender, 1); // unchanged
+
+        // The local player (rid == my_runtime_id) mutates the me_* mirror that
+        // the in-world body reads.
+        w.me_actor_id = 3;
+        w.apply(&msg(pk::APPEARANCE_UPDATE, pkt(|p| { p.u8(b'H').u16(1).u8(4); })));
+        w.apply(&msg(pk::APPEARANCE_UPDATE, pkt(|p| { p.u8(b'C').u16(1).u16(7); })));
+        assert_eq!(w.me_hair, 4);
+        assert_eq!(w.me_actor_id, 7);
+        assert_eq!(w.me_gender, 1); // female-only template forced me female
+
+        // Unknown actor and a truncated packet both soft-fail (no panic, no-op).
+        w.apply(&msg(pk::APPEARANCE_UPDATE, pkt(|p| { p.u8(b'F').u16(999).u8(2); })));
+        w.apply(&msg(pk::APPEARANCE_UPDATE, pkt(|p| { p.u8(b'F').u16(50); }))); // missing value
+        assert_eq!(w.actors[&50].face_tex, 3, "truncated packet left face unchanged");
     }
 
     #[test]
