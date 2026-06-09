@@ -232,9 +232,13 @@ Function LoadAreaData(Name$, CameraEN, DisplayItems = False, UpdateRottNet = Fal
 			
 		; Nasty hack to disable decryption on RCTE terrains in a subfolder DISABLED terrains are no longer encrypted so no need to keep code.
 			NoDecrypt = False
-			Name$ = Upper$(GetMeshName$(S\MeshID))
-			;If Instr(Name$, "RCTE\") = 1 Or Instr(Name$, "RCTE/") = 1
-			;	If Instr(Name$, "\", 6) > 0 Or Instr(Name$, "/", 6) > 0 Then NoDecrypt = True
+			; Distinct local: assigning to Name$ here clobbered the zone-name
+			; parameter, so the soft-fail logs below reported a mesh path.
+			; (meshName$ is taken -- Blitz identifiers are case-insensitive
+			; and GetMeshNameClean$ overwrites it inside the BUMPED branch.)
+			MeshPath$ = Upper$(GetMeshName$(S\MeshID))
+			;If Instr(MeshPath$, "RCTE\") = 1 Or Instr(MeshPath$, "RCTE/") = 1
+			;	If Instr(MeshPath$, "\", 6) > 0 Or Instr(MeshPath$, "/", 6) > 0 Then NoDecrypt = True
 			;EndIf
 			
 			; Load the mesh
@@ -246,7 +250,7 @@ Function LoadAreaData(Name$, CameraEN, DisplayItems = False, UpdateRottNet = Fal
 			S\ScaleX# = ReadFloat#(F) : S\ScaleY# = ReadFloat#(F) : S\ScaleZ# = ReadFloat#(F)
 		
 			; is it a bump mesh? [BUMP]
-         If Instr(Name$, "BUMPED\") Then
+         If Instr(MeshPath$, "BUMPED\") Then
         	 meshName$ = GetMeshNameClean$(S\MeshID)
         	 bumpMap = LoadTexture("Data\Meshes\"+meshName$+"_NORMAL.jpg")
 			 ;TextureCoords(colorMap, 1)
@@ -310,11 +314,11 @@ Function LoadAreaData(Name$, CameraEN, DisplayItems = False, UpdateRottNet = Fal
 				ScaleEntity S\EN, S\ScaleX#, S\ScaleY#, S\ScaleZ#
 				
 				;Dynamic Lighting
-				S\ENName=Left(Lower(GetFilename$(Name$)), 2)
+				S\ENName=Left(Lower(GetFilename$(MeshPath$)), 2)
 				S\LightID=0
-				S\ENLight=Lower(GetFilename$(Name$))
-				S\ENWF=Lower(GetFilename$(Name$))
-				S\ENFM=Lower(GetFilename$(Name$))
+				S\ENLight=Lower(GetFilename$(MeshPath$))
+				S\ENWF=Lower(GetFilename$(MeshPath$))
+				S\ENFM=Lower(GetFilename$(MeshPath$))
 								
 				If Left$(S\ENLight$, 6) = "light_" ;And S\LightID=0 And EntityDistance# (S\EN,Me\EN)<=10.0
 					
@@ -356,8 +360,8 @@ Function LoadAreaData(Name$, CameraEN, DisplayItems = False, UpdateRottNet = Fal
 				
 				; Chunking for dungeons etc.
 				If DisplayItems = False
-					Name$ = Upper$(GetMeshName$(S\MeshID))
-					If Instr(Name$, "RCDUNGEON\") Or Instr(Name$, "CUSTOMCHUNK\")
+					MeshPath$ = Upper$(GetMeshName$(S\MeshID))
+					If Instr(MeshPath$, "RCDUNGEON\") Or Instr(MeshPath$, "CUSTOMCHUNK\")
 						RotateMesh(S\EN, Pitch#, Yaw#, Roll#)
 						ScaleEntity(S\EN, S\ScaleX#, S\ScaleY#, S\ScaleZ#)
 						ChunkTerrain(S\EN, 3, 3, 3, X#, Y#, Z#)
@@ -375,7 +379,7 @@ Function LoadAreaData(Name$, CameraEN, DisplayItems = False, UpdateRottNet = Fal
 				EndIf
 
 				; Retexturing
-           ; If Instr(Name$, "BUMPED\") Then
+           ; If Instr(MeshPath$, "BUMPED\") Then
         ;	    colorMap = LoadTexture ("Data\Meshes\"+meshName$+"_DIMMER.jpg")
 		;		;TextureCoords(colorMap, 1)
 		;		EntityTexture S\EN, colorMap, 0, 0
@@ -385,7 +389,7 @@ Function LoadAreaData(Name$, CameraEN, DisplayItems = False, UpdateRottNet = Fal
         ;	    If S\TextureID < 65535 Then EntityTexture S\EN, GetTexture(S\TextureID)
          ;   EndIf
 
-			If Instr(Name$, "BUMPED\") Then
+			If Instr(MeshPath$, "BUMPED\") Then
         	    colorMap = LoadTexture ("Data\Meshes\"+meshName$+"_SPEC.jpg")
 				;TextureCoords(colorMap, 1)
 				EntityTexture S\EN, colorMap, 0, 0
@@ -395,7 +399,7 @@ Function LoadAreaData(Name$, CameraEN, DisplayItems = False, UpdateRottNet = Fal
         	    If S\TextureID < 65535 Then EntityTexture S\EN, GetTexture(S\TextureID)
             EndIf
 
-			If Instr(Name$, "BUMPED\") Then
+			If Instr(MeshPath$, "BUMPED\") Then
         	    colorMap = LoadTexture ("Data\Meshes\"+meshName$+"_COLOR.jpg")
 				;TextureCoords(colorMap, 1)
 				EntityTexture S\EN, colorMap, 0, 2
@@ -407,7 +411,7 @@ Function LoadAreaData(Name$, CameraEN, DisplayItems = False, UpdateRottNet = Fal
 
 
 			;Glow models
-	;		If Instr(Name$, "GLOWMODELS\") Then
+	;		If Instr(MeshPath$, "GLOWMODELS\") Then
     ;    	    colorMap = LoadTexture ("Data\Meshes\"+meshName$+"_GLOW.jpg")
 	;			;TextureCoords(colorMap, 1)
 	;			EntityTexture S\EN, colorMap, 0, 4
