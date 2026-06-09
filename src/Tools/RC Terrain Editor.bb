@@ -96,6 +96,20 @@ Const max_brush_size=80
 Dim GUI_HANDLE_TEMPORARY_IMAGE(6)
 thispath$=CurrentDir()
 
+; Collision types (mirrors Client.bb). Never declared in this target even
+; though ClientAreasTE.bb's LoadArea/ChunkTerrain reference C_Sphere /
+; C_Triangle / C_Box; under non-Strict Blitz they silently read as 0. Declared
+; before the module Includes so the comparisons work as written.
+Const C_None      = 0
+Const C_Sphere    = 1
+Const C_Box       = 2
+Const C_Triangle  = 3
+Const C_Actor     = 4
+Const C_Player    = 5
+Const C_Cam       = 6
+Const C_ActorTri1 = 7
+Const C_ActorTri2 = 8
+
 	;Include "modules\encrypt_b3d.bb"
 Include "modules\rcenet.bb"
 Include "modules\language.bb"
