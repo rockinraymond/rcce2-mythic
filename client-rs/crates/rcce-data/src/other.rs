@@ -122,9 +122,11 @@ mod tests {
 
     #[test]
     fn bubble_semantics() {
-        // Byte 5 = UseBubbles (>1 enables); bytes 6-8 = BubblesR/G/B.
+        // Full record layout: HideNametags, DisableCollisions, ViewMode, ServerPort
+        // (i32 = 4 bytes!), RequireMemorise, UseBubbles, BubblesR/G/B. So UseBubbles
+        // is byte index 8 and the colour is bytes 9-11.
         let with = |ub: u8, rgb: [u8; 3]| {
-            OtherConfig::parse(&[0, 0, 2, 0, 0, 0, ub, rgb[0], rgb[1], rgb[2]])
+            OtherConfig::parse(&[0, 0, 2, 0, 0, 0, 0, 0, ub, rgb[0], rgb[1], rgb[2]])
         };
         assert!(with(2, [10, 20, 30]).bubbles_enabled(), "2 enables");
         assert!(!with(1, [10, 20, 30]).bubbles_enabled(), "1 disables");
