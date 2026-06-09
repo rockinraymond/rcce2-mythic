@@ -79,6 +79,7 @@ pub mod packet_id {
     pub const PARTY_UPDATE: u8 = 38;
     pub const ITEM_SCRIPT: u8 = 43;
     pub const EAT_ITEM: u8 = 44;
+    pub const ITEM_HEALTH: u8 = 45;
     pub const ANIMATE_ACTOR: u8 = 30;
     pub const APPEARANCE_UPDATE: u8 = 39;
     pub const JUMP: u8 = 46;
