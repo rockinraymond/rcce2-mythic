@@ -506,6 +506,15 @@ impl AssetStore {
     /// (`Actors3D.bb:45`): `0.05 × LoadedMeshScales[mesh] × Actor.Scale`.
     /// Positions stay in raw world units. Falls back to `0.05` if a stored
     /// scale is non-positive.
+    /// Load a particle-emitter config by name from `Data/Emitter Configs/<name>.rpc`.
+    /// Used by the zone-emitter load and by `P_CreateEmitter` (dynamic emitters).
+    /// `None` if the file is missing or unparseable (caller soft-fails).
+    pub fn emitter_config(&self, name: &str) -> Option<rcce_data::EmitterConfig> {
+        let path = self.data_root.join("Emitter Configs").join(format!("{name}.rpc"));
+        let bytes = std::fs::read(path).ok()?;
+        rcce_data::EmitterConfig::parse(&bytes).ok()
+    }
+
     /// The template's AI hostility (`Actors.dat` Aggressiveness): 0 passive,
     /// 1 defensive, 2 always-attacks, 3 non-combatant. Defaults to 0 (passive)
     /// for an unknown template. Drives the nameplate hostility colour.

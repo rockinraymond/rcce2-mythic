@@ -151,6 +151,21 @@ pub struct CombatEvent {
     pub damage_type: u8,
 }
 
+/// A server-spawned particle emitter request (`P_CreateEmitter`), resolved by the
+/// App against the AssetStore (`.rpc` config + texture).
+#[derive(Debug, Clone, PartialEq)]
+pub struct PendingEmitter {
+    /// Billboard texture catalog id.
+    pub tex_id: u16,
+    /// Lifetime in milliseconds (the emitter stops spawning after this).
+    pub lifetime_ms: u32,
+    /// World spawn position.
+    pub pos: [f32; 3],
+    /// Emitter config name (indexes `Data/Emitter Configs/<name>.rpc`). Validated
+    /// against path traversal at the receive site.
+    pub name: String,
+}
+
 /// A server-commanded animation override (`P_AnimateActor`). Blitz `Animate`
 /// mode 3 plays the clip once from the start, holds its last frame, and only
 /// reverts when the actor next moves — so we track time **since the clip began**
@@ -377,6 +392,11 @@ pub struct World {
     /// below death) instead of locomotion; `tick_server_anims` expires it after the
     /// clip's natural length, reverting to idle/walk (Blitz mode-3 plays once).
     pub server_anims: HashMap<u16, ServerAnim>,
+    /// Server-spawned particle emitters (`P_CreateEmitter`): the App drains these,
+    /// loads each one's `.rpc` config + texture (which live in the AssetStore), and
+    /// adds a finite-lifetime emitter to the live particle sim. Mirrors Blitz
+    /// `ScriptedEmitter` (ClientNet.bb:772).
+    pub pending_emitters: Vec<PendingEmitter>,
     /// The local player's inventory, keyed by slot (0..13 equipment, 14..45
     /// backpack). Seeded from the P_FetchCharacter sheet, then kept live by
     /// P_InventoryUpdate G/T/H/R. BTreeMap so the panel iterates in slot order.
@@ -746,6 +766,7 @@ impl World {
             pk::REPOSITION_ACTOR => self.on_reposition_actor(&m.data),
             pk::ANIMATE_ACTOR => self.on_animate_actor(&m.data),
             pk::ITEM_HEALTH => self.on_item_health(&m.data),
+            pk::CREATE_EMITTER => self.on_create_emitter(&m.data),
             // The server kicked us (admin/ban/dup-login). Flag it; the App tears
             // down the session and returns to the login screen. Empty payload.
             pk::KICKED_PLAYER => self.kicked = true,
@@ -1862,6 +1883,42 @@ impl World {
             a.dest_z = a.z;
         }
         self.pending_anims.push((rid, name));
+    }
+
+    /// `P_CreateEmitter` (ClientNet.bb:772): the server spawns a particle emitter —
+    /// a spell/ability/script visual. Layout: TexID(u16) · Time(u32, ms lifetime) ·
+    /// RuntimeID(u16, attach target) · X·Y·Z(f32) · ConfigName(string-to-end). We
+    /// queue the request; the App loads the `.rpc` config + texture and adds a
+    /// finite emitter to the sim.
+    ///
+    /// The config name is validated against path traversal exactly as Blitz does
+    /// (ClientNet.bb:785-797): a hostile server could otherwise pass `..\..\x` to
+    /// escape `Data/Emitter Configs`. Reject empty / >240 chars, any byte outside
+    /// printable ASCII, `:` `/` `\`, or a `..` substring. Soft-fails (queues
+    /// nothing) on a bad name or short packet. (RuntimeID/attachment is parsed but
+    /// not yet applied — first slice uses the spawn position; following the actor
+    /// is a deferred follow-up.)
+    fn on_create_emitter(&mut self, d: &[u8]) {
+        let mut r = MsgReader::new(d);
+        let (Some(tex_id), Some(lifetime_ms), Some(_rid)) = (r.u16(), r.u32(), r.u16()) else {
+            return;
+        };
+        let (Some(x), Some(y), Some(z)) = (r.f32(), r.f32(), r.f32()) else {
+            return;
+        };
+        let name = String::from_utf8_lossy(r.rest()).into_owned();
+        if name.is_empty() || name.len() > 240 || name.contains("..") {
+            return;
+        }
+        if name.bytes().any(|b| !(32..=126).contains(&b) || b == b':' || b == b'/' || b == b'\\') {
+            return;
+        }
+        self.pending_emitters.push(PendingEmitter {
+            tex_id,
+            lifetime_ms,
+            pos: [x, y, z],
+            name,
+        });
     }
 
     /// `P_ItemHealth` (ClientNet.bb:249): the server reports a durability change
@@ -3158,6 +3215,28 @@ mod tests {
         w.server_anims.insert(60, ServerAnim { name: "Bow".into(), elapsed: 0.0, duration: 0.1 });
         w.tick_server_anims(0.5, false);
         assert!(w.server_anims.contains_key(&60), "held pose survives a pinned (idle) dest");
+    }
+
+    // P_CreateEmitter queues a (tex, lifetime, pos, name) intent for the App to
+    // resolve into a live particle emitter. The config name is validated against
+    // path traversal; bad names + short packets soft-fail.
+    #[test]
+    fn create_emitter_queues_and_validates() {
+        let mut w = World::default();
+        // Valid: tex 5, 2000ms, rid 0, pos (10,1,20), config "fire".
+        w.apply(&msg(pk::CREATE_EMITTER, pkt(|p| { p.u16(5).u32(2000).u16(0).f32(10.0).f32(1.0).f32(20.0).raw(b"fire"); })));
+        assert_eq!(
+            w.pending_emitters,
+            vec![PendingEmitter { tex_id: 5, lifetime_ms: 2000, pos: [10.0, 1.0, 20.0], name: "fire".into() }]
+        );
+
+        // Path traversal (".."), a slash, an empty name, and a truncated packet
+        // all queue nothing.
+        w.apply(&msg(pk::CREATE_EMITTER, pkt(|p| { p.u16(5).u32(2000).u16(0).f32(0.0).f32(0.0).f32(0.0).raw(b"..\\evil"); })));
+        w.apply(&msg(pk::CREATE_EMITTER, pkt(|p| { p.u16(5).u32(2000).u16(0).f32(0.0).f32(0.0).f32(0.0).raw(b"a/b"); })));
+        w.apply(&msg(pk::CREATE_EMITTER, pkt(|p| { p.u16(5).u32(2000).u16(0).f32(0.0).f32(0.0).f32(0.0); })));
+        w.apply(&msg(pk::CREATE_EMITTER, pkt(|p| { p.u16(5).u32(2000).u16(0); })));
+        assert_eq!(w.pending_emitters.len(), 1, "only the valid emitter queued");
     }
 
     #[test]

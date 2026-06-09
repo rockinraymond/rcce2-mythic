@@ -2119,7 +2119,11 @@ fn register_gui_textures(overlay: &mut rcce_render::Overlay, device: &wgpu::Devi
 
 #[allow(clippy::type_complexity)]
 /// A live emitter + its resolved billboard texture, simulated per frame.
-type ZoneEmitter = (rcce_client::particles::Emitter, Option<rcce_data::Image>);
+/// A live particle emitter in the sim: the emitter, its billboard texture, and an
+/// optional remaining lifetime in milliseconds. `None` = a permanent zone emitter
+/// (from the area file); `Some(ms)` = a finite server-spawned `P_CreateEmitter`
+/// effect that stops + is dropped when the timer runs out.
+type ZoneEmitter = (rcce_client::particles::Emitter, Option<rcce_data::Image>, Option<f32>);
 
 type ZoneStatic = (
     [f32; 3],
@@ -2248,7 +2252,7 @@ fn particle_batches(
     // Softness vs Blitz: scale particle alpha (RCCE_PARTICLE_GAIN, default 0.6).
     let gain = std::env::var("RCCE_PARTICLE_GAIN").ok().and_then(|s| s.parse().ok()).unwrap_or(0.6_f32);
     let mut batches = Vec::with_capacity(emitters.len());
-    for (e, tex) in emitters.iter_mut() {
+    for (e, tex, _life) in emitters.iter_mut() {
         e.update(delta);
         let mut verts = Vec::new();
         e.billboards(right, up, gain, &mut verts);
@@ -2776,7 +2780,7 @@ fn load_zone_static(store: &mut AssetStore, view: &mut WorldView, gfx: &Gfx, dat
         let Ok(config) = rcce_data::EmitterConfig::parse(&bytes) else { continue };
         let tex = store.texture_path(em.tex_id).and_then(|p| rcce_data::texture::load(&p));
         let seed = 0x9E3779B97F4A7C15u64.wrapping_mul(ei as u64 + 1) ^ (em.pos[0].to_bits() as u64);
-        emitters.push((rcce_client::particles::Emitter::new(config, em.tex_id, em.pos, em.rot, seed), tex));
+        emitters.push((rcce_client::particles::Emitter::new(config, em.tex_id, em.pos, em.rot, seed), tex, None));
     }
     if !emitters.is_empty() {
         println!("[client-window] zone '{zone}': {} particle emitter(s)", emitters.len());
@@ -4933,10 +4937,24 @@ impl App {
     /// Advance every emitter and upload this frame's billboards (preview path —
     /// no other `self` borrow is live, so a `&mut self` method is fine).
     fn tick_particles(&mut self, eye: [f32; 3], target: [f32; 3], dt: f32) {
+        // Age finite (P_CreateEmitter) emitters: count their lifetime down and
+        // stop them spawning when it elapses (live particles then taper off).
+        let dt_ms = dt * 1000.0;
+        for (e, _, life) in self.emitters.iter_mut() {
+            if let Some(ms) = life {
+                *ms -= dt_ms;
+                if *ms <= 0.0 {
+                    e.stop();
+                }
+            }
+        }
         let batches = particle_batches(&mut self.emitters, eye, target, dt);
         if let (Some(gfx), Some(view)) = (self.gfx.as_ref(), self.view.as_mut()) {
             view.set_particles(&gfx.device, &gfx.queue, &batches);
         }
+        // Drop stopped emitters whose particles have all died (permanent zone
+        // emitters, life == None, are kept).
+        self.emitters.retain(|(e, _, life)| life.is_none() || !e.is_done());
     }
 
     /// Headless zone preview (`RCCE_VIEWZONE`): render the startup-loaded gameplay
@@ -5147,7 +5165,7 @@ impl App {
         // plume, then build this frame's billboards facing the preview camera.
         if !self.emitters.is_empty() {
             for _ in 0..180 {
-                for (e, _) in self.emitters.iter_mut() {
+                for (e, _, _) in self.emitters.iter_mut() {
                     e.update(1.0);
                 }
             }
@@ -6216,6 +6234,29 @@ impl App {
                             },
                         );
                     }
+                }
+            }
+            // Server-spawned particle emitters (P_CreateEmitter): World validated
+            // the config name + queued a PendingEmitter; resolve the .rpc config +
+            // billboard texture via the store (which World can't reach) and build a
+            // FINITE emitter (Some(lifetime_ms)) so tick aging stops + reaps it.
+            // A missing/unparseable config or texture soft-fails to no emitter.
+            if !net.world.pending_emitters.is_empty() {
+                let reqs: Vec<rcce_client::world::PendingEmitter> =
+                    net.world.pending_emitters.drain(..).collect();
+                for req in reqs {
+                    let Some(config) = store.emitter_config(&req.name) else { continue };
+                    let tex = store
+                        .texture_path(req.tex_id)
+                        .and_then(|p| rcce_data::texture::load(&p));
+                    let seed = 0x9E3779B97F4A7C15u64
+                        ^ (req.pos[0].to_bits() as u64)
+                        ^ ((req.pos[2].to_bits() as u64) << 1);
+                    let emitter = rcce_client::particles::Emitter::new(
+                        config, req.tex_id, req.pos, [0.0, 0.0, 0.0], seed,
+                    );
+                    self.emitters
+                        .push((emitter, tex, Some(req.lifetime_ms as f32)));
                 }
             }
             net.world.tick_server_anims(proj_dt, moving);
@@ -7609,6 +7650,18 @@ impl App {
         // Particles: advance the sim + upload this frame's camera-facing billboards.
         // `&mut self.emitters` is disjoint from the live gfx/view/store borrows.
         let pdt = (elapsed - self.prev_elapsed).clamp(0.0, 0.1);
+        // Age finite (P_CreateEmitter) emitters: count their lifetime down and stop
+        // them spawning when it elapses (live particles then taper off). Permanent
+        // zone emitters (life == None) are unaffected.
+        let pdt_ms = pdt * 1000.0;
+        for (e, _, life) in self.emitters.iter_mut() {
+            if let Some(ms) = life {
+                *ms -= pdt_ms;
+                if *ms <= 0.0 {
+                    e.stop();
+                }
+            }
+        }
         let mut pbatches = particle_batches(&mut self.emitters, eye, cam_target, pdt);
         // Projectiles: a depth-correct glowing orb + motion trail, appended as an
         // additive particle batch (so terrain/scenery occludes them) — replaces the
@@ -7624,6 +7677,9 @@ impl App {
             }
         }
         view.set_particles(&gfx.device, &gfx.queue, &pbatches);
+        // Reap finite emitters that have stopped and whose particles have all died
+        // (permanent zone emitters, life == None, are kept). Disjoint field borrow.
+        self.emitters.retain(|(e, _, life)| life.is_none() || !e.is_done());
         view.render(
             &gfx.device,
             &gfx.queue,
