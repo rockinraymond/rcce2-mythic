@@ -692,7 +692,7 @@ Function UpdateActorInstances()
 										Snd = GetSound(AI\Actor\FSpeechIDs[Speech_FootstepDry])
 									EndIf
 								EndIf
-								EmitSound(Snd, AI\EN)
+								EmitActorSound(Snd, AI\EN)
 								AI\FootstepPlayedThisCycle = True
 							EndIf
 						Else
