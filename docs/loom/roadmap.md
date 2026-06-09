@@ -84,6 +84,8 @@ The next-tier roadmap items, in rough order of leverage:
 
 **Path to unblocking:** Either (a) extract the data-only parts of `LoadArea` into a new `Modules/AreaMeshLoader.bb` that both GUE and Loom can call, or (b) write a Loom-side mesh loader that parses the same `.dat` format independently. (a) is correct, (b) risks drift. Either is a meaningful refactor — probably needs to be its own multi-PR project before Loom can pick it up.
 
+**Status:** the engine-side refactor (route (a)) is done. ADR-004 Phase A (shared `Path.bb`, PR #429) and Phase B (data-only `Modules/AreaLoader.bb` with `LoadAreaData` + `UnloadArea`; GUE's loading-screen UI stays behind `AreaLoadBegin/Progress/End` hooks in `ClientAreas.bb`) are both merged. What remains is the Loom-side Phase C: Include `AreaLoader.bb`, provide no-op hooks, and render the loaded area in a `WorldView` — see ADR-004's Phase C note for the remaining include-graph items (RottParticles, RCTrees).
+
 See [decisions/004-deferred-3d-viewport.md](decisions/004-deferred-3d-viewport.md) for full context.
 
 ### Walk-in playtest
