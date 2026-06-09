@@ -1704,7 +1704,7 @@ fn build_actors(
                     rid: u16,
                     moving: bool,
                     running: bool,
-                    combat: Option<(&'static [&'static str], bool)>,
+                    combat: Option<(&[&str], bool)>,
                     pos: [f32; 3],
                     yaw: f32,
                     color: [f32; 3]| {
@@ -1861,7 +1861,15 @@ fn build_actors(
     // Jump (ANIM-7) overrides the attack clip; the offset lifts the body (MOVE-7).
     // In first-person (CAM-4) the own body is hidden entirely. An idle fidget
     // (ANIM-6) overrides only when nothing more important is playing.
-    let me_combat = if me_jumping {
+    // A server-commanded animation on the local player (P_AnimateActor for our own
+    // rid) overrides jump/attack/fidget, same as remote actors. Runtime name → a
+    // 1-element slice borrowing it for this build.
+    let me_server_anim = world.server_anims.get(&world.my_runtime_id).map(|s| s.name.as_str());
+    let me_sa_slot;
+    let me_combat = if let Some(name) = me_server_anim {
+        me_sa_slot = [name];
+        Some((&me_sa_slot[..], false))
+    } else if me_jumping {
         Some((JUMP_CLIP, false))
     } else if me_attack {
         Some((ATTACK_CLIP, false))
@@ -1881,10 +1889,17 @@ fn build_actors(
         // remote actor mid-attack (P_AttackActor → world.attack_anims) plays its
         // swing clip (CBT-3).
         let jump_left = world.jumps.get(&a.runtime_id).copied();
-        // CBT-3: a remote actor mid-attack (P_AttackActor 'Y'/broadcast) plays its
-        // swing clip. Priority: dead > jump > attack > none.
+        // A server-commanded animation (P_AnimateActor → world.server_anims) is an
+        // explicit emote/pose and overrides locomotion, jump, and attack — but not
+        // death. Priority: dead > server-anim > jump > attack > none. The clip name
+        // is a runtime String, so build a 1-element slice borrowing it for this call.
+        let server_anim = world.server_anims.get(&a.runtime_id).map(|s| s.name.as_str());
+        let sa_slot;
         let combat = if !a.alive {
             Some((death_clip(a.runtime_id), true))
+        } else if let Some(name) = server_anim {
+            sa_slot = [name];
+            Some((&sa_slot[..], false))
         } else if jump_left.is_some() {
             Some((JUMP_CLIP, false))
         } else if world.attack_anims.contains_key(&a.runtime_id) {
@@ -1939,7 +1954,12 @@ fn dyn_hash(world: &World, elapsed: f32, me_moving: bool, me_running: bool, me_a
         }
         // Remote attack-swing presence (CBT-3) so the swing shows under the throttle.
         world.attack_anims.contains_key(&rid).hash(&mut h);
+        // Server-commanded animation presence (P_AnimateActor) so the emote
+        // appears/reverts crisply rather than waiting on the elapsed term.
+        world.server_anims.contains_key(&rid).hash(&mut h);
     }
+    // The local player's own server-commanded animation.
+    world.server_anims.contains_key(&world.my_runtime_id).hash(&mut h);
     // Dropped loot (DROP-1): hash the set of item handles + ids so the 3D ground
     // meshes rebuild when loot is dropped or picked up (positions are fixed at drop).
     let mut loot: Vec<u32> = world.dropped_items.keys().copied().collect();
@@ -6120,6 +6140,42 @@ impl App {
             net.world.tick_jumps(proj_dt);
             // Remote attack-swing timers (CBT-3).
             net.world.tick_attack_anims(proj_dt);
+            // Server-commanded animations (P_AnimateActor): resolve each queued
+            // intent's clip + natural duration via the store (which World can't
+            // reach), install a timed override, then tick the active ones down so
+            // they revert to locomotion when the clip has played out.
+            if !net.world.pending_anims.is_empty() {
+                let intents: Vec<(u16, String)> = net.world.pending_anims.drain(..).collect();
+                for (rid, name) in intents {
+                    let (tmpl, gender) = if rid == net.world.my_runtime_id {
+                        (net.world.me_actor_id, net.world.me_gender)
+                    } else if let Some(a) = net.world.actors.get(&rid) {
+                        (a.template_id, a.gender)
+                    } else {
+                        continue; // unknown actor → drop (Blitz `If A <> Null`)
+                    };
+                    // Resolve the named clip; an unknown name drops the command
+                    // (Blitz `If ID > -1`). Copy the clip dims out first so the
+                    // immutable actor_clip borrow ends before the &mut actor_model.
+                    let clip_dims = store
+                        .actor_clip(tmpl, gender, &[name.as_str()])
+                        .filter(|c| c.end > c.start)
+                        .map(|c| (c.start, c.end, c.speed));
+                    if let Some((start, end, speed)) = clip_dims {
+                        // Duration = clip frames / effective fps (data-native rate).
+                        let fps = store
+                            .actor_model(tmpl, gender)
+                            .and_then(|m| m.anim.map(|a| a.fps))
+                            .unwrap_or(15.0);
+                        let dur = (end - start) as f32 / (fps.max(0.001) * speed.max(0.001));
+                        net.world.server_anims.insert(
+                            rid,
+                            rcce_client::world::ServerAnim { name, remaining: dur.max(0.05) },
+                        );
+                    }
+                }
+            }
+            net.world.tick_server_anims(proj_dt);
             if !self.grounded {
                 let (o, v, g) = jump_step(self.jump_offset, self.jump_vel);
                 self.jump_offset = o;
