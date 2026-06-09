@@ -66,7 +66,7 @@ Always run from the repo root.
 ./test.sh ItemsTest        # same single-file substring filter as Windows
 ```
 
-`test.bat` / `test.sh` print a `[RUN ]` / `[PASS]` / `[FAIL]` marker per file and an end-of-run `Ran N files: P passed, F failed.` summary with a bulleted list of any failing files. CI still calls the runner with no args and only checks the exit code, so the default behavior is unchanged. The positional substring filter is the documented way to reproduce the known intermittent `ItemsTest.bb` flake locally without re-running the whole suite — see the **Known intermittent flake** note under [CI](#ci-githubworkflowsciyml) below.
+`test.bat` / `test.sh` print a `[RUN ]` / `[PASS]` / `[FAIL]` marker per file and an end-of-run `Ran N files: P passed, F failed.` summary with a bulleted list of any failing files. CI still calls the runner with no args and only checks the exit code, so the default behavior is unchanged. The positional substring filter remains handy for looping a single file (it's how the historical `ItemsTest.bb` exit-crash flake was reproduced and statistically verified fixed — see the **Historical intermittent flake** note under [CI](#ci-githubworkflowsciyml) below).
 
 After any change to a `.bb` file under `src/`, run `compile.bat -t` and confirm clean compile before committing. `Local`-shadowing-a-`Global`, missing field, wrong sigil — Strict mode catches all of these at compile time.
 
@@ -296,11 +296,7 @@ The compound rule: if the function reaches out to a resource the host owns (kern
 - Build step caches BlitzForge binaries keyed on the submodule SHA. Most PRs hit cache.
 - Test step runs every file under `src/Tests/` and exits 1 on first failure.
 - **Generator-staleness gate**: after the test step, CI runs `bash scripts/gen_packet_index.sh --check` and `bash scripts/gen_bvm_reference.sh --check`. Both auto-regenerate the two reference docs ([`docs/protocol/index.md`](docs/protocol/index.md), [`docs/bvm-reference.md`](docs/bvm-reference.md)) from source and exit non-zero if the committed file no longer matches. If you touch any of [`src/Modules/ServerNet.bb`](src/Modules/ServerNet.bb), [`src/Modules/ClientNet.bb`](src/Modules/ClientNet.bb), [`src/Modules/Packets.bb`](src/Modules/Packets.bb), [`src/Modules/RC_Standard_Invoker.bb`](src/Modules/RC_Standard_Invoker.bb), or [`src/Modules/ScriptingCommands.bb`](src/Modules/ScriptingCommands.bb), rerun the two generators and commit the regenerated docs before pushing — CI will fail with a diff message otherwise.
-- **Known intermittent flake**: `ItemsTest.bb` sometimes fails with `Stack overflow!` for unrelated PRs. If a PR's CI fails *only* with that error and your change doesn't touch items/inventory/serialization, retry via close + reopen of the PR:
-  ```bash
-  gh pr close <N> && sleep 3 && gh pr reopen <N>
-  ```
-  Two retries is plenty; if it still fails, investigate.
+- **Historical intermittent flake — FIXED (2026-06-09)**: `ItemsTest.bb` / `OnlinePlayerChainTest.bb` used to crash intermittently at exit (`Stack overflow!` / `Memory access violation`) on unrelated PRs, with a documented close-and-reopen retry ritual. Root cause was in the BlitzForge compiler, not the tests: `deleteVars()` codegen emitted a GC release for program **globals** through an **uninitialized** `Decl::offset` frame displacement, so main's epilogue performed a wild `[ebp+garbage]` read (harmless when the stale value was 0, an access violation otherwise). Fixed in blitz-forge PRs [#85](https://github.com/RydeTec/blitz-forge/pull/85)/[#86](https://github.com/RydeTec/blitz-forge/pull/86) (verified 0 failures in 300 runs of each test vs. a 2-12% baseline). If a similar intermittent native crash ever reappears, the runtime now prints the exception code, module-relative fault address, registers, a dump of the faulting generated-code image, and a symbolized stack walk — diagnose from that instead of retrying; the per-test sweep band-aids from PRs #313/#322 remain harmless.
 
 ### Git submodules
 
