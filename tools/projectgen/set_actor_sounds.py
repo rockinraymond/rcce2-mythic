@@ -27,6 +27,10 @@ PLAN = {
     ('Rat', 'Critter'):   {ATTACK1: 16, HIT1: 17, DEATH: 18},        # rat squeaks
     ('Orc', 'Raider'):    {ATTACK1: 19, HIT1: 20, DEATH: 21,
                            FOOT_DRY: 1},                              # troll grunts + heavy step
+    ('Orc', 'Warlord'):   {ATTACK1: 19, HIT1: 20, DEATH: 21,
+                           FOOT_DRY: 1},                              # Grukk mini-boss: clone of
+                                                                     # Raider (same Troll mesh), so
+                                                                     # the same troll vocalizations
 }
 
 def main():
