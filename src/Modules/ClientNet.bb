@@ -743,7 +743,11 @@ Function UpdateNetwork()
 				If Asc(Right$(Name$, 1)) = True
 					AI.ActorInstance = RuntimeIDList(RCE_IntFromStr(Mid$(M\MessageData$, 3, 2)))
 					If AI <> Null
-						Channel = EmitSound(S, AI\CollisionEN)
+						; Route through the bounded actor-sound pool so a stream
+						; of P_Sound packets can't exhaust the audio backend's
+						; channels (issue #489, sibling of the footstep /
+						; PlayActorSound sites).
+						Channel = EmitActorSound(S, AI\CollisionEN)
 						If Channel <> 0 Then ChannelVolume(Channel, DefaultVolume#)
 					EndIf
 				Else

@@ -14,6 +14,25 @@ Global HideNametags = 0, DisableCollisions = False
 Const nearFadeModifier# = 0.25 ; 500 units
 Const farFadeModifier# = 0.75 ; 1500 units
 
+; --- Bounded actor-sound channel pool (issue #489) ------------------------
+;
+; Per-step actor sounds -- the footstep EmitSound in the client loop and the
+; attack/hit/death EmitSound in PlayActorSound below -- were fire-and-forget:
+; the channel handle EmitSound returns was discarded and never reclaimed.
+; With several actors moving and fighting, the audio backend's sources/
+; channels accumulate until allocation fails and the client hard-crashes
+; (no RuntimeError, empty Client Log) -- issue #489. The managed SoundZone
+; path already avoids this by keeping its handle and ChannelPlaying()-
+; checking it; the per-step actor paths did not.
+;
+; EmitActorSound (defined just above PlayActorSound) routes every actor
+; sound through this fixed-size ring of channel handles, StopChannel()-ing
+; the slot it is about to reuse, so the live actor-sound channel count is
+; capped at ActorSoundPoolSize regardless of session length or actor count.
+Const ActorSoundPoolSize = 24
+Dim ActorSoundChannel(ActorSoundPoolSize - 1)
+Global ActorSoundCursor = 0
+
 ; Loads gubbin joint names from file
 Function LoadGubbinNames()
 
@@ -786,6 +805,28 @@ Function UpdateActorItems(A.ActorInstance)
 
 End Function
 
+; Emits an actor sound through the bounded recycling channel pool (see the
+; pool declaration near the top of this module). Use this for every per-step
+; / per-action actor EmitSound so the live channel count stays capped and the
+; client can't exhaust the audio backend (issue #489). Returns the channel
+; handle (0 if Snd is 0 / unregistered).
+Function EmitActorSound%(Snd, EN)
+	; GetSound() returns 0 for an unregistered/missing sound id -- nothing to
+	; play, and EmitSound(0, ...) would burn a pool slot on silence.
+	If Snd = 0 Then Return 0
+	; Reclaim the slot we are about to overwrite if its previous sound is
+	; still playing. This StopChannel is what bounds the live channel count.
+	If ActorSoundChannel(ActorSoundCursor) <> 0
+		If ChannelPlaying(ActorSoundChannel(ActorSoundCursor))
+			StopChannel(ActorSoundChannel(ActorSoundCursor))
+		EndIf
+	EndIf
+	Local Ch = EmitSound(Snd, EN)
+	ActorSoundChannel(ActorSoundCursor) = Ch
+	ActorSoundCursor = (ActorSoundCursor + 1) Mod ActorSoundPoolSize
+	Return Ch
+End Function
+
 ; Plays an actor speech sound
 Function PlayActorSound(A.ActorInstance, Speech)
 
@@ -798,7 +839,7 @@ Function PlayActorSound(A.ActorInstance, Speech)
 		If Result < 65535
 			EN = FindChild(A\EN, "Head")
 			If EN = 0 Then EN = A\EN
-			EmitSound(GetSound(Result), EN)
+			EmitActorSound(GetSound(Result), EN)
 		EndIf
 
 End Function
