@@ -92,6 +92,10 @@ pub struct Projectile {
     /// billboard texture id (`TexID2`). Empty name → no emitter (the plain glow only).
     pub emitter: String,
     pub emitter_tex: u16,
+    /// The projectile's base emitter (`Emitter1$`, e.g. "Default") + its texture
+    /// (`TexID1`), attached alongside `emitter` like Blitz. Empty → not rendered.
+    pub emitter1: String,
+    pub emitter1_tex: u16,
 }
 
 /// A screen-flash effect (`P_ScreenFlash`, id 33): a full-screen colour that
@@ -1729,15 +1733,16 @@ impl World {
     /// ref ClientNet.bb:217-238.
     fn on_projectile(&mut self, d: &[u8]) {
         let mut r = MsgReader::new(d);
-        let (Some(src), Some(tgt), Some(_mesh), Some(_t1), Some(tex2), Some(homing), Some(spd)) =
+        let (Some(src), Some(tgt), Some(_mesh), Some(tex1), Some(tex2), Some(homing), Some(spd)) =
             (r.u16(), r.u16(), r.u16(), r.u16(), r.u16(), r.u8(), r.u8())
         else {
             return;
         };
         // Emitter config names (GameServer.bb:261): Emitter1$ is length-prefixed
-        // (str8), Emitter2$ is the rest. We render Emitter2 (the distinctive effect,
-        // e.g. "Fireball"/"Snow") with TexID2; a soft-fail to "" keeps the plain glow.
-        let _emitter1 = r.str8().unwrap_or_default();
+        // (str8), Emitter2$ is the rest. Blitz attaches BOTH to the projectile —
+        // Emitter1$ (e.g. "Default", the base trail) with TexID1, Emitter2$ (the
+        // distinctive effect, e.g. "Fireball") with TexID2. Empty names → plain glow.
+        let emitter1 = r.str8().unwrap_or_default().trim().to_string();
         let emitter2: String = String::from_utf8_lossy(r.rest()).into_owned();
         let emitter2 = emitter2.trim().to_string();
         let (Some(sp), Some(tp)) = (self.actor_pos(src), self.actor_pos(tgt)) else {
@@ -1760,6 +1765,8 @@ impl World {
             id,
             emitter: emitter2,
             emitter_tex: tex2,
+            emitter1,
+            emitter1_tex: tex1,
         });
     }
 
@@ -2811,6 +2818,9 @@ mod tests {
         assert_eq!(w.projectiles.len(), 1);
         assert_eq!(w.projectiles[0].emitter, "Fireball");
         assert_eq!(w.projectiles[0].emitter_tex, 7);
+        // Emitter1$ ("Default") + TexID1 (0) are also captured (the base trail).
+        assert_eq!(w.projectiles[0].emitter1, "Default");
+        assert_eq!(w.projectiles[0].emitter1_tex, 0);
         // Each spawn gets a distinct id.
         w.apply(&msg(pk::PROJECTILE, { let mut q = MsgWriter::new(); q.u16(2).u16(3).u16(65535).u16(0).u16(0).u8(0).u8(65).str8("").raw(b""); q.into_bytes() }));
         assert_ne!(w.projectiles[0].id, w.projectiles[1].id);
