@@ -1763,6 +1763,7 @@ fn build_actors(
     hide_me: bool,
     me_fidget: Option<&'static [&'static str]>,
     height: Option<&rcce_client::terrain::HeightField>,
+    waters: &[(rcce_data::WaterPlane, rcce_data::Image)],
 ) -> (
     Vec<Rc<B3dModel>>,
     Vec<Rc<Vec<Option<Image>>>>,
@@ -1858,7 +1859,18 @@ fn build_actors(
         let half_h = (max[1] - min[1]) * 0.5;
         let ground = height.and_then(|h| h.height_at(pos[0], pos[2]));
         let trans_y = match ground {
-            Some(th) => th - min[1] * scale,
+            // Inside a water plane, float the body at the surface (swim) instead
+            // of on the submerged lakebed (the user's "I walk underwater" bug).
+            // `swim_seat_ground` only raises, so wading / above-water terrain is
+            // unaffected.
+            Some(th) => {
+                let body_h = (max[1] - min[1]) * scale;
+                let seat = match water_surface_at(waters, pos[0], pos[2]) {
+                    Some(surface) => swim_seat_ground(th, surface, body_h),
+                    None => th,
+                };
+                seat - min[1] * scale
+            }
             None => pos[1] - half_h * scale,
         };
         let trans = [pos[0], trans_y, pos[2]];
@@ -2454,6 +2466,30 @@ fn underwater_color(water_planes: &[(rcce_data::WaterPlane, rcce_data::Image)], 
             eye[1] < p[1] && (eye[0] - p[0]).abs() < w.scale_x * 0.5 && (eye[2] - p[2]).abs() < w.scale_z * 0.5;
         under.then_some(w.color)
     })
+}
+
+/// Fraction of an actor's height that sits BELOW the waterline while swimming
+/// (so `1 - SWIM_SUBMERSION` of the body — head and shoulders — stays above).
+const SWIM_SUBMERSION: f32 = 0.7;
+
+/// The surface Y of the water plane whose X/Z footprint contains `(x, z)`, if
+/// any (first match wins, mirroring `underwater_color`'s containment test).
+fn water_surface_at(waters: &[(rcce_data::WaterPlane, rcce_data::Image)], x: f32, z: f32) -> Option<f32> {
+    waters.iter().find_map(|(w, _)| {
+        let p = w.pos;
+        ((x - p[0]).abs() < w.scale_x * 0.5 && (z - p[2]).abs() < w.scale_z * 0.5).then_some(p[1])
+    })
+}
+
+/// Seat-ground height for an actor standing inside a water plane: float the body
+/// at the `surface` (submerged to `SWIM_SUBMERSION` of its height, so it swims
+/// with head/shoulders out) instead of leaving it seated on the lakebed
+/// (`ground`) — which renders the player walking along the bottom. `body_h` is
+/// the scaled mesh height. Only ever RAISES: shallow water or above-surface
+/// terrain (`ground` already at/above the swim line) is left as wading, so the
+/// `.max` also makes this a no-op outside genuinely-deep water. Pure.
+fn swim_seat_ground(ground: f32, surface: f32, body_h: f32) -> f32 {
+    ground.max(surface - SWIM_SUBMERSION * body_h)
 }
 
 /// A soft radial glow sprite (white RGB, alpha falls off from the centre) used
@@ -5635,7 +5671,7 @@ impl App {
                 // Seat on the set's floor height field (built at scene init) so
                 // the feet rest on the rug instead of a guessed anchor Y.
                 let (models, textures, place, keys, skinned) =
-                    build_actors(store, &mw, elapsed, self.gpu_skin, false, false, c.actor_id, false, false, 0.0, false, None, self.height_field.as_ref());
+                    build_actors(store, &mw, elapsed, self.gpu_skin, false, false, c.actor_id, false, false, 0.0, false, None, self.height_field.as_ref(), &[]);
                 let instances: Vec<SceneInstance> = place
                     .iter()
                     .map(|&(idx, t, r, color, s)| SceneInstance {
@@ -6675,12 +6711,31 @@ impl App {
             // gate accidentally forced the gear/loot rebake every frame too. The
             // RCCE_CPUSKIN path is unchanged: it only enters when a rebake is due and
             // never runs `set_skinned`.
+            // Headless position override (RCCE_MEPOS="x,z"): teleport the local
+            // player's render+logical X/Z so scenery interactions (e.g. swimming
+            // in a water plane) are framable without walking there. Re-applied
+            // each frame so the server's position echo can't drag the body back
+            // out before the screenshot. No-op when the var is unset.
+            if let Ok(s) = std::env::var("RCCE_MEPOS") {
+                let p: Vec<f32> = s.split(',').filter_map(|t| t.trim().parse().ok()).collect();
+                if p.len() == 2 {
+                    net.world.me_x = p[0];
+                    net.world.me_z = p[1];
+                    net.world.me_render_x = p[0];
+                    net.world.me_render_z = p[1];
+                }
+            }
             let need_rebake = hash != self.last_dyn_hash;
             if self.gpu_skin || need_rebake {
+                // RCCE_NOSWIM disables the water-surface seating (passes no water
+                // planes) so a before/after of the swim fix is capturable from one
+                // binary.
+                let swim_waters: &[(rcce_data::WaterPlane, rcce_data::Image)] =
+                    if std::env::var_os("RCCE_NOSWIM").is_some() { &[] } else { &self.water_planes };
                 let (models, textures, place, keys, skinned) = build_actors(
                     store, &net.world, elapsed, self.gpu_skin, moving, run, net.world.me_actor_id,
                     me_attack, me_jumping, me_jump_offset, self.first_person, me_fidget,
-                    self.height_field.as_ref(),
+                    self.height_field.as_ref(), swim_waters,
                 );
                 // GPU-skinned bodies (when enabled) — static mesh + pose uniform. Cheap;
                 // runs every frame so the body animates at display rate.
@@ -6768,11 +6823,18 @@ impl App {
             // is a stale spawn height) — otherwise the camera stays at the spawn
             // elevation and clips through hills the player walks up.
             let (mrx, mrz) = (net.world.me_render_x, net.world.me_render_z);
-            let cam_y = self
+            let mut cam_y = self
                 .height_field
                 .as_ref()
                 .and_then(|h| h.height_at(mrx, mrz))
                 .unwrap_or(net.world.me_y);
+            // Over a water plane, don't let the look-point sink below the surface:
+            // the body now floats at the surface (swim seating), so a look-point on
+            // the deep lakebed would aim the camera underwater — murking the screen
+            // while the player is actually swimming on top. Clamp to the surface.
+            if let Some(surface) = water_surface_at(&self.water_planes, mrx, mrz) {
+                cam_y = cam_y.max(surface);
+            }
             cam_target = [mrx, cam_y, mrz];
             // Headless inspection: RCCE_CAMAT="x,y,z" points the camera at a fixed
             // world spot (e.g. a water plane) for a screenshot without walking there.
@@ -10661,6 +10723,29 @@ mod tests {
         assert_eq!(camera_occluder_radius([1.5, 1.5, 1.5], unit, span), None, "scatter excluded");
         // The whole-zone terrain shell — above the span guard — excluded.
         assert_eq!(camera_occluder_radius([200.0, 20.0, 200.0], unit, span), None, "terrain excluded");
+    }
+
+    // Swim seating (SWIM): inside deep water the body floats at the surface
+    // (submerged SWIM_SUBMERSION of its height); shallow / above-water terrain is
+    // left seated on the ground (wading). swim_seat_ground only ever raises.
+    #[test]
+    fn swim_seat_floats_at_surface() {
+        let surface = -4.7_f32; // Plains water plane Y
+        let body_h = 5.0_f32;
+
+        // Deep water: lakebed well below the surface → raise to the swim line, so
+        // the waterline sits SWIM_SUBMERSION up the body (head/shoulders out).
+        let seat = swim_seat_ground(-9.0, surface, body_h);
+        assert!(seat > -9.0, "deep water must raise the body off the lakebed");
+        let submerged = (surface - seat) / body_h; // fraction of body below water
+        assert!((submerged - SWIM_SUBMERSION).abs() < 1e-5, "waterline at SWIM_SUBMERSION up the body");
+        assert!(seat + body_h > surface, "the head clears the surface");
+
+        // Shallow water: the lakebed is already above the swim line → unchanged
+        // (the actor wades on the bottom, head well clear).
+        assert_eq!(swim_seat_ground(-5.5, surface, body_h), -5.5, "shallow water wades, no lift");
+        // Footprint over above-surface terrain (a bank) → unchanged.
+        assert_eq!(swim_seat_ground(-2.0, surface, body_h), -2.0, "above-water terrain unaffected");
     }
 
     // The function-button row hit-test must agree with the draw geometry: a
