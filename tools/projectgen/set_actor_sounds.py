@@ -8,6 +8,11 @@ positionally on that actor when the event fires (Actors3D.bb:794).
 Player footsteps reuse the footstep sounds registered in iter 2 (ids 0,1); creature
 attack/hit/death use the HF vocalizations imported this iteration (ids 16-21).
 
+Re-enabled in the showcase project once the engine channel-pool fix (#540) made
+per-actor EmitSound safe; the PLAN was extended to cover the Orc/Warlord mini-boss
+(Grukk) -- a clone of the Orc/Raider on the same Troll mesh -- so it reuses the
+troll vocalizations (ids 19-21) rather than staying mute.
+
 Surgical: only the speech arrays change; everything else stays byte-identical.
 """
 import os, sys
@@ -27,6 +32,10 @@ PLAN = {
     ('Rat', 'Critter'):   {ATTACK1: 16, HIT1: 17, DEATH: 18},        # rat squeaks
     ('Orc', 'Raider'):    {ATTACK1: 19, HIT1: 20, DEATH: 21,
                            FOOT_DRY: 1},                              # troll grunts + heavy step
+    ('Orc', 'Warlord'):   {ATTACK1: 19, HIT1: 20, DEATH: 21,
+                           FOOT_DRY: 1},                              # Grukk mini-boss: clone of
+                                                                     # Raider (same Troll mesh), so
+                                                                     # the same troll vocalizations
 }
 
 def main():

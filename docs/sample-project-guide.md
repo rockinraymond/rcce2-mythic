@@ -25,7 +25,8 @@ can learn the engine by reading — and editing — real content.
 5. **Quests.** Kill rats for the Rat Catcher (an NPC in the wilds) and orc raiders for
    the Captain. Turn each in for gold, XP, and gear.
 6. **Atmosphere.** Each zone has ambient sound and dynamic weather — forest birds and
-   showers on the plains, fog in the wilds, flowing water and snow at the shrine.
+   showers on the plains, fog in the wilds, flowing water and snow at the shrine — plus
+   per-actor footsteps and creature attack/hit/death cries as you move and fight.
 
 ## Zones & how they connect
 
@@ -145,13 +146,18 @@ A quest script uses `NewQuest` / `WaitKill(player, actorID, n)` / `UpdateQuest` 
   `data/Game Data/Sounds.dat` (files under `data/Sounds/`).
 - **Spell sounds:** casting plays a one-shot sound (see `PlaySound` in the `Spell_*.rsl`
   scripts).
-- **Per-actor footstep/combat sounds are intentionally OFF.** They're wired through the
-  `Actors.dat` Speech arrays via the engine's fire-and-forget `EmitSound`, which — fired
-  every step of every moving actor — exhausts the client's audio sources over a session and
-  hard-crashes it (see [rcce2#489](https://github.com/RydeTec/rcce2/issues/489)). Once that
-  engine bug is fixed (channel pooling/recycling), re-add them by setting the actors'
-  `MSpeechIDs`/`FSpeechIDs` (the registered creature/footstep sounds are still in
-  `Sounds.dat`).
+- **Per-actor footstep/combat sounds.** Wired through each actor template's `Actors.dat`
+  Speech arrays (`MSpeechIDs`/`FSpeechIDs`, indexed by event — `Attack1`, `Hit1`, `Death`,
+  `FootstepDry`/`Wet`). The engine plays the indexed sound positionally on that actor when
+  the event fires. Currently wired: the Human/Fighter (player) footsteps, the Rat/Critter
+  squeaks, and the Orc/Raider + Orc/Warlord (Grukk) troll vocalizations + heavy footstep.
+  These were previously **OFF** because the old fire-and-forget `EmitSound` — fired every
+  step of every moving actor — exhausted the client's audio sources over a session and
+  hard-crashed it ([rcce2#489](https://github.com/RydeTec/rcce2/issues/489)). That engine
+  bug is fixed: actor sounds now route through a bounded recycling channel pool
+  (`EmitActorSound`, [rcce2#540](https://github.com/RydeTec/rcce2/pull/540)) that caps the
+  live channel count, so they are safe to ship and are now ON. The wiring is reproducible
+  via `tools/projectgen/set_actor_sounds.py` (idempotent; only the speech arrays change).
 - **Weather:** the `WeatherChance[5]` weights at the head of each gameplay area file
   drive dynamic weather — showers/storms on the plains, rain/fog in the wilds, snow at
   the Northern Shrine.
