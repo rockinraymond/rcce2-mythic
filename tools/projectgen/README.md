@@ -24,6 +24,48 @@ generated and round-trip-verified before it ever reaches the engine.
   asserts byte-for-byte equality. **Run this first, every iteration**, before trusting
   the codec to generate anything.
 - `add_spells.py` — iteration 1 content: adds the restorative starter spells.
+- `rcproject.py` — git-friendly project format ([Issue #32](https://github.com/RydeTec/rcce2/issues/32),
+  phase 1). Round-trips the gameplay `.dat` files to/from JSON so they diff and
+  merge in git; see below.
+
+## Git-friendly project format (`rcproject.py`)
+
+Projects store content as opaque binary `.dat` files, so two people editing the
+same catalog produce an **unmergeable binary conflict**. [Issue #32](https://github.com/RydeTec/rcce2/issues/32)
+("Make projects more git friendly") proposes keeping an editable, diffable
+representation in the tree and converting to `.dat` only at publish time. `rcproject.py`
+is phase 1 of that: a round-trip `.dat ↔ JSON` CLI built on the same byte-faithful
+`rcdata.py` codec `validate.py` proves.
+
+```sh
+python tools/projectgen/rcproject.py export data text/   # .dat -> .json   (decode for git)
+# ...edit/merge the JSON, then before running the server / publishing:
+python tools/projectgen/rcproject.py build  text/ data   # .json -> .dat   (the "obfuscation" form)
+python tools/projectgen/rcproject.py verify data         # prove the round-trip is byte-exact
+```
+
+- **`export`** decodes every supported `.dat` into pretty-printed, key-sorted JSON
+  (one `<name>.dat.json` mirroring the source path). The output is deterministic, so
+  re-exporting an unchanged project yields byte-identical text — `git diff` shows
+  exactly which records changed.
+- **`build`** re-encodes the JSON back to `.dat` (atomic temp-file + replace).
+- **`verify`** is the safety gate: for every supported file it decodes → serialises to
+  JSON → parses back → re-encodes and asserts the bytes equal the original (and that the
+  JSON is deterministic). Run it after editing the codec or before trusting a publish.
+
+**Scope (phase 1):** the symmetric value-codec formats — `Spells`, `Items`, `Actors`,
+`Projectiles`, `Factions`, server-side `Areas` (gameplay) and client-side `Areas`
+(visual). The `Meshes`/`Textures`/`Sounds` media databases are append-only index+blob
+structures (§ below) — rebuilding them from decoded entries would lose insertion-order /
+gap layout and change the bytes — so a git-friendly form for them is **deferred to phase 2**.
+`Server Data/Areas/Ownerships/*.dat` (a different format) and the legacy `Areas/ha.dat`
+stub are skipped, matching `validate.py`'s known-good set. Unrecognised `.dat` files are
+reported and left untouched.
+
+**Deferred (phase 2):** wiring `verify` into CI; a media-DB representation; optional
+compaction of the fixed-size area arrays (150 triggers / 2000 waypoints / 1000 spawns are
+serialised in full today — faithful and diffable, but verbose); a GUE/Loom export-on-save
+hook so authors never touch the CLI.
 
 ## The formats (verified against engine source)
 
