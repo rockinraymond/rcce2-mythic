@@ -1733,9 +1733,10 @@ fn build_actors(
                     ClipPlay::HoldEnd => c.end as f32,
                     ClipPlay::Loop => clip_frame(c, fps, elapsed + rid as f32 * 0.13),
                     // Advance from frame 0 at the clip's native rate, clamping at the
-                    // last frame so the pose holds once it has played through.
+                    // last frame so the pose holds once it has played through. Guard
+                    // fps/speed like clip_frame so pathological data can't stall it.
                     ClipPlay::OnceFrom(t) => {
-                        (c.start as f32 + t * fps * c.speed).min(c.end as f32)
+                        (c.start as f32 + t * fps.max(0.001) * c.speed.max(0.001)).min(c.end as f32)
                     }
                 }),
             None => {

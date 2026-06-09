@@ -1815,6 +1815,16 @@ impl World {
         if name.is_empty() {
             return;
         }
+        // Pin a remote actor's destination to its current position, exactly as
+        // Blitz does on receipt (ClientNet.bb:727-728). Otherwise a stale dest
+        // left by the prior P_StandardUpdate (an actor that was walking when the
+        // emote was issued) reads as "still moving", and tick_server_anims would
+        // cancel the held end pose the instant the one-shot plays out. (Me isn't
+        // in `actors`; its movement-cancel uses the live `me_moving` intent.)
+        if let Some(a) = self.actors.get_mut(&rid) {
+            a.dest_x = a.x;
+            a.dest_z = a.z;
+        }
         self.pending_anims.push((rid, name));
     }
 
@@ -3063,6 +3073,25 @@ mod tests {
         assert!(w.server_anims.contains_key(&1), "holds the end pose while idle");
         w.tick_server_anims(0.1, true); // moving after the playthrough → cancel
         assert!(w.server_anims.is_empty(), "movement cancels the held pose");
+
+        // A remote actor that was WALKING when told to emote: on_animate_actor
+        // must pin dest=pos (Blitz ClientNet.bb:727-728) so its held end pose
+        // isn't cancelled by the stale far-away dest the moment the clip plays out.
+        w.apply(&msg(pk::NEW_ACTOR, pkt(|p| {
+            p.u32(0).u16(60).u16(1).u32(0).u16(3);
+            p.f32(10.0).f32(0.0).f32(20.0).f32(0.0);
+            p.u8(0).str8("Walker").str8("");
+        })));
+        w.actors.get_mut(&60).unwrap().dest_x = 999.0; // stale far dest (was walking)
+        w.actors.get_mut(&60).unwrap().dest_z = 999.0;
+        w.apply(&msg(pk::ANIMATE_ACTOR, pkt(|p| { p.u16(60).u8(0).f32(0.05).raw(b"Bow"); })));
+        assert_eq!(w.actors[&60].dest_x, 10.0, "dest pinned to pos on emote");
+        assert_eq!(w.actors[&60].dest_z, 20.0);
+        // Install the override and tick well past its duration while idle: the
+        // pinned dest now reads as not-moving, so the end pose holds.
+        w.server_anims.insert(60, ServerAnim { name: "Bow".into(), elapsed: 0.0, duration: 0.1 });
+        w.tick_server_anims(0.5, false);
+        assert!(w.server_anims.contains_key(&60), "held pose survives a pinned (idle) dest");
     }
 
     #[test]
