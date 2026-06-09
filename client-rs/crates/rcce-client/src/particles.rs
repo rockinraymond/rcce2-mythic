@@ -61,6 +61,10 @@ pub struct Emitter {
     particles: Vec<Particle>,
     to_spawn: i32,
     rng: Rng,
+    /// When true, no new particles spawn (live ones still age out). Used by
+    /// finite-lifetime dynamic emitters (`P_CreateEmitter`) once their time is up,
+    /// so the effect tapers off instead of vanishing mid-puff.
+    stopped: bool,
 }
 
 fn rot_basis(deg: [f32; 3]) -> [[f32; 3]; 3] {
@@ -95,7 +99,19 @@ impl Emitter {
             particles,
             to_spawn: 0,
             rng: Rng(seed | 1),
+            stopped: false,
         }
+    }
+
+    /// Stop spawning new particles; live ones keep ageing until they expire.
+    pub fn stop(&mut self) {
+        self.stopped = true;
+    }
+
+    /// True once the emitter is stopped and all its particles have died — the
+    /// caller can then drop it.
+    pub fn is_done(&self) -> bool {
+        self.stopped && !self.particles.iter().any(|p| p.in_use)
     }
 
     fn spawn(&mut self, i: usize) {
@@ -163,7 +179,12 @@ impl Emitter {
     /// Advance the sim by `delta` Blitz-frames.
     pub fn update(&mut self, delta: f32) {
         let c = &self.config;
-        self.to_spawn = (c.particles_per_frame as f32 * delta).ceil() as i32;
+        // A stopped emitter spawns nothing; live particles below still age + fade.
+        self.to_spawn = if self.stopped {
+            0
+        } else {
+            (c.particles_per_frame as f32 * delta).ceil() as i32
+        };
         let (fm, force_shaping) = (c.force_mod, c.force_shaping);
         for i in 0..self.particles.len() {
             if self.particles[i].in_use {
@@ -269,6 +290,23 @@ mod tests {
             e.update(1.0);
         }
         assert_eq!(e.particles.iter().filter(|p| p.in_use).count(), 0);
+    }
+
+    // A stopped emitter spawns no new particles but lets live ones finish, then
+    // reports `is_done` so a finite dynamic emitter can be dropped.
+    #[test]
+    fn stop_lets_particles_finish_then_is_done() {
+        let mut e = Emitter::new(cfg(), 0, [0.0; 3], [0.0; 3], 9);
+        e.update(1.0);
+        assert!(e.particles.iter().any(|p| p.in_use), "spawned some");
+        e.stop();
+        assert!(!e.is_done(), "not done while particles live");
+        // Once stopped, no fresh spawns even though particles_per_frame is high.
+        for _ in 0..40 {
+            e.update(1.0);
+        }
+        assert_eq!(e.particles.iter().filter(|p| p.in_use).count(), 0, "all aged out, none respawned");
+        assert!(e.is_done(), "done after stop + all particles dead");
     }
 
     #[test]
