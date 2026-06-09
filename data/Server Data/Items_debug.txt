@@ -470,3 +470,355 @@ Item ID: 117
 Item Name: Trap Disarming Kit
 Range: 0.0
 
+Item ID: 118
+Item Name: Topaz Ring
+Range: 0.0
+
+Item ID: 119
+Item Name: Malachite Ring
+Range: 0.0
+
+Item ID: 120
+Item Name: Amethyst Ring
+Range: 0.0
+
+Item ID: 121
+Item Name: Garnet Ring
+Range: 0.0
+
+Item ID: 122
+Item Name: Sapphire Ring
+Range: 0.0
+
+Item ID: 123
+Item Name: Emerald Ring
+Range: 0.0
+
+Item ID: 124
+Item Name: Ruby Ring
+Range: 0.0
+
+Item ID: 125
+Item Name: Diamond Ring
+Range: 0.0
+
+Item ID: 126
+Item Name: Sapphire Amulet
+Range: 0.0
+
+Item ID: 127
+Item Name: Emerald Amulet
+Range: 0.0
+
+Item ID: 128
+Item Name: Ruby Amulet
+Range: 0.0
+
+Item ID: 129
+Item Name: Diamond Amulet
+Range: 0.0
+
+Item ID: 130
+Item Name: Dagger +3
+Range: 0.0
+
+Item ID: 131
+Item Name: Great Axe +1
+Range: 0.0
+
+Item ID: 132
+Item Name: Leather Armor +3
+Range: 0.0
+
+Item ID: 133
+Item Name: Chainmail Armor +3
+Range: 0.0
+
+Item ID: 134
+Item Name: Leather Boots +3
+Range: 0.0
+
+Item ID: 135
+Item Name: Hand Axe +3
+Range: 0.0
+
+Item ID: 136
+Item Name: Battle Axe +3
+Range: 0.0
+
+Item ID: 137
+Item Name: Great Axe +3
+Range: 0.0
+
+Item ID: 138
+Item Name: Short Sword +3
+Range: 0.0
+
+Item ID: 139
+Item Name: Long Sword +3
+Range: 0.0
+
+Item ID: 140
+Item Name: Scimitar +3
+Range: 0.0
+
+Item ID: 141
+Item Name: Two-handed Sword +3
+Range: 0.0
+
+Item ID: 142
+Item Name: Warhammer +3
+Range: 0.0
+
+Item ID: 143
+Item Name: Mace +3
+Range: 0.0
+
+Item ID: 144
+Item Name: Morning Star +3
+Range: 0.0
+
+Item ID: 145
+Item Name: Maul +3
+Range: 0.0
+
+Item ID: 146
+Item Name: Pole Arm +3
+Range: 0.0
+
+Item ID: 147
+Item Name: Short Spear +3
+Range: 0.0
+
+Item ID: 148
+Item Name: Long Spear +3
+Range: 0.0
+
+Item ID: 149
+Item Name: Short Bow +3
+Range: 80.0
+
+Item ID: 150
+Item Name: Long Bow +3
+Range: 150.0
+
+Item ID: 151
+Item Name: Quarter Staff +3
+Range: 0.0
+
+Item ID: 152
+Item Name: Leather Cap +3
+Range: 0.0
+
+Item ID: 153
+Item Name: Leather Trousers +3
+Range: 0.0
+
+Item ID: 154
+Item Name: Leather Gloves +3
+Range: 0.0
+
+Item ID: 155
+Item Name: Leather Belt +3
+Range: 0.0
+
+Item ID: 156
+Item Name: Skull Cap +3
+Range: 0.0
+
+Item ID: 157
+Item Name: Chainmail Greaves +3
+Range: 0.0
+
+Item ID: 158
+Item Name: Chainmail Boots +3
+Range: 0.0
+
+Item ID: 159
+Item Name: Chainmail Gauntlets +3
+Range: 0.0
+
+Item ID: 160
+Item Name: Chainmail Belt +3
+Range: 0.0
+
+Item ID: 161
+Item Name: Round Shield +3
+Range: 0.0
+
+Item ID: 162
+Item Name: Full Helm +3
+Range: 0.0
+
+Item ID: 163
+Item Name: Plated Greaves +3
+Range: 0.0
+
+Item ID: 164
+Item Name: Plated Boots +3
+Range: 0.0
+
+Item ID: 165
+Item Name: Plated Gauntlets +3
+Range: 0.0
+
+Item ID: 166
+Item Name: Plated Belt +3
+Range: 0.0
+
+Item ID: 167
+Item Name: Kite Shield +3
+Range: 0.0
+
+Item ID: 168
+Item Name: Dagger +4
+Range: 0.0
+
+Item ID: 169
+Item Name: Leather Armor +4
+Range: 0.0
+
+Item ID: 170
+Item Name: Chainmail Armor +4
+Range: 0.0
+
+Item ID: 171
+Item Name: Leather Boots +4
+Range: 0.0
+
+Item ID: 172
+Item Name: Hand Axe +4
+Range: 0.0
+
+Item ID: 173
+Item Name: Battle Axe +4
+Range: 0.0
+
+Item ID: 174
+Item Name: Great Axe +4
+Range: 0.0
+
+Item ID: 175
+Item Name: Short Sword +4
+Range: 0.0
+
+Item ID: 176
+Item Name: Long Sword +4
+Range: 0.0
+
+Item ID: 177
+Item Name: Scimitar +4
+Range: 0.0
+
+Item ID: 178
+Item Name: Two-handed Sword +4
+Range: 0.0
+
+Item ID: 179
+Item Name: Warhammer +4
+Range: 0.0
+
+Item ID: 180
+Item Name: Mace +4
+Range: 0.0
+
+Item ID: 181
+Item Name: Morning Star +4
+Range: 0.0
+
+Item ID: 182
+Item Name: Maul +4
+Range: 0.0
+
+Item ID: 183
+Item Name: Pole Arm +4
+Range: 0.0
+
+Item ID: 184
+Item Name: Short Spear +4
+Range: 0.0
+
+Item ID: 185
+Item Name: Long Spear +4
+Range: 0.0
+
+Item ID: 186
+Item Name: Short Bow +4
+Range: 80.0
+
+Item ID: 187
+Item Name: Long Bow +4
+Range: 150.0
+
+Item ID: 188
+Item Name: Quarter Staff +4
+Range: 0.0
+
+Item ID: 189
+Item Name: Leather Cap +4
+Range: 0.0
+
+Item ID: 190
+Item Name: Leather Trousers +4
+Range: 0.0
+
+Item ID: 191
+Item Name: Leather Gloves +4
+Range: 0.0
+
+Item ID: 192
+Item Name: Leather Belt +4
+Range: 0.0
+
+Item ID: 193
+Item Name: Skull Cap +4
+Range: 0.0
+
+Item ID: 194
+Item Name: Chainmail Greaves +4
+Range: 0.0
+
+Item ID: 195
+Item Name: Chainmail Boots +4
+Range: 0.0
+
+Item ID: 196
+Item Name: Chainmail Gauntlets +4
+Range: 0.0
+
+Item ID: 197
+Item Name: Chainmail Belt +4
+Range: 0.0
+
+Item ID: 198
+Item Name: Round Shield +4
+Range: 0.0
+
+Item ID: 199
+Item Name: Full Helm +4
+Range: 0.0
+
+Item ID: 200
+Item Name: Plated Greaves +4
+Range: 0.0
+
+Item ID: 201
+Item Name: Plated Boots +4
+Range: 0.0
+
+Item ID: 202
+Item Name: Plated Gauntlets +4
+Range: 0.0
+
+Item ID: 203
+Item Name: Plated Belt +4
+Range: 0.0
+
+Item ID: 204
+Item Name: Kite Shield +4
+Range: 0.0
+
+Item ID: 205
+Item Name: Platemail Armor +4
+Range: 0.0
+
