@@ -2254,6 +2254,16 @@ fn actor_world_pos(world: &rcce_client::world::World, rid: u16) -> Option<[f32; 
     world.actors.get(&rid).map(|a| [a.render_x, a.y, a.render_z])
 }
 
+/// Whether a scripted (dynamic) emitter survives a zone change. Blitz frees every
+/// scripted emitter on a zone change EXCEPT those attached to the local player
+/// (ClientNet.bb:1679 `AttachedToPlayer = False` gate) — a player-attached aura
+/// follows the player across zones, while world/NPC-attached effects are dropped and
+/// replaced by the new zone's emitters. `my_rid` is the local player's RuntimeID
+/// (0 before entering the world → nothing is player-attached, so nothing survives).
+fn emitter_survives_zone_change(attach: Option<u16>, my_rid: u16) -> bool {
+    my_rid != 0 && attach == Some(my_rid)
+}
+
 /// Advance emitters by `dt` seconds and build their camera-facing billboard
 /// batches `(texture, additive?, verts)`. A free function so the in-world render
 /// can call it while holding `gfx`/`view` borrows of other `self` fields.
@@ -6104,7 +6114,17 @@ impl App {
                     self.ground_y = z.ground_y;
                     self.height_field = Some(z.height_field);
                     set_water_planes(z.waters, &mut self.water_planes, &mut self.water_texs);
-                    self.emitters = z.emitters;
+                    // Carry player-attached dynamic emitters across the zone change
+                    // (Blitz keeps `AttachedToPlayer` ones, ClientNet.bb:1679 — a
+                    // player aura follows them), then append the new zone's permanent
+                    // emitters. World/NPC-attached + world-anchored effects are dropped.
+                    let my_rid = net.world.my_runtime_id;
+                    let mut carried: Vec<ZoneEmitter> = std::mem::take(&mut self.emitters)
+                        .into_iter()
+                        .filter(|ze| emitter_survives_zone_change(ze.attach, my_rid))
+                        .collect();
+                    carried.extend(z.emitters);
+                    self.emitters = carried;
                     self.cam_occluders = z.occluders;
                     self.fog_color = z.env.fog_color;
                     self.fog_near = z.env.fog_near;
@@ -9497,6 +9517,18 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // A zone change keeps only player-attached dynamic emitters (Blitz
+    // ClientNet.bb:1679); world-anchored + NPC-attached effects are dropped, and
+    // before the player is in-world (my_rid 0) nothing is player-attached.
+    #[test]
+    fn emitter_survives_zone_change_only_player_attached() {
+        let me = 1285u16;
+        assert!(emitter_survives_zone_change(Some(me), me), "my aura follows me");
+        assert!(!emitter_survives_zone_change(Some(99), me), "an NPC's emitter is dropped");
+        assert!(!emitter_survives_zone_change(None, me), "a world-anchored emitter is dropped");
+        assert!(!emitter_survives_zone_change(Some(0), 0), "before in-world, nothing survives");
+    }
 
     // NPC nameplate hostility colour: non-combatant (3) green, passive/defensive
     // (0/1) gold, always-attacks (2, and any other value) red — mirrors Blitz's
