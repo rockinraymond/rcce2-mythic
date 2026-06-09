@@ -84,6 +84,14 @@ pub struct Projectile {
     pub homing: bool,
     /// World units per second.
     pub speed: f32,
+    /// Stable id assigned at spawn, so the App can keep one following particle
+    /// emitter per projectile across frames (the projectiles Vec has no key).
+    pub id: u32,
+    /// The projectile's particle-emitter config name (`Emitter2$` on the wire — the
+    /// distinctive effect, e.g. "Fireball"/"Snow"/"Flame"; Projectiles.dat) and its
+    /// billboard texture id (`TexID2`). Empty name → no emitter (the plain glow only).
+    pub emitter: String,
+    pub emitter_tex: u16,
 }
 
 /// A screen-flash effect (`P_ScreenFlash`, id 33): a full-screen colour that
@@ -375,6 +383,9 @@ pub struct World {
     pub next_pbar_handle: u32,
     /// In-flight projectiles (P_Projectile). See [`Projectile`].
     pub projectiles: Vec<Projectile>,
+    /// Monotonic id source for projectiles (so the App can track one following
+    /// particle emitter per projectile). Wraps; collisions are harmless (transient).
+    pub next_proj_id: u32,
     /// A pending screen flash (P_ScreenFlash), drained by the renderer.
     pub flash: Option<ScreenFlash>,
     /// Live known-spell list maintained by P_KnownSpellUpdate. See [`KnownSpell`].
@@ -1718,14 +1729,22 @@ impl World {
     /// ref ClientNet.bb:217-238.
     fn on_projectile(&mut self, d: &[u8]) {
         let mut r = MsgReader::new(d);
-        let (Some(src), Some(tgt), Some(_mesh), Some(_t1), Some(_t2), Some(homing), Some(spd)) =
+        let (Some(src), Some(tgt), Some(_mesh), Some(_t1), Some(tex2), Some(homing), Some(spd)) =
             (r.u16(), r.u16(), r.u16(), r.u16(), r.u16(), r.u8(), r.u8())
         else {
             return;
         };
+        // Emitter config names (GameServer.bb:261): Emitter1$ is length-prefixed
+        // (str8), Emitter2$ is the rest. We render Emitter2 (the distinctive effect,
+        // e.g. "Fireball"/"Snow") with TexID2; a soft-fail to "" keeps the plain glow.
+        let _emitter1 = r.str8().unwrap_or_default();
+        let emitter2: String = String::from_utf8_lossy(r.rest()).into_owned();
+        let emitter2 = emitter2.trim().to_string();
         let (Some(sp), Some(tp)) = (self.actor_pos(src), self.actor_pos(tgt)) else {
             return;
         };
+        let id = self.next_proj_id;
+        self.next_proj_id = self.next_proj_id.wrapping_add(1);
         // Blitz: Speed# = (serverSpeed/50)·2.0 units/frame@30fps → ·30 for /sec.
         let speed = (spd as f32 / 50.0) * 2.0 * 30.0;
         self.projectiles.push(Projectile {
@@ -1738,6 +1757,9 @@ impl World {
             tz: tp[2],
             homing: homing != 0,
             speed,
+            id,
+            emitter: emitter2,
+            emitter_tex: tex2,
         });
     }
 
@@ -2772,6 +2794,27 @@ mod tests {
         assert_eq!(*rid, 9);
         assert_eq!(text, "Hello!");
         assert_eq!(*col, [0.0, 1.0, 0.0, 1.0]);
+    }
+
+    // P_Projectile carries the projectile's emitter config names + tex ids after
+    // the fixed header; we capture Emitter2 ("Fireball") + TexID2 so the App can
+    // render the distinctive particle effect over the plain glow.
+    #[test]
+    fn projectile_captures_emitter() {
+        let mut w = World::default();
+        w.actors.insert(2, Actor { runtime_id: 2, alive: true, ..Default::default() });
+        w.actors.insert(3, Actor { runtime_id: 3, x: 10.0, alive: true, ..Default::default() });
+        // src=2 tgt=3 mesh=65535 tex1=0 tex2=7 homing=0 spd=65, Emitter1="Default", Emitter2="Fireball".
+        let mut p = MsgWriter::new();
+        p.u16(2).u16(3).u16(65535).u16(0).u16(7).u8(0).u8(65).str8("Default").raw(b"Fireball");
+        w.apply(&msg(pk::PROJECTILE, p.into_bytes()));
+        assert_eq!(w.projectiles.len(), 1);
+        assert_eq!(w.projectiles[0].emitter, "Fireball");
+        assert_eq!(w.projectiles[0].emitter_tex, 7);
+        // Each spawn gets a distinct id.
+        w.apply(&msg(pk::PROJECTILE, { let mut q = MsgWriter::new(); q.u16(2).u16(3).u16(65535).u16(0).u16(0).u8(0).u8(65).str8("").raw(b""); q.into_bytes() }));
+        assert_ne!(w.projectiles[0].id, w.projectiles[1].id);
+        assert_eq!(w.projectiles[1].emitter, "", "no emitter name → plain glow");
     }
 
     // A plain say "<Name> text" (no colour-code prefix) becomes a speech bubble over
