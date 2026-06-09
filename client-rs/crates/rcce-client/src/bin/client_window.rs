@@ -846,6 +846,52 @@ fn wrap_text(s: &str, max_chars: usize) -> Vec<String> {
     out
 }
 
+/// Greedy word-wrap to a pixel `max_px` at render `scale`, measured with the
+/// real bitmap-font metrics (`font::text_width`, 9px per glyph cell). Breaks at
+/// whitespace; a single word wider than the line is hard-broken so no output
+/// line ever exceeds `max_px` — nothing bleeds past a bounded box. Pure fn.
+fn wrap_text_px(s: &str, max_px: f32, scale: f32) -> Vec<String> {
+    use rcce_render::font::text_width;
+    let max_px = max_px.max(1.0);
+    let mut out: Vec<String> = Vec::new();
+    let mut cur = String::new();
+    for word in s.split_whitespace() {
+        // A word too wide to ever fit on one line: flush, then hard-break it,
+        // carrying the trailing piece forward so the next word can share it.
+        if text_width(word, scale) > max_px {
+            if !cur.is_empty() {
+                out.push(std::mem::take(&mut cur));
+            }
+            for ch in word.chars() {
+                cur.push(ch);
+                if cur.chars().count() > 1 && text_width(&cur, scale) > max_px {
+                    cur.pop();
+                    out.push(std::mem::take(&mut cur));
+                    cur.push(ch);
+                }
+            }
+            continue;
+        }
+        // Normal word: start a new line if appending would overflow.
+        let joined_w = if cur.is_empty() {
+            text_width(word, scale)
+        } else {
+            text_width(&cur, scale) + text_width(" ", scale) + text_width(word, scale)
+        };
+        if !cur.is_empty() && joined_w > max_px {
+            out.push(std::mem::take(&mut cur));
+        }
+        if !cur.is_empty() {
+            cur.push(' ');
+        }
+        cur.push_str(word);
+    }
+    if !cur.is_empty() {
+        out.push(cur);
+    }
+    out
+}
+
 /// The inventory action button (Drop / Eat) under `(cx, cy)`, given the
 /// InventoryWindow rect and the two window-relative button rects. Pure — shared
 /// by the draw and the click hit-test.
@@ -1524,8 +1570,10 @@ fn next_target(current: Option<u16>, sorted: &[u16]) -> Option<u16> {
 }
 
 /// The visible chat lines for a scrollback `skip` (already clamped): newest-
-/// first, skipping the `skip` most-recent lines and taking up to `max`. Pure —
-/// shared by the renderer and unit-tested for the scrollback window (CHAT-3).
+/// first, skipping the `skip` most-recent lines and taking up to `max`. Pure.
+/// The live renderer now wraps per-line (see the chat block in `render`), but
+/// this remains the reference window the scrollback unit test (CHAT-3) pins.
+#[cfg(test)]
 fn visible_chat(lines: &[(String, [f32; 4])], skip: usize, max: usize) -> Vec<&(String, [f32; 4])> {
     lines.iter().rev().skip(skip).take(max).collect()
 }
@@ -8193,10 +8241,10 @@ impl App {
                         overlay.rect(dx, dy, dw, dh, [0.04, 0.04, 0.07, 0.93]);
                     }
                     overlay.text_shadow(dx + 8.0, dy + 6.0, 1.3, &dl.title, [1.0, 0.92, 0.6, 1.0]);
-                    let max_chars = (((dw - 18.0) / 6.5) as usize).max(8);
+                    let body_w = dw - 16.0;
                     let mut ty = dy + 30.0;
                     for (text, col) in &dl.lines {
-                        for wl in wrap_text(text, max_chars) {
+                        for wl in wrap_text_px(text, body_w, 1.0) {
                             overlay.text_shadow(dx + 8.0, ty, 1.0, &wl, *col);
                             ty += 14.0;
                         }
@@ -8249,9 +8297,9 @@ impl App {
                         overlay.rect(dx, dy, dw, dh, [0.05, 0.05, 0.08, 0.97]);
                     }
                     overlay.text_shadow(dx + 10.0, dy + 8.0, 1.3, &si.title, [1.0, 0.92, 0.6, 1.0]);
-                    let max_chars = (((dw - 20.0) / 6.5) as usize).max(8);
+                    let body_w = dw - 20.0;
                     let mut ty = dy + 32.0;
-                    for wl in wrap_text(&si.prompt, max_chars) {
+                    for wl in wrap_text_px(&si.prompt, body_w, 1.0) {
                         overlay.text_shadow(dx + 10.0, ty, 1.0, &wl, [0.85, 0.85, 0.85, 1.0]);
                         ty += 14.0;
                     }
@@ -8691,14 +8739,36 @@ impl App {
                 overlay.rect(cx0, cy0, cw, chh, [0.0, 0.0, 0.0, 0.28]);
                 let max_lines = ((chh / 12.0) as usize).max(1);
                 let bottom = cy0 + chh - 13.0;
-                // Scrollback (CHAT-3): skip the `chat_scroll` newest lines so
-                // older history scrolls in. Clamp so ≥1 line stays visible.
+                // Scrollback (CHAT-3): skip the `chat_scroll` newest rows so
+                // older history scrolls in. Clamp so ≥1 row stays visible.
                 let scroll = self.chat_scroll.min(w.chat.len().saturating_sub(1));
                 self.chat_scroll = scroll;
-                for (i, (text, col)) in visible_chat(&w.chat, scroll, max_lines).into_iter().enumerate() {
+                // Word-wrap each chat line to the box width so nothing bleeds off
+                // the backdrop (the old `take(60)` truncated mid-word and still
+                // overflowed). Wrap from the newest entry backward, stopping once
+                // we have enough display rows for the visible window — chat is
+                // unbounded, so wrapping the whole history every frame is wasteful.
+                let inner_w = (cw - 8.0).max(16.0);
+                let want = scroll + max_lines + 1;
+                let mut newest_first: Vec<(String, [f32; 4])> = Vec::new();
+                'collect: for (text, col) in w.chat.iter().rev() {
+                    let wrapped = if text.is_empty() {
+                        vec![String::new()]
+                    } else {
+                        wrap_text_px(text, inner_w, 1.0)
+                    };
+                    // Rows within an entry run top→bottom; the bottom row is the
+                    // newest, so push them reversed to keep global newest-first.
+                    for wl in wrapped.into_iter().rev() {
+                        newest_first.push((wl, *col));
+                        if newest_first.len() >= want {
+                            break 'collect;
+                        }
+                    }
+                }
+                for (i, (text, col)) in newest_first.iter().skip(scroll).take(max_lines).enumerate() {
                     let y = bottom - i as f32 * 12.0;
-                    let s: String = text.chars().take(60).collect();
-                    overlay.text_shadow(cx0 + 4.0, y, 1.0, &s, *col);
+                    overlay.text_shadow(cx0 + 4.0, y, 1.0, text, *col);
                 }
                 if scroll > 0 {
                     overlay.text_shadow(cx0 + cw - 68.0, cy0 + 2.0, 1.0, &format!("scroll +{scroll}"), [0.7, 0.85, 1.0, 1.0]);
@@ -10222,6 +10292,44 @@ mod tests {
         let t8: Vec<&str> = visible_chat(&lines, 8, 5).into_iter().map(|(t, _)| t.as_str()).collect();
         assert_eq!(t8, vec!["line 8", "line 7", "line 6", "line 5", "line 4"]);
         assert!(visible_chat(&lines, 16, 5).is_empty()); // renderer clamps before this
+    }
+
+    // Pixel-width word-wrap (TGT-5/CHAT): no output line exceeds the box width,
+    // and the wrap never overflows a bounded surface like the dialog popup did.
+    #[test]
+    fn wrap_text_px_never_overflows_and_breaks_at_spaces() {
+        use rcce_render::font::text_width;
+        // The font is 9px per glyph cell at scale 1.0; 90px == 10 chars.
+        let max = 90.0;
+
+        // Greedy space break: "aaaa bbbb" (9 chars, 81px) fits; " cccc" tips it
+        // over 90px, so "cccc" starts a new line.
+        let lines = wrap_text_px("aaaa bbbb cccc", max, 1.0);
+        assert_eq!(lines, vec!["aaaa bbbb".to_string(), "cccc".to_string()]);
+
+        // Every produced line must fit within the pixel budget — the invariant
+        // that was violated by the old char-estimate divisor.
+        for l in &lines {
+            assert!(text_width(l, 1.0) <= max, "line {l:?} overflows");
+        }
+
+        // A single word wider than the line is hard-broken (no spaces to break
+        // at) so it can't run off the box edge.
+        let long = "a".repeat(25);
+        let broken = wrap_text_px(&long, max, 1.0);
+        assert!(broken.len() >= 3, "expected hard-break into multiple rows");
+        let total: usize = broken.iter().map(|l| l.chars().count()).sum();
+        assert_eq!(total, 25, "hard-break must preserve every character");
+        for l in &broken {
+            assert!(text_width(l, 1.0) <= max, "hard-broken line {l:?} overflows");
+        }
+
+        // Empty / whitespace-only input yields no rows; scale is honoured.
+        assert!(wrap_text_px("   ", max, 1.0).is_empty());
+        let scaled = wrap_text_px("aaaa bbbb cccc", max, 2.0);
+        for l in &scaled {
+            assert!(text_width(l, 2.0) <= max, "scaled line {l:?} overflows");
+        }
     }
 
     // The auto-combat decision (CBT-1): chase when out of melee range, swing in
