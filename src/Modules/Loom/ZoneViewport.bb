@@ -115,6 +115,12 @@ Global VPMarkerDragArH    = 0            ; Handle(Area) of the zone being edited
 ; without breaking the gesture.
 Global VPMarkerDragYMode = False
 Global VPMarkerDragLastMY = 0    ; per-frame Y delta basis
+; True once a drag actually committed a coordinate write. The release
+; handler only toasts "Moved ..." + marks the zone dirty when a write
+; happened -- an XZ drag whose every pick missed the ground (e.g. the
+; ground is hidden) used to fire a false success toast and a spurious
+; dirty flag. (Review finding on #551.)
+Global VPMarkerDragChanged = False
 
 ; MMB pan state. Middle-mouse drag translates VPSceneCenterX/Z in
 ; camera-aligned screen-right and screen-forward directions so the
@@ -284,8 +290,20 @@ Function Loom_SetWorldMode(zoneHandle, enable)
 
     If enable = True
         If VPWorldLoaded = True Then Loom_UnloadWorld()
-        If LoadAreaData(Ar\Name$, VPCam, True, False) = False
+        ; Pre-check the visual data file rather than letting LoadAreaData's
+        ; missing-file Return False handle it: the loader's early return
+        ; happens after LockMeshes/LockTextures, leaking the two lock file
+        ; handles per attempt (pre-existing in AreaLoader, also reachable
+        ; from GUE). The common Loom case -- toggling world view on a
+        ; gameplay-only zone -- shouldn't pay that. (Review finding on #551.)
+        If FileType("Data\Areas\" + Ar\Name$ + ".dat") <> 1
             Toast_Show("No visual zone data (Data\Areas\" + Ar\Name$ + ".dat)", "warning")
+            WriteLog(LoomLog, "ZoneViewport: no visual .dat for " + Ar\Name$ + " -- staying schematic")
+            VPWorldMode = False
+            Return
+        EndIf
+        If LoadAreaData(Ar\Name$, VPCam, True, False) = False
+            Toast_Show("World load failed for " + Ar\Name$, "warning")
             WriteLog(LoomLog, "ZoneViewport: world load failed for " + Ar\Name$ + " -- staying schematic")
             VPWorldMode = False
             Return
@@ -454,6 +472,14 @@ End Function
 ; =============================================================================
 Function Loom_DeleteMarkerAtClick(zoneHandle, localX, localY)
     If VPInitOK = False Then Return
+    ; World mode is read-only (the hint bar says so). Without this gate a
+    ; Ctrl+LMB on a marker deletes zone data from the "view" mode: the pick
+    ; here is marker-vs-marker, so hiding VPGround doesn't protect this
+    ; path the way it does the add/drag-XZ paths. (Review finding on #551.)
+    If VPWorldMode = True
+        Toast_Show("World view is read-only -- switch to schematic to delete", "warning")
+        Return
+    EndIf
     Local Ar.Area = Object.Area(zoneHandle)
     If Ar = Null Then Return
 
@@ -1143,7 +1169,11 @@ Function Loom_DrawZoneViewport(zoneHandle, x, y, w, h)
             ; should still be valid since nothing has moved.
             CameraPick VPCam, mx - x, my - y
             Local pickedEN = PickedEntity()
-            If pickedEN <> 0 And pickedEN <> VPGround
+            ; Marker drag is schematic-only: in world mode the XZ branch
+            ; would no-op (ground hidden) but the shift+RMB Y-mode branch
+            ; uses raw mouse deltas and would mutate zone data from the
+            ; read-only view. Gate the drag START. (Review finding on #551.)
+            If pickedEN <> 0 And pickedEN <> VPGround And VPWorldMode = False
                 Local pm.ZoneViewportMarker
                 For pm = Each ZoneViewportMarker
                     If pm\EN = pickedEN And (pm\Kind = "portal" Or pm\Kind = "trigger" Or pm\Kind = "spawn")
@@ -1182,6 +1212,7 @@ Function Loom_DrawZoneViewport(zoneHandle, x, y, w, h)
                     PositionEntity VPMarkerDragEN, curX#, newY#, curZ#
                     ; Convert to scene-relative Y (subtract VP_SCENE_Y_OFFSET).
                     Loom_CommitMarkerY(VPMarkerDragArH, VPMarkerDragKind$, VPMarkerDragIdx, newY# - VPSceneYOff#)
+                    VPMarkerDragChanged = True
                     VPDirty = True
                 EndIf
             Else
@@ -1200,6 +1231,7 @@ Function Loom_DrawZoneViewport(zoneHandle, x, y, w, h)
                     ; Update the underlying Area field via the existing zone
                     ; setter dispatch (handles Strict-mode dim-write trap).
                     Loom_CommitMarkerCoord(VPMarkerDragArH, VPMarkerDragKind$, VPMarkerDragIdx, newX#, newZ#)
+                    VPMarkerDragChanged = True
                     VPDirty = True
                 EndIf
             EndIf
@@ -1207,15 +1239,20 @@ Function Loom_DrawZoneViewport(zoneHandle, x, y, w, h)
     Else
         If VPMarkerDragging = True
             ; Commit on release. The per-frame updates already wrote
-            ; through to the Area; just fire a toast + mark dirty.
-            If LoomComposer <> Null Then Composer::markDirtyForKind(LoomComposer, "zone")
-            Toast_Show("Moved " + VPMarkerDragKind$ + " " + Str(VPMarkerDragIdx), "success")
-            WriteLog(LoomLog, "ZoneViewport: drag commit " + VPMarkerDragKind$ + " " + Str(VPMarkerDragIdx))
+            ; through to the Area; only toast + mark dirty when a write
+            ; actually happened (a drag whose picks all missed commits
+            ; nothing and must not flip the zone dirty).
+            If VPMarkerDragChanged = True
+                If LoomComposer <> Null Then Composer::markDirtyForKind(LoomComposer, "zone")
+                Toast_Show("Moved " + VPMarkerDragKind$ + " " + Str(VPMarkerDragIdx), "success")
+                WriteLog(LoomLog, "ZoneViewport: drag commit " + VPMarkerDragKind$ + " " + Str(VPMarkerDragIdx))
+            EndIf
             VPMarkerDragging = False
             VPMarkerDragEN   = 0
             VPMarkerDragKind$ = ""
             VPMarkerDragIdx  = -1
             VPMarkerDragYMode = False
+            VPMarkerDragChanged = False
         EndIf
     EndIf
 
