@@ -705,6 +705,7 @@ impl World {
             pk::FETCH_ACTORS => self.on_fetch_actors(&m.data),
             pk::FLOATING_NUMBER => self.on_floating_number(&m.data),
             pk::APPEARANCE_UPDATE => self.on_appearance_update(&m.data),
+            pk::REPOSITION_ACTOR => self.on_reposition_actor(&m.data),
             _ => {}
         }
     }
@@ -1705,6 +1706,64 @@ impl World {
                 }
             }
             _ => {}
+        }
+    }
+
+    /// `P_RepositionActor` (ClientNet.bb:180): the server hard-teleports an actor
+    /// (warp, knockback, GM/script move, anti-cheat correction). Layout:
+    /// subtype(u8) · RuntimeID(u16) · then, for "M" (move) X·Y·Z(f32) + an
+    /// optional camera/collision flag(u8); for the rotate subtype, Yaw(f32).
+    ///
+    /// Unlike the ~9 Hz `P_StandardUpdate` echo (which the client *interpolates*
+    /// toward), this is an explicit snap — Blitz does `PositionEntity` +
+    /// `ResetEntity`. So we set the authoritative position AND force the render
+    /// position to it, clearing the interpolation trail, so the actor (or the
+    /// local player) snaps instead of gliding across the zone. Soft-fails on a
+    /// short packet or unknown actor (mirrors Blitz `If AI <> Null`).
+    fn on_reposition_actor(&mut self, d: &[u8]) {
+        let mut r = MsgReader::new(d);
+        let (Some(sub), Some(rid)) = (r.u8(), r.u16()) else {
+            return;
+        };
+        let is_me = rid == self.my_runtime_id;
+        if sub == b'M' {
+            let (Some(x), Some(y), Some(z)) = (r.f32(), r.f32(), r.f32()) else {
+                return;
+            };
+            // The trailing byte is Blitz's MoveCamera / ignore-collision flag; the
+            // Rust third-person camera follows the (now-snapped) render position,
+            // so it snaps with the body. Consumed but not load-bearing here.
+            let _flag = r.u8();
+            if is_me {
+                self.me_x = x;
+                self.me_y = y;
+                self.me_z = z;
+                // Hard snap: render = authoritative, fresh trail so the next
+                // tick_movement snaps (`first`) rather than reconciling/gliding.
+                self.me_render_x = x;
+                self.me_render_z = z;
+                self.me_render_init = true;
+                self.me_samples.clear();
+            } else if let Some(a) = self.actors.get_mut(&rid) {
+                a.x = x;
+                a.y = y;
+                a.z = z;
+                a.dest_x = x;
+                a.dest_z = z;
+                a.render_x = x;
+                a.render_z = z;
+                a.samples.clear();
+            }
+        } else {
+            let Some(yaw) = r.f32() else {
+                return;
+            };
+            if is_me {
+                self.me_yaw = yaw;
+            } else if let Some(a) = self.actors.get_mut(&rid) {
+                a.yaw = yaw;
+                a.render_yaw = yaw;
+            }
         }
     }
 
@@ -2847,6 +2906,51 @@ mod tests {
         w.apply(&msg(pk::APPEARANCE_UPDATE, pkt(|p| { p.u8(b'F').u16(999).u8(2); })));
         w.apply(&msg(pk::APPEARANCE_UPDATE, pkt(|p| { p.u8(b'F').u16(50); }))); // missing value
         assert_eq!(w.actors[&50].face_tex, 3, "truncated packet left face unchanged");
+    }
+
+    // P_RepositionActor hard-teleports an actor: the authoritative AND render
+    // positions snap (no glide), the interpolation trail is cleared, and the
+    // rotate subtype sets yaw. Covers actors, the local player, and soft-fails.
+    #[test]
+    fn reposition_actor_hard_snaps() {
+        let mut w = World { my_runtime_id: 1, ..Default::default() };
+        w.apply(&msg(pk::NEW_ACTOR, pkt(|p| {
+            p.u32(0).u16(50).u16(1).u32(0).u16(3);
+            p.f32(0.0).f32(0.0).f32(0.0).f32(0.0);
+            p.u8(0).str8("Stag").str8("");
+        })));
+        // Simulate the actor mid-glide: render lags the authoritative pos, trail buffered.
+        {
+            let a = w.actors.get_mut(&50).unwrap();
+            a.render_x = -99.0;
+            a.render_z = -99.0;
+            a.samples.push([0.0, 0.0, 0.0]);
+        }
+        // "M" teleport to (120, 5, -80).
+        w.apply(&msg(pk::REPOSITION_ACTOR, pkt(|p| { p.u8(b'M').u16(50).f32(120.0).f32(5.0).f32(-80.0).u8(0); })));
+        let a = &w.actors[&50];
+        assert_eq!((a.x, a.y, a.z), (120.0, 5.0, -80.0));
+        assert_eq!((a.dest_x, a.dest_z), (120.0, -80.0));
+        assert_eq!((a.render_x, a.render_z), (120.0, -80.0), "render hard-snaps, no glide");
+        assert!(a.samples.is_empty(), "interpolation trail cleared on teleport");
+
+        // Rotate subtype sets both the authoritative and render yaw.
+        w.apply(&msg(pk::REPOSITION_ACTOR, pkt(|p| { p.u8(b'R').u16(50).f32(90.0); })));
+        assert_eq!((w.actors[&50].yaw, w.actors[&50].render_yaw), (90.0, 90.0));
+
+        // Local player teleport: me_* + me_render snap, the trail clears.
+        w.me_render_x = 0.0;
+        w.me_render_z = 0.0;
+        w.me_samples.push([0.0, 0.0, 0.0]);
+        w.apply(&msg(pk::REPOSITION_ACTOR, pkt(|p| { p.u8(b'M').u16(1).f32(50.0).f32(2.0).f32(60.0).u8(0); })));
+        assert_eq!((w.me_x, w.me_y, w.me_z), (50.0, 2.0, 60.0));
+        assert_eq!((w.me_render_x, w.me_render_z), (50.0, 60.0));
+        assert!(w.me_samples.is_empty());
+
+        // Unknown actor and a truncated packet both soft-fail (no panic, no-op).
+        w.apply(&msg(pk::REPOSITION_ACTOR, pkt(|p| { p.u8(b'M').u16(999).f32(1.0).f32(1.0).f32(1.0).u8(0); })));
+        w.apply(&msg(pk::REPOSITION_ACTOR, pkt(|p| { p.u8(b'M').u16(50).f32(7.0); }))); // missing Y/Z
+        assert_eq!(w.actors[&50].x, 120.0, "truncated packet left position unchanged");
     }
 
     #[test]
