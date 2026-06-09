@@ -60,6 +60,27 @@ impl EnetTransport {
         !self.peer.is_null() && !self.host.is_null()
     }
 
+    /// Tear the connection down IMMEDIATELY, skipping the reliable-disconnect
+    /// handshake + up-to-~1s ack wait that `teardown` (Drop) performs. Use when
+    /// the connection is already gone — a server kick (it has already cleared our
+    /// session) or a dropped/timed-out peer — so the graceful wait would only
+    /// stall the UI for a disconnect the server has already done. Sends one
+    /// best-effort unreliable disconnect, frees the host, and nulls both handles,
+    /// so the later `Drop` runs `teardown` as a no-op (no double-free).
+    pub fn disconnect_immediate(&mut self) {
+        unsafe {
+            if !self.peer.is_null() {
+                enet_peer_disconnect_now(self.peer, 0);
+            }
+            if !self.host.is_null() {
+                enet_host_flush(self.host);
+                enet_host_destroy(self.host);
+            }
+        }
+        self.host = ptr::null_mut();
+        self.peer = ptr::null_mut();
+    }
+
     fn teardown(&mut self) {
         unsafe {
             if !self.peer.is_null() && !self.host.is_null() {

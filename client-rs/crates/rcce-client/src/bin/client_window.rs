@@ -6498,6 +6498,14 @@ impl App {
             .is_some_and(|n| n.world.kicked || !n.transport.is_connected());
         if lost {
             let kicked = self.net.as_ref().is_some_and(|n| n.world.kicked);
+            // The connection is already gone (server kick, or a dropped/timed-out
+            // peer), so tear it down immediately rather than letting `Drop` do the
+            // reliable-disconnect handshake + ~1s ack wait — the server has already
+            // cleared our session, so that wait would just freeze the kick→login
+            // transition. (Normal quit still does the graceful disconnect.)
+            if let Some(net) = self.net.as_mut() {
+                net.transport.disconnect_immediate();
+            }
             self.net = None;
             self.target = None;
             self.mode = Mode::Login;
