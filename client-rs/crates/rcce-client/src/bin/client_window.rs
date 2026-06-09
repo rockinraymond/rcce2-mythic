@@ -2070,6 +2070,47 @@ fn dyn_hash(world: &World, elapsed: f32, me_moving: bool, me_running: bool, me_a
     h.finish()
 }
 
+/// The camera-boom occluder sphere radius for a scenery prop, or `None` if it
+/// shouldn't occlude. `extent` is the model-local bounds size, `scale` the
+/// placement scale, `span` the zone size. Pure.
+///
+/// A building the third-person camera can get stuck inside has a substantial
+/// footprint in BOTH horizontal axes. A long thin object (fence, wall, railing)
+/// is wide in one axis and paper-thin in the other, so its bounding sphere
+/// (sized by the long axis) hugely overestimates the occluding volume, which is
+/// why the boom used to yank the camera in whenever the player walked alongside
+/// or between fences even though nothing was blocking the view. Rejecting thin
+/// footprints fixes that while leaving real buildings untouched.
+fn camera_occluder_radius(extent: [f32; 3], scale: [f32; 3], span: f32) -> Option<f32> {
+    // World-space footprint per axis.
+    let hx = extent[0] * scale[0].abs();
+    let hz = extent[2] * scale[2].abs();
+    // Reject long, thin props (fence/wall/railing): the camera can never be
+    // "inside" them, so they shouldn't pull the boom in. A genuine building is
+    // substantial in BOTH horizontal axes; a fence has one tiny axis.
+    if hx.min(hz) < CAM_OCCLUDER_MIN_FOOTPRINT {
+        return None;
+    }
+    let smax = scale[0].abs().max(scale[1].abs()).max(scale[2].abs());
+    let radius = 0.5
+        * (extent[0] * extent[0] + extent[1] * extent[1] + extent[2] * extent[2]).sqrt()
+        * smax;
+    // Building-sized only: big enough to get stuck inside, but not the whole-
+    // zone terrain shell (and small/medium props are skipped so the camera
+    // isn't yanked close every time the player walks past a barrel/lamp post).
+    if radius < 8.0 || radius > span * 0.25 {
+        return None;
+    }
+    // The bounding sphere of a boxy building overshoots its footprint at the
+    // corners; shrink it so "camera inside" only fires within the walls.
+    Some(radius * 0.62)
+}
+
+/// Minimum world-space footprint (in BOTH horizontal axes) for a prop to count
+/// as a camera occluder. Below this the prop is a thin fence/wall the camera
+/// can't be inside, so it must not pull the boom in.
+const CAM_OCCLUDER_MIN_FOOTPRINT: f32 = 4.0;
+
 /// Third-person camera collision. Marches the boom outward from the pivot
 /// `look` along the unit direction `dir` and returns the furthest distance
 /// (≤ `max_dist`) the camera can sit without its eye entering a solid occluder
@@ -2835,20 +2876,13 @@ fn load_zone_static(store: &mut AssetStore, view: &mut WorldView, gfx: &Gfx, dat
             continue;
         }
         let (lmin, lmax) = model.bounds();
-        let smax = scale[0].abs().max(scale[1].abs()).max(scale[2].abs());
         let extent = [lmax[0] - lmin[0], lmax[1] - lmin[1], lmax[2] - lmin[2]];
-        let radius = 0.5 * (extent[0] * extent[0] + extent[1] * extent[1] + extent[2] * extent[2]).sqrt() * smax;
-        // Only building-sized occluders: large enough to be a structure the
-        // camera can get stuck inside, but not the whole-zone terrain shell.
-        // Small/medium props (barrels, fountains, lamp posts) are skipped so the
-        // camera isn't yanked close every time the player walks past one.
-        if radius < 8.0 || radius > span * 0.25 {
+        // Building-sized, non-thin props only (see camera_occluder_radius): this
+        // skips terrain, tiny scatter, AND long thin fences/walls that used to
+        // yank the boom in when the player walked between them.
+        let Some(radius) = camera_occluder_radius(extent, scale, span) else {
             continue;
-        }
-        // The bounding-sphere of a boxy building overshoots its footprint at the
-        // corners; shrink it so "camera inside" only fires when the player is
-        // genuinely within the walls, not merely standing beside the building.
-        let radius = radius * 0.62;
+        };
         let c = [
             pos[0] + (lmin[0] + lmax[0]) * 0.5 * scale[0],
             pos[1] + (lmin[1] + lmax[1]) * 0.5 * scale[1],
@@ -10593,6 +10627,40 @@ mod tests {
         let many = [([0.0, 0.0, 30.0], 2.0), ([0.0, 0.0, 6.0], 1.0), ([0.0, 0.0, 12.0], 1.0)];
         let d = camera_boom([0.0; 3], dir, 40.0, &many);
         assert!((4.6..5.0).contains(&d), "nearest hit ~5 -> ~4.6..5, got {d}");
+    }
+
+    // Which props become camera occluders (CAM-occlusion fix): a boxy building
+    // does; a long thin fence/wall does NOT (the user's "camera zooms in between
+    // fences" bug); terrain and tiny scatter are excluded as before.
+    #[test]
+    fn camera_occluder_selection() {
+        let span = 300.0;
+        let unit = [1.0, 1.0, 1.0];
+
+        // A boxy building (12 x 8 x 14) — substantial footprint both axes — is an
+        // occluder, and the returned radius is the shrunk bounding sphere.
+        let r = camera_occluder_radius([12.0, 8.0, 14.0], unit, span);
+        assert!(r.is_some(), "a boxy building must occlude");
+        let r = r.unwrap();
+        let raw = 0.5 * (12.0f32 * 12.0 + 8.0 * 8.0 + 14.0 * 14.0).sqrt();
+        assert!((r - raw * 0.62).abs() < 1e-3, "radius is the 0.62-shrunk sphere");
+
+        // A long thin fence (20 long x 3 tall x 0.5 thick): its diagonal is big
+        // enough to clear the old radius>=8 gate, but the thin Z footprint now
+        // rejects it — this is the core fix.
+        assert_eq!(camera_occluder_radius([20.0, 3.0, 0.5], unit, span), None, "fence must NOT occlude");
+        // A long stone wall, thin the other way.
+        assert_eq!(camera_occluder_radius([0.6, 5.0, 30.0], unit, span), None, "wall must NOT occlude");
+        // A fence made "big" only by a large scale on its long axis is still thin.
+        assert_eq!(camera_occluder_radius([20.0, 3.0, 0.5], [2.0, 1.0, 1.0], span), None);
+
+        // A small non-thin prop (5 x 1 x 5 platform) clears the thinness gate but
+        // is below the radius>=8 floor — excluded as before.
+        assert_eq!(camera_occluder_radius([5.0, 1.0, 5.0], unit, span), None, "small prop excluded by radius floor");
+        // Tiny scatter is excluded too (thin footprint).
+        assert_eq!(camera_occluder_radius([1.5, 1.5, 1.5], unit, span), None, "scatter excluded");
+        // The whole-zone terrain shell — above the span guard — excluded.
+        assert_eq!(camera_occluder_radius([200.0, 20.0, 200.0], unit, span), None, "terrain excluded");
     }
 
     // The function-button row hit-test must agree with the draw geometry: a
