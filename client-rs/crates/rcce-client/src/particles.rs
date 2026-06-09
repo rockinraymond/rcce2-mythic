@@ -108,6 +108,15 @@ impl Emitter {
         self.stopped = true;
     }
 
+    /// Move the emitter's spawn point. Used by actor-attached dynamic emitters
+    /// (`P_CreateEmitter` with an attach RuntimeID), which follow their actor's
+    /// position each frame. Already-live particles keep their own world-space
+    /// trajectory (like a Blitz parented emitter); only newly spawned particles
+    /// originate from the new position.
+    pub fn set_pos(&mut self, pos: [f32; 3]) {
+        self.pos = pos;
+    }
+
     /// True once the emitter is stopped and all its particles have died — the
     /// caller can then drop it.
     pub fn is_done(&self) -> bool {
@@ -307,6 +316,20 @@ mod tests {
         }
         assert_eq!(e.particles.iter().filter(|p| p.in_use).count(), 0, "all aged out, none respawned");
         assert!(e.is_done(), "done after stop + all particles dead");
+    }
+
+    // set_pos relocates the spawn point: particles spawned after the move
+    // originate near the new position (actor-attached emitters follow their actor).
+    #[test]
+    fn set_pos_moves_new_spawns() {
+        let mut e = Emitter::new(cfg(), 0, [0.0, 0.0, 0.0], [0.0; 3], 11);
+        e.set_pos([100.0, 0.0, 0.0]);
+        e.update(1.0);
+        assert!(e.particles.iter().any(|p| p.in_use), "spawned some");
+        for p in e.particles.iter().filter(|p| p.in_use) {
+            let d = ((p.pos[0] - 100.0).powi(2) + p.pos[1].powi(2) + p.pos[2].powi(2)).sqrt();
+            assert!(d <= 2.0, "particle should spawn near the moved position, was {d}");
+        }
     }
 
     #[test]
