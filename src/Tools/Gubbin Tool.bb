@@ -10,6 +10,20 @@ Global AH_AppB$ = "RCSTD", AH_Loca$ = "..\New Game\"
 ;Include "AntiHack.bb"
 Const testing=True
 
+; Collision types (mirrors Client.bb). Never declared in this target even
+; though Actors3D.bb sets EntityType with C_Actor / C_ActorTri1 / C_ActorTri2;
+; under non-Strict Blitz they silently read as 0. Declared before the module
+; Includes so the EntityType calls use the intended values.
+Const C_None      = 0
+Const C_Sphere    = 1
+Const C_Box       = 2
+Const C_Triangle  = 3
+Const C_Actor     = 4
+Const C_Player    = 5
+Const C_Cam       = 6
+Const C_ActorTri1 = 7
+Const C_ActorTri2 = 8
+
 ; Includes
 Include "Modules\Spells.bb"
 Include "Modules\Language.bb"

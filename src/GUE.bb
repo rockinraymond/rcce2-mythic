@@ -6,6 +6,22 @@ Global LogMode = 1; (0 = standard logging, 1 = debug mode)
 
 ChangeDir RootDir$
 
+; Collision types (mirrors Client.bb). GUE.bb never declared these even though
+; AreaLoader.bb (scenery Collides branches), Actors3D.bb (EntityType C_Actor /
+; C_ActorTri1 / C_ActorTri2) and GUE.bb's own undo-restore path reference them.
+; Under non-Strict Blitz an undeclared identifier silently reads as 0, so every
+; `If Collides = C_Sphere` compared against 0 and the pick-mode/radius/box
+; setup never ran as intended. Must be declared BEFORE the module Includes.
+Const C_None      = 0
+Const C_Sphere    = 1
+Const C_Box       = 2
+Const C_Triangle  = 3
+Const C_Actor     = 4
+Const C_Player    = 5
+Const C_Cam       = 6
+Const C_ActorTri1 = 7
+Const C_ActorTri2 = 8
+
 ; Includes --------------------------------------------------------------------------------------------------------------------------
 
 Include "Modules\Path.bb"
