@@ -1382,19 +1382,24 @@ fn compose_damage_line(
     attacker: u16,
     damage: u16,
     me: u16,
+    damage_type: Option<&str>,
     name_of: impl Fn(u16) -> String,
 ) -> (String, [f32; 4]) {
+    // " Fire" when the project named this damage type (Damage.dat), else "" — so a
+    // hit reads "for 5 Fire damage!" or just "for 5 damage!". Matches Blitz's
+    // `Str$(Amount) + " " + DType$ + " " + LS_DamageWow` (ClientCombat.bb:155).
+    let dt = damage_type.map(|t| format!(" {t}")).unwrap_or_default();
     if target == me {
         let who = name_of(attacker);
         if damage > 0 {
-            (format!("{who} hits you for {damage} damage!"), [1.0, 0.4, 0.4, 1.0])
+            (format!("{who} hits you for {damage}{dt} damage!"), [1.0, 0.4, 0.4, 1.0])
         } else {
             (format!("{who} attacks you and misses!"), [0.5, 0.6, 1.0, 1.0])
         }
     } else {
         let who = name_of(target);
         if damage > 0 {
-            (format!("You hit {who} for {damage} damage!"), [0.4, 1.0, 0.4, 1.0])
+            (format!("You hit {who} for {damage}{dt} damage!"), [0.4, 1.0, 0.4, 1.0])
         } else {
             (format!("You attack {who} and miss!"), [0.5, 0.6, 1.0, 1.0])
         }
@@ -6190,7 +6195,8 @@ impl App {
                 }
                 for i in self.combat_chat_consumed..total {
                     let ev = net.world.combat_events[i];
-                    let (line, col) = compose_damage_line(ev.target, ev.attacker, ev.damage, me, |rid| {
+                    let dtype = store.damage_type_name(ev.damage_type as i16);
+                    let (line, col) = compose_damage_line(ev.target, ev.attacker, ev.damage, me, dtype, |rid| {
                         net.world
                             .actors
                             .get(&rid)
@@ -10098,22 +10104,27 @@ mod tests {
             7 => "Goblin".to_string(),
             _ => "Someone".to_string(),
         };
-        // Outgoing hit: target 7, attacker me.
-        let (l, c) = compose_damage_line(7, me, 5, me, name);
+        // Outgoing hit: target 7, attacker me. No type → no type word.
+        let (l, c) = compose_damage_line(7, me, 5, me, None, name);
         assert_eq!(l, "You hit Goblin for 5 damage!");
         assert_eq!(c, [0.4, 1.0, 0.4, 1.0]); // green
         // Incoming hit: target me, attacker 7.
-        let (l, c) = compose_damage_line(me, 7, 3, me, name);
+        let (l, c) = compose_damage_line(me, 7, 3, me, None, name);
         assert_eq!(l, "Goblin hits you for 3 damage!");
         assert_eq!(c, [1.0, 0.4, 0.4, 1.0]); // red
-        // Outgoing miss (damage 0).
-        let (l, _) = compose_damage_line(7, me, 0, me, name);
+        // Named damage type is inserted before "damage!" (both directions).
+        let (l, _) = compose_damage_line(7, me, 5, me, Some("Fire"), name);
+        assert_eq!(l, "You hit Goblin for 5 Fire damage!");
+        let (l, _) = compose_damage_line(me, 7, 3, me, Some("Ice"), name);
+        assert_eq!(l, "Goblin hits you for 3 Ice damage!");
+        // A miss never shows a type, even if one is passed.
+        let (l, _) = compose_damage_line(7, me, 0, me, Some("Fire"), name);
         assert_eq!(l, "You attack Goblin and miss!");
         // Incoming miss.
-        let (l, _) = compose_damage_line(me, 7, 0, me, name);
+        let (l, _) = compose_damage_line(me, 7, 0, me, None, name);
         assert_eq!(l, "Goblin attacks you and misses!");
         // Unknown attacker name falls back.
-        let (l, _) = compose_damage_line(me, 99, 2, me, name);
+        let (l, _) = compose_damage_line(me, 99, 2, me, None, name);
         assert_eq!(l, "Someone hits you for 2 damage!");
     }
 
