@@ -12,7 +12,14 @@ pub const LIFETIME: f32 = 1.2;
 /// How far (world-ish px applied at draw time) a number rises over its life.
 pub const RISE: f32 = 38.0;
 
-/// One on-screen damage number, anchored to a target actor by runtime id.
+/// One on-screen floating number, anchored to a target actor by runtime id.
+///
+/// Two flavours share the same rise/fade/expiry machinery:
+/// - **Combat damage** (the default): `value`/`color` are `None`; the draw shows
+///   `damage` styled by `damage_type` (see `damage_color`).
+/// - **Server-driven** (`P_FloatingNumber` / `BVM_CreateFloatingNumber`): `value`
+///   is the signed amount the server sent and `color` is the server's explicit
+///   RGB. The draw shows `value` in `color`, ignoring `damage`/`damage_type`.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Floater {
     pub rid: u16,
@@ -20,6 +27,12 @@ pub struct Floater {
     pub damage_type: u8,
     /// Wall-clock (seconds since client start) when it spawned.
     pub t0: f32,
+    /// `Some` for a server-driven floater: the signed amount to display (can be
+    /// negative, unlike `damage`). `None` ⇒ a combat floater showing `damage`.
+    pub value: Option<i32>,
+    /// `Some` for a server-driven floater: explicit RGB (0..1). `None` ⇒ a combat
+    /// floater coloured by `damage_type`.
+    pub color: Option<[f32; 3]>,
 }
 
 impl Floater {
@@ -70,9 +83,27 @@ impl Floaters {
                 damage: e.damage,
                 damage_type: e.damage_type,
                 t0: now,
+                value: None,
+                color: None,
             });
         }
         self.consumed = events.len();
+    }
+
+    /// Spawn a server-driven floating number (`P_FloatingNumber`): a signed
+    /// `value` in an explicit `color`, anchored over actor `rid`, rising and
+    /// fading on the same timeline as a combat number. Independent of the
+    /// `consumed` cursor — these are pushed directly, not drained from the
+    /// combat log.
+    pub fn spawn_value(&mut self, rid: u16, value: i32, color: [f32; 3], now: f32) {
+        self.items.push(Floater {
+            rid,
+            damage: 0,
+            damage_type: 0,
+            t0: now,
+            value: Some(value),
+            color: Some(color),
+        });
     }
 
     /// Drop floaters older than [`LIFETIME`].
@@ -130,12 +161,35 @@ mod tests {
 
     #[test]
     fn alpha_and_rise_progress() {
-        let fl = Floater { rid: 1, damage: 5, damage_type: 0, t0: 0.0 };
+        let fl = Floater { rid: 1, damage: 5, damage_type: 0, t0: 0.0, value: None, color: None };
         assert_eq!(fl.alpha(0.0), 1.0); // fresh = opaque
         assert!(fl.rise(LIFETIME) >= RISE - 0.001); // fully risen at end
         assert!(fl.alpha(LIFETIME) <= 0.001); // faded out at end
         // Monotonic rise.
         assert!(fl.rise(LIFETIME * 0.25) < fl.rise(LIFETIME * 0.75));
+    }
+
+    #[test]
+    fn server_value_floater_coexists_with_combat() {
+        let mut f = Floaters::new();
+        // A combat hit and a server-driven number live side by side, both on the
+        // same rise/fade timeline but distinguished by `value`/`color`.
+        f.ingest(&[ev(7, 10)], 0.0);
+        f.spawn_value(7, -250, [0.0, 1.0, 0.0], 0.0); // a green heal "-250"
+        assert_eq!(f.len(), 2);
+        let combat = f.iter().find(|x| x.value.is_none()).unwrap();
+        assert_eq!(combat.damage, 10);
+        let server = f.iter().find(|x| x.value.is_some()).unwrap();
+        assert_eq!(server.value, Some(-250));
+        assert_eq!(server.color, Some([0.0, 1.0, 0.0]));
+        assert_eq!(server.rid, 7);
+        // Server floaters do NOT advance the combat-event cursor, so a later
+        // combat ingest still fires.
+        f.ingest(&[ev(7, 10), ev(8, 4)], 0.5);
+        assert_eq!(f.len(), 3);
+        // Both flavours expire on the same timeline (last one spawned at t=0.5).
+        f.tick(0.5 + LIFETIME + 0.01);
+        assert_eq!(f.len(), 0);
     }
 
     #[test]

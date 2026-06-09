@@ -80,6 +80,7 @@ pub mod packet_id {
     pub const ITEM_SCRIPT: u8 = 43;
     pub const EAT_ITEM: u8 = 44;
     pub const JUMP: u8 = 46;
+    pub const FLOATING_NUMBER: u8 = 48;
     pub const PROGRESS_BAR: u8 = 51;
     pub const BUBBLE_MESSAGE: u8 = 52;
     pub const SCRIPT_INPUT: u8 = 53;

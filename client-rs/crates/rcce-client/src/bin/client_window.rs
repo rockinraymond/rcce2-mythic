@@ -6070,6 +6070,14 @@ impl App {
                 // Spawn floating damage numbers for any new combat hits, expire old.
                 self.floaters.ingest(&net.world.combat_events, elapsed);
             }
+            // Server-driven floating numbers (P_FloatingNumber): script-driven
+            // heal/text popups, always shown regardless of the combat-damage
+            // display style (they aren't combat damage). Drained unconditionally
+            // so the queue can't grow even when combat floaters are off.
+            for (rid, amount, c) in net.world.pending_floaters.drain(..) {
+                let col = [c[0] as f32 / 255.0, c[1] as f32 / 255.0, c[2] as f32 / 255.0];
+                self.floaters.spawn_value(rid, amount, col, elapsed);
+            }
             self.floaters.tick(elapsed);
             // Advance in-flight projectiles (PRJ-1). prev_elapsed is updated
             // later (weather), so this read gives the same per-frame dt.
@@ -7835,8 +7843,13 @@ impl App {
                     };
                     let Some(p) = pos else { continue };
                     if let Some((px, py)) = rcce_render::project(&vp, [p[0], p[1] + 6.5, p[2]], sw, sh) {
-                        let s = fl.damage.to_string();
-                        let col = damage_color(fl.damage_type, fl.alpha(elapsed));
+                        // Server floaters carry an explicit signed value + colour;
+                        // combat floaters show the damage in a damage-type colour.
+                        let a = fl.alpha(elapsed);
+                        let (s, col) = match (fl.value, fl.color) {
+                            (Some(v), Some(c)) => (v.to_string(), [c[0], c[1], c[2], a]),
+                            _ => (fl.damage.to_string(), damage_color(fl.damage_type, a)),
+                        };
                         let tw = rcce_render::font::text_width(&s, 1.5);
                         overlay.text_shadow(px - tw * 0.5, py - 30.0 - fl.rise(elapsed), 1.5, &s, col);
                     }
