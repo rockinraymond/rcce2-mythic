@@ -233,6 +233,17 @@ impl AssetStore {
         self.other.view_toggle_allowed()
     }
 
+    /// Whether player-chat speech bubbles are shown (`Other.dat` UseBubbles > 1).
+    pub fn bubbles_enabled(&self) -> bool {
+        self.other.bubbles_enabled()
+    }
+
+    /// The project's chat-bubble text colour (`Other.dat` BubblesR/G/B; readable
+    /// warm-white fallback when unset). See [`rcce_data::OtherConfig::bubble_color`].
+    pub fn bubble_color(&self) -> [f32; 4] {
+        self.other.bubble_color()
+    }
+
     /// The project's name for a weapon damage-type index (`Damage.dat`), e.g.
     /// `3 -> "Fire"`. `None` when the table is absent or the slot is unnamed/out
     /// of range — the tooltip then omits the "(type)" suffix.
