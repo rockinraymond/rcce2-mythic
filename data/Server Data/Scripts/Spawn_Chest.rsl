@@ -1,0 +1,13 @@
+Using "RC_Core.rcm"
+; Define entry function 'Main'
+
+Function Main()
+setattribute(actor(), "Armor Bonus", Rand(0,1))
+setattribute(actor(), "Attack Bonus", Rand(1,4))
+SetActorLevel(actor(), Rand(1,5))
+;setattribute(actor(), "Stealth Mod", 1)
+
+
+
+
+End Function

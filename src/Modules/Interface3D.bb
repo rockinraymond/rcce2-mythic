@@ -966,7 +966,7 @@ Function UpdateInterface()
 							GY_FreeGadget(WContextMenu)
 							WContextMenu = 0
 							EndIf
-							WContextMenu = GY_CreateWindowInter("Actions", GY_MouseX#, GY_MouseY#, 0.1, 0.08, True, True, False, CreateTexture(2, 2))
+							WContextMenu = GY_CreateWindowInter("Actions", GY_MouseX#, GY_MouseY#, 0.1, 0.04, True, True, False)
 							Y# = 0.0
 							; Interact button
 							Local interactLabel$ = "Interact"
@@ -979,20 +979,20 @@ Function UpdateInterface()
 								iG = 255
 								iB = 255
 							EndIf
-							BInteract = GY_CreateButton(WContextMenu, Y#, 0.0, 1.0, 0.33, interactLabel$, False, iR, iG, iB)
-							Y# = Y# + 0.33
+							BInteract = GY_CreateButton(WContextMenu, Y#, 0.0, 1.0, 0.66, interactLabel$, False, iR, iG, iB)
+							Y# = Y# + 0.66
 							; Attack button (only if target is attackable)
 							If AI\Aggressiveness < 3 And Me\FactionRatings[AI\HomeFaction] <= 150
-								BAttack = GY_CreateButton(WContextMenu, 0.0, Y#, 1.0, 0.33, "Attack", False, 255, 0, 0)
-								Y# = Y# + 0.33
+								BAttack = GY_CreateButton(WContextMenu, 0.0, Y#, 1.0, 0.66, "Attack", False, 255, 0, 0)
+								Y# = Y# + 0.66
 							EndIf
 							
 							; Examine button
-							BExamine = GY_CreateButton(WContextMenu, 0.0, Y#, 1.0, 0.33, "Examine", False, 255, 255, 255)
-							Y# = Y# + 0.33
+							BExamine = GY_CreateButton(WContextMenu, 0.0, Y#, 1.0, 0.66, "Examine", False, 255, 255, 255)
+							Y# = Y# + 0.66
 							; Trade Button
 							If AI\Actor\TradeMode > 0
-								BTrade = GY_CreateButton(WContextMenu, 0.0, Y#, 1.0, 0.33, "Trade", False, 0, 255, 0)
+								BTrade = GY_CreateButton(WContextMenu, 0.0, Y#, 1.0, 0.66, "Trade", False, 0, 255, 0)
 							EndIf
 						Else
 							CreateCharInteractionWindow(AI)
@@ -1893,6 +1893,7 @@ Function UpdateInterface()
 
 	If InventoryVisible = True
 		GY_UpdateLabel(LInventoryMass,  "Carried Weight: " + (InventoryMass(Me\Inventory) - Me\Attributes\Value[FindAttribute("Carry Weight Mod")]))
+		GY_UpdateLabel(LInventoryMovement,  "Movement Speed: " + (Me\Attributes\Value[FindAttribute("Movement")]))
 	EndIf
 
 
@@ -1906,8 +1907,10 @@ Function UpdateInterface()
 
 		HPAtt = FindAttribute("Health")
 		MPAtt = FindAttribute("Mana")
+		SPAtt = FindAttribute("Spirit")
 		GY_UpdateLabel(LHealth, "Health: " + Str(Me\Attributes\Value[HPAtt]) + "/" + Str(Me\Attributes\Maximum[HPAtt]))
 		GY_UpdateLabel(LMana, "Mana: " + Str(Me\Attributes\Value[MPAtt]) + "/" + Str(Me\Attributes\Maximum[MPAtt]))
+		GY_UpdateLabel(LSpirit, "Spirit: " + Str(Me\Attributes\Value[SPAtt]) + "/" + Str(Me\Attributes\Maximum[SPAtt]))
 
 
 		ArmorBnsStr$ = ""
@@ -2120,6 +2123,10 @@ EndIf
 							NameR = 255
 							NameG = 255
 							NameB = 0
+						Case R_Legendary
+							NameR = 255
+							NameG = 165
+							NameB = 0
 					End Select
 					X# = GY_MouseX# + 0.03
 					Y# = GY_MouseY#
@@ -2285,6 +2292,10 @@ EndIf
 							NameR = 255
 							NameG = 255
 							NameB = 0
+						Case R_Legendary
+							NameR = 255
+							NameG = 165
+							NameB = 0
 					End Select
 					X# = GY_MouseX# + 0.03
 					Y# = GY_MouseY#
@@ -2447,6 +2458,10 @@ EndIf
 						Case R_Mythic
 							NameR = 255
 							NameG = 255
+							NameB = 0
+						Case R_Legendary
+							NameR = 255
+							NameG = 165
 							NameB = 0
 					End Select	
 					X# = GY_MouseX# + 0.03
@@ -3292,6 +3307,7 @@ EndIf
 				GY_GadgetAlpha(WInventory, 1.0, True);0.75
 				GY_UpdateLabel(LInventoryGold, Money$(Me\Gold))
 				GY_UpdateLabel(LInventoryMass, "Carried Weight: " + (InventoryMass(Me\Inventory) - Me\Attributes\Value[FindAttribute("Carry Weight Mod")]))
+				GY_UpdateLabel(LInventoryMovement, "Movement Speed: " + (Me\Attributes\Value[FindAttribute("Movement")]))
 				GY_UpdateLabel(LInventoryLightLoad, "Light Load: " + GetActorLightLoad(Me))
 				GY_UpdateLabel(LInventoryHeavyLoad, "Heavy Load: " + GetActorHeavyLoad(Me))
 				; GY_LockGadget(BInventoryDrop)
@@ -4420,9 +4436,10 @@ Function CreateInterface()
 	LReputation = GY_CreateLabel(WCharStats, 0.03, 0.13, LanguageString$(LS_Reputation) + " 00000", 255, 255, 255)
 
 	;STATS
-	GY_CreateLabel(WCharStats, 0.03, 0.2, "STATS", 255, 255, 255)
-	LHealth = GY_CreateLabel(WCharStats, 0.03, 0.225, "Health:" + " 00000 / 00000", 255, 50, 50)
-	LMana = GY_CreateLabel(WCharStats, 0.03, 0.25, "Mana:" + " 00000 / 00000", 75, 75, 255)
+	GY_CreateLabel(WCharStats, 0.03, 0.175, "STATS", 255, 255, 255)
+	LHealth = GY_CreateLabel(WCharStats, 0.03, 0.2, "Health:" + " 00000 / 00000", 255, 50, 50)
+	LMana = GY_CreateLabel(WCharStats, 0.03, 0.225, "Mana:" + " 00000 / 00000", 75, 75, 255)
+	LSpirit = GY_CreateLabel(WCharStats, 0.03, 0.25, "Spirit:" + " 00000 / 00000", 255, 255, 55)
 	LArmorPoints = GY_CreateLabel(WCharStats, 0.03, 0.275, "Defense Rating: 000 + 00", 255, 255, 255)
 	LAccuracy = GY_CreateLabel(WCharStats, 0.03, 0.3, "Attack Rating: 000 + 00", 255, 255, 255)
 	LDamage = GY_CreateLabel(WCharStats, 0.03, 0.325, "Max Damage: 000 + 00", 255, 255, 255)
@@ -4448,7 +4465,7 @@ Function CreateInterface()
 	;Resistances
 	;# = ResY# + 0.01
 	ResY# = .68
-	GY_CreateLabel(WCharStats, 0.03, ResY#, "RESISTANCE MODIFIERS", 255, 255, 255)
+	GY_CreateLabel(WCharStats, 0.03, ResY#, "DAMAGE MODIFIERS", 255, 255, 255)
 	ResY# = ResY# + .03
 	ResCount = 0
 	For i = 0 To 8
@@ -4485,9 +4502,9 @@ Function CreateInterface()
 		If AttributeNames$(i) <> "" And AttributeHidden(i) = False And AttributeIsSkill(i) = True
 			XPos# = 0.3
 			YPos# = SkillStart + (Float#(SklCount) * 0.05)
-			If SklCount > 11
+			If SklCount > 10
 				XPos# = 0.65
-				YPos# = SkillStart + (Float#(SklCount - 12) * 0.05)
+				YPos# = SkillStart + (Float#(SklCount - 11) * 0.05)
 			EndIf
 			LSkillNames(SklCount) = GY_CreateLabel(WCharStats, XPos, YPos, "LONGEST SKILL NAME HERE!")
 			;LSkillVals(SklCount) = GY_CreateLabel(WCharStats, 0.61, SkillStart + (Float#(SklCount) * 0.05), "00000", 255, 255, 255, Justify_Right)
@@ -4569,6 +4586,7 @@ Function CreateInterface()
 	LInventoryLightLoad = GY_CreateLabel(WInventory, InventoryGold\X#, InventoryGold\Y# + 0.08, "Light Load: 00000")
 	LInventoryHeavyLoad = GY_CreateLabel(WInventory, InventoryGold\X#, InventoryGold\Y# + 0.11, "Heavy Load: 00000")
 	LInventoryMass = GY_CreateLabel(WInventory, InventoryGold\X#, InventoryGold\Y# + 0.14, "Carried Weight: 00000")
+	LInventoryMovement = GY_CreateLabel(WInventory, InventoryGold\X#, InventoryGold\Y# + 0.17, "Movement Speed: 000")
 
 
 

@@ -41,6 +41,7 @@ Const R_Uncommon = 2
 Const R_Rare = 3
 Const R_Epic = 4
 Const R_Mythic = 5
+Const R_Legendary = 6
 
 Dim DamageTypes$(19)
 
@@ -646,8 +647,8 @@ End Function
 Function GetWeaponClass$(I.Item)
 
 	Select I\WeaponClass
-		Case WC_Sword : Return "Long Blade"
-		Case WC_Dagger : Return "Short Blade"
+		Case WC_Sword : Return "Sword"
+		Case WC_Dagger : Return "Dagger"
 		Case WC_Axe : Return "Axe"
 		Case WC_Blunt : Return "Blunt"
 		Case WC_Bow : Return "Bow"

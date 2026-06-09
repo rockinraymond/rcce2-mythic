@@ -13,7 +13,7 @@ Function TouchHealSpell(Player, Target, SpellCost, ResourceName$, SpellName$, Ba
     EmitterTex = 373
     EmitterName$ = "healBurst"
 
-    SuccessChance = Attribute(Player,SkillName$) + Attribute(Player,GoverningAttribute$) + 25
+    SuccessChance = GetSkillModifier(Attribute(Player,SkillName$)) + 10
 
     If CastingChecks(Player, Target, SkillName$) < 1
         Return
@@ -37,7 +37,7 @@ Function TouchHealSpell(Player, Target, SpellCost, ResourceName$, SpellName$, Ba
 	
     ZZADDSKILLXP(Player, SkillName$, (SpellCost * 10))
     
-    SpellSuccess = Rand(1,100)
+    SpellSuccess = Rand(1,20)
 
     If SpellSuccess < SuccessChance
 
@@ -210,3 +210,43 @@ Function AbilityBonus(SkillLevel%)
     End Select
 End Function
 
+Function GetSkillModifier(SkillValue)
+	
+	TargetSkillVal = SkillValue
+
+	If TargetSkillVal < 0 Then TargetSkillVal = 0
+	
+	If TargetSkillVal = 100
+		Return 10
+	ElseIf TargetSkillVal > 97
+		Return 9
+	ElseIf TargetSkillVal > 90
+		Return 8
+	ElseIf TargetSkillVal > 83
+		Return 7
+	ElseIf TargetSkillVal > 76
+		Return 6
+	Else If TargetSkillVal > 69
+		Return 5
+	ElseIf TargetSkillVal > 62
+		Return 4
+	ElseIf TargetSkillVal > 55
+		Return 3
+	ElseIf TargetSkillVal > 48
+		Return 2
+	ElseIf TargetSkillVal > 41
+		Return 1
+	ElseIf TargetSkillVal > 34
+		Return 0
+	ElseIf TargetSkillVal > 27
+		Return -1
+	ElseIf TargetSkillVal > 20
+		Return -2
+	ElseIf TargetSkillVal > 15
+		Return -3
+	ElseIf TargetSkillVal > 10
+		Return -4
+	Else
+		Return -5
+	EndIf
+End Function

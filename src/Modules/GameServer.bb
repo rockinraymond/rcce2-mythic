@@ -142,8 +142,10 @@ Function KillActor(A.ActorInstance, Killer.ActorInstance)
 	; broadcast rather than crash on AInstance\FirstInZone.
 	If A\RNID < 0
 		Pa$ = RCE_StrFromInt$(A\RuntimeID, 2)
-		If Killer <> Null Then Pa$ = Pa$ + RCE_StrFromInt$(Killer\RuntimeID, 2)
-		If Killer\Leader <> Null Then Pa$ = Pa$ + RCE_StrFromInt$(Killer\Leader\RuntimeID, 2)
+		If Killer <> Null
+			Pa$ = Pa$ + RCE_StrFromInt$(Killer\RuntimeID, 2)
+			If Killer\Leader <> Null Then Pa$ = Pa$ + RCE_StrFromInt$(Killer\Leader\RuntimeID, 2)
+		EndIf
 		AInstance.AreaInstance = Object.AreaInstance(A\ServerArea)
 		If AInstance <> Null
 			A2.ActorInstance = AInstance\FirstInZone
@@ -266,14 +268,16 @@ Function FireProjectile%(P.Projectile, A1.ActorInstance, A2.ActorInstance)
 
 	ProjAttBns = GetAttributeModifier(A1\Attributes\Value[FindAttribute(P\Attribute$)])
 	ProjSkillBns = GetSkillModifier(A1\Attributes\Value[FindAttribute(P\Skill$)])
-	DefenderResistance = (A2\Resistances[P\DamageType])
+	SaveMod = (A2\Resistances[P\SaveType])
+	DamageResistance = (A2\Resistances[P\DamageType])
 	; Does the projectile hit the target?
 	ToHit = Rand(1,20)
-	HitChance = 10 + ProjSkillBns - DefenderResistance - A2\Attributes\Value[FindAttribute("Armor Bonus")]
+	HitChance = 10 + ProjSkillBns - SaveMod
 	If ToHit <= HitChance
 		; Calculate damage
 		TargetIsHit = 1
-		Damage = Rand(1, P\DamageDie) + P\Damage + ProjAttBns
+		Damage = Rand(1, P\DamageDie) + P\Damage + ProjAttBns - DamageResistance
+		If Damage < 1 Then Damage = 1
 
 		; Apply damage
 		A2\Attributes\Value[HealthStat] = A2\Attributes\Value[HealthStat] - Damage
@@ -425,7 +429,7 @@ Function ActorAttack(A1.ActorInstance, A2.ActorInstance)
 		ArmorVal = GetArmourLevel(A2) + ArmorBonus
 		DefenderResistance = (A2\Resistances[DamageType])
 
-		TargetHitRoll = ArmorVal + DefenderResistance
+		TargetHitRoll = ArmorVal
 		
 		;Roll D20s for hit and block
 		HitRoll = Rand(1,20) + AttackerAccuracy

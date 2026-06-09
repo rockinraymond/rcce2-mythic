@@ -1,0 +1,593 @@
+Using "RC_Core.rcm"
+; Define entry function 'Main'
+
+Function Main()
+
+	Player = Actor()
+	Chest = ContextActor()
+
+
+
+	D = OpenDialog(Player, Chest, "Treasure Chest")
+	DialogClosed = 0
+	ChestIsOpen = 0
+	Repeat
+		ChestLevel = ActorLevel(Chest)
+		ChestLock = Attribute(Chest, "Armor Bonus")
+		ChestTrap = Attribute(Chest, "Attack Bonus")
+		DiscoveredTrap = Attribute(Chest, "Stealth Mod")
+		;Stealth Mod Checks if Trap has been discovered or not
+		DialogOutput(Player, D, "You look down at the sealed wooden chest...", 255, 255, 255)
+		If ChestLock > 0
+			DialogOutput(Player, D, "It is locked...", 255, 255, 0)
+		EndIf
+		If DiscoveredTrap > 0
+			If ChestTrap > 0
+				DialogOutput(Player, D, "It is booby-trapped...", 255, 0, 0)
+			ElseIf ChestTrap < 0
+				DialogOutput(Player, D, "The trap has been disarmed...", 175, 255, 175)
+			EndIf
+		EndIf
+		
+		DialogOutput(Player, D, "What would you like to do?", 255, 255, 255)
+
+		Options$ = ""
+		If ChestLock > 0
+			Options$ = Options$ + "Pick Lock|"
+		Else
+			Options$ = Options$ + "Open|"
+		EndIf
+
+		If (DiscoveredTrap > 0)
+			If ChestTrap > 0
+				Options$ = Options$ + "Disarm Trap|"
+			EndIf
+		Else
+			Options$ = Options$ + "Search for Traps|"
+		EndIf
+
+		Options$ = Options$ + "Close"
+		
+		Result = DialogInput(Player, D, Options$, "|")
+			
+		If Result = 1
+			If ChestLock > 0
+				If EquipmentCheck(Player) = 1
+					If (Rand(1,3) = 1) And (ChestTrap > 0)
+						DialogClosed = TriggerTrap(Player,Chest,D)
+					Else
+						If HasItem(Player, "Lockpick", 1)
+							DialogClosed = PickLock(Player, Chest, D)
+						Else
+							DialogOutput(Player, D, "You do not have any lock picks!", 255, 150, 0)
+						EndIf
+					EndIf
+				Else
+					DialogOutput(Player, D, "Your worn equipment prevents you from picking locks!", 255, 150, 0)
+				EndIf
+			Else
+				If (Rand(1,3) = 1) And (ChestTrap > 0)
+					DialogClosed = TriggerTrap(Player,Chest,D)
+				Else
+					;OpenChest
+					DropTreasure(Chest)
+					DialogClosed = 1
+					ChestIsOpen = 1
+				EndIf
+			EndIf
+		ElseIf Result = 2
+				If (DiscoveredTrap > 0)
+					If (ChestTrap = 0)
+						DialogClosed = 1
+					Else
+						If EquipmentCheck(Player) = 1
+							If HasItem(Player, "Trap Disarming Kit", 1)
+								DialogClosed = DisarmTrap(Player, Chest, D)
+							Else
+								DialogOutput(Player, D, "You do not have the tools needed to disarm traps!", 255, 150, 0)
+							EndIf
+						Else
+							DialogOutput(Player, D, "Your worn equipment prevents you from disarming traps!", 255, 150, 0)
+						EndIf
+					EndIf
+				Else
+					If EquipmentCheck(Player) = 1
+						DialogClosed = SearchForTrap(Player, Chest, D)
+					Else
+						DialogOutput(Player, D, "Your worn equipment prevents you from searching for traps!", 255, 150, 0)
+					EndIf
+				EndIf
+		Else
+			DialogClosed = 1
+		EndIf
+	If Attribute(Player, "Health") = 0
+		DialogClosed = 1
+	EndIf
+	Until DialogClosed = 1
+	If D <> 0
+		CloseDialog(Player, D)
+	EndIf
+	If ChestIsOpen = 1
+		DoEvents(1000)
+		KillActor(Chest)
+	EndIf
+
+Return
+
+End Function
+
+Function PickLock(Player, Chest, D)
+
+	PlayerLockPickSkill = Attribute(Player, "Lockpicking")
+	PlayerDexMod = AbilityBonus(Attribute(Player, "Dexterity")) * 5
+	ChestLevelMod = ActorLevel(Chest) * 5
+
+	PickChance = PlayerLockPickSkill - ChestLevelMod
+
+	DialogOutput(Player, D, "You try picking the lock...", 255, 255, 255)
+	;create progress bar
+	lockPickTime = (100 - PlayerLockPickSkill) + ChestLevelMod - PlayerDexMod
+	Bar = CreateProgressBar(Player,100,255,0,.4,.8,.2,.04,lockPickTime,0,"Lock Picking")
+	Repeat
+	UpdateProgressBar(Player,bar,i)
+    DoEvents(100)
+    i =  i + 1
+    If(Attribute(Player, "Health") < 0)
+        Output(Player, "You cannot pick locks when you are dead",255, 255, 0)
+        DeleteProgressBar(Player,Bar)
+        Return 1
+    EndIf
+	Until i = lockPickTime
+	DeleteProgressBar(Player,Bar)
+
+	;roll for success
+	PickRoll = Rand(1,100) - PlayerDexMod
+
+	;pass or fail
+	If PickRoll <= PickChance
+		DialogOutput(Player, D, "You successfully pick the lock!", 0, 255, 0)
+		SetAttribute(Chest, "Armor Bonus", 0)
+		ZZADDSKILLXP(Player, "Lockpicking", ChestLevelMod * 7)
+		Return
+	Else
+		DialogOutput(Player, D, "You fail to pick the lock, and your pick breaks!", 255, 0, 0)
+		GiveItem(Player,"Lockpick",-1)
+		ZZADDSKILLXP(Player, "Lockpicking", ChestLevelMod)
+		Return
+	EndIf
+End Function
+
+Function DisarmTrap(Player, Chest, D)
+
+	PlayerDisarmSkill = Attribute(Player, "Trap Disarming")
+	PlayerDexMod = AbilityBonus(Attribute(Player, "Dexterity")) * 5
+	ChestLevelMod = ActorLevel(Chest) * 5
+	
+
+	DisarmChance = PlayerDisarmSkill - ChestLevelMod
+
+	DialogOutput(Player, D, "You try disarming the trap...", 255, 255, 255)
+	;create progress bar
+	disarmTime = (100 - PlayerDisarmSkill) + ChestLevelMod - PlayerDexMod
+	Bar = CreateProgressBar(Player,255,100,0,.4,.8,.2,.04,disarmTime,0,"Disarming Trap")
+	Repeat
+	UpdateProgressBar(Player,bar,i)
+    DoEvents(100)
+    i =  i + 1
+    If(Attribute(Player, "Health") < 0)
+        Output(Player, "You cannot disarm traps when you are dead",255, 255, 0)
+        DeleteProgressBar(Player,Bar)
+        Return 1
+    EndIf
+	Until i = disarmTime
+	DeleteProgressBar(Player,Bar)
+
+	;roll for success
+	DisarmRoll = Rand(1,100) - PlayerDexMod
+
+	;pass or fail
+	If DisarmRoll <= DisarmChance
+		DialogOutput(Player, D, "You successfully disarm the trap!", 0, 255, 0)
+		SetAttribute(Chest, "Attack Bonus", -1)
+		ZZADDSKILLXP(Player, "Trap Disarming", ChestLevelMod * 9)
+		Return
+	Else
+		DialogOutput(Player, D, "You fail to disarm the trap!", 255, 0, 0)
+		ZZADDSKILLXP(Player, "Trap Disarming", ChestLevelMod)
+		If (Rand(1,3) = 1)
+			Return TriggerTrap(Player,Chest,D)
+		EndIf
+		Return
+	EndIf
+End Function
+
+Function SearchForTrap(Player, Chest, D)
+
+	PlayerDisarmSkill = Attribute(Player, "Trap Disarming")
+	PlayerDexMod = AbilityBonus(Attribute(Player, "Wisdom")) * 5
+	ChestLevelMod = ActorLevel(Chest) * 5
+	ChestTrap = Attribute(Chest, "Attack Bonus")
+
+	DisarmChance = PlayerDisarmSkill
+
+	DialogOutput(Player, D, "You search for traps...", 255, 255, 255)
+	;create progress bar
+	searchTime = (100 - PlayerDisarmSkill) - PlayerDexMod
+	Bar = CreateProgressBar(Player,200,200,0,.4,.8,.2,.04,searchTime,0,"Searching for Traps")
+	Repeat
+	UpdateProgressBar(Player,bar,i)
+    DoEvents(100)
+    i =  i + 1
+    If(Attribute(Player, "Health") < 0)
+        Output(Player, "You cannot search for traps when you are dead",255, 255, 0)
+        DeleteProgressBar(Player,Bar)
+        Return 1
+    EndIf
+	Until i = searchTime
+	DeleteProgressBar(Player,Bar)
+
+	;roll for success
+	DisarmRoll = Rand(1,100) - PlayerDexMod
+
+	;pass or fail
+	If (ChestTrap > 0)
+		If DisarmRoll <= DisarmChance
+			DialogOutput(Player, D, "You discover a trap!", 255, 255, 0)
+			SetAttribute(Chest, "Stealth Mod", 1)
+			ZZADDSKILLXP(Player, "Trap Disarming", ChestLevelMod * 7)
+			Return
+		Else
+			If (Rand(1,3) = 1)
+				
+				Return TriggerTrap(Player,Chest,D)
+			EndIf
+			DialogOutput(Player, D, "You do not find any traps.", 255, 255, 255)
+			Return
+		EndIf
+	Else
+		DialogOutput(Player, D, "You do not find any traps.", 255, 255, 255)
+		Return
+	EndIf
+End Function
+
+Function TriggerTrap(Player, Chest, D)
+	TrapType = Attribute(Chest, "Attack Bonus")
+	;TrapDamageDie = Attribute(Chest, "Damage Bonus")
+	ChestLevel = ActorLevel(Chest) 
+
+	TrapDamageType$ = ""
+	TrapSaveType$ = ""
+	TrapName$ = ""
+	TrapDamageDie = 1
+	TrapDamageBonus = 0
+	SaveAttribute$ = ""
+
+	;CloseDialog(Player, D)
+	Select TrapType
+		Case 1 ;Blade Trap
+			TrapName$ = "Blade Trap"
+			TrapDamageType$ = "Edged"
+			TrapSaveType$ = "Death Ray"
+			TrapDamageDie = 8
+			SaveAttribute$ = "Toughness"
+		Case 2 ;Blunt Trap
+			TrapName$ = "Falling Stone Trap"
+			TrapDamageType$ = "Blunt"
+			TrapSaveType$ = "Paralysis"
+			TrapDamageDie = 10
+			SaveAttribute$ = "Dexterity"
+		Case 3 ;Arrow Trap
+			TrapName$ = "Arrow Trap"
+			TrapDamageType$ = "Missile"
+			TrapSaveType$ = "Death Ray"
+			TrapDamageDie = 6
+			TrapDamageBonus = 1
+			SaveAttribute$ = "Toughness"
+		Case 4 ;Poison Trap
+			TrapName$ = "Poison Needle Trap"
+			TrapSaveType$ = "Poison"
+			SaveAttribute$ = "Constitution"
+	End Select
+	Output(Player, "You have sprung a " + TrapName$ + "!", 255, 150, 0)
+	SetAttribute(Chest, "Stealth Mod", 1)
+	SetAttribute(Chest, "Attack Bonus", 0)
+
+
+	SaveTarget = 9 + ChestLevel
+	SaveRoll = Rand(1,20) + Resistance(Player,TrapSaveType$)
+
+	If SaveRoll < SaveTarget
+		Output(Player, "You fail to save against " + TrapSaveType$ + "!", 255, 50, 50)
+		If TrapSaveType$ <> "Poison"
+			DamageRoll = Rand(1,TrapDamageDie) + TrapDamageBonus - Resistance(Player, TrapDamageType$)
+			NewHealth = Attribute(Player, "Health") - DamageRoll
+			Output(Player, TrapName$ + " hits you for " + DamageRoll + " " + TrapDamageType$ + " damage!", 255, 50, 50)
+			If NewHealth < 0
+				SetAttribute(Player, "Health", 0)
+			EndIf
+			SetAttribute(Player, "Health", NewHealth)
+		Else
+			Output(Player, "You have been slain by poison!", 0, 150, 0)
+			SetAttribute(Player, "Health", 0)
+		EndIf
+	Else
+		Output(Player, "You successfully save against " + TrapSaveType$ + "!", 50, 255, 50)
+	EndIf
+	Return 1
+
+End Function
+
+Function EquipmentCheck(Player)
+    Result = 1
+    
+    ;Actor Equipment
+    PlayerWeapon = ActorWeapon(Player)
+    PlayerShield = ActorShield(Player)
+    PlayerChest = ActorChest(Player)
+    PlayerHat = ActorHat(Player)
+    PlayerLegs = ActorLegs(Player)
+    PlayerHands = ActorHands(Player)
+    PlayerFeet = ActorFeet(Player)
+    PlayerBelt = ActorBelt(Player)
+
+	PlayerRace$ = Race(Player)
+
+    If PlayerShield > 0
+        Result = 0
+    EndIf
+	If (ZZITEMARMORCLASS(PlayerChest) = 3) OR (ZZITEMARMORCLASS(PlayerChest) = 2)
+		Result = 0
+	EndIf
+	If (ZZITEMARMORCLASS(PlayerHat) = 3) OR (ZZITEMARMORCLASS(PlayerHat) = 2)
+		Result = 0
+	EndIf
+	If (ZZITEMARMORCLASS(PlayerLegs) = 3) OR (ZZITEMARMORCLASS(PlayerLegs) = 2)
+		Result = 0
+	EndIf
+	If (ZZITEMARMORCLASS(PlayerHands) = 3) OR (ZZITEMARMORCLASS(PlayerHands) = 2)
+		Result = 0
+	EndIf
+	If (ZZITEMARMORCLASS(PlayerFeet) = 3) OR (ZZITEMARMORCLASS(PlayerFeet) = 2)
+		Result = 0
+	EndIf
+	If (ZZITEMARMORCLASS(PlayerBelt) = 3) OR (ZZITEMARMORCLASS(PlayerBelt) = 2)
+		Result = 0
+	EndIf
+	If (ItemWeaponType(PlayerWeapon) = 3)
+		Result = 0
+	EndIf
+	If (ItemWeaponType(PlayerWeapon) = 2) And ((PlayerRace$ = "Gnome") Or (PlayerRace$ = "Halfling"))
+		Result = 0
+	EndIf
+    Return Result
+
+End Function
+
+Function DropTreasure(Chest)
+	NumOfItems = Rand(1,ActorLevel(Chest))
+
+	For x = 1 to NumOfItems Step 1
+		d100 = Rand(1,100)
+		MagicItemType$ = ""
+		If (d100 >= 1) And ( d100 <= 60)
+			MagicItemType$ = "Weapon"
+		ElseIf (d100 >= 61) And ( d100 <= 90)
+			MagicItemType$ = "Armor"
+		ElseIf (d100 >= 91) And ( d100 <= 100)
+			MagicItemType$ = "Jewelry"
+		EndIf
+
+		ItemName$ = MagicItemNameGenerator(MagicItemType$, ActorLevel(Chest))
+        Spawnitem(ItemName$,1,actorzone(Chest),actorx(Chest),actory(Chest),actorz(Chest))
+		doevents(100)
+
+    Next
+
+End Function
+
+Function MagicItemNameGenerator$(ItemType$,ChestLevel)
+	LevelMod = (ChestLevel -1 ) * 5
+	ItemName$ = ""
+
+	Select ItemType$
+		Case "Weapon"
+			d100 = Rand(1,100)
+			If (d100 >= 1) And ( d100 <= 2)
+				ItemName$ = "Great Axe"
+			ElseIf (d100 >= 3) And ( d100 <= 9)
+				ItemName$ = "Battle Axe"
+			ElseIf (d100 >= 10) And ( d100 <= 14)
+				ItemName$ = "Hand Axe"
+			ElseIf (d100 >= 15) And ( d100 <= 27)
+				ItemName$ = "Short Bow"
+			ElseIf (d100 >= 28) And ( d100 <= 35)
+				ItemName$ = "Long Bow"
+			ElseIf (d100 >= 36) And ( d100 <= 43)
+				ItemName$ = "Quarter Staff"
+			ElseIf (d100 >= 44) And ( d100 <= 47)
+				ItemName$ = "Morning Star"
+			ElseIf (d100 >= 48) And ( d100 <= 59)
+				ItemName$ = "Dagger"
+			ElseIf (d100 >= 60) And ( d100 <= 65)
+				ItemName$ = "Short Sword"
+			ElseIf (d100 >= 66) And ( d100 <= 79)
+				ItemName$ = "Long Sword"
+			ElseIf (d100 >= 80) And ( d100 <= 81)
+				ItemName$ = "Scimitar"
+			ElseIf (d100 >= 82) And ( d100 <= 83)
+				ItemName$ = "Two-handed Sword"
+			ElseIf (d100 >= 84) And ( d100 <= 86)
+				ItemName$ = "Warhammer"
+			ElseIf (d100 >= 87) And ( d100 <= 94)
+				ItemName$ = "Mace"
+			ElseIf (d100 >= 95) And ( d100 <= 95)
+				ItemName$ = "Maul"
+			ElseIf (d100 >= 96) And ( d100 <= 96)
+				ItemName$ = "Pole Arm"
+			ElseIf (d100 >= 97) And ( d100 <= 98)
+				ItemName$ = "Short Spear"
+			ElseIf (d100 >= 99) And ( d100 <= 100)
+				ItemName$ = "Long Spear"
+			EndIf
+		
+		Case "Armor"
+			d10 = Rand(1,10)
+			If (d10 >= 1) And ( d10 <= 4) ; Leather Armor
+				Select Rand(1,6)
+					Case 1
+						ItemName$ = "Leather Armor"
+					Case 2
+						ItemName$ = "Leather Cap"
+					Case 3
+						ItemName$ = "Leather Trousers"
+					Case 4
+						ItemName$ = "Leather Boots"
+					Case 5
+						ItemName$ = "Leather Gloves"
+					Case 6
+						ItemName$ = "Leather Belt"
+				End Select
+				
+			ElseIf (d10 >= 4) And ( d10 <= 8) ;Chain Armor
+				Select Rand(1,7)
+					Case 1
+						ItemName$ = "Chainmail Armor"
+					Case 2
+						ItemName$ = "Skull Cap"
+					Case 3
+						ItemName$ = "Chainmail Greaves"
+					Case 4
+						ItemName$ = "Chainmail Boots"
+					Case 5
+						ItemName$ = "Chainmail Gauntlets"
+					Case 6
+						ItemName$ = "Chainmail Belt"
+					Case 7
+						ItemName$ = "Round Shield"
+				End Select
+				
+			ElseIf (d10 >= 9) And ( d10 <= 10) ;Plate Armor
+				Select Rand(1,7)
+					Case 1
+						ItemName$ = "Platemail Armor"
+					Case 2
+						ItemName$ = "Full Helm"
+					Case 3
+						ItemName$ = "Plated Greaves"
+					Case 4
+						ItemName$ = "Plated Boots"
+					Case 5
+						ItemName$ = "Plated Gauntlets"
+					Case 6
+						ItemName$ = "Plated Belt"
+					Case 7
+						ItemName$ = "Kite Shield"
+				End Select
+			EndIf
+		Case "Jewelry"
+			d6 = rand(1,6)
+			If (d6 >= 1) And (d6 <= 4) ;Rings
+				d8 = rand(1,8)
+				Select d8
+					Case 1
+						ItemName$ = "Topaz Ring"
+					Case 2
+						ItemName$ = "Malachite Ring"
+					Case 3
+						ItemName$ = "Amethyst Ring"
+					Case 4
+						ItemName$ = "Garnet Ring"
+					Case 5
+						ItemName$ = "Sapphire Ring"
+					Case 6
+						ItemName$ = "Emerald Ring"
+					Case 7
+						ItemName$ = "Ruby Ring"
+					Case 8
+						ItemName$ = "Diamond Ring"
+				End Select
+			ElseIf (d6 >= 5) And ( d6 <= 6) ;Amulets
+				d4 = rand(1,4)
+				Select d4
+					Case 1
+						ItemName$ = "Sapphire Amulet"
+					Case 2
+						ItemName$ = "Emerald Amulet"
+					Case 3
+						ItemName$ = "Ruby Amulet"
+					Case 4
+						ItemName$ = "Diamond Amulet"
+				End Select
+			EndIf
+	End Select
+
+	;Determine power
+	d100 = Rand(1,100) + LevelMod
+	
+	If (d100 >= 1) And ( d100 <= 65)
+		ItemName$ = ItemName$ + " +1"
+	ElseIf (d100 >= 66) And ( d100 <= 90)
+		ItemName$ = ItemName$ + " +2"
+	ElseIf (d100 >= 91) And ( d100 <= 115)
+		ItemName$ = ItemName$ + " +3"
+	ElseIf (d100 >= 116) And ( d100 <= 125)
+		ItemName$ = ItemName$ + " +4"
+	ElseIf (d100 >= 126)
+		ItemName$ = ItemName$ + " +5"
+	EndIf
+
+	Return ItemName$
+
+End Function
+
+Function Examine()
+
+	Output(Actor(), "A wooden chest containing treasure!")
+	
+End Function
+
+Function AbilityBonus(SkillLevel%)
+    Select SkillLevel
+    case 3
+    return -3
+    case 4
+    return -2
+    case 5
+    return -2
+    case 6
+    return -1
+    case 7 
+    return -1
+    case 8
+    return -1
+    case 13 
+    return 1
+    case 14
+    return 1
+    case 15
+    return 1
+    case 16
+    return 2
+    case 17
+    return 2
+    case 18
+    return 3
+    Case 19
+    Return 3
+    Case 20
+    Return 4
+    Case 21
+    Return 4
+    Case 22
+    Return 4
+    Case 23
+    Return 4
+    Case 24
+    Return 4
+    Case 25
+    Return 5
+    default 
+    return 0
+    End Select
+End Function
+

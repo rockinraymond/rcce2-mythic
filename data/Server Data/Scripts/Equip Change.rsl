@@ -27,8 +27,8 @@ Function Main()
 	ApplyAttributeBonus(Player, "Carry Weight Mod")
 
 
-	ApplyAttributeBonus(Player, "Long Blades")
-	ApplyAttributeBonus(Player, "Short Blades")
+	ApplyAttributeBonus(Player, "Swords")
+	ApplyAttributeBonus(Player, "Daggers")
 	ApplyAttributeBonus(Player, "Axes")
 	ApplyAttributeBonus(Player, "Blunt Weapons")
 	ApplyAttributeBonus(Player, "Polearms/Spears")
@@ -66,7 +66,7 @@ Function Main()
 	ApplyResistanceBonus(Player, "Lightning")
 	ApplyResistanceBonus(Player, "Holy")
 	ApplyResistanceBonus(Player, "Unholy")
-	ApplyResistanceBonus(Player, "Poison/Disease")
+	ApplyResistanceBonus(Player, "Poison")
 	ApplyResistanceBonus(Player, "Paralysis")
 	ApplyResistanceBonus(Player, "Spells")
 	ApplyResistanceBonus(Player, "Wands")
@@ -94,7 +94,7 @@ Function ApplyAttributeBonus(Player, AttributeName$)
 	PlayerRing3 = ActorRing(Player,3)
 	PlayerRing4 = ActorRing(Player,4)
 
-	AttributeBonusValue = ItemAttribute(PlayerAmulet1, AttributeName$) + ItemAttribute(PlayerAmulet2, AttributeName$) + ItemAttribute(PlayerChest, AttributeName$) + ItemAttribute(PlayerFeet, AttributeName$) + ItemAttribute(PlayerHands, AttributeName$) + ItemAttribute(PlayerHat, AttributeName$) + ItemAttribute(PlayerLegs, AttributeName$) + ItemAttribute(PlayerShield, AttributeName$) +  ItemAttribute(PlayerWeapon, AttributeName$) + ItemAttribute(PlayerRing1, AttributeName$) + ItemAttribute(PlayerRing2, AttributeName$) + ItemAttribute(PlayerRing3, AttributeName$) +  ItemAttribute(PlayerRing4, AttributeName$)
+	AttributeBonusValue = ItemAttribute(PlayerBelt, AttributeName$) + ItemAttribute(PlayerAmulet1, AttributeName$) +  ItemAttribute(PlayerAmulet2, AttributeName$) + ItemAttribute(PlayerChest, AttributeName$) + ItemAttribute(PlayerFeet, AttributeName$) + ItemAttribute(PlayerHands, AttributeName$) + ItemAttribute(PlayerHat, AttributeName$) + ItemAttribute(PlayerLegs, AttributeName$) + ItemAttribute(PlayerShield, AttributeName$) +  ItemAttribute(PlayerWeapon, AttributeName$) + ItemAttribute(PlayerRing1, AttributeName$) + ItemAttribute(PlayerRing2, AttributeName$) + ItemAttribute(PlayerRing3, AttributeName$) +  ItemAttribute(PlayerRing4, AttributeName$)
 
 	If AttributeBonusValue <> 0
 		AddActorEffect(Player, AttributeName$ + "EquipBns", AttributeName$, AttributeBonusValue, 0, 0)
@@ -120,7 +120,7 @@ Function ApplyResistanceBonus(Player, AttributeName$)
 	PlayerRing3 = ActorRing(Player,3)
 	PlayerRing4 = ActorRing(Player,4)
 
-	AttributeBonusValue = ItemAttribute(PlayerAmulet1, AttributeName$, 1) + ItemAttribute(PlayerAmulet2, AttributeName$, 1) + ItemAttribute(PlayerChest, AttributeName$,1) + ItemAttribute(PlayerFeet, AttributeName$,1) + ItemAttribute(PlayerHands, AttributeName$,1) + ItemAttribute(PlayerHat, AttributeName$,1) + ItemAttribute(PlayerLegs, AttributeName$,1) + ItemAttribute(PlayerShield, AttributeName$,1) +  ItemAttribute(PlayerWeapon, AttributeName$,1) + ItemAttribute(PlayerRing1, AttributeName$,1) + ItemAttribute(PlayerRing2, AttributeName$) + ItemAttribute(PlayerRing3, AttributeName$,1) +  ItemAttribute(PlayerRing4, AttributeName$, 1)
+	AttributeBonusValue = ItemAttribute(PlayerBelt, AttributeName$, 1) + ItemAttribute(PlayerAmulet1, AttributeName$, 1) + ItemAttribute(PlayerAmulet2, AttributeName$, 1) + ItemAttribute(PlayerChest, AttributeName$,1) + ItemAttribute(PlayerFeet, AttributeName$,1) + ItemAttribute(PlayerHands, AttributeName$,1) + ItemAttribute(PlayerHat, AttributeName$,1) + ItemAttribute(PlayerLegs, AttributeName$,1) + ItemAttribute(PlayerShield, AttributeName$,1) +  ItemAttribute(PlayerWeapon, AttributeName$,1) + ItemAttribute(PlayerRing1, AttributeName$,1) + ItemAttribute(PlayerRing2, AttributeName$) + ItemAttribute(PlayerRing3, AttributeName$,1) +  ItemAttribute(PlayerRing4, AttributeName$, 1)
 
 	If AttributeBonusValue <> 0
 		AddActorEffect(Player, AttributeName$ + "EquipBns", AttributeName$, AttributeBonusValue, 0, 0, 1)

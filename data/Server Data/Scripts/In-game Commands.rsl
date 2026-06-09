@@ -132,6 +132,10 @@ ZZSETITEMATTRIBUTE(newarmor, "Carry Weight Mod", 20)
 
 End Function
 
+Function printSpeed()
+Output(Actor(),Attribute(Actor(), "Movement"))
+End Function
+
 
 Function Sit()
 AnimateActor(Actor(), "Sit down", 0.5)
@@ -164,7 +168,7 @@ End function
 
 function SpellTest()
 	AddAbility(Actor(), "Magic Missile I", 1)
-	AddAbility(Actor(), "Resist Bludgeon", 1)
+	AddAbility(Actor(), "Feather Weight I", 1)
 	AddAbility(Actor(), "Shield", 1)
 	AddAbility(Actor(), "Burning Hands", 1)
 	AddAbility(Actor(), "Shocking Touch", 1)

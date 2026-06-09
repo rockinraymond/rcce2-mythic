@@ -14,9 +14,6 @@ Function Examine()
 
 	Output(Actor(), "This is a " + Name(Target))
 
-	If (PlayerIsGM(Player))
-		Output(Actor(), "Magical Resistance: " + Resistance(Target, "Magical"))
-	EndIf
 End Function
 
 Function Trade()

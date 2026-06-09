@@ -2,7 +2,7 @@ Using "RC_Core.rcm"
 Function Main()
 End Function
 
-Function ModifyAttributeSpell(Player, Target, SpellCost, ResourceName$, SpellName$, EffectName$, EffectAttribute$, EffectValue, EffectDuration, EffectTexID, SkillName$, GoverningAttribute$, castingTime, HitSound = 30, EmitterName$ = "BuffRed", EmitterTex = 337, isResist = 0)
+Function ModifyAttributeSpell(Player, Target, SpellCost, ResourceName$, SpellName$, EffectName$, EffectAttribute$, EffectValue, EffectDuration, EffectTexID, SkillName$, GoverningAttribute$, castingTime , HitSound = 30, EmitterName$ = "BuffRed", EmitterTex = 337, isResist = 0, SaveType$ = "Spells")
 
     PlayerName$ = Name(Player)
     TargetName$ = Name(Target)
@@ -16,7 +16,20 @@ Function ModifyAttributeSpell(Player, Target, SpellCost, ResourceName$, SpellNam
         CastingEmitter$ = "divineCasting"
     EndIf
 
-    SuccessChance = Attribute(Player,SkillName$) + Attribute(Player,GoverningAttribute$) + 25
+    SuccessChance = 10 + GetSkillModifier(Attribute(Player,SkillName$))
+
+    FinalEffectValue = EffectValue
+
+    If EffectValue < 0
+        SuccessChance = SuccessChance - (Resistance(Target, SaveType$))
+        FinalEffectValue = FinalEffectValue - AbilityBonus(Attribute(Player,GoverningAttribute$))
+    Else
+        FinalEffectValue = FinalEffectValue + AbilityBonus(Attribute(Player,GoverningAttribute$))
+    EndIf
+
+    If FinalEffectValue < 0
+        FinalEffectValue = 1
+    EndIf
 
     If CastingChecks(Player, Target, SkillName$) < 1
         Return
@@ -85,7 +98,7 @@ Function ModifyAttributeSpell(Player, Target, SpellCost, ResourceName$, SpellNam
         CreateEmitter(Target, EmitterName$, EmitterTex, 4000)
         PlaySound(Player, HitSound, 0)
         PlaySound(Target, HitSound, 0)
-	    AddActorEffect(Target, EffectName$, EffectAttribute$, EffectValue, EffectDuration, EffectTexID, isResist)
+	    AddActorEffect(Target, EffectName$, EffectAttribute$, FinalEffectValue, EffectDuration, EffectTexID, isResist)
     Else
          If Target = Player
             Output(Target,  "Your " + SpellName$ + " spell has failed!", 255, 100, 100)
@@ -240,25 +253,26 @@ Function ArcaneEquipmentCheck(Player)
             If (ZZITEMARMORCLASS(PlayerChest) = 3) OR (ZZITEMARMORCLASS(PlayerChest) = 2) OR (ZZITEMARMORCLASS(PlayerChest) = 1)
                 Result = 0
             EndIf
-            If (ZZITEMARMORCLASS(PlayerChest) = 3) OR (ZZITEMARMORCLASS(PlayerChest) = 2) OR (ZZITEMARMORCLASS(PlayerChest) = 1)
+            If (ZZITEMARMORCLASS(PlayerHat) = 3) OR (ZZITEMARMORCLASS(PlayerHat) = 2) OR (ZZITEMARMORCLASS(PlayerHat) = 1)
                 Result = 0
             EndIf
-            If (ZZITEMARMORCLASS(PlayerChest) = 3) OR (ZZITEMARMORCLASS(PlayerChest) = 2) OR (ZZITEMARMORCLASS(PlayerChest) = 1)
+            If (ZZITEMARMORCLASS(PlayerLegs) = 3) OR (ZZITEMARMORCLASS(PlayerLegs) = 2) OR (ZZITEMARMORCLASS(PlayerLegs) = 1)
                 Result = 0
             EndIf
-            If (ZZITEMARMORCLASS(PlayerChest) = 3) OR (ZZITEMARMORCLASS(PlayerChest) = 2) OR (ZZITEMARMORCLASS(PlayerChest) = 1)
+            If (ZZITEMARMORCLASS(PlayerHands) = 3) OR (ZZITEMARMORCLASS(PlayerHands) = 2) OR (ZZITEMARMORCLASS(PlayerHands) = 1)
                 Result = 0
             EndIf
-            If (ZZITEMARMORCLASS(PlayerChest) = 3) OR (ZZITEMARMORCLASS(PlayerChest) = 2) OR (ZZITEMARMORCLASS(PlayerChest) = 1)
+            If (ZZITEMARMORCLASS(PlayerFeet) = 3) OR (ZZITEMARMORCLASS(PlayerFeet) = 2) OR (ZZITEMARMORCLASS(PlayerFeet) = 1)
                 Result = 0
             EndIf
-            If (ZZITEMARMORCLASS(PlayerChest) = 3) OR (ZZITEMARMORCLASS(PlayerChest) = 2) OR (ZZITEMARMORCLASS(PlayerChest) = 1)
+            If (ZZITEMARMORCLASS(PlayerBelt) = 3) OR (ZZITEMARMORCLASS(PlayerBelt) = 2) OR (ZZITEMARMORCLASS(PlayerBelt) = 1)
+                Result = 0
                 Result = 0
             EndIf
             If ItemWeaponType(PlayerWeapon) = 3 
                 Result = 0
             EndIf
-            If (ZZITEMWEAPONCLASS(PlayerWeapon) > 0) AND (ZZITEMWEAPONCLASS(PlayerWeapon) < 7)
+            If (ZZITEMWEAPONCLASS(PlayerWeapon) = 1) OR ((ZZITEMWEAPONCLASS(PlayerWeapon) > 2) AND (ZZITEMWEAPONCLASS(PlayerWeapon) < 7))
                 Result = 0
             EndIf
     End Select
@@ -465,4 +479,90 @@ Function Spell_ProtectEvil()
     EmitterTex = 337
 
     ModifyAttributeSpell(Player, Target, SpellCost, ResourceName$, SpellName$, EffectName$, EffectAttribute$, EffectValue, EffectDuration, EffectTexID, SkillName$, GoverningAttribute$, castingTime,CastingSound, EmitterName$,EmitterTex, 1)
+End Function
+
+Function GetSkillModifier(SkillValue)
+	
+	TargetSkillVal = SkillValue
+
+	If TargetSkillVal < 0 Then TargetSkillVal = 0
+	
+	If TargetSkillVal = 100
+		Return 10
+	ElseIf TargetSkillVal > 97
+		Return 9
+	ElseIf TargetSkillVal > 90
+		Return 8
+	ElseIf TargetSkillVal > 83
+		Return 7
+	ElseIf TargetSkillVal > 76
+		Return 6
+	Else If TargetSkillVal > 69
+		Return 5
+	ElseIf TargetSkillVal > 62
+		Return 4
+	ElseIf TargetSkillVal > 55
+		Return 3
+	ElseIf TargetSkillVal > 48
+		Return 2
+	ElseIf TargetSkillVal > 41
+		Return 1
+	ElseIf TargetSkillVal > 34
+		Return 0
+	ElseIf TargetSkillVal > 27
+		Return -1
+	ElseIf TargetSkillVal > 20
+		Return -2
+	ElseIf TargetSkillVal > 15
+		Return -3
+	ElseIf TargetSkillVal > 10
+		Return -4
+	Else
+		Return -5
+	EndIf
+End Function
+
+Function AbilityBonus(SkillLevel%)
+    Select SkillLevel
+    case 3
+    return -3
+    case 4
+    return -2
+    case 5
+    return -2
+    case 6
+    return -1
+    case 7 
+    return -1
+    case 8
+    return -1
+    case 13 
+    return 1
+    case 14
+    return 1
+    case 15
+    return 1
+    case 16
+    return 2
+    case 17
+    return 2
+    case 18
+    return 3
+    Case 19
+    Return 3
+    Case 20
+    Return 4
+    Case 21
+    Return 4
+    Case 22
+    Return 4
+    Case 23
+    Return 4
+    Case 24
+    Return 4
+    Case 25
+    Return 5
+    default 
+    return 0
+    End Select
 End Function

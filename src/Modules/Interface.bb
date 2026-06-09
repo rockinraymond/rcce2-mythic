@@ -120,7 +120,7 @@ Global MapVisible
 
 ; Inventory window
 Global WInventory, InventoryVisible = False
-Global LInventoryGold, LInventoryMass, LInventoryLightLoad, LInventoryHeavyLoad, WItemContext = 0, BInventoryDrop, BInventoryDropAll, BInventoryEat, BInventoryEnchant, BInventoryRepair, BInventoryDismantle
+Global LInventoryGold, LInventoryMovement, LInventoryMass, LInventoryLightLoad, LInventoryHeavyLoad, WItemContext = 0, BInventoryDrop, BInventoryDropAll, BInventoryEat, BInventoryEnchant, BInventoryRepair, BInventoryDismantle
 Global WAmount, BAmountOK, TAmount, AmountSlot, AmountVisible
 Global MouseSlotEN, MouseSlotItem.ItemInstance, MouseSlotAmount, MouseSlotSource = -1
 Global ContextItem.ItemInstance, ContextAmount, ContextSource = -1 ;added for item actions
@@ -142,7 +142,7 @@ Dim ServerTradeIDs(31)
 
 ; Char stats window
 Global WCharStats, CharStatsVisible = False
-Global LReputation, LGold, LLevel, LXP, LHealth, LArmorPoints, LMana, LDamage, LAccuracy, LAggro, LAttackSpeed, BNextAttribute, BPrevAttribute, FirstAttribute
+Global LReputation, LGold, LLevel, LXP, LHealth, LArmorPoints, LMana, LSpirit, LDamage, LAccuracy, LAggro, LAttackSpeed, BNextAttribute, BPrevAttribute, FirstAttribute
 Dim LAttributeNames(49)
 Dim LAttributeVals(49)
 Dim LSkillNames(49)
