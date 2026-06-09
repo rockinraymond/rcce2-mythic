@@ -63,6 +63,26 @@ impl OtherConfig {
         self.view_mode == 1
     }
 
+    /// Whether player-chat speech bubbles are shown. Blitz turns a plain say
+    /// (`"<Name> text"`) into a bubble over the speaker only `If ... And UseBubbles
+    /// > 1` (ClientNet.bb:1237). The shipped default is 2 (enabled).
+    pub fn bubbles_enabled(&self) -> bool {
+        self.use_bubbles > 1
+    }
+
+    /// The project's chat-bubble text colour (`BubblesR/G/B`), as RGBA 0..1. When
+    /// the project leaves it unset (all zero — incl. the truncated default file that
+    /// omits these bytes), fall back to a readable warm white instead of invisible
+    /// black on the dark bubble background. (Blitz uses the raw bytes; this keeps
+    /// the default project's bubbles legible — a genuine improvement.)
+    pub fn bubble_color(&self) -> [f32; 4] {
+        let [r, g, b] = self.bubbles_rgb;
+        if r == 0 && g == 0 && b == 0 {
+            return [0.95, 0.95, 0.85, 1.0];
+        }
+        [r as f32 / 255.0, g as f32 / 255.0, b as f32 / 255.0, 1.0]
+    }
+
     /// Whether the player may toggle first/third-person. Blitz flips `CamMode` on
     /// the toggle key only `If ... And ViewMode = 2` (Interface3D.bb:466); ViewMode
     /// 1 (first-only) and 3 (third-only) LOCK the camera. Expressed as "not locked to
@@ -98,6 +118,24 @@ mod tests {
         // Absent file (soft-failed to 0) → third-person start, but toggle stays
         // ENABLED (don't trap the player; only an explicit 1/3 locks).
         assert!(!cfg(0).default_first_person() && cfg(0).view_toggle_allowed());
+    }
+
+    #[test]
+    fn bubble_semantics() {
+        // Full record layout: HideNametags, DisableCollisions, ViewMode, ServerPort
+        // (i32 = 4 bytes!), RequireMemorise, UseBubbles, BubblesR/G/B. So UseBubbles
+        // is byte index 8 and the colour is bytes 9-11.
+        let with = |ub: u8, rgb: [u8; 3]| {
+            OtherConfig::parse(&[0, 0, 2, 0, 0, 0, 0, 0, ub, rgb[0], rgb[1], rgb[2]])
+        };
+        assert!(with(2, [10, 20, 30]).bubbles_enabled(), "2 enables");
+        assert!(!with(1, [10, 20, 30]).bubbles_enabled(), "1 disables");
+        assert!(!with(0, [0, 0, 0]).bubbles_enabled(), "0 disables");
+        // Set colour is honored.
+        let c = with(2, [255, 128, 0]).bubble_color();
+        assert!((c[0] - 1.0).abs() < 1e-6 && (c[1] - 0.502).abs() < 0.01 && c[2] == 0.0);
+        // Unset (all-zero / truncated) colour falls back to a readable warm white.
+        assert_eq!(with(2, [0, 0, 0]).bubble_color(), [0.95, 0.95, 0.85, 1.0]);
     }
 
     #[test]

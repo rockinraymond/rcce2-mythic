@@ -304,6 +304,16 @@ pub struct World {
     /// threaded in at enter-world. Empty (the `Default`) → chat strings use
     /// their hardcoded-English fallback. See [`World::lang`].
     pub language: rcce_data::Language,
+    /// Player-chat speech bubbles (`Other.dat` UseBubbles > 1), threaded in at
+    /// enter-world. When true, a plain say (`"<Name> text"`) shows as a bubble over
+    /// the speaker in addition to the chat log.
+    pub bubbles_enabled: bool,
+    /// Chat-bubble text colour for other players (`Other.dat` BubblesR/G/B; readable
+    /// fallback when unset). The local player's own bubble is always blue.
+    pub bubble_color: [f32; 4],
+    /// The local player's character name, for matching their own `"<Name>"` say to
+    /// `my_runtime_id` (so it bubbles over Me in blue). Empty until enter-world.
+    pub me_name: String,
     pub zone: Zone,
     /// Other actors keyed by runtime id (excludes the local player).
     pub actors: HashMap<u16, Actor>,
@@ -882,6 +892,8 @@ impl World {
             self.me_beard = beard;
             self.me_health = health;
             self.me_health_max = health_max;
+            // Our own name, so a "<Name>" say bubbles over Me (CHAT bubbles).
+            self.me_name = name;
             return; // don't list ourselves among "other actors"
         }
         self.actors.insert(
@@ -1510,9 +1522,42 @@ impl World {
         if text.starts_with("<<") {
             color = [0.0, 0.5, 1.0, 1.0]; // local player's own line
         }
+        // Player-chat speech bubble: a plain say arrives as "<Name> text" with NO
+        // colour-code prefix (`d[0] == '<'`, ServerNet.bb:708). Colour-prefixed
+        // yells/guild/etc. (250..=254) are NOT bubbled — matching Blitz, where only
+        // the "Normal" branch bubbles (ClientNet.bb:1237). Shown over the speaker
+        // when the project enables bubbles (UseBubbles > 1); the log line still shows.
+        if self.bubbles_enabled && d[0] == b'<' {
+            if let Some(bubble) = self.chat_bubble_for(&text) {
+                self.pending_bubbles.push(bubble);
+            }
+        }
         if !text.is_empty() {
             self.chat.push((text, color));
         }
+    }
+
+    /// Resolve a plain say `"<Name> text"` to a bubble `(runtime id, message, colour)`
+    /// when the speaker is a known actor (or the local player). `None` when the format
+    /// doesn't match or the name is unknown — the say then only hits the chat log. The
+    /// local player's own line bubbles over `my_runtime_id` in blue (Blitz `If AI = Me`);
+    /// others use the project's bubble colour.
+    fn chat_bubble_for(&self, text: &str) -> Option<(u16, String, [f32; 4])> {
+        let rest = text.strip_prefix('<')?;
+        let close = rest.find('>')?;
+        let name = &rest[..close];
+        if name.is_empty() {
+            return None;
+        }
+        let msg = rest[close + 1..].trim_start().to_string();
+        if msg.is_empty() {
+            return None;
+        }
+        if !self.me_name.is_empty() && name == self.me_name {
+            return Some((self.my_runtime_id, msg, [0.0, 0.5, 1.0, 1.0]));
+        }
+        let rid = self.actors.values().find(|a| a.name == name).map(|a| a.runtime_id)?;
+        Some((rid, msg, self.bubble_color))
     }
 
     /// Handle an inbound `P_Dialog` (NPC dialog). Builds/updates `self.dialog`
@@ -2727,6 +2772,45 @@ mod tests {
         assert_eq!(*rid, 9);
         assert_eq!(text, "Hello!");
         assert_eq!(*col, [0.0, 1.0, 0.0, 1.0]);
+    }
+
+    // A plain say "<Name> text" (no colour-code prefix) becomes a speech bubble over
+    // the speaker when the project enables bubbles — over Me in blue, others in the
+    // project colour. Colour-prefixed messages, unknown names, and disabled bubbles
+    // produce none. The chat log line always appears.
+    #[test]
+    fn plain_say_makes_a_bubble() {
+        let mut w = World {
+            my_runtime_id: 1,
+            bubbles_enabled: true,
+            bubble_color: [0.5, 0.5, 0.5, 1.0],
+            me_name: "Hero".into(),
+            ..Default::default()
+        };
+        w.actors.insert(7, Actor { runtime_id: 7, name: "Stag".into(), alive: true, ..Default::default() });
+
+        // Another player's say → bubble over actor 7 in the project colour, + log line.
+        w.on_chat(b"<Stag> hello there");
+        assert_eq!(w.pending_bubbles.last(), Some(&(7u16, "hello there".to_string(), [0.5, 0.5, 0.5, 1.0])));
+        assert!(w.chat.iter().any(|(t, _)| t.contains("hello there")), "still logged");
+
+        // My own say → bubble over me (rid 1) in blue.
+        w.on_chat(b"<Hero> hi");
+        assert_eq!(w.pending_bubbles.last(), Some(&(1u16, "hi".to_string(), [0.0, 0.5, 1.0, 1.0])));
+
+        let n = w.pending_bubbles.len();
+        // Unknown speaker → no bubble.
+        w.on_chat(b"<Ghost> boo");
+        // A colour-prefixed yell (253) is NOT bubbled even with a valid "<Stag>".
+        let mut yell = vec![253u8];
+        yell.extend_from_slice(b"<Stag> YELL");
+        w.on_chat(&yell);
+        assert_eq!(w.pending_bubbles.len(), n, "unknown name + colour-prefixed → no bubble");
+
+        // Disabled → no bubble.
+        w.bubbles_enabled = false;
+        w.on_chat(b"<Stag> quiet");
+        assert_eq!(w.pending_bubbles.len(), n, "disabled → no bubble");
     }
 
     #[test]

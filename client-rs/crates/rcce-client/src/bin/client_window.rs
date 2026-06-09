@@ -3630,6 +3630,10 @@ impl App {
             // Which attribute slot is Health for this project (default 0);
             // P_StatUpdate reports HP under this slot.
             health_stat: store.health_stat(),
+            // Player-chat speech bubbles (Other.dat UseBubbles/BubblesRGB). `me_name`
+            // is captured from our own P_NewActor below (in the world_packets apply).
+            bubbles_enabled: store.bubbles_enabled(),
+            bubble_color: store.bubble_color(),
             ..Default::default()
         };
         for m in &outcome.world_packets {
