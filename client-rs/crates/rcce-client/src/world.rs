@@ -353,6 +353,12 @@ pub struct World {
     /// template+gender, resolves via `ActorCatalog::speech_id`, and plays. Mirrors
     /// Blitz `PlayActorSound` on combat (ClientNet.bb:1094/1122/1166).
     pub pending_combat_sounds: Vec<(u16, u8)>,
+    /// Speech slots for the LOCAL player's own combat voice (Attack on a swing,
+    /// Hit when struck). `pending_combat_sounds` resolves via the `actors` map,
+    /// which excludes `Me`, so these are kept separate — the App resolves them
+    /// against `me_actor_id` + `me_gender`. Mirrors Blitz `PlayActorSound(Me, …)`
+    /// (ClientNet.bb:1122 Attack, :1166 Hit).
+    pub pending_self_sounds: Vec<u8>,
     /// `(item_id, amount)` of items the local player just picked up off the
     /// ground (`P_InventoryUpdate "R"`). The App drains these, resolves the item
     /// NAME (which lives in the AssetStore, not `World`) + the localized prefix,
@@ -1050,6 +1056,10 @@ impl World {
                 // RID is the target I hit (I am the attacker).
                 let (Some(raw_dmg), Some(dtype)) = (r.u16(), r.u8()) else { return };
                 let damage = raw_dmg.saturating_sub(1);
+                // I grunt (Attack) on every swing I land a 'H' for — unconditional,
+                // matching Blitz `PlayActorSound(Me, Speech_Attack*)` at the top of
+                // the 'H' branch (ClientNet.bb:1122).
+                self.pending_self_sounds.push(SPEECH_ATTACK1);
                 self.combat_events.push(CombatEvent {
                     target: rid,
                     attacker: self.my_runtime_id,
@@ -1076,6 +1086,13 @@ impl World {
                 if raw_dmg != 1 {
                     self.attack_anims.insert(rid, ATTACK_ANIM_SECS);
                     self.pending_combat_sounds.push((rid, SPEECH_ATTACK1));
+                    // I cry out (Hit) only on a CONNECTING blow (Damage > 0), NOT a
+                    // miss (raw_dmg 0 → Damage < 0). Tighter than the attacker's
+                    // swing gate above. Blitz `PlayActorSound(Me, Speech_Hit*)` is
+                    // inside `If Damage > 0` (ClientNet.bb:1166).
+                    if raw_dmg.saturating_sub(1) > 0 {
+                        self.pending_self_sounds.push(SPEECH_HIT1);
+                    }
                     self.combat_events.push(CombatEvent {
                         target: self.my_runtime_id,
                         attacker: rid,
@@ -2106,6 +2123,49 @@ mod tests {
         w.apply(&msg(pk::ATTACK_ACTOR, pkt(|p| { p.u8(b'Y').u16(8).u16(6).u8(0); })));
         assert!(w.attack_anims.contains_key(&8));
         assert_eq!(w.combat_events.last().unwrap().damage, 5);
+    }
+
+    // The LOCAL player's own combat voice. `Me` isn't in the `actors` map, so
+    // `pending_combat_sounds` can never carry Me — these go through the separate
+    // `pending_self_sounds` queue, which the App resolves against `me_actor_id` +
+    // `me_gender`. Two cases, matching the Blitz If/Else exactly:
+    //   'H' (I land a swing on a target): I grunt (Attack) UNCONDITIONALLY — even
+    //        a 0-damage / parried swing (Blitz `PlayActorSound(Me, Speech_Attack)`
+    //        at the top of the 'H' branch, ClientNet.bb:1122).
+    //   'Y' (an attacker swings at me): I cry out (Hit) ONLY on a connecting blow
+    //        (Damage > 0), not on a miss or the 0-damage sentinel (Blitz cry is
+    //        inside `If Damage > 0`, ClientNet.bb:1166).
+    #[test]
+    fn local_player_combat_voice() {
+        let mut w = World { my_runtime_id: 1, ..Default::default() };
+
+        // 'H' raw 1 (0 damage / parried): I STILL grunt (Attack), but the target
+        // takes no pain cry (combat_sounds stays empty — gated on damage).
+        w.apply(&msg(pk::ATTACK_ACTOR, pkt(|p| { p.u8(b'H').u16(9).u16(1).u8(0); })));
+        assert_eq!(w.pending_self_sounds, vec![SPEECH_ATTACK1], "I grunt on every swing I land");
+        assert!(w.pending_combat_sounds.is_empty(), "no target pain cry on a 0-damage hit");
+
+        // 'H' raw 6 (damage 5): a second Attack grunt for me; target gets its cry.
+        w.apply(&msg(pk::ATTACK_ACTOR, pkt(|p| { p.u8(b'H').u16(9).u16(6).u8(0); })));
+        assert_eq!(w.pending_self_sounds, vec![SPEECH_ATTACK1, SPEECH_ATTACK1]);
+        assert_eq!(w.pending_combat_sounds, vec![(9, SPEECH_HIT1)]);
+
+        // Fresh world for the receiving side ('Y').
+        let mut w = World { my_runtime_id: 1, ..Default::default() };
+
+        // 'Y' raw 1 (0-damage sentinel): nothing at all — no self Hit cry.
+        w.apply(&msg(pk::ATTACK_ACTOR, pkt(|p| { p.u8(b'Y').u16(7).u16(1).u8(0); })));
+        assert!(w.pending_self_sounds.is_empty(), "no Hit cry on the 0-damage sentinel");
+
+        // 'Y' raw 0 (a MISS, Blitz Damage -1): attacker swings/grunts but I do
+        // NOT cry out — the pain cry is gated on Damage > 0.
+        w.apply(&msg(pk::ATTACK_ACTOR, pkt(|p| { p.u8(b'Y').u16(7).u16(0).u8(0); })));
+        assert!(w.pending_self_sounds.is_empty(), "no Hit cry on a miss");
+        assert_eq!(w.pending_combat_sounds, vec![(7, SPEECH_ATTACK1)], "attacker still grunts");
+
+        // 'Y' raw 6 (damage 5, a landed blow): NOW I cry out (Hit).
+        w.apply(&msg(pk::ATTACK_ACTOR, pkt(|p| { p.u8(b'Y').u16(8).u16(6).u8(0); })));
+        assert_eq!(w.pending_self_sounds, vec![SPEECH_HIT1], "I cry out only on a connecting blow");
     }
 
     // Looting a dropped item ('R') moves it into inventory AND queues a
