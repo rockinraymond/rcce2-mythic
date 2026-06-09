@@ -6114,6 +6114,27 @@ impl App {
                 self.bubbles.insert(rid, (text, col, elapsed));
             }
             self.bubbles.retain(|_, (_, _, start)| elapsed - *start < 5.0);
+            // Item-pickup chat toast (parity, ClientNet.bb:1349/1351): a green
+            // "Picked up item: <name> (xN)" line when I loot a dropped item. The
+            // item NAME lives in the catalog (not World), so World queues a
+            // (item_id, amount) intent and we resolve name + localized prefix
+            // here. Drain into a local first to release the borrow.
+            let pickups: Vec<(u16, u16)> = net.world.pending_pickup_toasts.drain(..).collect();
+            for (item_id, amount) in pickups {
+                let name = store.item_name(item_id);
+                let line = {
+                    let prefix = net
+                        .world
+                        .language
+                        .get_or(rcce_data::language::ls::PICKED_UP_ITEM, "Picked up item:");
+                    if amount > 1 {
+                        format!("{prefix} {name} (x{amount})")
+                    } else {
+                        format!("{prefix} {name}")
+                    }
+                };
+                net.world.chat.push((line, [0.3, 1.0, 0.3, 1.0]));
+            }
             // Inbound sound (AUD-4/5: P_Sound/P_Speech) + mid-zone music switch
             // (AUD-1: P_Music). Drain the queued events to the audio engine —
             // one-shots play 2D for the alpha; the music switch replaces the

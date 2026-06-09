@@ -23,6 +23,8 @@ pub mod ls {
     pub const XP_RECEIVED: usize = 61;
     /// `LS_YouKilled` (63) — prefix of the kill line: `"<this> <name>!"`.
     pub const YOU_KILLED: usize = 63;
+    /// `LS_PickedUpItem` (64) — prefix of the loot line: `"<this> <name> (xN)"`.
+    pub const PICKED_UP_ITEM: usize = 64;
 }
 
 /// The project's localizable string table, parsed from `Language.txt`. `Default`
