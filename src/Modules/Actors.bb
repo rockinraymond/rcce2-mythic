@@ -503,6 +503,23 @@ Function ReadActorInstance.ActorInstance(Stream)
 	For i = 0 To 999
 		A\KnownSpells[i] = ReadShort(Stream)
 		A\SpellLevels[i] = ReadShort(Stream)
+		; KnownSpells[i] is a spell ID used directly as a SpellsList(...)
+		; index (Dim'd (65534), valid 0..65534). ReadShort can carry a
+		; corrupt/tampered Accounts.dat slot outside that range -- a
+		; negative value, or an unsigned read-back of one (e.g. 65535).
+		; Release builds emit no array-bounds check (debug-only), so
+		; SpellsList(OOB) reads garbage memory, casts it to a Spell handle,
+		; and crashes the SHARED server process on character-list send
+		; (ServerNet.bb P_FetchCharacter: the `If Sp <> Null` guard runs
+		; AFTER the OOB read). Zero both the id and its paired level so the
+		; slot is inert everywhere the `SpellLevels[i] > 0` gate is checked,
+		; mirroring the MemorisedSpells clamp just below and the ServerNet
+		; recovery branch. The two-sided test catches the OOB regardless of
+		; ReadShort's signedness.
+		If A\KnownSpells[i] < 0 Or A\KnownSpells[i] > 65534
+			A\KnownSpells[i] = 0
+			A\SpellLevels[i] = 0
+		EndIf
 	Next
 	For i = 0 To 9
 		A\MemorisedSpells[i] = ReadShort(Stream)
