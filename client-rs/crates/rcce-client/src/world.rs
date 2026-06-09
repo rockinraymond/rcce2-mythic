@@ -151,12 +151,20 @@ pub struct CombatEvent {
     pub damage_type: u8,
 }
 
-/// A server-commanded animation override (`P_AnimateActor`): the clip name to
-/// play and how long it has left before reverting to locomotion.
+/// A server-commanded animation override (`P_AnimateActor`). Blitz `Animate`
+/// mode 3 plays the clip once from the start, holds its last frame, and only
+/// reverts when the actor next moves — so we track time **since the clip began**
+/// (to play it from frame 0, not a global-time phase) and its natural length.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ServerAnim {
     pub name: String,
-    pub remaining: f32,
+    /// Seconds since the clip started; drives the play-once frame in `build_actors`
+    /// (clip start + elapsed·rate, clamped to the last frame = the held pose).
+    pub elapsed: f32,
+    /// The clip's natural play-once length in seconds. Until `elapsed` reaches it
+    /// the clip is still playing (movement can't cancel); after, the end pose holds
+    /// until the actor moves.
+    pub duration: f32,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -1810,15 +1818,33 @@ impl World {
         self.pending_anims.push((rid, name));
     }
 
-    /// Tick down server-commanded animation timers, reverting expired overrides to
-    /// locomotion by dropping them from the map.
-    pub fn tick_server_anims(&mut self, dt: f32) {
+    /// Advance server-commanded animations and expire them the Blitz mode-3 way:
+    /// the clip always plays through once (movement can't interrupt it), then its
+    /// end pose holds until the actor next moves — at which point the override is
+    /// dropped and locomotion takes over. `me_moving` is the local player's current
+    /// movement intent; remote actors use their own dest-vs-position delta.
+    pub fn tick_server_anims(&mut self, dt: f32, me_moving: bool) {
         if self.server_anims.is_empty() {
             return;
         }
-        self.server_anims.retain(|_, sa| {
-            sa.remaining -= dt;
-            sa.remaining > 0.0
+        let actors = &self.actors;
+        let my_rid = self.my_runtime_id;
+        self.server_anims.retain(|&rid, sa| {
+            sa.elapsed += dt;
+            // Still playing the one-shot through → keep regardless of movement.
+            if sa.elapsed < sa.duration {
+                return true;
+            }
+            // Played out; hold the end pose until this actor moves.
+            let moving = if rid == my_rid {
+                me_moving
+            } else if let Some(a) = actors.get(&rid) {
+                let (dx, dz) = (a.dest_x - a.x, a.dest_z - a.z);
+                dx * dx + dz * dz > 1.0
+            } else {
+                true // actor gone → drop the override
+            };
+            !moving
         });
     }
 
@@ -3027,12 +3053,16 @@ mod tests {
         w.apply(&msg(pk::ANIMATE_ACTOR, pkt(|p| { p.u16(50).u8(0); })));
         assert_eq!(w.pending_anims.len(), 1, "truncated packet not queued");
 
-        // tick_server_anims counts an active override down and drops it on expiry.
-        w.server_anims.insert(50, ServerAnim { name: "Wave".into(), remaining: 0.5 });
-        w.tick_server_anims(0.3);
-        assert!((w.server_anims[&50].remaining - 0.2).abs() < 1e-6);
-        w.tick_server_anims(0.3);
-        assert!(w.server_anims.is_empty(), "expired override reverts to locomotion");
+        // Mode-3 lifecycle on the local player (rid 1): the clip plays through once
+        // (movement can't interrupt), then the end pose holds while idle and only
+        // reverts once the player moves.
+        w.server_anims.insert(1, ServerAnim { name: "Wave".into(), elapsed: 0.0, duration: 0.5 });
+        w.tick_server_anims(0.3, true); // mid-playthrough: movement is ignored
+        assert!(w.server_anims.contains_key(&1), "plays through even while moving");
+        w.tick_server_anims(0.3, false); // elapsed 0.6 > 0.5, idle → held
+        assert!(w.server_anims.contains_key(&1), "holds the end pose while idle");
+        w.tick_server_anims(0.1, true); // moving after the playthrough → cancel
+        assert!(w.server_anims.is_empty(), "movement cancels the held pose");
     }
 
     #[test]
