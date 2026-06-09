@@ -7775,11 +7775,21 @@ impl App {
                             let nc = if is_target { col } else { white };
                             overlay.text_shadow(px - tw * 0.5, py - 26.0, 1.0, &label, nc);
                         }
-                        // Equipped weapon (from P_InventoryUpdate "O") under the name.
+                        // Role/guild tag, shown above the name as "<Tag>" — Blitz
+                        // draws it as a second nametag line (Actors3D.bb:562). Rows
+                        // stack upward: name, tag, then the equipped weapon.
+                        let mut row_y = py - 38.0;
+                        if !a.tag.is_empty() {
+                            let tag = format!("<{}>", a.tag);
+                            let tw = rcce_render::font::text_width(&tag, 1.0);
+                            overlay.text_shadow(px - tw * 0.5, row_y, 1.0, &tag, [0.78, 0.86, 1.0, 1.0]);
+                            row_y -= 12.0;
+                        }
+                        // Equipped weapon (from P_InventoryUpdate "O").
                         if a.equipped[0] != 0xFFFF {
                             let wname = store.item_name(a.equipped[0]);
                             let tw = rcce_render::font::text_width(&wname, 1.0);
-                            overlay.text_shadow(px - tw * 0.5, py - 38.0, 1.0, &wname, [0.85, 0.85, 0.7, 1.0]);
+                            overlay.text_shadow(px - tw * 0.5, row_y, 1.0, &wname, [0.85, 0.85, 0.7, 1.0]);
                         }
                     }
                 }
