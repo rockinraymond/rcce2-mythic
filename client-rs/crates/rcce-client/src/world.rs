@@ -151,6 +151,14 @@ pub struct CombatEvent {
     pub damage_type: u8,
 }
 
+/// A server-commanded animation override (`P_AnimateActor`): the clip name to
+/// play and how long it has left before reverting to locomotion.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ServerAnim {
+    pub name: String,
+    pub remaining: f32,
+}
+
 #[derive(Debug, Clone, Default)]
 pub struct Actor {
     pub runtime_id: u16,
@@ -339,6 +347,17 @@ pub struct World {
     /// `'Y'`/broadcast, ticked down each frame; while present the actor renders
     /// its attack clip in `build_actors`. (The local player uses `me_attack_until`.)
     pub attack_anims: HashMap<u16, f32>,
+    /// `(rid, anim_name)` server-commanded animation intents from `P_AnimateActor`
+    /// (emotes, scripted poses). The App drains these, resolves the named clip +
+    /// its duration via the AssetStore (which `World` can't reach), and installs a
+    /// timed override in `server_anims`. Mirrors Blitz `PlayAnimation(A, 3, …)`
+    /// (ClientNet.bb:726).
+    pub pending_anims: Vec<(u16, String)>,
+    /// Active server-commanded animations: rid → `(clip name, seconds left)`. While
+    /// present, `build_actors` plays the named clip on that actor (priority just
+    /// below death) instead of locomotion; `tick_server_anims` expires it after the
+    /// clip's natural length, reverting to idle/walk (Blitz mode-3 plays once).
+    pub server_anims: HashMap<u16, ServerAnim>,
     /// The local player's inventory, keyed by slot (0..13 equipment, 14..45
     /// backpack). Seeded from the P_FetchCharacter sheet, then kept live by
     /// P_InventoryUpdate G/T/H/R. BTreeMap so the panel iterates in slot order.
@@ -706,6 +725,7 @@ impl World {
             pk::FLOATING_NUMBER => self.on_floating_number(&m.data),
             pk::APPEARANCE_UPDATE => self.on_appearance_update(&m.data),
             pk::REPOSITION_ACTOR => self.on_reposition_actor(&m.data),
+            pk::ANIMATE_ACTOR => self.on_animate_actor(&m.data),
             _ => {}
         }
     }
@@ -1765,6 +1785,41 @@ impl World {
                 a.render_yaw = yaw;
             }
         }
+    }
+
+    /// `P_AnimateActor` (ClientNet.bb:713): the server commands an actor to play a
+    /// named animation — an emote or a scripted pose. Layout: RuntimeID(u16) ·
+    /// FixedSpeed(u8) · Speed(f32) · AnimName(string-to-end). We queue a
+    /// `(rid, name)` intent; the App resolves the clip + its natural duration via
+    /// the AssetStore (out of `World`'s reach) and installs a timed override.
+    ///
+    /// Speed/FixedSpeed are parsed (to reach the name) but not applied: Blitz's
+    /// playback rate is framerate-coupled (`Animate` advances N frames per render
+    /// tick), which can't be reproduced faithfully here, so the clip plays at its
+    /// data-native rate — the deterministic, sensible choice. Soft-fails on a
+    /// short packet or an empty name.
+    fn on_animate_actor(&mut self, d: &[u8]) {
+        let mut r = MsgReader::new(d);
+        let (Some(rid), Some(_fixed), Some(_speed)) = (r.u16(), r.u8(), r.f32()) else {
+            return;
+        };
+        let name = String::from_utf8_lossy(r.rest()).into_owned();
+        if name.is_empty() {
+            return;
+        }
+        self.pending_anims.push((rid, name));
+    }
+
+    /// Tick down server-commanded animation timers, reverting expired overrides to
+    /// locomotion by dropping them from the map.
+    pub fn tick_server_anims(&mut self, dt: f32) {
+        if self.server_anims.is_empty() {
+            return;
+        }
+        self.server_anims.retain(|_, sa| {
+            sa.remaining -= dt;
+            sa.remaining > 0.0
+        });
     }
 
     /// Tick down remote jump-anim timers, dropping any that have elapsed.
@@ -2951,6 +3006,33 @@ mod tests {
         w.apply(&msg(pk::REPOSITION_ACTOR, pkt(|p| { p.u8(b'M').u16(999).f32(1.0).f32(1.0).f32(1.0).u8(0); })));
         w.apply(&msg(pk::REPOSITION_ACTOR, pkt(|p| { p.u8(b'M').u16(50).f32(7.0); }))); // missing Y/Z
         assert_eq!(w.actors[&50].x, 120.0, "truncated packet left position unchanged");
+    }
+
+    // P_AnimateActor queues a (rid, name) intent for the App to resolve into a
+    // timed clip override; tick_server_anims expires active overrides. (The
+    // clip/duration resolution lives App-side — it needs the AssetStore — so this
+    // covers the wire parse + the expiry timer.)
+    #[test]
+    fn animate_actor_queues_intent_and_expires() {
+        let mut w = World { my_runtime_id: 1, ..Default::default() };
+        // rid 50, fixed-speed 0, speed 0.05, name "Wave" (string-to-end, no prefix).
+        w.apply(&msg(pk::ANIMATE_ACTOR, pkt(|p| { p.u16(50).u8(0).f32(0.05).raw(b"Wave"); })));
+        assert_eq!(w.pending_anims, vec![(50, "Wave".to_string())]);
+
+        // An empty name queues nothing (no clip to play).
+        w.apply(&msg(pk::ANIMATE_ACTOR, pkt(|p| { p.u16(50).u8(0).f32(0.05); })));
+        assert_eq!(w.pending_anims.len(), 1, "empty name not queued");
+
+        // A truncated packet (missing the speed f32) soft-fails.
+        w.apply(&msg(pk::ANIMATE_ACTOR, pkt(|p| { p.u16(50).u8(0); })));
+        assert_eq!(w.pending_anims.len(), 1, "truncated packet not queued");
+
+        // tick_server_anims counts an active override down and drops it on expiry.
+        w.server_anims.insert(50, ServerAnim { name: "Wave".into(), remaining: 0.5 });
+        w.tick_server_anims(0.3);
+        assert!((w.server_anims[&50].remaining - 0.2).abs() < 1e-6);
+        w.tick_server_anims(0.3);
+        assert!(w.server_anims.is_empty(), "expired override reverts to locomotion");
     }
 
     #[test]
