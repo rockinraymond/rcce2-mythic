@@ -14,6 +14,14 @@ Function Main()
         Return
     EndIf
 
+    ; Don't fire at a dead/freed target. A homing projectile created against a
+    ; corpse dereferences the freed actor on the client and crashes it. Attribute()
+    ; safely returns 0 for a dead or already-freed handle, so this guards both.
+    If(Attribute(Target, "Health") <= 0)
+        Output(Player, "Your target is already dead.")
+        Return
+    EndIf
+
     ;Check the mana
     ManaLevel = Attribute(Player, "Mana")
     If(ManaLevel < 1)
@@ -25,6 +33,7 @@ Function Main()
 
     ;Particles and casting animation
     AnimateActor(Player, "Pray", 0.05, 1)
+    PlaySound(Player, 12, 1)
     FireProjectile(Player, Target, "Fireball")
 
     DoEvents(2000)
