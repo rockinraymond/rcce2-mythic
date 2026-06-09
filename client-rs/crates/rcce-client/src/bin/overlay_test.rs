@@ -84,7 +84,7 @@ fn main() {
     let samples: [(u16, u8, f32); 4] =
         [(120, 0, 0.0), (45, 1, 0.4), (310, 2, 0.8), (7, 5, 1.1)];
     for (i, (dmg, dt, age)) in samples.iter().enumerate() {
-        let fl = rcce_client::floaters::Floater { rid: 0, damage: *dmg, damage_type: *dt, t0: 0.0 };
+        let fl = rcce_client::floaters::Floater { rid: 0, damage: *dmg, damage_type: *dt, t0: 0.0, value: None, color: None };
         let c = palette[*dt as usize % 6];
         let base_x = 300.0 + i as f32 * 78.0;
         overlay.text_shadow(base_x, 190.0 - fl.rise(*age), 1.5, &dmg.to_string(), [c[0], c[1], c[2], fl.alpha(*age)]);

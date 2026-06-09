@@ -287,6 +287,13 @@ pub struct World {
     pub me_attributes: HashMap<u8, (i16, i16)>,
     /// Recent combat hits (from P_AttackActor).
     pub combat_events: Vec<CombatEvent>,
+    /// Server-driven floating numbers (`P_FloatingNumber` /
+    /// `BVM_CreateFloatingNumber`): `(rid, amount, [r,g,b])`. The App drains these
+    /// into the floater system with the server's explicit colour — these are the
+    /// script-driven popups (heals, custom text) the client can't compute itself,
+    /// distinct from the locally-derived combat-damage floaters. Mirrors Blitz
+    /// `CreateFloatingNumber` (ClientNet.bb:213).
+    pub pending_floaters: Vec<(u16, i32, [u8; 3])>,
     /// Items dropped in the world (P_InventoryUpdate "D"), keyed by the
     /// server's DroppedItem handle. Removed on pickup ("P"/"R").
     pub dropped_items: HashMap<u32, DroppedItem>,
@@ -696,6 +703,7 @@ impl World {
             pk::PARTY_UPDATE => self.on_party_update(&m.data),
             pk::JUMP => self.on_jump(&m.data),
             pk::FETCH_ACTORS => self.on_fetch_actors(&m.data),
+            pk::FLOATING_NUMBER => self.on_floating_number(&m.data),
             _ => {}
         }
     }
@@ -1608,6 +1616,21 @@ impl World {
         }
     }
 
+    /// `P_FloatingNumber` (ClientNet.bb:205): RuntimeID(u16) · Amount(i32) ·
+    /// R(u8) · G(u8) · B(u8). A script-driven floating number (heal popups,
+    /// custom text) broadcast to everyone in the zone. We queue the intent; the
+    /// App anchors it over the actor and animates it with the floater system.
+    /// Soft-fail: a short/garbled packet queues nothing (no panic, no crash).
+    fn on_floating_number(&mut self, d: &[u8]) {
+        let mut r = MsgReader::new(d);
+        let (Some(rid), Some(amount), Some(cr), Some(cg), Some(cb)) =
+            (r.u16(), r.i32(), r.u8(), r.u8(), r.u8())
+        else {
+            return;
+        };
+        self.pending_floaters.push((rid, amount, [cr, cg, cb]));
+    }
+
     /// Tick down remote jump-anim timers, dropping any that have elapsed.
     pub fn tick_jumps(&mut self, dt: f32) {
         if self.jumps.is_empty() {
@@ -2166,6 +2189,25 @@ mod tests {
         // 'Y' raw 6 (damage 5, a landed blow): NOW I cry out (Hit).
         w.apply(&msg(pk::ATTACK_ACTOR, pkt(|p| { p.u8(b'Y').u16(8).u16(6).u8(0); })));
         assert_eq!(w.pending_self_sounds, vec![SPEECH_HIT1], "I cry out only on a connecting blow");
+    }
+
+    // P_FloatingNumber (script-driven, BVM_CreateFloatingNumber): RuntimeID u16,
+    // signed Amount i32, then R/G/B u8. Queues a (rid, amount, [r,g,b]) intent for
+    // the App to anchor + animate. A short/garbled packet queues nothing.
+    #[test]
+    fn floating_number_queues_intent() {
+        let mut w = World::default();
+        // A green heal "+250" over actor 7.
+        w.apply(&msg(pk::FLOATING_NUMBER, pkt(|p| { p.u16(7).i32(250).u8(0).u8(255).u8(0); })));
+        assert_eq!(w.pending_floaters, vec![(7, 250, [0, 255, 0])]);
+
+        // A negative amount (signed i32 round-trips) in red over actor 12.
+        w.apply(&msg(pk::FLOATING_NUMBER, pkt(|p| { p.u16(12).i32(-40).u8(255).u8(0).u8(0); })));
+        assert_eq!(w.pending_floaters.last(), Some(&(12, -40, [255, 0, 0])));
+
+        // A truncated packet (missing the colour bytes) queues nothing more.
+        w.apply(&msg(pk::FLOATING_NUMBER, pkt(|p| { p.u16(9).i32(5); })));
+        assert_eq!(w.pending_floaters.len(), 2, "truncated packet soft-fails");
     }
 
     // Looting a dropped item ('R') moves it into inventory AND queues a
