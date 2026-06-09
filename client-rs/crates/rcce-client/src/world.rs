@@ -348,6 +348,12 @@ pub struct World {
     /// template+gender, resolves via `ActorCatalog::speech_id`, and plays. Mirrors
     /// Blitz `PlayActorSound` on combat (ClientNet.bb:1094/1122/1166).
     pub pending_combat_sounds: Vec<(u16, u8)>,
+    /// `(item_id, amount)` of items the local player just picked up off the
+    /// ground (`P_InventoryUpdate "R"`). The App drains these, resolves the item
+    /// NAME (which lives in the AssetStore, not `World`) + the localized prefix,
+    /// and pushes a green "Picked up item: <name> (xN)" chat line — Blitz parity
+    /// (ClientNet.bb:1349/1351).
+    pub pending_pickup_toasts: Vec<(u16, u16)>,
     /// A pending mid-zone music switch (`P_Music`, AUD-1): the App applies it via
     /// `audio.set_music`, replacing the looping track. `None` when unchanged.
     pub pending_music: Option<u16>,
@@ -1142,6 +1148,9 @@ impl World {
                 let (Some(handle), Some(slot)) = (r.u32(), r.u8()) else { return };
                 if let Some(di) = self.dropped_items.remove(&handle) {
                     self.inv_add(slot, di.item_id, di.amount, di.health);
+                    // Queue the "Picked up item: <name> (xN)" toast (resolved +
+                    // localized App-side, since item names live in the catalog).
+                    self.pending_pickup_toasts.push((di.item_id, di.amount));
                 }
             }
             // Given an item: handle u32 + ItemID u16 + Amount u16. Place it in a
@@ -2089,6 +2098,35 @@ mod tests {
         w.apply(&msg(pk::ATTACK_ACTOR, pkt(|p| { p.u8(b'Y').u16(8).u16(6).u8(0); })));
         assert!(w.attack_anims.contains_key(&8));
         assert_eq!(w.combat_events.last().unwrap().damage, 5);
+    }
+
+    // Looting a dropped item ('R') moves it into inventory AND queues a
+    // (item_id, amount) pickup-toast intent for the App to resolve into the
+    // green "Picked up item: <name> (xN)" chat line — Blitz parity
+    // (ClientNet.bb:1349). An 'R' for an unknown handle queues nothing.
+    #[test]
+    fn pickup_queues_toast_intent() {
+        let mut w = World::default();
+        // 'D': a stack of 3 of item 77 drops in the world at handle 9 (header
+        // amount/x/y/z/handle, then the 83-byte ItemInstance: id u16 + 80 + health).
+        w.apply(&msg(pk::INVENTORY_UPDATE, pkt(|p| {
+            p.u8(b'D').u16(3).f32(1.0).f32(2.0).f32(3.0).u32(9);
+            p.u16(77);
+            for _ in 0..80 {
+                p.u8(0);
+            }
+            p.u8(100);
+        })));
+        assert!(w.dropped_items.contains_key(&9));
+
+        // 'R': I pick it up into backpack slot 14.
+        w.apply(&msg(pk::INVENTORY_UPDATE, pkt(|p| { p.u8(b'R').u32(9).u8(14); })));
+        assert!(!w.dropped_items.contains_key(&9), "removed from the world on pickup");
+        assert_eq!(w.pending_pickup_toasts, vec![(77, 3)], "queued (item_id, amount)");
+
+        // An 'R' for a handle that isn't in the world queues no toast.
+        w.apply(&msg(pk::INVENTORY_UPDATE, pkt(|p| { p.u8(b'R').u32(999).u8(0); })));
+        assert_eq!(w.pending_pickup_toasts.len(), 1, "no toast for an unknown handle");
     }
 
     #[test]
