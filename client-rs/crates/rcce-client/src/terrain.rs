@@ -71,6 +71,31 @@ impl HeightField {
         best
     }
 
+    /// Ground Y at `(x, z)` on the surface NEAREST `ref_y`, or `None` if no
+    /// ground triangle covers it. Actor seating uses this with the actor's
+    /// authoritative Y so a character standing under a building roof sits on the
+    /// FLOOR (near its server Y) instead of the roof — `height_at` returns the
+    /// highest surface, which is the roof when floor + roof stack at one (x, z).
+    /// With a single surface (open terrain) this equals `height_at`.
+    pub fn height_at_near(&self, x: f32, z: f32, ref_y: f32) -> Option<f32> {
+        if let Some(y) = self.flat {
+            return Some(y);
+        }
+        let key = ((x / self.cell).floor() as i32, (z / self.cell).floor() as i32);
+        let ids = self.grid.get(&key)?;
+        let mut best: Option<f32> = None;
+        for &i in ids {
+            if let Some(y) = tri_height(&self.tris[i as usize], x, z) {
+                best = match best {
+                    // Keep the current best only if it's at least as close to ref_y.
+                    Some(b) if (b - ref_y).abs() <= (y - ref_y).abs() => Some(b),
+                    _ => Some(y),
+                };
+            }
+        }
+        best
+    }
+
     /// Lowest ground Y at `(x, z)`, or `None` if no ground triangle covers it.
     /// The set's rug is its lowest horizontal surface under the character (the
     /// ceiling vault / tables sit above it), so the menu seats the character on
@@ -130,6 +155,34 @@ mod tests {
         assert_eq!(hf.height_at(5.0, 5.0), Some(5.0));
         assert_eq!(hf.height_at(1.0, 9.0), Some(5.0));
         assert_eq!(hf.height_at(-1.0, 5.0), None); // off the quad
+    }
+
+    #[test]
+    fn height_at_near_picks_floor_under_roof() {
+        // A floor quad at y=0 and a roof quad at y=12, both over [0,10]×[0,10]
+        // (a building the player can walk under).
+        let quad = |y: f32| {
+            let v = |x: f32, z: f32| Vec3::new(x, y, z);
+            vec![
+                [v(0.0, 0.0), v(10.0, 0.0), v(10.0, 10.0)],
+                [v(0.0, 0.0), v(10.0, 10.0), v(0.0, 10.0)],
+            ]
+        };
+        let mut tris = quad(0.0);
+        tris.extend(quad(12.0));
+        let hf = HeightField::build(tris, 8.0);
+
+        // `height_at` returns the highest surface — the roof (the bug).
+        assert_eq!(hf.height_at(5.0, 5.0), Some(12.0));
+        // Seated near the floor's authoritative Y → picks the FLOOR.
+        assert_eq!(hf.height_at_near(5.0, 5.0, 1.0), Some(0.0));
+        // Standing on the roof (ref_y high) → picks the roof.
+        assert_eq!(hf.height_at_near(5.0, 5.0, 11.0), Some(12.0));
+        // Open terrain (single surface) → identical to height_at regardless of ref.
+        let flat = HeightField::build(quad(3.0), 8.0);
+        assert_eq!(flat.height_at_near(5.0, 5.0, -50.0), flat.height_at(5.0, 5.0));
+        // Off the quad → None.
+        assert_eq!(hf.height_at_near(-1.0, 5.0, 0.0), None);
     }
 
     #[test]
