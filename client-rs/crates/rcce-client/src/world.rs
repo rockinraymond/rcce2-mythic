@@ -164,6 +164,10 @@ pub struct PendingEmitter {
     /// Emitter config name (indexes `Data/Emitter Configs/<name>.rpc`). Validated
     /// against path traversal at the receive site.
     pub name: String,
+    /// Actor RuntimeID this emitter is attached to (it follows the actor each
+    /// frame, and `pos` is an actor-local offset). `None` when the server sent
+    /// RuntimeID 0 (world-anchored — `pos` is then an absolute world position).
+    pub attach: Option<u16>,
 }
 
 /// A server-commanded animation override (`P_AnimateActor`). Blitz `Animate`
@@ -1900,7 +1904,7 @@ impl World {
     /// is a deferred follow-up.)
     fn on_create_emitter(&mut self, d: &[u8]) {
         let mut r = MsgReader::new(d);
-        let (Some(tex_id), Some(lifetime_ms), Some(_rid)) = (r.u16(), r.u32(), r.u16()) else {
+        let (Some(tex_id), Some(lifetime_ms), Some(rid)) = (r.u16(), r.u32(), r.u16()) else {
             return;
         };
         let (Some(x), Some(y), Some(z)) = (r.f32(), r.f32(), r.f32()) else {
@@ -1913,11 +1917,16 @@ impl World {
         if name.bytes().any(|b| !(32..=126).contains(&b) || b == b':' || b == b'/' || b == b'\\') {
             return;
         }
+        // RuntimeID 0 = world-anchored (BVM_CREATEEMITTER sends 0 when no actor is
+        // given, ScriptingCommands.bb:1730); >0 = attach to that actor, with `pos`
+        // an actor-local offset (ClientNet.bb:816 EntityParent + local PositionEntity).
+        let attach = (rid != 0).then_some(rid);
         self.pending_emitters.push(PendingEmitter {
             tex_id,
             lifetime_ms,
             pos: [x, y, z],
             name,
+            attach,
         });
     }
 
@@ -3223,12 +3232,16 @@ mod tests {
     #[test]
     fn create_emitter_queues_and_validates() {
         let mut w = World::default();
-        // Valid: tex 5, 2000ms, rid 0, pos (10,1,20), config "fire".
+        // Valid, world-anchored: tex 5, 2000ms, rid 0 → attach None, pos (10,1,20).
         w.apply(&msg(pk::CREATE_EMITTER, pkt(|p| { p.u16(5).u32(2000).u16(0).f32(10.0).f32(1.0).f32(20.0).raw(b"fire"); })));
         assert_eq!(
             w.pending_emitters,
-            vec![PendingEmitter { tex_id: 5, lifetime_ms: 2000, pos: [10.0, 1.0, 20.0], name: "fire".into() }]
+            vec![PendingEmitter { tex_id: 5, lifetime_ms: 2000, pos: [10.0, 1.0, 20.0], name: "fire".into(), attach: None }]
         );
+
+        // Valid, actor-attached: rid 42 → attach Some(42), pos is the local offset.
+        w.apply(&msg(pk::CREATE_EMITTER, pkt(|p| { p.u16(5).u32(2000).u16(42).f32(0.0).f32(50.0).f32(0.0).raw(b"aura"); })));
+        assert_eq!(w.pending_emitters[1].attach, Some(42), "rid>0 attaches to the actor");
 
         // Path traversal (".."), a slash, an empty name, and a truncated packet
         // all queue nothing.
@@ -3236,7 +3249,7 @@ mod tests {
         w.apply(&msg(pk::CREATE_EMITTER, pkt(|p| { p.u16(5).u32(2000).u16(0).f32(0.0).f32(0.0).f32(0.0).raw(b"a/b"); })));
         w.apply(&msg(pk::CREATE_EMITTER, pkt(|p| { p.u16(5).u32(2000).u16(0).f32(0.0).f32(0.0).f32(0.0); })));
         w.apply(&msg(pk::CREATE_EMITTER, pkt(|p| { p.u16(5).u32(2000).u16(0); })));
-        assert_eq!(w.pending_emitters.len(), 1, "only the valid emitter queued");
+        assert_eq!(w.pending_emitters.len(), 2, "only the two valid emitters queued");
     }
 
     #[test]
