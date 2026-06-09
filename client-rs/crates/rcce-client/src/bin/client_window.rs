@@ -3853,6 +3853,30 @@ impl App {
                     .collect();
                 world.known_spells.sort_by_key(|a| a.name.to_lowercase());
             }
+            // Seed the quest log from the login sheet's "Q" blocks. A returning
+            // player's existing quests arrive in the P_FetchCharacter stream at
+            // character-select, NOT as a live P_QuestLog "N" push, so without this
+            // the L panel showed "No quests available." until/unless the server
+            // happened to send a live update. Mirrors on_quest_log's "N" add:
+            // parse the raw status blob (RGB + completed marker + text) and dedup
+            // by name (case-insensitive), matching the live handler in world.rs.
+            if world.quests.is_empty() {
+                for (name, blob) in &s.quests {
+                    if name.is_empty()
+                        || world.quests.iter().any(|q| q.name.eq_ignore_ascii_case(name))
+                    {
+                        continue;
+                    }
+                    let (status, color, completed) =
+                        rcce_client::world::parse_quest_status(blob);
+                    world.quests.push(rcce_client::world::Quest {
+                        name: name.clone(),
+                        status,
+                        color,
+                        completed,
+                    });
+                }
+            }
         }
         // Load the persisted hotbar (P_ActionBarUpdate round-trip): resolve each
         // stored spell NAME back to its id via the sheet / known spells; item slots

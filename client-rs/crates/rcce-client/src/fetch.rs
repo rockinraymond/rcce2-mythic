@@ -12,7 +12,10 @@
 //!   (sentinel 99) the slot is empty. May span multiple packets.
 //! - `"S"` — known spells: repeated level u16, id u16, thumbTex u16, recharge
 //!   u16, name str16, description str16, memorised u8.
-//! - `"Q"` — quest log (ignored here).
+//! - `"Q"` — quest log: repeated `nameLen u8 · name · statusLen u16 ·
+//!   statusBlob` (the status blob is raw RGB + optional completed marker +
+//!   text, parsed by `world::parse_quest_status` at seed time — not a UTF-8
+//!   string, so it is read as raw bytes).
 //! - `"F"` — terminator: questCount u16, spellCount u16.
 //!
 //! All multi-byte fields are little-endian (matches `MsgReader` and the live
@@ -65,6 +68,11 @@ pub struct CharacterSheet {
     pub attributes: Vec<(i16, i16)>,
     pub inventory: Vec<InvItem>,
     pub spells: Vec<SpellInfo>,
+    /// Quest log entries from the `"Q"` blocks: `(name, raw status blob)`. The
+    /// blob is parsed into a coloured status line + completed flag at seed time
+    /// via `world::parse_quest_status` (it carries non-text RGB bytes, so it is
+    /// kept raw here rather than lossily decoded to a `String`).
+    pub quests: Vec<(String, Vec<u8>)>,
     /// Set once the `"F"` terminator block is seen.
     pub done: bool,
 }
@@ -78,8 +86,9 @@ impl CharacterSheet {
             Some(b'C') if data.get(1) == Some(&b'1') => self.parse_stats(&data[2..]),
             Some(b'C') if data.get(1) == Some(&b'3') => self.parse_inventory(&data[2..]),
             Some(b'S') => self.parse_spells(&data[1..]),
+            Some(b'Q') => self.parse_quests(&data[1..]),
             Some(b'F') => self.done = true,
-            _ => {} // "Q" quests + anything else: ignored
+            _ => {} // anything else: ignored
         }
     }
 
@@ -138,6 +147,25 @@ impl CharacterSheet {
                 description,
                 memorised: mem != 0,
             });
+        }
+    }
+
+    /// Parse a `"Q"` quest-log block: repeated `nameLen u8 · name · statusLen
+    /// u16 · statusBlob`. The status blob is kept raw (it holds RGB bytes the
+    /// `world::parse_quest_status` reader needs); empty-name entries are
+    /// skipped. Bounded at 500 (the server caps the log at 500 — ServerNet.bb).
+    /// Mirrors the live `on_quest_log` "N" wire shape (world.rs).
+    fn parse_quests(&mut self, body: &[u8]) {
+        let mut r = MsgReader::new(body);
+        while let Some(name) = r.str8() {
+            let Some(n) = r.u16() else { break };
+            let Some(blob) = r.bytes(n as usize) else { break };
+            if self.quests.len() >= 500 {
+                break;
+            }
+            if !name.is_empty() {
+                self.quests.push((name, blob.to_vec()));
+            }
         }
     }
 }
@@ -223,6 +251,88 @@ mod tests {
         assert_eq!(s.spells[1].name, "Heal");
         assert_eq!(s.spells[1].description, "");
         assert!(!s.spells[1].memorised);
+    }
+
+    /// Build one Q-block entry: `nameLen u8 · name · statusLen u16 · blob`.
+    fn quest_entry(w: &mut MsgWriter, name: &str, blob: &[u8]) {
+        w.u8(name.len() as u8).raw(name.as_bytes());
+        w.u16(blob.len() as u16).raw(blob);
+    }
+
+    #[test]
+    fn parse_q_quests() {
+        // Two quests: an in-progress one and a completed one. The status blob is
+        // RGB(3) + optional 254 completed-marker + text, exactly as the server
+        // packs it and as world::parse_quest_status decodes it.
+        let mut w = MsgWriter::new();
+        w.raw(b"Q");
+        quest_entry(&mut w, "Find the Sword", &{
+            let mut b = vec![255u8, 255, 64];
+            b.extend_from_slice(b"Search the ruins.");
+            b
+        });
+        quest_entry(&mut w, "Greet the Mayor", &{
+            let mut b = vec![128u8, 255, 128, 254];
+            b.extend_from_slice(b"Done.");
+            b
+        });
+        let mut s = CharacterSheet::default();
+        s.apply_packet(w.as_slice());
+        assert_eq!(s.quests.len(), 2);
+        assert_eq!(s.quests[0].0, "Find the Sword");
+        assert_eq!(s.quests[1].0, "Greet the Mayor");
+        // The raw blob round-trips through world::parse_quest_status correctly.
+        let (text0, color0, done0) = crate::world::parse_quest_status(&s.quests[0].1);
+        assert_eq!(text0, "Search the ruins.");
+        assert_eq!(color0, [1.0, 1.0, 64.0 / 255.0, 1.0]);
+        assert!(!done0);
+        let (text1, _c1, done1) = crate::world::parse_quest_status(&s.quests[1].1);
+        assert_eq!(text1, "Done.");
+        assert!(done1);
+    }
+
+    #[test]
+    fn parse_q_multi_packet_accumulates() {
+        let mut s = CharacterSheet::default();
+        let mut a = MsgWriter::new();
+        a.raw(b"Q");
+        quest_entry(&mut a, "Quest A", b"\x80\x80\x80status a");
+        s.apply_packet(a.as_slice());
+        let mut b = MsgWriter::new();
+        b.raw(b"Q");
+        quest_entry(&mut b, "Quest B", b"\x80\x80\x80status b");
+        s.apply_packet(b.as_slice());
+        assert_eq!(s.quests.len(), 2);
+    }
+
+    #[test]
+    fn parse_q_truncated_does_not_panic_and_keeps_prefix() {
+        // First entry complete; second entry's status is truncated (claims 50
+        // bytes, supplies 3). The parser keeps the good prefix and stops without
+        // panicking — the bounded-walk soft-fail discipline.
+        let mut w = MsgWriter::new();
+        w.raw(b"Q");
+        quest_entry(&mut w, "Good", b"\xff\xff\xfftext");
+        w.u8("Bad".len() as u8).raw(b"Bad");
+        w.u16(50).raw(b"abc"); // statusLen says 50, only 3 present
+        let mut s = CharacterSheet::default();
+        s.apply_packet(w.as_slice());
+        assert_eq!(s.quests.len(), 1);
+        assert_eq!(s.quests[0].0, "Good");
+    }
+
+    #[test]
+    fn parse_q_empty_name_skipped() {
+        // A zero-length name entry is consumed (cursor stays aligned) but not
+        // stored, matching on_quest_log's `!name.is_empty()` guard.
+        let mut w = MsgWriter::new();
+        w.raw(b"Q");
+        quest_entry(&mut w, "", b"\xff\xff\xffignored");
+        quest_entry(&mut w, "Real", b"\xff\xff\xffkept");
+        let mut s = CharacterSheet::default();
+        s.apply_packet(w.as_slice());
+        assert_eq!(s.quests.len(), 1);
+        assert_eq!(s.quests[0].0, "Real");
     }
 
     #[test]
