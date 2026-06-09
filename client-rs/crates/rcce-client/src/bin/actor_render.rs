@@ -158,6 +158,7 @@ fn main() {
             rot: r,
             scale: s,
             color: [1.0, 1.0, 1.0],
+            cast_shadow: true,
         })
         .collect();
 

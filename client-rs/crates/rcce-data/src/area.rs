@@ -25,6 +25,10 @@ pub struct SceneryPlacement {
     pub scale: [f32; 3],
     /// Optional retexture id (texture catalog), 65535/none if unused.
     pub texture_id: u16,
+    /// Authored "casts a shadow" flag (`Areas.dat`). When false the renderer
+    /// should skip this scenery in the shadow-caster pass — respecting the
+    /// content author's intent (e.g. ground foliage that shouldn't cast).
+    pub cast_shadow: bool,
 }
 
 /// Zone environment/atmosphere from the area header — what the renderer needs
@@ -203,7 +207,7 @@ impl AreaScenery {
             let _collides = r.read_byte()?;
             let _lightmap = r.read_string(260)?;
             let _rcte = r.read_string(260)?;
-            let _cast_shadow = r.read_byte()?;
+            let cast_shadow = r.read_byte()? != 0;
             let _receive_shadow = r.read_byte()?;
             let _render_range = r.read_byte()?;
             sceneries.push(SceneryPlacement {
@@ -212,6 +216,7 @@ impl AreaScenery {
                 rot,
                 scale,
                 texture_id,
+                cast_shadow,
             });
         }
 
@@ -321,6 +326,32 @@ impl AreaScenery {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // One synthetic scenery record exercises the per-object cast_shadow flag
+    // parse (used by the renderer to skip no-cast scenery in the shadow pass).
+    #[test]
+    fn scenery_cast_shadow_flag() {
+        let mut d = vec![0u8; SCENERY_COUNT_OFFSET]; // zeroed 41-byte header
+        d.extend_from_slice(&1u16.to_le_bytes()); // scenery count = 1
+        d.extend_from_slice(&7u16.to_le_bytes()); // mesh_id
+        for _ in 0..9 {
+            d.extend_from_slice(&0.0f32.to_le_bytes()); // pos + rot + scale
+        }
+        d.push(0); // anim_mode
+        d.push(0); // scenery_id
+        d.extend_from_slice(&65535u16.to_le_bytes()); // texture_id (none)
+        d.push(0); // catch_rain
+        d.push(0); // collides
+        d.extend_from_slice(&0i32.to_le_bytes()); // lightmap (empty string)
+        d.extend_from_slice(&0i32.to_le_bytes()); // rcte (empty string)
+        d.push(0); // cast_shadow = false  ← the field under test
+        d.push(1); // receive_shadow
+        d.push(0); // render_range
+        let a = AreaScenery::parse(&d).unwrap();
+        assert_eq!(a.sceneries.len(), 1);
+        assert_eq!(a.sceneries[0].mesh_id, 7);
+        assert!(!a.sceneries[0].cast_shadow, "cast_shadow byte 0 → false");
+    }
 
     fn approx(a: [f32; 3], b: [f32; 3]) -> bool {
         (0..3).all(|i| (a[i] - b[i]).abs() < 1e-4)

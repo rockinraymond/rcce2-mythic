@@ -30,6 +30,11 @@ pub struct SceneInstance<'a> {
     /// Fallback/tint colour (multiplied with the texture; shows through where a
     /// mesh has no texture).
     pub color: [f32; 3],
+    /// Whether this instance casts a shadow (its drawables are drawn in the
+    /// shadow-caster pass). Terrain/actors pass `true`; scenery passes the area
+    /// file's authored per-object `cast_shadow` flag, so ground foliage flagged
+    /// no-cast doesn't litter the ground with shadows.
+    pub cast_shadow: bool,
 }
 
 /// Render the scene to a PNG with distance fog. `eye`/`target` define the
