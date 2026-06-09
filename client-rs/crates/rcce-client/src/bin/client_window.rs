@@ -1658,6 +1658,18 @@ fn damage_color(dtype: u8, alpha: f32) -> [f32; 4] {
     [r, g, b, alpha]
 }
 
+/// Nameplate colour for a non-player actor by its template hostility, so a player
+/// can read at a glance whether an NPC will attack — Blitz colours the nametag the
+/// same way (Actors3D.bb:546-559): non-combatant green, passive/defensive gold,
+/// always-attacks red.
+fn aggression_color(aggressiveness: u8) -> [f32; 4] {
+    match aggressiveness {
+        3 => [0.20, 0.85, 0.25, 1.0], // non-combatant — green
+        0 | 1 => [1.0, 0.86, 0.45, 1.0], // passive / defensive — gold
+        _ => [0.90, 0.30, 0.30, 1.0], // always attacks (2) — red
+    }
+}
+
 /// A GPU-skinned actor body: the source model (with bones), its textures, the
 /// animation frame, the column-major instance transform, and tint. The body's
 /// static mesh is uploaded once by [`WorldView::set_skinned`]; only the pose
@@ -7720,7 +7732,8 @@ impl App {
                         } else if a.is_player {
                             [0.4, 0.7, 1.0, 1.0]
                         } else {
-                            [0.9, 0.3, 0.3, 1.0]
+                            // NPC: colour by hostility (Blitz Actors3D.bb:546).
+                            aggression_color(store.actor_aggressiveness(a.template_id))
                         };
                         overlay.bar(px - 24.0, py - 14.0, 48.0, 5.0, frac, col);
                         if is_target {
@@ -9340,6 +9353,19 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // NPC nameplate hostility colour: non-combatant (3) green, passive/defensive
+    // (0/1) gold, always-attacks (2, and any other value) red — mirrors Blitz's
+    // nametag colouring (Actors3D.bb:546-559).
+    #[test]
+    fn aggression_color_maps_hostility() {
+        assert_eq!(aggression_color(3), [0.20, 0.85, 0.25, 1.0]); // non-combatant
+        assert_eq!(aggression_color(0), aggression_color(1)); // passive == defensive
+        assert_eq!(aggression_color(0)[0], 1.0); // gold (high red+green)
+        let red = aggression_color(2);
+        assert!(red[0] > red[1] && red[0] > red[2], "always-attacks is red-dominant");
+        assert_eq!(aggression_color(99), red, "unknown aggressiveness defaults to red");
+    }
 
     // Non-blocking login moves the EnetTransport to a worker thread and back
     // through an mpsc channel, which requires `EnetTransport: Send` (a hand-

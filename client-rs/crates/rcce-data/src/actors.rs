@@ -45,6 +45,11 @@ pub struct ActorTemplate {
     pub genders: u8,
     /// Whether this template is a playable race (offered in character create).
     pub playable: bool,
+    /// AI hostility (`Actors.dat`): 0 = passive, 1 = defensive, 2 = always
+    /// attacks (the proactive hunters), 3 = non-combatant. Drives the nameplate
+    /// colour so a player can read an NPC's hostility at a glance (Blitz
+    /// Actors3D.bb:546-559).
+    pub aggressiveness: u8,
 }
 
 #[derive(Debug, Default, Clone)]
@@ -154,7 +159,7 @@ fn parse_record(r: &mut BlitzReader) -> Result<ActorTemplate, ReadError> {
     let genders = r.read_byte()?;
     let playable = r.read_byte()? != 0;
     let _rideable = r.read_byte()?;
-    let _aggressiveness = r.read_byte()?;
+    let aggressiveness = r.read_byte()?;
     let _aggressive_range = r.read_int()?;
     let _trade_mode = r.read_byte()?;
     let _environment = r.read_byte()?;
@@ -183,6 +188,7 @@ fn parse_record(r: &mut BlitzReader) -> Result<ActorTemplate, ReadError> {
         female_speech,
         genders,
         playable,
+        aggressiveness,
     })
 }
 

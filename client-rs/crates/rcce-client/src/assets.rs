@@ -506,6 +506,13 @@ impl AssetStore {
     /// (`Actors3D.bb:45`): `0.05 × LoadedMeshScales[mesh] × Actor.Scale`.
     /// Positions stay in raw world units. Falls back to `0.05` if a stored
     /// scale is non-positive.
+    /// The template's AI hostility (`Actors.dat` Aggressiveness): 0 passive,
+    /// 1 defensive, 2 always-attacks, 3 non-combatant. Defaults to 0 (passive)
+    /// for an unknown template. Drives the nameplate hostility colour.
+    pub fn actor_aggressiveness(&self, template_id: u16) -> u8 {
+        self.actors.templates.get(&template_id).map(|t| t.aggressiveness).unwrap_or(0)
+    }
+
     pub fn actor_render_scale(&self, template_id: u16, gender: u8) -> Option<f32> {
         let mesh_id = self.actors.mesh_for(template_id, gender)?;
         let mesh = self.meshes.get(mesh_id)?;
