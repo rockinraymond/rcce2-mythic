@@ -222,6 +222,17 @@ impl AssetStore {
         self.other.nametags_hidden()
     }
 
+    /// Whether the camera starts in first-person (`Other.dat` ViewMode == 1).
+    pub fn default_first_person(&self) -> bool {
+        self.other.default_first_person()
+    }
+
+    /// Whether the first/third-person toggle key is allowed (`Other.dat` ViewMode
+    /// not locked to 1/3). See [`rcce_data::OtherConfig::view_toggle_allowed`].
+    pub fn view_toggle_allowed(&self) -> bool {
+        self.other.view_toggle_allowed()
+    }
+
     /// The project's name for a weapon damage-type index (`Damage.dat`), e.g.
     /// `3 -> "Fire"`. `None` when the table is absent or the slot is unnamed/out
     /// of range — the tooltip then omits the "(type)" suffix.
