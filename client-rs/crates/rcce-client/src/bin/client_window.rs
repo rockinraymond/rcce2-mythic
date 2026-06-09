@@ -2140,6 +2140,10 @@ struct ZoneEmitter {
     /// (the packet's X/Y/Z, which Blitz applies as a parent-local PositionEntity).
     /// Only meaningful when `attach` is `Some`; ignored for world-anchored emitters.
     offset: [f32; 3],
+    /// Projectile id this emitter follows each frame (the projectile's trailing
+    /// effect, e.g. a fireball's flame). `None` for zone/actor emitters. When the
+    /// projectile is gone the emitter is stopped (tapers) and reaped.
+    proj_id: Option<u32>,
 }
 
 type ZoneStatic = (
@@ -2835,6 +2839,7 @@ fn load_zone_static(store: &mut AssetStore, view: &mut WorldView, gfx: &Gfx, dat
             life: None,
             attach: None,
             offset: [0.0, 0.0, 0.0],
+            proj_id: None,
         });
     }
     if !emitters.is_empty() {
@@ -5264,6 +5269,9 @@ impl App {
                 tz: pos[2] + dir[2] * 100.0,
                 homing: false,
                 speed: 40.0,
+                id: 0,
+                emitter: String::new(),
+                emitter_tex: 0,
             };
             let mut batches = particle_batches(&mut self.emitters, eye, target, 1.0 / 60.0);
             let mut verts = Vec::new();
@@ -6344,6 +6352,7 @@ impl App {
                         life: Some(req.lifetime_ms as f32),
                         attach: req.attach,
                         offset: req.pos,
+                        proj_id: None,
                     });
                 }
             }
@@ -7211,6 +7220,11 @@ impl App {
                             tz: sz + fwd[1] * 200.0,
                             homing: false,
                             speed: 4.0,
+                            id: 1,
+                            // Trail the Fireball emitter so the effect is capturable
+                            // (RCCE_PROJTEST verification of the projectile-emitter path).
+                            emitter: "Fireball".to_string(),
+                            emitter_tex: 0,
                         });
                         let (sw, sh) = (gfx.config.width as f32, gfx.config.height as f32);
                         match rcce_render::project(&vp, [sx, sy_, sz], sw, sh) {
@@ -7774,6 +7788,43 @@ impl App {
                 }
             }
         }
+        // Projectile trail emitters: each projectile with a configured emitter
+        // (Emitter2$ from P_Projectile, e.g. "Fireball"/"Snow") gets one following
+        // particle emitter so it trails its distinctive effect — the dynamic-emitter
+        // system applied to projectiles. The plain glow still draws underneath.
+        if let Some(net) = self.net.as_ref() {
+            // Follow live projectiles; stop the emitter when its projectile is gone.
+            for ze in self.emitters.iter_mut() {
+                if let Some(pid) = ze.proj_id {
+                    match net.world.projectiles.iter().find(|p| p.id == pid) {
+                        Some(p) => ze.emitter.set_pos([p.x, p.y, p.z]),
+                        None => ze.emitter.stop(),
+                    }
+                }
+            }
+            // Spawn one emitter for each new projectile that has a config name.
+            for p in &net.world.projectiles {
+                if p.emitter.is_empty() || self.emitters.iter().any(|ze| ze.proj_id == Some(p.id)) {
+                    continue;
+                }
+                let Some(config) = store.emitter_config(&p.emitter) else { continue };
+                let tex = store
+                    .texture_path(p.emitter_tex)
+                    .and_then(|pp| rcce_data::texture::load(&pp));
+                let seed = 0x9E3779B97F4A7C15u64 ^ (p.id as u64);
+                let emitter = rcce_client::particles::Emitter::new(
+                    config, p.emitter_tex, [p.x, p.y, p.z], [0.0, 0.0, 0.0], seed,
+                );
+                self.emitters.push(ZoneEmitter {
+                    emitter,
+                    tex,
+                    life: None,
+                    attach: None,
+                    offset: [0.0; 3],
+                    proj_id: Some(p.id),
+                });
+            }
+        }
         let mut pbatches = particle_batches(&mut self.emitters, eye, cam_target, pdt);
         // Projectiles: a depth-correct glowing orb + motion trail, appended as an
         // additive particle batch (so terrain/scenery occludes them) — replaces the
@@ -7789,9 +7840,11 @@ impl App {
             }
         }
         view.set_particles(&gfx.device, &gfx.queue, &pbatches);
-        // Reap finite emitters that have stopped and whose particles have all died
-        // (permanent zone emitters, life == None, are kept). Disjoint field borrow.
-        self.emitters.retain(|ze| ze.life.is_none() || !ze.emitter.is_done());
+        // Reap finite (P_CreateEmitter) + projectile-trail emitters that have stopped
+        // and whose particles have all died. Permanent zone emitters (life == None and
+        // not projectile-bound) are kept. Disjoint field borrow.
+        self.emitters
+            .retain(|ze| (ze.life.is_none() && ze.proj_id.is_none()) || !ze.emitter.is_done());
         view.render(
             &gfx.device,
             &gfx.queue,
@@ -9781,6 +9834,9 @@ mod tests {
             tz: 100.0, // flying toward +z
             homing: false,
             speed: 40.0,
+            id: 0,
+            emitter: String::new(),
+            emitter_tex: 0,
         };
         let mut out = Vec::new();
         projectile_billboards(std::slice::from_ref(&pr), [0.0, 10.0, -30.0], [0.0, 10.0, 0.0], &mut out);
