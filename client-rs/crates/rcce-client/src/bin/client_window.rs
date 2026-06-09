@@ -7795,6 +7795,7 @@ impl App {
                         net.world.me_inventory.insert(15, InvItem { slot: 15, item_id: 2, amount: 3, health: 100 });
                     }
                     self.show_inventory = true;
+                    self.last_inv_slot = Some(14); // select a slot so the highlight is capturable
                     // Stage a buy (offer 1) + a sell (slot 14) so the basket /
                     // net-gold / Confirm button are capturable.
                     self.pending_buys = vec![1];
@@ -9164,9 +9165,22 @@ impl App {
                             };
                             overlay.rect(bx, bgy, bw, bh, bg);
                         }
+                        // Selection highlight (SEL): a bright border on the slot the
+                        // player last clicked. The user reported that clicking an
+                        // inventory item gave no visual feedback before the Drop/Eat
+                        // buttons act on it. Drawn under the icon (icons are inset).
+                        if self.last_inv_slot == Some(i as u8) {
+                            let t = (bw.min(bh) * 0.08).clamp(1.5, 3.0);
+                            let hl = [1.0, 0.88, 0.35, 0.95];
+                            overlay.rect(bx, bgy, bw, t, hl); // top
+                            overlay.rect(bx, bgy + bh - t, bw, t, hl); // bottom
+                            overlay.rect(bx, bgy, t, bh, hl); // left
+                            overlay.rect(bx + bw - t, bgy, t, bh, hl); // right
+                        }
                         // Empty equipment slots show their Blitz placeholder ICON
                         // (Hat/Chest/Ring/…), dimmed, so you can see what goes where —
-                        // like Blitz. Slot 0 ("Weapon") has no icon → name fallback.
+                        // like Blitz. Each slot 0..13 has a placeholder (slot 0 =
+                        // Weapon.bmp); occupied slots draw the item icon below.
                         if equip && !occupied {
                             let name = rcce_data::equip_slot_name(i as u8);
                             let key = name.map(|n| format!("gui:slot:{n}"));
