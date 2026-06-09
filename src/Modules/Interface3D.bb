@@ -1757,6 +1757,7 @@ Function UpdateInterface()
 
 	If InventoryVisible = True
 		GY_UpdateLabel(LInventoryMass,  "Carried Weight: " + (InventoryMass(Me\Inventory) - Me\Attributes\Value[FindAttribute("Carry Weight Mod")]))
+		GY_UpdateLabel(LInventoryMovement,  "Movement Speed: " + (Me\Attributes\Value[FindAttribute("Movement")]))
 	EndIf
 
 
@@ -1770,8 +1771,10 @@ Function UpdateInterface()
 
 		HPAtt = FindAttribute("Health")
 		MPAtt = FindAttribute("Mana")
+		SPAtt = FindAttribute("Spirit")
 		GY_UpdateLabel(LHealth, "Health: " + Str(Me\Attributes\Value[HPAtt]) + "/" + Str(Me\Attributes\Maximum[HPAtt]))
 		GY_UpdateLabel(LMana, "Mana: " + Str(Me\Attributes\Value[MPAtt]) + "/" + Str(Me\Attributes\Maximum[MPAtt]))
+		GY_UpdateLabel(LSpirit, "Spirit: " + Str(Me\Attributes\Value[SPAtt]) + "/" + Str(Me\Attributes\Maximum[SPAtt]))
 
 
 		ArmorBnsStr$ = ""
@@ -3168,6 +3171,7 @@ EndIf
 				GY_GadgetAlpha(WInventory, 1.0, True);0.75
 				GY_UpdateLabel(LInventoryGold, Money$(Me\Gold))
 				GY_UpdateLabel(LInventoryMass, "Carried Weight: " + (InventoryMass(Me\Inventory) - Me\Attributes\Value[FindAttribute("Carry Weight Mod")]))
+				GY_UpdateLabel(LInventoryMovement, "Movement Speed: " + (Me\Attributes\Value[FindAttribute("Movement")]))
 				GY_UpdateLabel(LInventoryLightLoad, "Light Load: " + GetActorLightLoad(Me))
 				GY_UpdateLabel(LInventoryHeavyLoad, "Heavy Load: " + GetActorHeavyLoad(Me))
 				; GY_LockGadget(BInventoryDrop)
@@ -4266,9 +4270,10 @@ Function CreateInterface()
 	LReputation = GY_CreateLabel(WCharStats, 0.03, 0.13, LanguageString$(LS_Reputation) + " 00000", 255, 255, 255)
 
 	;STATS
-	GY_CreateLabel(WCharStats, 0.03, 0.2, "STATS", 255, 255, 255)
-	LHealth = GY_CreateLabel(WCharStats, 0.03, 0.225, "Health:" + " 00000 / 00000", 255, 50, 50)
-	LMana = GY_CreateLabel(WCharStats, 0.03, 0.25, "Mana:" + " 00000 / 00000", 75, 75, 255)
+	GY_CreateLabel(WCharStats, 0.03, 0.175, "STATS", 255, 255, 255)
+	LHealth = GY_CreateLabel(WCharStats, 0.03, 0.2, "Health:" + " 00000 / 00000", 255, 50, 50)
+	LMana = GY_CreateLabel(WCharStats, 0.03, 0.225, "Mana:" + " 00000 / 00000", 75, 75, 255)
+	LSpirit = GY_CreateLabel(WCharStats, 0.03, 0.25, "Spirit:" + " 00000 / 00000", 255, 255, 55)
 	LArmorPoints = GY_CreateLabel(WCharStats, 0.03, 0.275, "Defense Rating: 000 + 00", 255, 255, 255)
 	LAccuracy = GY_CreateLabel(WCharStats, 0.03, 0.3, "Attack Rating: 000 + 00", 255, 255, 255)
 	LDamage = GY_CreateLabel(WCharStats, 0.03, 0.325, "Max Damage: 000 + 00", 255, 255, 255)
@@ -4294,7 +4299,7 @@ Function CreateInterface()
 	;Resistances
 	;# = ResY# + 0.01
 	ResY# = .68
-	GY_CreateLabel(WCharStats, 0.03, ResY#, "RESISTANCE MODIFIERS", 255, 255, 255)
+	GY_CreateLabel(WCharStats, 0.03, ResY#, "DAMAGE MODIFIERS", 255, 255, 255)
 	ResY# = ResY# + .03
 	ResCount = 0
 	For i = 0 To 8
@@ -4331,9 +4336,9 @@ Function CreateInterface()
 		If AttributeNames$(i) <> "" And AttributeHidden(i) = False And AttributeIsSkill(i) = True
 			XPos# = 0.3
 			YPos# = SkillStart + (Float#(SklCount) * 0.05)
-			If SklCount > 11
+			If SklCount > 10
 				XPos# = 0.65
-				YPos# = SkillStart + (Float#(SklCount - 12) * 0.05)
+				YPos# = SkillStart + (Float#(SklCount - 11) * 0.05)
 			EndIf
 			LSkillNames(SklCount) = GY_CreateLabel(WCharStats, XPos, YPos, "LONGEST SKILL NAME HERE!")
 			;LSkillVals(SklCount) = GY_CreateLabel(WCharStats, 0.61, SkillStart + (Float#(SklCount) * 0.05), "00000", 255, 255, 255, Justify_Right)
@@ -4415,6 +4420,7 @@ Function CreateInterface()
 	LInventoryLightLoad = GY_CreateLabel(WInventory, InventoryGold\X#, InventoryGold\Y# + 0.08, "Light Load: 00000")
 	LInventoryHeavyLoad = GY_CreateLabel(WInventory, InventoryGold\X#, InventoryGold\Y# + 0.11, "Heavy Load: 00000")
 	LInventoryMass = GY_CreateLabel(WInventory, InventoryGold\X#, InventoryGold\Y# + 0.14, "Carried Weight: 00000")
+	LInventoryMovement = GY_CreateLabel(WInventory, InventoryGold\X#, InventoryGold\Y# + 0.17, "Movement Speed: 000")
 
 
 
