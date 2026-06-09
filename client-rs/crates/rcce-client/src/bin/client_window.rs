@@ -6176,6 +6176,18 @@ impl App {
                         }
                     }
                 }
+                // The LOCAL player's own combat voice (Attack/Hit). `Me` isn't in
+                // the `actors` map, so resolve against our own template (`me_actor_id`,
+                // captured from our P_NewActor) + gender. Same soft-fail-to-silence:
+                // the default project ships no combat voices, so this is silent.
+                let self_sounds: Vec<u8> = net.world.pending_self_sounds.drain(..).collect();
+                for slot in self_sounds {
+                    if let Some(sid) = store.actor_speech_id(net.world.me_actor_id, net.world.me_gender, slot) {
+                        if let Some(path) = store.sound_path_by_id(sid) {
+                            audio.play_oneshot(&path, 0.7);
+                        }
+                    }
+                }
                 if let Some(mid) = net.world.pending_music.take() {
                     audio.set_music(mid, 0.4, |id| store.music_path(id));
                     println!("[audio] P_Music -> music id {mid}");
