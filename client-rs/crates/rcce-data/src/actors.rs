@@ -50,6 +50,10 @@ pub struct ActorTemplate {
     /// colour so a player can read an NPC's hostility at a glance (Blitz
     /// Actors3D.bb:546-559).
     pub aggressiveness: u8,
+    /// Blood-spurt texture id (`Actors.dat` BloodTexID). When > 0, Blitz spawns a
+    /// `Blood.rpc` particle emitter (textured with this id) at the actor on a
+    /// connecting combat hit (ClientNet.bb:1136/1168). 0 = no blood for this race.
+    pub blood_tex: i16,
 }
 
 #[derive(Debug, Default, Clone)]
@@ -147,7 +151,7 @@ fn parse_record(r: &mut BlitzReader) -> Result<ActorTemplate, ReadError> {
     for slot in &mut female_speech {
         *slot = r.read_short_u()?;
     }
-    let _blood_tex = r.read_short()?;
+    let blood_tex = r.read_short()?;
     // Attributes[40] × (Value + Maximum) = 80 shorts.
     for _ in 0..80 {
         r.read_short()?;
@@ -189,6 +193,7 @@ fn parse_record(r: &mut BlitzReader) -> Result<ActorTemplate, ReadError> {
         genders,
         playable,
         aggressiveness,
+        blood_tex,
     })
 }
 
@@ -215,5 +220,13 @@ mod tests {
         // Unknown template → None; out-of-range slot → None (no panic).
         assert_eq!(cat.speech_id(99, 0, speech::ATTACK1), None);
         assert_eq!(cat.speech_id(3, 0, 999), None);
+    }
+
+    #[test]
+    fn blood_tex_defaults_to_none() {
+        // Captured from Actors.dat; default 0 = no blood (the gate is `> 0`).
+        assert_eq!(ActorTemplate::default().blood_tex, 0);
+        let t = ActorTemplate { id: 5, blood_tex: 42, ..Default::default() };
+        assert_eq!(t.blood_tex, 42);
     }
 }

@@ -345,6 +345,9 @@ struct App {
     /// the floaters' `consumed` cursor) so each hit makes exactly one chat line.
     damage_info_style: u8,
     combat_chat_consumed: usize,
+    /// Append-only cursor into `combat_events` for spawning blood-spurt emitters
+    /// (one per new connecting hit). Mirrors `combat_chat_consumed`.
+    combat_blood_consumed: usize,
     /// Audio output (zone music). `None` when there's no audio device.
     audio: Option<rcce_client::audio::Audio>,
     /// Character sheet (gold/level/inventory/spells) from login's P_FetchCharacter.
@@ -561,6 +564,7 @@ impl App {
             floaters: rcce_client::floaters::Floaters::new(),
             damage_info_style: 3,
             combat_chat_consumed: 0,
+            combat_blood_consumed: 0,
             audio: rcce_client::audio::Audio::new(),
             sheet: None,
             show_inventory: false,
@@ -6237,6 +6241,48 @@ impl App {
                 // Spawn floating damage numbers for any new combat hits, expire old.
                 self.floaters.ingest(&net.world.combat_events, elapsed);
             }
+            // Blood spurt (CBT): a connecting hit (damage > 0) spawns a finite
+            // Blood.rpc emitter at the struck actor, textured with its race's
+            // BloodTexID — Blitz ClientNet.bb:1136/1168. Independent of the
+            // damage-info display style. Soft-fails (no blood) for a race with
+            // BloodTexID 0, a missing Blood.rpc, or an unknown target actor.
+            {
+                let total = net.world.combat_events.len();
+                if self.combat_blood_consumed > total {
+                    self.combat_blood_consumed = 0;
+                }
+                for i in self.combat_blood_consumed..total {
+                    let ev = net.world.combat_events[i];
+                    if ev.damage == 0 {
+                        continue; // a miss/parry draws no blood
+                    }
+                    let (tmpl, pos) = if ev.target == net.world.my_runtime_id {
+                        (net.world.me_actor_id, [net.world.me_render_x, net.world.me_y + 3.0, net.world.me_render_z])
+                    } else if let Some(a) = net.world.actors.get(&ev.target) {
+                        (a.template_id, [a.render_x, a.y + 3.0, a.render_z])
+                    } else {
+                        continue;
+                    };
+                    let (Some(tex_id), Some(config)) = (store.actor_blood_tex(tmpl), store.emitter_config("Blood")) else {
+                        continue;
+                    };
+                    let tex = store.texture_path(tex_id).and_then(|p| rcce_data::texture::load(&p));
+                    if std::env::var_os("RCCE_BLOODTEST").is_some() {
+                        println!("[blood] spawned at {pos:?} tex {tex_id} (tex loaded: {})", tex.is_some());
+                    }
+                    let seed = 0x9E3779B97F4A7C15u64 ^ (i as u64) ^ (ev.target as u64);
+                    let emitter = rcce_client::particles::Emitter::new(config, tex_id, pos, [0.0, 0.0, 0.0], seed);
+                    self.emitters.push(ZoneEmitter {
+                        emitter,
+                        tex,
+                        life: Some(700.0), // a brief spurt, then taper + reap
+                        attach: None,
+                        offset: [0.0; 3],
+                        proj_id: None,
+                    });
+                }
+                self.combat_blood_consumed = total;
+            }
             // Server-driven floating numbers (P_FloatingNumber): script-driven
             // heal/text popups, always shown regardless of the combat-damage
             // display style (they aren't combat damage). Drained unconditionally
@@ -7085,6 +7131,31 @@ impl App {
             }
         }
         // Headless script-input + progress-bar self-test (TGT-8): inject a
+        // Headless blood-spurt self-test (CBT): inject one connecting hit on Me so
+        // the Blood.rpc emitter spawns over the player (always framable). No-op unless
+        // RCCE_BLOODTEST=<frame> set. Logs Me's resolved BloodTexID so a no-show can
+        // be distinguished (race BloodTexID 0 = latent) from a render fault.
+        if let Ok(bv) = std::env::var("RCCE_BLOODTEST") {
+            if let Ok(at) = bv.parse::<u64>() {
+                if self.frames == at {
+                    if let Some(net) = self.net.as_mut() {
+                        let me = net.world.my_runtime_id;
+                        let tmpl = net.world.me_actor_id;
+                        net.world.combat_events.push(rcce_client::world::CombatEvent {
+                            target: me,
+                            attacker: me,
+                            damage: 10,
+                            damage_type: 0,
+                        });
+                        println!(
+                            "[bloodtest] frame {} injected hit on me (tmpl {tmpl}, BloodTexID {:?})",
+                            self.frames,
+                            store.actor_blood_tex(tmpl)
+                        );
+                    }
+                }
+            }
+        }
         // Headless remote-attack self-test (CBT-3): make the nearest actor play
         // its attack swing so it's capturable without a hostile NPC. No-op unless
         // RCCE_REMOTEATTACK=<frame> set.
