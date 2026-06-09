@@ -10,6 +10,7 @@ behavior, or finding module-level details.
 - [`start.md`](start.md) - contributor/source-build quick start
 - [`reference.md`](reference.md) - module-by-module engine reference
 - [`formats.md`](formats.md) - on-disk data format notes
+- [`scripting/language.md`](scripting/language.md) - the RSL scripting language for content authors
 
 ## What These Docs Cover
 
