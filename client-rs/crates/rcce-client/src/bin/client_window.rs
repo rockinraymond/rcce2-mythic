@@ -6474,6 +6474,27 @@ impl App {
             cam_me_yaw = net.world.me_yaw.to_radians(); // degrees -> radians for the FP camera
             following = true;
         }
+        // Connection lost — the server kicked us (P_KickedPlayer) or the ENet peer
+        // dropped (server shutdown / timeout / network loss, nulled in poll()).
+        // Tear the world session down and return to the login screen with a
+        // message instead of freezing in a dead session (Blitz: RCE_Disconnect +
+        // OnLostConnection). The `World` lives inside `Net`, so dropping `net`
+        // releases the whole session; a fresh login rebuilds it.
+        let lost = self
+            .net
+            .as_ref()
+            .is_some_and(|n| n.world.kicked || !n.transport.is_connected());
+        if lost {
+            let kicked = self.net.as_ref().is_some_and(|n| n.world.kicked);
+            self.net = None;
+            self.target = None;
+            self.mode = Mode::Login;
+            self.login_msg = if kicked {
+                "You were kicked from the server.".to_string()
+            } else {
+                "Connection to the server was lost.".to_string()
+            };
+        }
         if did_send {
             self.last_move = Instant::now();
         }
