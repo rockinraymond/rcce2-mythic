@@ -1899,9 +1899,9 @@ impl World {
     /// (ClientNet.bb:785-797): a hostile server could otherwise pass `..\..\x` to
     /// escape `Data/Emitter Configs`. Reject empty / >240 chars, any byte outside
     /// printable ASCII, `:` `/` `\`, or a `..` substring. Soft-fails (queues
-    /// nothing) on a bad name or short packet. (RuntimeID/attachment is parsed but
-    /// not yet applied — first slice uses the spawn position; following the actor
-    /// is a deferred follow-up.)
+    /// nothing) on a bad name or short packet. A non-zero RuntimeID attaches the
+    /// emitter to that actor (`pos` is then an actor-local offset it follows each
+    /// frame); RuntimeID 0 = world-anchored (`pos` absolute).
     fn on_create_emitter(&mut self, d: &[u8]) {
         let mut r = MsgReader::new(d);
         let (Some(tex_id), Some(lifetime_ms), Some(rid)) = (r.u16(), r.u32(), r.u16()) else {

@@ -2131,6 +2131,10 @@ struct ZoneEmitter {
     /// `None` = world-anchored at a fixed position. When the actor leaves the zone
     /// or dies the emitter is stopped (tapers + is reaped) rather than derefed.
     attach: Option<u16>,
+    /// Actor-local spawn offset added to the attached actor's position each frame
+    /// (the packet's X/Y/Z, which Blitz applies as a parent-local PositionEntity).
+    /// Only meaningful when `attach` is `Some`; ignored for world-anchored emitters.
+    offset: [f32; 3],
 }
 
 type ZoneStatic = (
@@ -2239,9 +2243,6 @@ fn test_box_model(skinned: bool) -> B3dModel {
 /// tiling density is the lone cosmetic unknown until verified against a real
 /// terrain (current rcce2 zones ship none). Winding is irrelevant (backface cull
 /// is off).
-/// Advance emitters by `dt` seconds and build their camera-facing billboard
-/// batches `(texture, additive?, verts)`. A free function so the in-world render
-/// can call it while holding `gfx`/`view` borrows of other `self` fields.
 /// Interpolated world position of an actor by RuntimeID, for an attached emitter
 /// to follow. Returns `None` when the actor isn't present (left the zone, despawned,
 /// or not yet spawned) — the caller then stops the emitter instead of derefing a
@@ -2253,6 +2254,9 @@ fn actor_world_pos(world: &rcce_client::world::World, rid: u16) -> Option<[f32; 
     world.actors.get(&rid).map(|a| [a.render_x, a.y, a.render_z])
 }
 
+/// Advance emitters by `dt` seconds and build their camera-facing billboard
+/// batches `(texture, additive?, verts)`. A free function so the in-world render
+/// can call it while holding `gfx`/`view` borrows of other `self` fields.
 fn particle_batches(
     emitters: &mut [ZoneEmitter],
     eye: [f32; 3],
@@ -2804,6 +2808,7 @@ fn load_zone_static(store: &mut AssetStore, view: &mut WorldView, gfx: &Gfx, dat
             tex,
             life: None,
             attach: None,
+            offset: [0.0, 0.0, 0.0],
         });
     }
     if !emitters.is_empty() {
@@ -6287,6 +6292,7 @@ impl App {
                         tex,
                         life: Some(req.lifetime_ms as f32),
                         attach: req.attach,
+                        offset: req.pos,
                     });
                 }
             }
@@ -7703,7 +7709,15 @@ impl App {
             for ze in self.emitters.iter_mut() {
                 if let Some(rid) = ze.attach {
                     match actor_world_pos(&net.world, rid) {
-                        Some(pos) => ze.emitter.set_pos(pos),
+                        // Add the actor-local offset (Blitz parents then sets a local
+                        // PositionEntity). World-space add (no actor-yaw rotation) —
+                        // exact for vertical/zero offsets; yaw-rotating a horizontal
+                        // offset is a deferred fidelity follow-up.
+                        Some(pos) => ze.emitter.set_pos([
+                            pos[0] + ze.offset[0],
+                            pos[1] + ze.offset[1],
+                            pos[2] + ze.offset[2],
+                        ]),
                         None => ze.emitter.stop(),
                     }
                 }
