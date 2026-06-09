@@ -7750,9 +7750,17 @@ impl App {
                             }
                         }
                         if !a.name.is_empty() {
-                            let tw = rcce_render::font::text_width(&a.name, 1.0);
+                            // Prefix the level (Blitz tracks AI\Level + shows it in
+                            // the CharInteract window; an at-a-glance nameplate level
+                            // is the on-world enhancement). Level 0 = unknown → omit.
+                            let label = if a.level > 0 {
+                                format!("Lvl {} {}", a.level, a.name)
+                            } else {
+                                a.name.clone()
+                            };
+                            let tw = rcce_render::font::text_width(&label, 1.0);
                             let nc = if is_target { col } else { white };
-                            overlay.text_shadow(px - tw * 0.5, py - 26.0, 1.0, &a.name, nc);
+                            overlay.text_shadow(px - tw * 0.5, py - 26.0, 1.0, &label, nc);
                         }
                         // Equipped weapon (from P_InventoryUpdate "O") under the name.
                         if a.equipped[0] != 0xFFFF {
@@ -7776,6 +7784,13 @@ impl App {
                         overlay.rect(px0, py0, pw, 2.0, [1.0, 0.85, 0.2, 0.9]);
                         let name: &str = if t.name.is_empty() { "Target" } else { t.name.as_str() };
                         overlay.text_shadow(px0 + 8.0, py0 + 6.0, 1.2, name, [1.0, 0.92, 0.6, 1.0]);
+                        // Level, right-aligned on the name row (Blitz CharInteract
+                        // window shows `LS_Level + AI\Level`, Interface3D.bb:25).
+                        if t.level > 0 {
+                            let lvl = format!("Lvl {}", t.level);
+                            let lw = rcce_render::font::text_width(&lvl, 1.0);
+                            overlay.text_shadow(px0 + pw - 8.0 - lw, py0 + 7.0, 1.0, &lvl, [0.8, 0.86, 1.0, 1.0]);
+                        }
                         let frac = if t.health_max > 0 {
                             (t.health as f32 / t.health_max as f32).clamp(0.0, 1.0)
                         } else {
