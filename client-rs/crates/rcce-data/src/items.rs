@@ -37,6 +37,10 @@ pub struct ItemDef {
     pub mass: i16,
     /// Base melee/ranged damage for weapons (item_type 1), else 0.
     pub weapon_damage: i16,
+    /// Weapon damage-type index (item_type 1), into the project's `Damage.dat`
+    /// names (`DamageTypes$`, Items.bb:486). 0 for non-weapons. Blitz shows the
+    /// resolved name in the weapon tooltip + combat output (ClientNet.bb:1129).
+    pub weapon_damage_type: i16,
     /// Weapon type for weapons (item_type 1): 1 OneHand, 2 TwoHand, 3 Ranged
     /// (`Items.bb` `W_*`). 0 for non-weapons. Drives the ranged attack-range gate.
     pub weapon_wtype: i16,
@@ -103,6 +107,7 @@ impl ItemCatalog {
         // ItemType-conditional tail (Items.bb:378-404).
         let mut weapon_damage = 0i16;
         let mut weapon_wtype = 0i16;
+        let mut weapon_damage_type = 0i16;
         let mut weapon_range = 0.0f32;
         let mut armour_level = 0i16;
         let mut image_id = -1i16;
@@ -111,7 +116,7 @@ impl ItemCatalog {
                 // Weapon: damage, dtype, wtype, rangedProjectile (4×i16),
                 // range f32, rangedAnimation string.
                 weapon_damage = r.read_short()?; // damage
-                let _dtype = r.read_short()?; // damage type
+                weapon_damage_type = r.read_short()?; // damage type (index into Damage.dat)
                 weapon_wtype = r.read_short()?; // weapon type (W_Ranged = 3)
                 let _ranged_proj = r.read_short()?; // ranged projectile id
                 weapon_range = r.read_float()?; // reach in world units
@@ -141,6 +146,7 @@ impl ItemCatalog {
             stackable,
             mass,
             weapon_damage,
+            weapon_damage_type,
             weapon_wtype,
             weapon_range,
             armour_level,
