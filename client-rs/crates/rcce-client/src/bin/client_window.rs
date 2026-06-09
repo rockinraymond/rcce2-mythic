@@ -5272,6 +5272,8 @@ impl App {
                 id: 0,
                 emitter: String::new(),
                 emitter_tex: 0,
+                emitter1: String::new(),
+                emitter1_tex: 0,
             };
             let mut batches = particle_batches(&mut self.emitters, eye, target, 1.0 / 60.0);
             let mut verts = Vec::new();
@@ -7221,10 +7223,12 @@ impl App {
                             homing: false,
                             speed: 4.0,
                             id: 1,
-                            // Trail the Fireball emitter so the effect is capturable
-                            // (RCCE_PROJTEST verification of the projectile-emitter path).
+                            // Trail the Fireball + Default emitters so both are
+                            // capturable (RCCE_PROJTEST verification of the path).
                             emitter: "Fireball".to_string(),
                             emitter_tex: 0,
+                            emitter1: "Default".to_string(),
+                            emitter1_tex: 0,
                         });
                         let (sw, sh) = (gfx.config.width as f32, gfx.config.height as f32);
                         match rcce_render::project(&vp, [sx, sy_, sz], sw, sh) {
@@ -7802,27 +7806,35 @@ impl App {
                     }
                 }
             }
-            // Spawn one emitter for each new projectile that has a config name.
+            // Spawn the projectile's emitters once: Emitter1$ (base, e.g. "Default")
+            // + Emitter2$ (distinctive, e.g. "Fireball"), each a following ZoneEmitter
+            // (Blitz attaches both). Skipped once any emitter exists for this id.
             for p in &net.world.projectiles {
-                if p.emitter.is_empty() || self.emitters.iter().any(|ze| ze.proj_id == Some(p.id)) {
+                if self.emitters.iter().any(|ze| ze.proj_id == Some(p.id)) {
                     continue;
                 }
-                let Some(config) = store.emitter_config(&p.emitter) else { continue };
-                let tex = store
-                    .texture_path(p.emitter_tex)
-                    .and_then(|pp| rcce_data::texture::load(&pp));
-                let seed = 0x9E3779B97F4A7C15u64 ^ (p.id as u64);
-                let emitter = rcce_client::particles::Emitter::new(
-                    config, p.emitter_tex, [p.x, p.y, p.z], [0.0, 0.0, 0.0], seed,
-                );
-                self.emitters.push(ZoneEmitter {
-                    emitter,
-                    tex,
-                    life: None,
-                    attach: None,
-                    offset: [0.0; 3],
-                    proj_id: Some(p.id),
-                });
+                for (name, tex_id) in [(&p.emitter1, p.emitter1_tex), (&p.emitter, p.emitter_tex)] {
+                    if name.is_empty() {
+                        continue;
+                    }
+                    let Some(config) = store.emitter_config(name) else { continue };
+                    let tex = store
+                        .texture_path(tex_id)
+                        .and_then(|pp| rcce_data::texture::load(&pp));
+                    // Differentiate the two emitters' RNGs (id + tex + name length).
+                    let seed = 0x9E3779B97F4A7C15u64 ^ (p.id as u64) ^ (tex_id as u64) ^ (name.len() as u64);
+                    let emitter = rcce_client::particles::Emitter::new(
+                        config, tex_id, [p.x, p.y, p.z], [0.0, 0.0, 0.0], seed,
+                    );
+                    self.emitters.push(ZoneEmitter {
+                        emitter,
+                        tex,
+                        life: None,
+                        attach: None,
+                        offset: [0.0; 3],
+                        proj_id: Some(p.id),
+                    });
+                }
             }
         }
         let mut pbatches = particle_batches(&mut self.emitters, eye, cam_target, pdt);
@@ -9837,6 +9849,8 @@ mod tests {
             id: 0,
             emitter: String::new(),
             emitter_tex: 0,
+            emitter1: String::new(),
+            emitter1_tex: 0,
         };
         let mut out = Vec::new();
         projectile_billboards(std::slice::from_ref(&pr), [0.0, 10.0, -30.0], [0.0, 10.0, 0.0], &mut out);
