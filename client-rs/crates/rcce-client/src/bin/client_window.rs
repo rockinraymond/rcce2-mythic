@@ -993,6 +993,15 @@ fn spellbook_rect(sw: f32, sh: f32) -> (f32, f32, f32, f32) {
     (sw * 0.5 + 12.0, (sh - khd) * 0.5, kwd, khd)
 }
 
+/// The `ThumbnailTexID` for a spell `id`, looked up from the login character
+/// sheet (which carries every known spell's thumb). `KnownSpell` — the live
+/// spellbook list — does not carry the thumb, so the Spellbook panel resolves
+/// its row icons through here. `None` when there's no sheet or the spell isn't
+/// in it (the panel then draws name-only, as before). Pure + unit-tested.
+fn spell_thumb_for(sheet: Option<&rcce_client::fetch::CharacterSheet>, id: u16) -> Option<u16> {
+    sheet?.spells.iter().find(|s| s.id == id).map(|s| s.thumb_tex)
+}
+
 /// Quest-log window rect `(x, y, w, h)` — centred. Shared by the render and the
 /// mouse-wheel scroll hit-test.
 fn quest_window_rect(sw: f32, sh: f32) -> (f32, f32, f32, f32) {
@@ -7751,12 +7760,21 @@ impl App {
                 if self.frames == at {
                     use rcce_client::fetch::{CharacterSheet, SpellInfo};
                     use rcce_client::world::KnownSpell;
-                    let mk = |id: u16, name: &str, lvl: u16| SpellInfo {
-                        id, level: lvl, thumb_tex: 0, recharge: 1500, name: name.to_string(),
+                    // Real, resolvable ThumbnailTexIDs from the shipped Textures.dat
+                    // (15=Particles/Fire, 76=Spell Icons/Heal, 79=Particles/
+                    // a_lightbeacon) so the spellbook + hotbar ICON path is actually
+                    // exercised — the old `thumb_tex: 0` placeholder never resolved a
+                    // texture, so no test proved spell icons render at all.
+                    let mk = |id: u16, name: &str, lvl: u16, thumb: u16| SpellInfo {
+                        id, level: lvl, thumb_tex: thumb, recharge: 1500, name: name.to_string(),
                         description: String::new(), memorised: false,
                     };
                     self.sheet = Some(CharacterSheet {
-                        spells: vec![mk(12, "Fireball", 3), mk(7, "Heal", 2), mk(21, "Lightning Bolt", 1)],
+                        spells: vec![
+                            mk(12, "Fireball", 3, 15),
+                            mk(7, "Heal", 2, 76),
+                            mk(21, "Lightning Bolt", 1, 79),
+                        ],
                         ..Default::default()
                     });
                     if let Some(net) = self.net.as_mut() {
@@ -8633,10 +8651,27 @@ impl App {
                     for (i, sp) in w.known_spells.iter().enumerate().skip(scroll).take(SPELL_ROWS) {
                         let memorised = self.memorised.contains(&sp.id);
                         let name_col = if memorised { [0.5, 1.0, 0.6, 1.0] } else { [0.7, 0.85, 1.0, 1.0] };
-                        if memorised {
-                            overlay.rect(kxp + 4.0, ky2 + 3.0, 4.0, 4.0, [0.4, 1.0, 0.5, 1.0]);
+                        // Spell icon (SPL): the user reported the spellbook showed
+                        // names only. `KnownSpell` carries no thumb, so resolve the
+                        // ThumbnailTexID from the login sheet by id and lazily
+                        // register it (same `spell:{id}` key the hotbar uses).
+                        let key = format!("spell:{}", sp.id);
+                        if !overlay.has_texture(&key) {
+                            if let Some(img) = spell_thumb_for(self.sheet.as_ref(), sp.id)
+                                .and_then(|t| store.texture_path(t))
+                                .and_then(|p| rcce_data::texture::load(&p))
+                            {
+                                overlay.register_texture(&gfx.device, &gfx.queue, &key, img.width, img.height, &img.rgba);
+                            }
                         }
-                        overlay.text_shadow(kxp + 12.0, ky2, 1.0, &sp.name, name_col);
+                        if overlay.has_texture(&key) {
+                            overlay.image(kxp + 4.0, ky2 - 1.0, 13.0, 13.0, &key, [1.0, 1.0, 1.0, 1.0]);
+                        }
+                        // Memorised marker: a small green dot in the icon's corner.
+                        if memorised {
+                            overlay.rect(kxp + 4.0, ky2 - 1.0, 4.0, 4.0, [0.4, 1.0, 0.5, 1.0]);
+                        }
+                        overlay.text_shadow(kxp + 21.0, ky2, 1.0, &sp.name, name_col);
                         let rank = format!("Rank {}", sp.level);
                         overlay.text(kxp + kwd - 64.0, ky2, 1.0, &rank, [0.85, 0.8, 0.6, 1.0]);
                         self.spell_hitboxes.push((kxp + 2.0, ky2 - 2.0, kwd - 4.0, 15.0, i));
@@ -10292,6 +10327,30 @@ mod tests {
         let t8: Vec<&str> = visible_chat(&lines, 8, 5).into_iter().map(|(t, _)| t.as_str()).collect();
         assert_eq!(t8, vec!["line 8", "line 7", "line 6", "line 5", "line 4"]);
         assert!(visible_chat(&lines, 16, 5).is_empty()); // renderer clamps before this
+    }
+
+    // Spellbook icon resolution (SPL): the panel pulls each row's ThumbnailTexID
+    // from the login sheet by spell id, since KnownSpell carries no thumb.
+    #[test]
+    fn spell_thumb_resolves_from_sheet_by_id() {
+        use rcce_client::fetch::{CharacterSheet, SpellInfo};
+        let mk = |id: u16, thumb: u16| SpellInfo {
+            id,
+            level: 1,
+            thumb_tex: thumb,
+            recharge: 0,
+            name: String::new(),
+            description: String::new(),
+            memorised: false,
+        };
+        let sheet = CharacterSheet {
+            spells: vec![mk(12, 15), mk(7, 76)],
+            ..Default::default()
+        };
+        assert_eq!(spell_thumb_for(Some(&sheet), 12), Some(15));
+        assert_eq!(spell_thumb_for(Some(&sheet), 7), Some(76));
+        assert_eq!(spell_thumb_for(Some(&sheet), 999), None); // not in sheet
+        assert_eq!(spell_thumb_for(None, 12), None); // no sheet -> name-only
     }
 
     // Pixel-width word-wrap (TGT-5/CHAT): no output line exceeds the box width,
