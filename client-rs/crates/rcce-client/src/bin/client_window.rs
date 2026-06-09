@@ -3669,6 +3669,21 @@ impl App {
             world.me_level = s.level;
             world.me_xp = s.xp as i32;
             world.me_reputation = s.reputation as i32;
+            // Seed the live attribute values + MAXes from the sheet so the HUD
+            // vitals bars (Health/Energy) show real numbers immediately. Without
+            // this, me_attributes was empty and me_health_max 0 at login, so every
+            // bar rendered "value/1" (the max defaulted to 1) until a P_StatUpdate
+            // "M" max-update arrived — which often never came. A later value-update
+            // ("A") preserves the seeded max (on_stat_update only writes e.0).
+            for (i, &(v, m)) in s.attributes.iter().take(40).enumerate() {
+                world.me_attributes.insert(i as u8, (v, m));
+            }
+            // Mirror the Health slot onto me_health/me_health_max (the Health bar +
+            // target panel read these), matching on_stat_update's health mirror.
+            if let Some(&(hv, hm)) = s.attributes.get(world.health_stat as usize) {
+                world.me_health = hv;
+                world.me_health_max = hm;
+            }
             // Populate the spellbook's known-spell list from the login sheet.
             // Login spells arrive via P_FetchCharacter, NOT P_KnownSpellUpdate, so
             // without this the spellbook was EMPTY at login for any character that
