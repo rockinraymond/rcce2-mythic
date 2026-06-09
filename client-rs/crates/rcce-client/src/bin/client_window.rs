@@ -2162,6 +2162,7 @@ fn register_gui_textures(overlay: &mut rcce_render::Overlay, device: &wgpu::Devi
         // Action-bar frame + coin + equipment-slot placeholder icons.
         ("gui:ActionBar", "Action Bar.bmp"),
         ("gui:Coin", "Coin.bmp"),
+        ("gui:slot:Weapon", "Weapon.bmp"),
         ("gui:slot:Hat", "Hat.bmp"),
         ("gui:slot:Amulet", "Amulet.bmp"),
         ("gui:slot:Chest", "Chest.bmp"),
@@ -8871,17 +8872,17 @@ impl App {
                     }
                 };
                 // Skinned leather window background (Blitz InventoryBG), with the
-                // flat panel as the fallback. A slim translucent title strip keeps
-                // the header text readable over the texture.
+                // flat panel as the fallback. The Interface.dat positions the top
+                // equipment-slot row right at the window's top edge, so the title +
+                // close hint render in the gap ABOVE the panel (with a shadow for
+                // legibility over the world) rather than overlapping that slot row.
                 if overlay.has_texture("gui:InventoryBG") {
                     overlay.image(px, py, pw, ph, "gui:InventoryBG", [1.0, 1.0, 1.0, 1.0]);
-                    overlay.rect(px, py, pw, 22.0, [0.0, 0.0, 0.0, 0.45]);
                 } else {
                     overlay.rect(px, py, pw, ph, [0.05, 0.06, 0.10, 0.92]);
-                    overlay.rect(px, py, pw, 22.0, [0.15, 0.18, 0.28, 0.96]);
                 }
-                overlay.text_shadow(px + 10.0, py + 6.0, 1.5, "Character", white);
-                overlay.text(px + pw - 78.0, py + 7.0, 1.0, "[I] close", dim);
+                overlay.text_shadow(px + 10.0, py - 16.0, 1.5, "Character", white);
+                overlay.text_shadow(px + pw - 78.0, py - 14.0, 1.0, "[I] close", dim);
 
                 // Attributes column to the left of the inventory window: the
                 // named, non-hidden attribute slots (Attributes.dat) with live
@@ -8904,7 +8905,9 @@ impl App {
                     let xp = live.map(|w| w.me_xp as i64).unwrap_or(sheet.xp as i64);
                     let rep = live.map(|w| w.me_reputation).unwrap_or(sheet.reputation as i32);
                     let mut rows: Vec<(String, [f32; 4])> = Vec::new();
+                    let gold = live.map(|w| w.me_gold).unwrap_or(sheet.gold as i32);
                     rows.push((format!("Level {}", level), [0.7, 1.0, 0.7, 1.0]));
+                    rows.push((format!("Gold {}", gold), [1.0, 0.88, 0.4, 1.0]));
                     rows.push((format!("XP {}", xp), [0.92, 0.86, 0.6, 1.0]));
                     rows.push((format!("Reputation {}", rep), [0.85, 0.85, 1.0, 1.0]));
                     rows.push((String::new(), white)); // spacer before attributes
@@ -9005,13 +9008,9 @@ impl App {
 
                 if let Some(iface) = iface {
                     let iw = &iface.inventory_window;
-                    // Header line: level / gold (live) / xp.
-                    if let Some(s) = &self.sheet {
-                        let gold = self.net.as_ref().map(|n| n.world.me_gold).unwrap_or(s.gold as i32);
-                        let level = self.net.as_ref().map(|n| n.world.me_level).unwrap_or(s.level);
-                        let xp = self.net.as_ref().map(|n| n.world.me_xp as i64).unwrap_or(s.xp as i64);
-                        overlay.text_shadow(px + 10.0, py + 26.0, 1.0, &format!("Lv {}   {} gold   {} xp", level, gold, xp), [1.0, 0.88, 0.4, 1.0]);
-                    }
+                    // (Level / Gold / XP live in the attributes column to the left;
+                    // an in-window header here overlapped the top equipment-slot
+                    // row, which the Interface.dat positions right under the title.)
                     for (i, b) in iface.inventory_buttons.iter().enumerate() {
                         // Window-relative fraction -> screen pixels.
                         let bx = (iw.x + b.x * iw.w) * sw;
