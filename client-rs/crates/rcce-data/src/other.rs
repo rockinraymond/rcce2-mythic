@@ -1,0 +1,95 @@
+//! `Game Data/Other.dat` — project client-display options the launcher writes and
+//! the Blitz client reads at startup (`ClientLoaders.bb:28-40`). Layout (all little
+//! -endian, `ReadByte`/`ReadInt`): HideNametags u8 · DisableCollisions u8 · ViewMode
+//! u8 · ServerPort i32 · RequireMemorise u8 · UseBubbles u8 · BubblesR/G/B u8.
+//!
+//! Blitz `ReadByte`/`ReadInt` past EOF return 0, and the shipped default file is
+//! truncated (9 bytes — no Bubbles RGB), so each field defaults to 0 when absent —
+//! matching the engine exactly.
+
+use crate::reader::BlitzReader;
+
+/// Parsed `Other.dat`. Fields are the raw bytes; the semantic accessors apply the
+/// engine's comparison rules (e.g. nametags hide only on the exact value 1).
+#[derive(Debug, Clone, Copy, Default)]
+pub struct OtherConfig {
+    pub hide_nametags: u8,
+    pub disable_collisions: u8,
+    pub view_mode: u8,
+    pub server_port: i32,
+    pub require_memorise: u8,
+    pub use_bubbles: u8,
+    pub bubbles_rgb: [u8; 3],
+}
+
+impl OtherConfig {
+    /// Read the fields in order, each defaulting to 0 past EOF (Blitz `ReadByte`/
+    /// `ReadInt` semantics) so a short/absent file yields engine-default behaviour.
+    pub fn parse(data: &[u8]) -> OtherConfig {
+        let mut r = BlitzReader::new(data);
+        let hide_nametags = r.read_byte().unwrap_or(0);
+        let disable_collisions = r.read_byte().unwrap_or(0);
+        let view_mode = r.read_byte().unwrap_or(0);
+        let server_port = r.read_int().unwrap_or(0);
+        let require_memorise = r.read_byte().unwrap_or(0);
+        let use_bubbles = r.read_byte().unwrap_or(0);
+        let rr = r.read_byte().unwrap_or(0);
+        let gg = r.read_byte().unwrap_or(0);
+        let bb = r.read_byte().unwrap_or(0);
+        OtherConfig {
+            hide_nametags,
+            disable_collisions,
+            view_mode,
+            server_port,
+            require_memorise,
+            use_bubbles,
+            bubbles_rgb: [rr, gg, bb],
+        }
+    }
+
+    /// Whether actor nametags (the floating name + tag text) should be hidden. Blitz
+    /// gates nametag creation on `If HideNametags <> 1` (Actors3D.bb:508), so they
+    /// are hidden ONLY for the exact value 1 — any other value (incl. the default 2)
+    /// shows them.
+    pub fn nametags_hidden(&self) -> bool {
+        self.hide_nametags == 1
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn nametags_hidden_only_on_exact_one() {
+        // Byte 0 = HideNametags. Only the exact value 1 hides (Blitz `<> 1`).
+        let cfg = |b: u8| OtherConfig::parse(&[b, 0, 2, 0, 0, 0, 0, 1, 0, 0, 0, 0]);
+        assert!(cfg(1).nametags_hidden(), "1 hides");
+        assert!(!cfg(0).nametags_hidden(), "0 shows");
+        assert!(!cfg(2).nametags_hidden(), "2 (the shipped default) shows");
+        assert!(!cfg(255).nametags_hidden(), "any other value shows");
+    }
+
+    #[test]
+    fn parses_full_record_and_truncation() {
+        // HideNametags 1, DisableCollisions 0, ViewMode 3, ServerPort 25000,
+        // RequireMemorise 1, UseBubbles 2, Bubbles 10/20/30.
+        let mut d = vec![1u8, 0, 3];
+        d.extend_from_slice(&25000i32.to_le_bytes());
+        d.extend_from_slice(&[1, 2, 10, 20, 30]);
+        let c = OtherConfig::parse(&d);
+        assert_eq!(c.hide_nametags, 1);
+        assert_eq!(c.view_mode, 3);
+        assert_eq!(c.server_port, 25000);
+        assert_eq!(c.use_bubbles, 2);
+        assert_eq!(c.bubbles_rgb, [10, 20, 30]);
+        // The shipped default is 9 bytes (no Bubbles RGB) — those default to 0.
+        let short = OtherConfig::parse(&d[..9]);
+        assert_eq!(short.use_bubbles, 2);
+        assert_eq!(short.bubbles_rgb, [0, 0, 0]);
+        // Empty file → all zero (no panic).
+        let empty = OtherConfig::parse(&[]);
+        assert_eq!(empty.hide_nametags, 0);
+        assert_eq!(empty.server_port, 0);
+    }
+}

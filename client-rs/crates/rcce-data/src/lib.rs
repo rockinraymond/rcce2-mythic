@@ -19,6 +19,7 @@ pub mod interface;
 pub mod items;
 pub mod language;
 pub mod money;
+pub mod other;
 pub mod reader;
 pub mod suns;
 pub mod texture;
@@ -41,6 +42,7 @@ pub use items::{equip_slot, equip_slot_name, ItemCatalog, ItemDef};
 pub use interface::{IComp, InterfaceLayout};
 pub use language::Language;
 pub use money::MoneyConfig;
+pub use other::OtherConfig;
 pub use reader::{BlitzReader, ReadError};
 
 #[cfg(test)]

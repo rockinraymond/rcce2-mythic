@@ -42,6 +42,9 @@ pub struct AssetStore {
     /// Project weapon damage-type names (`Server Data/Damage.dat`), for the
     /// weapon tooltip. Empty when the file is absent (then no type is shown).
     damage_types: rcce_data::DamageTypes,
+    /// Project client-display options (`Game Data/Other.dat`): nametag visibility,
+    /// view mode, chat-bubble options. Default (all-zero) when the file is absent.
+    other: rcce_data::OtherConfig,
     /// Project sun/moon directional lights from `Game Data/Suns.dat`. `None` when
     /// absent → the renderer uses a neutral white sun. See `sun_light`.
     suns: Option<rcce_data::Suns>,
@@ -169,6 +172,11 @@ impl AssetStore {
         let damage_types = std::fs::read(data_root.join("Server Data/Damage.dat"))
             .map(|b| rcce_data::DamageTypes::parse(&b))
             .unwrap_or_default();
+        // Project client-display options (nametag visibility, view mode, bubbles).
+        // Absent/short → all-zero defaults (Blitz ReadByte-past-EOF semantics).
+        let other = std::fs::read(data_root.join("Game Data/Other.dat"))
+            .map(|b| rcce_data::OtherConfig::parse(&b))
+            .unwrap_or_default();
         // Project sun/moon directional light colours (warm day / cool night).
         let suns = std::fs::read(data_root.join("Game Data/Suns.dat"))
             .ok()
@@ -192,6 +200,7 @@ impl AssetStore {
             attribute_names,
             fixed_attributes,
             damage_types,
+            other,
             suns,
             language,
             cache: HashMap::new(),
@@ -205,6 +214,12 @@ impl AssetStore {
     /// shipped default project (Health = slot 0).
     pub fn health_stat(&self) -> u8 {
         self.fixed_attributes.and_then(|f| f.health).unwrap_or(0)
+    }
+
+    /// Whether the project hides actor nametags (the floating name/tag text) —
+    /// `Other.dat` HideNametags == 1 (Actors3D.bb:508). Health bars are unaffected.
+    pub fn nametags_hidden(&self) -> bool {
+        self.other.nametags_hidden()
     }
 
     /// The project's name for a weapon damage-type index (`Damage.dat`), e.g.
