@@ -39,6 +39,9 @@ pub struct AssetStore {
     /// `Game Data/Fixed Attributes.dat`. `None` when the file is absent (the
     /// `health_stat()` accessor then falls back to the index-0 default).
     fixed_attributes: Option<rcce_data::FixedAttributes>,
+    /// Project weapon damage-type names (`Server Data/Damage.dat`), for the
+    /// weapon tooltip. Empty when the file is absent (then no type is shown).
+    damage_types: rcce_data::DamageTypes,
     /// Project sun/moon directional lights from `Game Data/Suns.dat`. `None` when
     /// absent → the renderer uses a neutral white sun. See `sun_light`.
     suns: Option<rcce_data::Suns>,
@@ -161,6 +164,11 @@ impl AssetStore {
         let fixed_attributes = std::fs::read(data_root.join("Game Data/Fixed Attributes.dat"))
             .ok()
             .and_then(|b| rcce_data::FixedAttributes::parse(&b).ok());
+        // Project weapon damage-type names (Piercing/Fire/…), shown in the weapon
+        // tooltip. Absent/unreadable → empty table → no "(type)" suffix.
+        let damage_types = std::fs::read(data_root.join("Server Data/Damage.dat"))
+            .map(|b| rcce_data::DamageTypes::parse(&b))
+            .unwrap_or_default();
         // Project sun/moon directional light colours (warm day / cool night).
         let suns = std::fs::read(data_root.join("Game Data/Suns.dat"))
             .ok()
@@ -183,6 +191,7 @@ impl AssetStore {
             money,
             attribute_names,
             fixed_attributes,
+            damage_types,
             suns,
             language,
             cache: HashMap::new(),
@@ -196,6 +205,13 @@ impl AssetStore {
     /// shipped default project (Health = slot 0).
     pub fn health_stat(&self) -> u8 {
         self.fixed_attributes.and_then(|f| f.health).unwrap_or(0)
+    }
+
+    /// The project's name for a weapon damage-type index (`Damage.dat`), e.g.
+    /// `3 -> "Fire"`. `None` when the table is absent or the slot is unnamed/out
+    /// of range — the tooltip then omits the "(type)" suffix.
+    pub fn damage_type_name(&self, idx: i16) -> Option<&str> {
+        self.damage_types.name(idx)
     }
 
     /// The project's localizable string table (`Game Data/Language.txt`), for

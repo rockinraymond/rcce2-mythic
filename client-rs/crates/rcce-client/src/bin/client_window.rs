@@ -2254,6 +2254,17 @@ fn actor_world_pos(world: &rcce_client::world::World, rid: u16) -> Option<[f32; 
     world.actors.get(&rid).map(|a| [a.render_x, a.y, a.render_z])
 }
 
+/// The weapon-damage tooltip line, with the project's damage-type name appended
+/// when the weapon has a named type in `Damage.dat` (e.g. "Damage: 12 (Fire)"),
+/// else just "Damage: 12". Mirrors Blitz's `DamageTypes$(WeaponDamageType)` tooltip
+/// (Interface3D.bb:1949). Caller already gated on `weapon_damage > 0` (a weapon).
+fn weapon_damage_line(damage: i16, type_name: Option<&str>) -> String {
+    match type_name {
+        Some(t) => format!("Damage: {damage} ({t})"),
+        None => format!("Damage: {damage}"),
+    }
+}
+
 /// Whether a scripted (dynamic) emitter survives a zone change. Blitz frees every
 /// scripted emitter on a zone change EXCEPT those attached to the local player
 /// (ClientNet.bb:1679 `AttachedToPlayer = False` gate) — a player-attached aura
@@ -9198,7 +9209,7 @@ impl App {
                                         lines.push((sname.to_string(), [0.7, 1.0, 0.8, 1.0]));
                                     }
                                     if def.weapon_damage > 0 {
-                                        lines.push((format!("Damage: {}", def.weapon_damage), [1.0, 0.7, 0.6, 1.0]));
+                                        lines.push((weapon_damage_line(def.weapon_damage, store.damage_type_name(def.weapon_damage_type)), [1.0, 0.7, 0.6, 1.0]));
                                     }
                                     if def.armour_level > 0 {
                                         lines.push((format!("Armour: {}", def.armour_level), [0.7, 0.85, 1.0, 1.0]));
@@ -9234,7 +9245,7 @@ impl App {
                                 lines.push((store.item_name(item_id), white));
                                 if let Some(def) = store.item_def(item_id) {
                                     if def.weapon_damage > 0 {
-                                        lines.push((format!("Damage: {}", def.weapon_damage), [1.0, 0.7, 0.6, 1.0]));
+                                        lines.push((weapon_damage_line(def.weapon_damage, store.damage_type_name(def.weapon_damage_type)), [1.0, 0.7, 0.6, 1.0]));
                                     }
                                     if def.armour_level > 0 {
                                         lines.push((format!("Armour: {}", def.armour_level), accent));
@@ -9517,6 +9528,14 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // The weapon tooltip appends the project's damage-type name when present
+    // ("Damage: 12 (Fire)"), else just the number (Damage.dat absent / unnamed slot).
+    #[test]
+    fn weapon_damage_line_appends_type() {
+        assert_eq!(weapon_damage_line(12, Some("Fire")), "Damage: 12 (Fire)");
+        assert_eq!(weapon_damage_line(12, None), "Damage: 12");
+    }
 
     // A zone change keeps only player-attached dynamic emitters (Blitz
     // ClientNet.bb:1679); world-anchored + NPC-attached effects are dropped, and

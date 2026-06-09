@@ -11,6 +11,7 @@ pub mod anim;
 pub mod area;
 pub mod attributes;
 pub mod b3d;
+pub mod damage;
 pub mod emitter;
 pub mod catalog;
 pub mod fixed_attributes;
@@ -27,6 +28,7 @@ pub use anim::{AnimClip, AnimSet, AnimSetCatalog};
 pub use area::{AreaEnv, AreaScenery, EmitterPlacement, SceneryPlacement, TerrainPatch, WaterPlane};
 pub use emitter::EmitterConfig;
 pub use b3d::{B3dAnim, B3dBone, B3dKey, B3dMesh, B3dModel};
+pub use damage::DamageTypes;
 pub use texture::Image;
 pub use catalog::{
     MeshCatalog, MeshEntry, MusicCatalog, MusicEntry, ParsedCatalog, SoundCatalog, SoundEntry,
