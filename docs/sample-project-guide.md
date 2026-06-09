@@ -9,6 +9,8 @@ can learn the engine by reading — and editing — real content.
 > scripts). None of it requires touching engine source. The binary catalogs were
 > authored with the small Python codec in [`tools/projectgen/`](../tools/projectgen)
 > (see its `README.md` / `PLAN.md` if you want to script bulk content changes).
+> New to writing `.rsl` scripts? The [RSL language guide](scripting/language.md)
+> teaches the syntax, entry-point functions, and the privilege rules first.
 
 ## The 60-second loop a new player experiences
 
