@@ -603,6 +603,13 @@ impl WorldView {
             // shadow fs alpha-tests so cut-out canopies cast their real shape.
             let (mut drawn, mut culled) = (0u32, 0u32);
             for d in self.statics.iter().chain(self.dynamics.iter()) {
+                // Respect the area's authored per-scenery cast-shadow flag: a
+                // no-cast object (e.g. ground foliage) is still rendered but
+                // contributes nothing to the shadow map.
+                if !d.casts_shadow {
+                    culled += 1;
+                    continue;
+                }
                 if !in_shadow_box(&d.center, d.radius) {
                     culled += 1;
                     continue;

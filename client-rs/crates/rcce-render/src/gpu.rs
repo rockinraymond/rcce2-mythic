@@ -1864,6 +1864,10 @@ pub struct Drawable {
     /// orthographic shadow box. Cheap to compute (once at bake time for statics).
     pub center: [f32; 3],
     pub radius: f32,
+    /// Whether this drawable contributes to the shadow-caster pass. Carried from
+    /// its source `SceneInstance.cast_shadow` so scenery the area author flagged
+    /// no-cast is still rendered but doesn't cast a shadow.
+    pub casts_shadow: bool,
 }
 
 /// World-space bounding sphere of `mesh` after the instance transform — the same
@@ -2013,7 +2017,7 @@ pub fn build_actor_drawables_cached(
                 .or_insert_with(|| Rc::new(pipeline.texture_bind(device, queue, tex)))
                 .clone();
             let (center, radius) = mesh_world_bounds(nrot, scale, trans, mesh);
-            drawables.push(Drawable { vbuf, ibuf, n_idx, tex_bind, alpha: mesh_is_alpha_overlay(mesh), center, radius });
+            drawables.push(Drawable { vbuf, ibuf, n_idx, tex_bind, alpha: mesh_is_alpha_overlay(mesh), center, radius, casts_shadow: inst.cast_shadow });
         }
     }
     drawables
@@ -2064,6 +2068,7 @@ pub fn build_drawables(
             alpha: false,
             center: gc.into(),
             radius: gr,
+            casts_shadow: true,
         });
     }
     drawables
@@ -2103,6 +2108,7 @@ fn build_instance_drawables(
                 alpha: mesh_is_alpha_overlay(mesh),
                 center,
                 radius,
+                casts_shadow: inst.cast_shadow,
             });
         }
     }

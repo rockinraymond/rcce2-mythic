@@ -2568,7 +2568,7 @@ fn load_zone_static(store: &mut AssetStore, view: &mut WorldView, gfx: &Gfx, dat
                 s.mesh_id, s.pos[0], s.pos[1], s.pos[2], s.rot[0], s.rot[1], s.rot[2], s.scale[0], s.scale[1], s.scale[2]
             );
         }
-        place.push((idx, s.pos, rot, s.scale));
+        place.push((idx, s.pos, rot, s.scale, s.cast_shadow));
         for k in 0..3 {
             min[k] = min[k].min(s.pos[k]);
             max[k] = max[k].max(s.pos[k]);
@@ -2608,7 +2608,7 @@ fn load_zone_static(store: &mut AssetStore, view: &mut WorldView, gfx: &Gfx, dat
         textures.push(vec![tex]);
         lightmaps.push(vec![detail]);
         let rot = [t.rot[0].to_radians(), -t.rot[1].to_radians(), t.rot[2].to_radians()];
-        place.push((idx, t.pos, rot, t.scale));
+        place.push((idx, t.pos, rot, t.scale, true)); // terrain always casts
         // Expand the zone bounds (camera framing / centre) to the terrain footprint.
         let n = t.grid as f32;
         for [cx, cz] in [[0.0, 0.0], [n, 0.0], [0.0, n], [n, n]] {
@@ -2646,7 +2646,7 @@ fn load_zone_static(store: &mut AssetStore, view: &mut WorldView, gfx: &Gfx, dat
     }
     let instances: Vec<SceneInstance> = place
         .iter()
-        .map(|&(idx, pos, rot, scale)| SceneInstance {
+        .map(|&(idx, pos, rot, scale, cast_shadow)| SceneInstance {
             model: &models[idx],
             textures: &textures[idx],
             lightmaps: &lightmaps[idx],
@@ -2654,6 +2654,7 @@ fn load_zone_static(store: &mut AssetStore, view: &mut WorldView, gfx: &Gfx, dat
             rot,
             scale,
             color: [1.0, 1.0, 1.0],
+            cast_shadow,
         })
         .collect();
     view.set_scene(&gfx.device, &gfx.queue, &instances, min[1]);
@@ -2708,7 +2709,7 @@ fn load_zone_static(store: &mut AssetStore, view: &mut WorldView, gfx: &Gfx, dat
     // shortens when it would pass through one of these, so the camera doesn't
     // end up inside a building.
     let mut occluders: Vec<([f32; 3], f32)> = Vec::new();
-    for &(idx, pos, _rot, scale) in &place {
+    for &(idx, pos, _rot, scale, _) in &place {
         let model = &models[idx];
         let foliage = model.meshes.iter().any(|m| m.texture_flag & 4 != 0);
         if foliage {
@@ -2744,7 +2745,7 @@ fn load_zone_static(store: &mut AssetStore, view: &mut WorldView, gfx: &Gfx, dat
     let height_field = {
         use glam::{Mat3, Mat4, Vec3};
         let mut tris: Vec<[Vec3; 3]> = Vec::new();
-        for &(idx, pos, rot, scale) in &place {
+        for &(idx, pos, rot, scale, _) in &place {
             let model = &models[idx];
             let nrot = Mat3::from_mat4(
                 Mat4::from_rotation_y(rot[1]) * Mat4::from_rotation_x(rot[0]) * Mat4::from_rotation_z(rot[2]),
@@ -4998,6 +4999,7 @@ impl App {
                         rot: [0.0, 0.0, 0.0],
                         scale: [w.scale_x, 1.0, w.scale_z],
                         color: [1.0, 1.0, 1.0],
+                        cast_shadow: true,
                     })
                     .collect();
                 view.set_water(&gfx.device, &gfx.queue, &instances);
@@ -5098,6 +5100,7 @@ impl App {
                         rot: [0.0, 0.0, 0.0],
                         scale: [1.0, 1.0, 1.0],
                         color: [0.8, 0.4, 0.4],
+                        cast_shadow: true,
                     }];
                     view.set_dynamic(&gfx.device, &gfx.queue, &inst, &["testbox".to_string()]);
                 }
@@ -5134,6 +5137,7 @@ impl App {
                     rot: [0.0, 0.0, 0.0],
                     scale: [s, s, s],
                     color: [1.0, 1.0, 1.0],
+                    cast_shadow: true,
                 }];
                 view.set_dynamic(&gfx.device, &gfx.queue, &inst, &["loot:preview".to_string()]);
             }
@@ -5344,6 +5348,7 @@ impl App {
                             rot: [0.0, 0.0, 0.0],
                             scale: [s, s, s],
                             color: [1.0, 1.0, 1.0],
+                            cast_shadow: true,
                         };
                         // NAN ground_y: skip the green terrain ground plane — the
                         // set carries its own floor; the plane only showed as a
@@ -5435,6 +5440,7 @@ impl App {
                         rot: r,
                         scale: s,
                         color,
+                        cast_shadow: true,
                     })
                     .collect();
                 view.set_dynamic(&gfx.device, &gfx.queue, &instances, &keys);
@@ -6414,6 +6420,7 @@ impl App {
                             rot: r,
                             scale: s,
                             color,
+                            cast_shadow: true,
                         })
                         .collect();
                     // Dropped loot (DROP-1): render each item's world mesh (its `mmesh`)
@@ -6455,6 +6462,7 @@ impl App {
                             rot: [0.0, 0.0, 0.0],
                             scale: [*s, *s, *s],
                             color: [1.0, 1.0, 1.0],
+                            cast_shadow: true,
                         });
                         keys.push(key.clone());
                     }
@@ -6548,6 +6556,7 @@ impl App {
                     rot: [0.0, 0.0, 0.0],
                     scale: [w.scale_x, 1.0, w.scale_z],
                     color: [1.0, 1.0, 1.0],
+                    cast_shadow: true,
                 })
                 .collect();
             view.set_water(&gfx.device, &gfx.queue, &instances);

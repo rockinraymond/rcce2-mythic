@@ -265,6 +265,7 @@ fn main() {
             rot,
             scale,
             color,
+            cast_shadow: true,
         })
         .collect();
 
