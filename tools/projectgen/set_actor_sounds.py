@@ -8,6 +8,11 @@ positionally on that actor when the event fires (Actors3D.bb:794).
 Player footsteps reuse the footstep sounds registered in iter 2 (ids 0,1); creature
 attack/hit/death use the HF vocalizations imported this iteration (ids 16-21).
 
+Re-enabled in the showcase project once the engine channel-pool fix (#540) made
+per-actor EmitSound safe; the PLAN was extended to cover the Orc/Warlord mini-boss
+(Grukk) -- a clone of the Orc/Raider on the same Troll mesh -- so it reuses the
+troll vocalizations (ids 19-21) rather than staying mute.
+
 Surgical: only the speech arrays change; everything else stays byte-identical.
 """
 import os, sys
