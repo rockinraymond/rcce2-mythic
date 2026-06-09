@@ -230,6 +230,10 @@ pub struct Zone {
 #[derive(Debug, Default)]
 pub struct World {
     pub my_runtime_id: u16,
+    /// Set when the server sends `P_KickedPlayer` — the App tears the world
+    /// session down and returns to the login screen with a "kicked" message
+    /// (Blitz: `RCE_Disconnect` + `OnLostConnection`, ClientNet.bb:1780).
+    pub kicked: bool,
     pub me_x: f32,
     pub me_y: f32,
     pub me_z: f32,
@@ -735,6 +739,9 @@ impl World {
             pk::REPOSITION_ACTOR => self.on_reposition_actor(&m.data),
             pk::ANIMATE_ACTOR => self.on_animate_actor(&m.data),
             pk::ITEM_HEALTH => self.on_item_health(&m.data),
+            // The server kicked us (admin/ban/dup-login). Flag it; the App tears
+            // down the session and returns to the login screen. Empty payload.
+            pk::KICKED_PLAYER => self.kicked = true,
             _ => {}
         }
     }
@@ -3225,6 +3232,16 @@ mod tests {
         w.apply(&msg(pk::ITEM_HEALTH, pkt(|p| { p.u8(99).u16(50); })));
         w.apply(&msg(pk::ITEM_HEALTH, pkt(|p| { p.u8(14); }))); // missing health
         assert_eq!(w.me_inventory[&14].health, 0, "truncated packet left health unchanged");
+    }
+
+    // P_KickedPlayer (empty payload) flags the session so the App tears it down
+    // and returns to the login screen instead of freezing.
+    #[test]
+    fn kicked_player_sets_flag() {
+        let mut w = World::default();
+        assert!(!w.kicked);
+        w.apply(&msg(pk::KICKED_PLAYER, pkt(|_p| {})));
+        assert!(w.kicked, "P_KickedPlayer flags the session for teardown");
     }
 
     #[test]

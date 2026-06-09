@@ -88,6 +88,7 @@ pub mod packet_id {
     pub const PROGRESS_BAR: u8 = 51;
     pub const BUBBLE_MESSAGE: u8 = 52;
     pub const SCRIPT_INPUT: u8 = 53;
+    pub const KICKED_PLAYER: u8 = 60;
     pub const EXAMINE: u8 = 61;
     pub const TRADE: u8 = 62;
 }

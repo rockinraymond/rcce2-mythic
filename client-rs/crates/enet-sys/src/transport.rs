@@ -52,6 +52,14 @@ impl EnetTransport {
         }
     }
 
+    /// Whether the connection is still live. The ENet `DISCONNECT` event (server
+    /// kick/shutdown/timeout, or network loss) nulls `peer` during `poll`, so a
+    /// `false` here is the signal the App uses to tear the world session down and
+    /// return to the login screen instead of freezing in a dead session.
+    pub fn is_connected(&self) -> bool {
+        !self.peer.is_null() && !self.host.is_null()
+    }
+
     fn teardown(&mut self) {
         unsafe {
             if !self.peer.is_null() && !self.host.is_null() {
