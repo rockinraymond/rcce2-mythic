@@ -6268,8 +6268,9 @@ impl App {
             let need_rebake = hash != self.last_dyn_hash;
             if self.gpu_skin || need_rebake {
                 let (models, textures, place, keys, skinned) = build_actors(
-                    store, &net.world, elapsed, self.gpu_skin, moving, run, 0, me_attack, me_jumping,
-                    me_jump_offset, self.first_person, me_fidget, self.height_field.as_ref(),
+                    store, &net.world, elapsed, self.gpu_skin, moving, run, net.world.me_actor_id,
+                    me_attack, me_jumping, me_jump_offset, self.first_person, me_fidget,
+                    self.height_field.as_ref(),
                 );
                 // GPU-skinned bodies (when enabled) — static mesh + pose uniform. Cheap;
                 // runs every frame so the body animates at display rate.
