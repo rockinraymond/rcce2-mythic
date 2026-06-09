@@ -1776,6 +1776,12 @@ fn build_actors(
     let mut place = Vec::new();
     let mut keys: Vec<String> = Vec::new();
     let mut skinned: Vec<SkinnedActor> = Vec::new();
+    // Seat each actor on the ground surface nearest its authoritative Y, so a
+    // body standing under a building roof sits on the FLOOR, not the roof (the
+    // height field's near-horizontal triangles include both, and plain
+    // `height_at` returns the highest). RCCE_NOROOFFIX restores the old highest-
+    // surface seating for an A/B comparison. Read once per frame, not per actor.
+    let roof_fix = std::env::var_os("RCCE_NOROOFFIX").is_none();
 
     let push = |store: &mut AssetStore,
                     models: &mut Vec<Rc<B3dModel>>,
@@ -1857,7 +1863,13 @@ fn build_actors(
         // (model `min`) at the ground. Fall back to centring on the server Y when
         // no ground triangle is under the actor (e.g. mid-air / off-mesh).
         let half_h = (max[1] - min[1]) * 0.5;
-        let ground = height.and_then(|h| h.height_at(pos[0], pos[2]));
+        let ground = height.and_then(|h| {
+            if roof_fix {
+                h.height_at_near(pos[0], pos[2], pos[1])
+            } else {
+                h.height_at(pos[0], pos[2])
+            }
+        });
         let trans_y = match ground {
             // Inside a water plane, float the body at the surface (swim) instead
             // of on the submerged lakebed (the user's "I walk underwater" bug).
@@ -2955,6 +2967,21 @@ fn load_zone_static(store: &mut AssetStore, view: &mut WorldView, gfx: &Gfx, dat
         }
         rcce_client::terrain::HeightField::build(tris, 8.0)
     };
+
+    // Headless roof-seating diagnostic (RCCE_ROOFSCAN): at each building
+    // occluder centre, report the highest vs lowest ground surface. A large gap
+    // means floor + roof stack there — the spot to test the roof-seating fix.
+    if std::env::var_os("RCCE_ROOFSCAN").is_some() {
+        for (c, r) in &occluders {
+            let hi = height_field.height_at(c[0], c[2]);
+            let lo = height_field.lowest_at(c[0], c[2]);
+            if let (Some(hi), Some(lo)) = (hi, lo) {
+                if hi - lo > 3.0 {
+                    println!("[roofscan] building @({:.1},{:.1}) r{:.1}: highest={:.2} lowest={:.2} gap={:.2}", c[0], c[2], r, hi, lo, hi - lo);
+                }
+            }
+        }
+    }
 
     // Particle emitters: load each placement's .rpc config + billboard texture and
     // build a live emitter (simulated per frame in `tick_particles`).
