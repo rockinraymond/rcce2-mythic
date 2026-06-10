@@ -513,6 +513,10 @@ INDEX_BYTES = INDEX_SLOTS * 4
 TEXTURE = 'texture'
 MESH = 'mesh'
 SOUND = 'sound'
+# Music.dat shares the index+blob shape but its record is the bare filename
+# string -- AddMusicToDatabase (Media.bb:498) writes only WriteString, no
+# leading flags/is3D byte like the other three databases.
+MUSIC = 'music'
 
 def _read_record(r, kind):
     if kind == TEXTURE:
@@ -522,6 +526,8 @@ def _read_record(r, kind):
                     z=r.float(), shader=r.short(), name=r.string())
     if kind == SOUND:
         return dict(is_3d=r.byte(), name=r.string())
+    if kind == MUSIC:
+        return dict(name=r.string())
     raise ValueError(kind)
 
 def _write_record(kind, e):
@@ -533,6 +539,8 @@ def _write_record(kind, e):
         w.float(e['z']); w.short(e['shader']); w.string(e['name'])
     elif kind == SOUND:
         w.byte(e['is_3d']); w.string(e['name'])
+    elif kind == MUSIC:
+        w.string(e['name'])
     else:
         raise ValueError(kind)
     return w.getvalue()
@@ -624,6 +632,79 @@ class MediaDB:
 def read_textures(data): return MediaDB(data, TEXTURE).entries()
 def read_meshes(data):   return MediaDB(data, MESH).entries()
 def read_sounds(data):   return MediaDB(data, SOUND).entries()
+
+
+# ---------- media DB <-> JSON-able object (rcproject phase 2) ----------
+#
+# Byte-faithful round-trip form for the index+blob databases. The .dat is NOT
+# a value codec: record bytes live at the offsets the index points to, in
+# insertion order, and Remove*FromDatabase leaves dead (unreferenced) spans
+# behind rather than compacting. The JSON form therefore captures three
+# things: the decoded records (sparse id -> fields map, the part humans diff
+# and merge), the insertion ORDER (ids sorted by blob offset -- appends are
+# strictly increasing, so order reconstructs every offset), and any GAP spans
+# (hex-encoded, keyed by the id whose record follows them; trailing gaps use
+# before=None). Rebuilding replays order/gaps and re-derives each index slot.
+
+def mediadb_to_obj(raw, kind):
+    db = MediaDB(raw, kind)
+    full = db._index_view()
+    # Decode every populated slot and measure each record's byte length via
+    # the reader's position delta (needed for gap detection).
+    spans = []  # (offset, end, id)
+    entries = {}
+    for idx, off in enumerate(db.index):
+        if off > 0:
+            r = Reader(full)
+            r.seek(off)
+            entries[str(idx)] = _read_record(r, kind)
+            spans.append((off, r.p, idx))
+    spans.sort()
+    order = [idx for (_, _, idx) in spans]
+    # Sanity: the engine appends records back-to-back; overlapping spans mean
+    # a misdecoded record and would silently corrupt the rebuild.
+    gaps = []
+    pos = INDEX_BYTES
+    for off, end, idx in spans:
+        if off < pos:
+            raise ValueError(f"overlapping record for id {idx} at {off} (expected >= {pos})")
+        if off > pos:
+            gaps.append(dict(before=idx, hex=full[pos:off].hex()))
+        pos = end
+    if pos < len(full):
+        gaps.append(dict(before=None, hex=full[pos:].hex()))
+    return dict(kind=kind, entries=entries, order=order, gaps=gaps)
+
+
+def obj_to_mediadb(obj):
+    kind = obj['kind']
+    entries = obj['entries']
+    order = list(obj['order'])
+    gaps = list(obj.get('gaps', []))
+    # Index ids may arrive as JSON string keys; order entries as ints.
+    index = [0] * INDEX_SLOTS
+    blob = bytearray()
+    def emit_gaps(marker):
+        nonlocal blob
+        for g in gaps:
+            if g['before'] == marker:
+                blob += bytes.fromhex(g['hex'])
+    seen = set()
+    for idx in order:
+        idx = int(idx)
+        if idx in seen:
+            raise ValueError(f"duplicate id {idx} in order")
+        seen.add(idx)
+        emit_gaps(idx)
+        rec = entries[str(idx)]
+        index[idx] = INDEX_BYTES + len(blob)
+        blob += _write_record(kind, rec)
+    emit_gaps(None)
+    missing = set(entries.keys()) - {str(i) for i in seen}
+    if missing:
+        raise ValueError(f"entries not present in order: {sorted(missing)}")
+    head = b''.join(struct.pack('<i', o) for o in index)
+    return head + bytes(blob)
 
 # ---------- simple string-list files (Damage.dat) ----------
 
