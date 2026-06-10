@@ -25,8 +25,11 @@ generated and round-trip-verified before it ever reaches the engine.
   the codec to generate anything.
 - `add_spells.py` — iteration 1 content: adds the restorative starter spells.
 - `rcproject.py` — git-friendly project format ([Issue #32](https://github.com/RydeTec/rcce2/issues/32),
-  phase 1). Round-trips the gameplay `.dat` files to/from JSON so they diff and
-  merge in git; see below.
+  phases 1+2). Round-trips the gameplay `.dat` files **and the four media
+  databases** to/from JSON so they diff and merge in git; see below.
+- `test_mediadb_roundtrip.py` — acceptance suite for the phase-2 media-DB
+  codec (real-data byte identity, dead-span fixtures, JSON-mutation vs the
+  engine's `Add*ToDatabase` write order, error cases, CLI gate).
 
 ## Git-friendly project format (`rcproject.py`)
 
@@ -55,17 +58,26 @@ python tools/projectgen/rcproject.py verify data         # prove the round-trip 
 
 **Scope (phase 1):** the symmetric value-codec formats — `Spells`, `Items`, `Actors`,
 `Projectiles`, `Factions`, server-side `Areas` (gameplay) and client-side `Areas`
-(visual). The `Meshes`/`Textures`/`Sounds` media databases are append-only index+blob
-structures (§ below) — rebuilding them from decoded entries would lose insertion-order /
-gap layout and change the bytes — so a git-friendly form for them is **deferred to phase 2**.
-`Server Data/Areas/Ownerships/*.dat` (a different format) and the legacy `Areas/ha.dat`
-stub are skipped, matching `validate.py`'s known-good set. Unrecognised `.dat` files are
-reported and left untouched.
+(visual). `Server Data/Areas/Ownerships/*.dat` (a different format) and the legacy
+`Areas/ha.dat` stub are skipped, matching `validate.py`'s known-good set.
 
-**Deferred (phase 2):** wiring `verify` into CI; a media-DB representation; optional
-compaction of the fixed-size area arrays (150 triggers / 2000 waypoints / 1000 spawns are
-serialised in full today — faithful and diffable, but verbose); a GUE/Loom export-on-save
-hook so authors never touch the CLI.
+**Scope (phase 2):** the four media databases — `Game Data/Meshes.dat`, `Textures.dat`,
+`Sounds.dat`, `Music.dat`. These are append-only index+blob structures, not value codecs
+(a 65,535-slot offset index + records in insertion order; deletions leave dead spans),
+so their JSON form captures three things: the sparse `entries` map (what humans diff),
+the insertion `order` (ids sorted by blob offset — enough to re-derive every offset),
+and any dead `gaps` (hex-encoded). Rebuild is byte-identical; the ~262 KB zero-heavy
+index serialises to a few KB of JSON. The actual assets are loose files and were always
+git-friendly — these indexes were the merge-conflict magnets (every asset import by any
+author rewrote the same opaque quarter-megabyte binary). Note `Music.dat` records are a
+bare filename string (no flags byte — `AddMusicToDatabase` differs from its siblings),
+and `Game Data/xMeshes.dat` is a legacy artifact with zero references in `src/`
+(reported as unrecognised, untouched).
+
+**Deferred (phase 3):** `Gubbins.dat` / `Animations.dat` / `Interface.dat` (different
+formats); wiring `verify` into CI; optional compaction of the fixed-size area arrays
+(150 triggers / 2000 waypoints / 1000 spawns are serialised in full today — faithful and
+diffable, but verbose); a GUE/Loom export-on-save hook so authors never touch the CLI.
 
 ## The formats (verified against engine source)
 
