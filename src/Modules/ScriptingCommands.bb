@@ -2809,6 +2809,20 @@ Function BVM_OPENTRADING(Param1%, Param2%)
 End Function
 
 Function BVM_SETACTORGLOBAL(Param1%, Param2%, Param3$)
+	; Self-or-priv gate. ScriptGlobals$[] is per-actor script state
+	; (skill XP, quest/login flags, marriage state). Shipped non-priv
+	; scripts legitimately write their OWN actor's globals -- Login.rsl
+	; (Player = Actor() -> SI\AI), the BlackSmithing skill template, and
+	; the ProcessGlobals.rcm PushGlobal helper they call. The privileged
+	; marriage / Click_marriage scripts (on Privileged Scripts.dat) write
+	; a *second* actor (the spouse, `Found`) and pass via the priv branch.
+	; The gate blocks a non-priv clicker-driven NPC script (Examine /
+	; Trade / RightClick / ItemScript, where SI\AI = Handle(clicker))
+	; from injecting into a THIRD actor's globals. Full-priv would break
+	; the shipped self-targeting scripts, so RequireSelfOrPrivileged is
+	; the correct choice here (peer: BVM_SETSUPERGLOBAL is full-priv as
+	; it has no actor handle and is server-wide state).
+	If Not BVM_RequireSelfOrPrivileged(Param1%) Then Return
 	; ScriptGlobals$ is Field [9] (10 slots); without this bound a
 	; script could write past the actor record into adjacent fields.
 	If Param2% < 0 Or Param2% > 9 Then Return
@@ -3178,6 +3192,13 @@ Function BVM_GETWAITRESULT$()
 End Function
 
 Function BVM_SETSUPERGLOBAL(Param1%, Param2$)
+	; Full-priv gate. SuperGlobals$() is server-wide shared state with no
+	; actor handle -- there is no "self" to scope to, so any non-priv
+	; script writing it is poisoning global state every other script and
+	; player observes (peer: BVM_SETGOLD-style server-state mutators are
+	; full-priv). No shipped content script calls SetSuperGlobal (grep of
+	; data/ found zero callers), so the gate breaks nothing.
+	If Not BVM_RequirePrivileged() Then Return
 	; SuperGlobals$ is Dim'd (99) -> 100 slots, indices 0..99.
 	; Without this bound a script's bad index is a Blitz Dim OOB write
 	; (no runtime check) and corrupts adjacent globals or crashes.
