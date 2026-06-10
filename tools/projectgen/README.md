@@ -62,11 +62,14 @@ python tools/projectgen/rcproject.py verify data         # prove the round-trip 
 `Areas/ha.dat` stub are skipped, matching `validate.py`'s known-good set.
 
 **Scope (phase 2):** the four media databases — `Game Data/Meshes.dat`, `Textures.dat`,
-`Sounds.dat`, `Music.dat`. These are append-only index+blob structures, not value codecs
-(a 65,535-slot offset index + records in insertion order; deletions leave dead spans),
-so their JSON form captures three things: the sparse `entries` map (what humans diff),
+`Sounds.dat`, `Music.dat`. These are index+blob structures, not value codecs
+(a 65,535-slot offset index + records in insertion order), so their JSON form captures
+three things: the sparse `entries` map (what humans diff),
 the insertion `order` (ids sorted by blob offset — enough to re-derive every offset),
-and any dead `gaps` (hex-encoded). Rebuild is byte-identical; the ~262 KB zero-heavy
+and any dead `gaps` (hex-encoded — note the engine itself never produces these:
+`Remove*FromDatabase` compacts via a full rewrite, so gaps only appear in
+crash-interrupted or hand-edited files, which the codec preserves faithfully
+instead of corrupting). Rebuild is byte-identical; the ~262 KB zero-heavy
 index serialises to a few KB of JSON. The actual assets are loose files and were always
 git-friendly — these indexes were the merge-conflict magnets (every asset import by any
 author rewrote the same opaque quarter-megabyte binary). Note `Music.dat` records are a
