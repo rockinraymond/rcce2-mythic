@@ -144,12 +144,18 @@ Function LoadAreaData(Name$, CameraEN, DisplayItems = False, UpdateRottNet = Fal
 	; RottNet update
 	Local RNUpdateTime% = MilliSecs()
 	
-	LockMeshes()
-	LockTextures()
-
-	; Open file
+	; Open file. The Lock calls come AFTER this check: LockMeshes/LockTextures
+	; (Media.bb) each open a database file and stash the handle in a Global;
+	; locking before the missing-file early return leaked both handles on
+	; every failed load (the next Lock call overwrites the Global without
+	; closing the old handle). With the order below, the early return holds
+	; no locks and the success path pairs with UnlockMeshes/UnlockTextures
+	; at the end of this function.
 	F = ReadFile("Data\Areas\" + Name$ + ".dat")
 	If F = 0 Then Return False
+
+	LockMeshes()
+	LockTextures()
 
 		; Loading screen
 		LoadingTexID = ReadShort(F)
