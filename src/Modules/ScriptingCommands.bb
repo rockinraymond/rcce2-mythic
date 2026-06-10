@@ -1564,6 +1564,16 @@ Function BVM_ADDABILITY(Param1%, Param2$, Param3%=1)
 End Function
 
 Function BVM_DELETEABILITY(Param1%, Param2$)
+	; Full-priv gate. Strips an ability/spell from any actor handle --
+	; equivalent-effect bypass of the already-gated BVM_SETABILITYLEVEL
+	; (which gates because zeroing ability levels bricks a player's
+	; combat toolkit; deleting the ability outright is strictly worse).
+	; For Examine/Trade/RightClick/ItemScript spawns SI\AI = Handle(clicker),
+	; so a self-or-priv gate would let DeleteAbility(clicker, "<spell>")
+	; through -- RequirePrivileged refuses regardless of the target.
+	; No shipped content script calls DeleteAbility (grep of data/ found
+	; zero callers), so the gate breaks nothing.
+	If Not BVM_RequirePrivileged() Then Return
 	Actor.ActorInstance = Object.ActorInstance(Param1%)
 	If Actor <> Null
 		SpellName$ = Upper$(Param2$)
@@ -2222,6 +2232,15 @@ Function BVM_COMPLETEQUEST(Param1%, Param2$)
 End Function
 
 Function BVM_DELETEQUEST(Param1%, Param2$)
+	; Full-priv gate. Wipes a target's quest-log entry -- equivalent-effect
+	; bypass of the gated quest/progression mutators: a non-priv clicker
+	; script could erase a player's quest progress. For Examine/Trade/
+	; RightClick/ItemScript spawns SI\AI = Handle(clicker), so a self-or-priv
+	; gate would let DeleteQuest(clicker, "<quest>") through --
+	; RequirePrivileged refuses regardless of the target. No shipped content
+	; script calls DeleteQuest (grep of data/ found zero callers), so the
+	; gate breaks nothing.
+	If Not BVM_RequirePrivileged() Then Return
 	Actor.ActorInstance = Object.ActorInstance(Param1%)
 	If Actor <> Null
 		If Actor\RNID > 0

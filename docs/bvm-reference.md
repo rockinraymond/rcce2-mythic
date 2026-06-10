@@ -268,9 +268,9 @@ none = void/Bool. Parameter sigils inside the argument list use the same.
 | `CREATEEMITTER` | `CREATEEMITTER(PARAM1%, PARAM2$, PARAM3%, PARAM4%, PARAM5#=0, PARAM6#=0, PARAM7#=0, PARAM8%=0)` | None |
 | `DAY` | `DAY()` : Int | None |
 | `DEFAULTFACTIONRATING` | `DEFAULTFACTIONRATING(PARAM1$, PARAM2$)` : Int | None |
-| `DELETEABILITY` | `DELETEABILITY(PARAM1%, PARAM2$)` | None |
+| `DELETEABILITY` | `DELETEABILITY(PARAM1%, PARAM2$)` | Privileged |
 | `DELETEACTOREFFECT` | `DELETEACTOREFFECT(PARAM1%, PARAM2$)` | None |
-| `DELETEQUEST` | `DELETEQUEST(PARAM1%, PARAM2$)` | None |
+| `DELETEQUEST` | `DELETEQUEST(PARAM1%, PARAM2$)` | Privileged |
 | `DEQUOTE` | `DEQUOTE(PARAM1$)` : String | None |
 | `DOTTEDIP` | `DOTTEDIP(Param1%)` : String | Privileged |
 | `FINDACTOR` | `FINDACTOR(PARAM1$, ACTORTYPE% = 3)` : Int | None |
