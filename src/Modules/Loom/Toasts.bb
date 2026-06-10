@@ -159,7 +159,16 @@ Type Toasts
         // Background -- slightly transparent-looking via stone-800 over
         // the existing surface
         LoomShadowCard(x, y, TOAST_W, TOAST_H)
-        LoomFill(x, y, TOAST_W, TOAST_H, LOOM_STONE_800_R, LOOM_STONE_800_G, LOOM_STONE_800_B)
+        // Background varies by chrome mode (mirrors Composer::
+        // renderAndUpdate): tool=flat, balanced=subtle gradient,
+        // in-world=dramatic gradient (+ mirror brass stripe added below).
+        If Loom_ChromeIsTool() = True
+            LoomFill(x, y, TOAST_W, TOAST_H, LOOM_STONE_800_R, LOOM_STONE_800_G, LOOM_STONE_800_B)
+        Else If Loom_ChromeIsInWorld() = True
+            LoomGradientV(x, y, TOAST_W, TOAST_H, LOOM_STONE_700_R, LOOM_STONE_700_G, LOOM_STONE_700_B, LOOM_STONE_900_R, LOOM_STONE_900_G, LOOM_STONE_900_B)
+        Else
+            LoomGradientV(x, y, TOAST_W, TOAST_H, LOOM_STONE_800_R, LOOM_STONE_800_G, LOOM_STONE_800_B, LOOM_STONE_850_R, LOOM_STONE_850_G, LOOM_STONE_850_B)
+        EndIf
 
         // Border in the kind's color
         LoomBorder(x, y, TOAST_W, TOAST_H, Toasts::kindR(self, t\Kind), Toasts::kindG(self, t\Kind), Toasts::kindB(self, t\Kind))
@@ -167,6 +176,9 @@ Type Toasts
 
         // Left brass accent stripe
         LoomFill(x, y, 3, TOAST_H, LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
+        // In-world mode mirrors the stripe on the right edge (book-spine
+        // ornament, same flourish the composer panel uses in-world).
+        If Loom_ChromeIsInWorld() = True Then LoomFill(x + TOAST_W - 3, y, 3, TOAST_H, LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
 
         // Message text (truncate if too long for the toast width)
         Local maxChars% = 40

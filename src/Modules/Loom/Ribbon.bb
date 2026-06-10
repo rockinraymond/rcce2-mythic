@@ -223,10 +223,20 @@ Type Ribbon
         Local bh% = RIBBON_BADGE_H
         Local hovered% = (mx >= x And mx < x + bw And my >= by And my < by + bh)
 
+        // Dirty-indicator fill varies by chrome mode (mirrors the
+        // tool/balanced/in-world pattern from Browser::drawTopRibbon +
+        // Composer::renderAndUpdate): tool=flat brass, balanced=subtle
+        // brass gradient, in-world=bold brass gradient + brass ornament
+        // hairline. Hover stays a flat warning highlight in every mode.
         If hovered = True
             LoomFill(x, by, bw, bh, LOOM_WARNING_R, LOOM_WARNING_G, LOOM_WARNING_B)
-        Else
+        Else If Loom_ChromeIsTool() = True
             LoomFill(x, by, bw, bh, LOOM_BRASS_800_R, LOOM_BRASS_800_G, LOOM_BRASS_800_B)
+        Else If Loom_ChromeIsInWorld() = True
+            LoomGradientV(x, by, bw, bh, LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B, LOOM_BRASS_800_R, LOOM_BRASS_800_G, LOOM_BRASS_800_B)
+            LoomHRule(x, by, bw, LOOM_BRASS_300_R, LOOM_BRASS_300_G, LOOM_BRASS_300_B)
+        Else
+            LoomGradientV(x, by, bw, bh, LOOM_BRASS_700_R, LOOM_BRASS_700_G, LOOM_BRASS_700_B, LOOM_BRASS_800_R, LOOM_BRASS_800_G, LOOM_BRASS_800_B)
         EndIf
         LoomBorder(x, by, bw, bh, LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
         LoomText(x + RIBBON_BADGE_PAD_X, by + 4, label, LOOM_PARCHMENT_100_R, LOOM_PARCHMENT_100_G, LOOM_PARCHMENT_100_B)

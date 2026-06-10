@@ -616,15 +616,39 @@ Type Atlas
                 // Outdoors zones get a slightly warmer/lighter stone fill
                 // so designers can scan the map for "is the forest the
                 // big green cluster?" without opening each zone.
+                //
+                // Base-disk chrome varies by mode (mirrors the
+                // tool/balanced/in-world pattern from Browser::drawCardChrome):
+                // tool=flat, balanced=subtle gradient, in-world=dramatic
+                // gradient (+ inner brass ring ornament added below). The
+                // focused (brass) and hovered (arcane) states above stay flat
+                // highlights in every mode.
                 If n\Outdoors = True
-                    LoomFill(sx - r, sy - r, r * 2, r * 2, LOOM_STONE_500_R, LOOM_STONE_500_G, LOOM_STONE_500_B)
+                    If Loom_ChromeIsTool() = True
+                        LoomFill(sx - r, sy - r, r * 2, r * 2, LOOM_STONE_500_R, LOOM_STONE_500_G, LOOM_STONE_500_B)
+                    Else If Loom_ChromeIsInWorld() = True
+                        LoomGradientV(sx - r, sy - r, r * 2, r * 2, LOOM_STONE_500_R, LOOM_STONE_500_G, LOOM_STONE_500_B, LOOM_STONE_900_R, LOOM_STONE_900_G, LOOM_STONE_900_B)
+                    Else
+                        LoomGradientV(sx - r, sy - r, r * 2, r * 2, LOOM_STONE_500_R, LOOM_STONE_500_G, LOOM_STONE_500_B, LOOM_STONE_700_R, LOOM_STONE_700_G, LOOM_STONE_700_B)
+                    EndIf
                 Else
-                    LoomFill(sx - r, sy - r, r * 2, r * 2, LOOM_STONE_700_R, LOOM_STONE_700_G, LOOM_STONE_700_B)
+                    If Loom_ChromeIsTool() = True
+                        LoomFill(sx - r, sy - r, r * 2, r * 2, LOOM_STONE_700_R, LOOM_STONE_700_G, LOOM_STONE_700_B)
+                    Else If Loom_ChromeIsInWorld() = True
+                        LoomGradientV(sx - r, sy - r, r * 2, r * 2, LOOM_STONE_700_R, LOOM_STONE_700_G, LOOM_STONE_700_B, LOOM_STONE_950_R, LOOM_STONE_950_G, LOOM_STONE_950_B)
+                    Else
+                        LoomGradientV(sx - r, sy - r, r * 2, r * 2, LOOM_STONE_700_R, LOOM_STONE_700_G, LOOM_STONE_700_B, LOOM_STONE_800_R, LOOM_STONE_800_G, LOOM_STONE_800_B)
+                    EndIf
                 EndIf
             EndIf
 
             // Outer brass ring
             LoomBorder(sx - r, sy - r, r * 2, r * 2, LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
+            // In-world mode adds an inner brass ring as an engraved ornament
+            // (mirrors the double-brass framing the modals use in-world).
+            If Loom_ChromeIsInWorld() = True
+                LoomBorder(sx - r + 2, sy - r + 2, r * 2 - 4, r * 2 - 4, LOOM_BRASS_700_R, LOOM_BRASS_700_G, LOOM_BRASS_700_B)
+            EndIf
 
             // Spawn count inside the node -- "12" if non-zero, else
             // blank. Quick "is this zone empty?" cue.
