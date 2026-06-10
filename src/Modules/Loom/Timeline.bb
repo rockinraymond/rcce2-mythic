@@ -190,7 +190,7 @@ Type Timeline
         // Footer hint
         Local hy% = modalY + TIMELINE_MODAL_H - TIMELINE_HINT_H - 4
         LoomHRule(modalX + TIMELINE_PAD, hy - 2, TIMELINE_MODAL_W - TIMELINE_PAD * 2, LOOM_BRASS_700_R, LOOM_BRASS_700_G, LOOM_BRASS_700_B)
-        LoomText(modalX + TIMELINE_PAD, hy + 4, "Click revert on a row to undo  |  arrows scroll  |  Esc to close", LOOM_STONE_300_R, LOOM_STONE_300_G, LOOM_STONE_300_B)
+        LoomText(modalX + TIMELINE_PAD, hy + 4, "Click revert on a row to undo  |  scroll / arrows  |  Esc to close", LOOM_STONE_300_R, LOOM_STONE_300_G, LOOM_STONE_300_B)
 
         // Click-outside-modal closes
         If clicked = True
@@ -230,6 +230,42 @@ Type Timeline
             EndIf
             e = Before e
         Wend
+
+        // Scrollbar thumb in the right margin (between the rows and the
+        // modal border) whenever the history overflows the visible band.
+        // Gives the wheel/arrow scroll a position indicator -- every other
+        // Loom scroll region (Composer body, browser grid) has one.
+        If self\entryCount > rowsVisible
+            Timeline::drawScrollbar(self, rx + rw + 4, listY, rowsVisible * TIMELINE_ROW_H)
+        EndIf
+    End Method
+
+
+    // -------------------------------------------------------------------------
+    // drawScrollbar -- thin brass thumb in row space (mirrors Composer::
+    // drawScrollbar, which works in pixel space). Track spans the visible
+    // band; thumb height + position reflect rowsVisible / entryCount and the
+    // current scrollOffset. Only called when the list overflows.
+    // -------------------------------------------------------------------------
+    Method drawScrollbar(barX%, barTopY%, barH%)
+        If self\entryCount <= 0 Then Return
+
+        // Track
+        LoomFill(barX, barTopY, 4, barH, LOOM_STONE_700_R, LOOM_STONE_700_G, LOOM_STONE_700_B)
+
+        // Thumb height proportional to the visible fraction of the content;
+        // floored at 16px so it stays grabbable with a long history.
+        Local thumbH% = (barH * barH) / (self\entryCount * TIMELINE_ROW_H)
+        If thumbH < 16 Then thumbH = 16
+        If thumbH > barH Then thumbH = barH
+
+        // Thumb y: scrollOffset (rows) mapped into track travel.
+        Local maxScroll% = Timeline::maxScroll(self)
+        Local travelTrack% = barH - thumbH
+        Local thumbY% = barTopY
+        If maxScroll > 0 Then thumbY = barTopY + (self\scrollOffset * travelTrack) / maxScroll
+
+        LoomFill(barX, thumbY, 4, thumbH, LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
     End Method
 
 
@@ -310,17 +346,42 @@ Type Timeline
             Timeline::closeModal(self)
             Return
         EndIf
-        If KeyHit(200) And self\scrollOffset > 0
-            self\scrollOffset = self\scrollOffset - 1
+
+        // Arrow keys nudge one row.
+        If KeyHit(200) Then self\scrollOffset = self\scrollOffset - 1
+        If KeyHit(208) Then self\scrollOffset = self\scrollOffset + 1
+
+        // Mouse wheel scroll. Loom_MouseWheel() is the per-frame DELTA
+        // (Loom_BeginFrame derives it from MouseZ's cumulative value);
+        // wheel-up is positive and scrolls toward the newest entry, matching
+        // the Composer body + browser grid convention. Consume the tick so a
+        // surface painted earlier this frame can't also act on it.
+        Local wheel% = Loom_MouseWheel()
+        If wheel <> 0
+            self\scrollOffset = self\scrollOffset - wheel
+            Loom_ConsumeWheel()
         EndIf
-        If KeyHit(208)
-            self\scrollOffset = self\scrollOffset + 1
-            // Clamp to avoid scrolling past the end (best-effort: cap to
-            // entryCount-1; the visible-rows check in drawEntries handles
-            // the rest visually).
-            If self\scrollOffset >= self\entryCount Then self\scrollOffset = self\entryCount - 1
-            If self\scrollOffset < 0 Then self\scrollOffset = 0
-        EndIf
+
+        // Clamp to [0, maxScroll] so the last page sits flush against the
+        // footer instead of scrolling into empty space (keeps the scrollbar
+        // thumb honest).
+        Local maxScroll% = Timeline::maxScroll(self)
+        If self\scrollOffset > maxScroll Then self\scrollOffset = maxScroll
+        If self\scrollOffset < 0 Then self\scrollOffset = 0
+    End Method
+
+
+    // -------------------------------------------------------------------------
+    // maxScroll -- highest valid scrollOffset: entryCount minus the rows that
+    // fit in the list band, floored at 0. Shared by pumpKeyboard's clamp and
+    // the scrollbar thumb geometry so the two never disagree.
+    // -------------------------------------------------------------------------
+    Method maxScroll%()
+        Local listH% = TIMELINE_MODAL_H - TIMELINE_HEADER_H - TIMELINE_HINT_H - 12
+        Local rowsVisible% = listH / TIMELINE_ROW_H
+        Local m% = self\entryCount - rowsVisible
+        If m < 0 Then m = 0
+        Return m
     End Method
 
 
