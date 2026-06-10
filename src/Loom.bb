@@ -79,6 +79,7 @@ Global EnvironmentSaved = True
 //
 // Order matters for Type declarations -- mirror GUE.bb's order.
 // -----------------------------------------------------------------------------
+Include "Modules\Graphics\RenderSanity.bb" // Issue #40 boot probe (dead-surface detection + bounded re-init)
 Include "Modules\Path.bb"
 Include "Modules\RCEnet.bb"
 Include "Modules\Media.bb"
@@ -448,12 +449,18 @@ If (boot_width < 1280 And boot_height < 800)
 EndIf
 
 Graphics3D(boot_width, boot_height, 0, 2)
+// Issue #40 boot probe (dead-surface detection + bounded re-init); see
+// Modules\Graphics\RenderSanity.bb. Runs before anything creates surfaces.
+EnsureRenderSanity(Int(boot_width), Int(boot_height), 0, 2)
 SetBuffer(BackBuffer())
-AppTitle("Loom -- World Editor (Alpha) -- Realm Crafter " + rcceVersion$)
+// Keep the probe's title-bar failure notice (the only OS-rendered text
+// visible when every surface is dead) instead of overwriting it.
+If RenderSanityResult >= 0 Then AppTitle("Loom -- World Editor (Alpha) -- Realm Crafter " + rcceVersion$)
 
 // Log -- Data\Logs\Loom Log.txt (relative to project root, next to GUE's log).
 Global LoomLog = StartLog("Loom Log", False)
 WriteLog(LoomLog, "** Loom startup begins **", True, True)
+If RenderSanityResult <> 0 Then WriteLog(LoomLog, "RenderSanity (Loom boot): result " + RenderSanityResult + " -- issue #40 signature")
 WriteLog(LoomLog, "Resolution: " + Str(boot_width) + "x" + Str(boot_height))
 
 // Resolve project name from the working directory leaf.
