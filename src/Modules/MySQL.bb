@@ -746,7 +746,20 @@ Function My_LoadActorInstance.ActorInstance(ActID, Q.Questlog, C.ActionBarData, 
 			If ID <> 65535 Then
 				
 				; This code for debugging
-				If ItemList(ID) = Null
+				; ItemList is Dim'd (65534) -> valid 0..65534. ID comes
+				; straight from the DB (ReadSQLField, a raw 32-bit value),
+				; so a corrupt/tampered rc_items.iid outside that range
+				; would OOB-index ItemList on the shared server process.
+				; BlitzForge's Or is non-short-circuit, so the range test
+				; is kept in its OWN branch ahead of the ItemList(ID) deref
+				; (an inline `... Or ItemList(ID) = Null` would still wild-
+				; read the array). Soft-fail to the same "item removed"
+				; recovery the flat-file path (ReadItemInstance) and the
+				; existing Null branch use: drop the item, keep loading.
+				If ID < 0 Or ID > 65534
+					WriteLog(MainLog, "Item Removal: Item with out-of-range ID " + ID + " dropped during actor load!")
+					A\Inventory\Items[i] = Null
+				ElseIf ItemList(ID) = Null
 					WriteLog(MainLog, "Item Removal: Item with ID " + ID + " has been removed from actor as it is no longer existant!")
 					A\Inventory\Items[i] = Null
 				Else
@@ -849,6 +862,17 @@ Function My_LoadActorInstance.ActorInstance(ActID, Q.Questlog, C.ActionBarData, 
 		If i = 0 Then A\Spell_ID	= ReadSQLField(SpellRow, "id")
 		A\KnownSpells[i]			= ReadSQLField(SpellRow, "known")
 		A\SpellLevels[i]			= ReadSQLField(SpellRow, "level")
+		; KnownSpells[i] is a spell ID used directly as a SpellsList(...)
+		; index (Dim'd (65534), valid 0..65534). ReadSQLField is an
+		; unbounded DB value, so a corrupt rc_spells.known would OOB the
+		; SpellsList read on the SHARED server process (character-list
+		; send, etc.). Zero both the id and its paired level so the slot
+		; is inert everywhere the `SpellLevels[i] > 0` gate is checked,
+		; mirroring the flat-file ReadActorInstance clamp in Actors.bb.
+		If A\KnownSpells[i] < 0 Or A\KnownSpells[i] > 65534
+			A\KnownSpells[i] = 0
+			A\SpellLevels[i] = 0
+		EndIf
 		
 		; Clean up
 		FreeSQLRow(SpellRow)
