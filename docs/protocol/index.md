@@ -37,12 +37,12 @@ pages is a per-iteration documentation task — see CONTRIBUTING.md.
 
 | ID | Packet | Direction | Server handler | Client handler | Detail |
 |---|---|---|---|---|---|
-| 1 | `P_CreateAccount` | C→S | [ServerNet.bb:2344](../../src/Modules/ServerNet.bb#L2344) | — | — |
-| 2 | `P_VerifyAccount` | C→S | [ServerNet.bb:2398](../../src/Modules/ServerNet.bb#L2398) | — | — |
+| 1 | `P_CreateAccount` | C→S | [ServerNet.bb:2344](../../src/Modules/ServerNet.bb#L2344) | — | [P_CreateAccount](packets/P_CreateAccount.md) |
+| 2 | `P_VerifyAccount` | C→S | [ServerNet.bb:2398](../../src/Modules/ServerNet.bb#L2398) | — | [P_VerifyAccount](packets/P_VerifyAccount.md) |
 | 3 | `P_FetchCharacter` | C→S | [ServerNet.bb:2590](../../src/Modules/ServerNet.bb#L2590) | — | — |
 | 4 | `P_CreateCharacter` | C→S | [ServerNet.bb:2714](../../src/Modules/ServerNet.bb#L2714) | — | — |
 | 5 | `P_DeleteCharacter` | C→S | [ServerNet.bb:2951](../../src/Modules/ServerNet.bb#L2951) | — | — |
-| 6 | `P_ChangePassword` | C→S | [ServerNet.bb:2533](../../src/Modules/ServerNet.bb#L2533) | — | — |
+| 6 | `P_ChangePassword` | C→S | [ServerNet.bb:2533](../../src/Modules/ServerNet.bb#L2533) | — | [P_ChangePassword](packets/P_ChangePassword.md) |
 | 7 | `P_FetchActors` | C→S | [ServerNet.bb:2236](../../src/Modules/ServerNet.bb#L2236) | — | — |
 | 8 | `P_FetchItems` | Unused | — | — | — |
 | 9 | `P_ChangeArea` | Both | [ServerNet.bb:734](../../src/Modules/ServerNet.bb#L734) | [ClientNet.bb:1637](../../src/Modules/ClientNet.bb#L1637) | — |
