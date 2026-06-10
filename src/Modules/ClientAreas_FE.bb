@@ -258,12 +258,15 @@ Function LoadArea(Name$, CameraEN, DisplayItems = False, UpdateRottNet = False)
 	FadeOutTexture = LoadTexture("Data\Textures\Shadows\fade.png", 59)	
 	ShadowFade FadeOutTexture
 		
-	LockMeshes()
-	LockTextures()
-	
-	; Open file
+	; Open file. Lock AFTER the missing-file check (matching AreaLoader.bb):
+	; locking first leaked both Media.bb lock handles on every failed load,
+	; since the next Lock call overwrites the handle Global without closing
+	; the old one. The early return below holds no locks.
 	F = ReadFile("Data\Areas\" + Name$ + ".dat")
 	If F = 0 Then Return False
+
+	LockMeshes()
+	LockTextures()
 
 		; Loading screen
 		LoadingTexID = ReadShort(F)

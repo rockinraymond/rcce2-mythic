@@ -291,11 +291,12 @@ Function Loom_SetWorldMode(zoneHandle, enable)
     If enable = True
         If VPWorldLoaded = True Then Loom_UnloadWorld()
         ; Pre-check the visual data file rather than letting LoadAreaData's
-        ; missing-file Return False handle it: the loader's early return
-        ; happens after LockMeshes/LockTextures, leaking the two lock file
-        ; handles per attempt (pre-existing in AreaLoader, also reachable
-        ; from GUE). The common Loom case -- toggling world view on a
-        ; gameplay-only zone -- shouldn't pay that. (Review finding on #551.)
+        ; missing-file Return False handle it, so the common Loom case --
+        ; toggling world view on a gameplay-only zone -- gets the specific
+        ; "no visual zone data" toast instead of a generic load failure.
+        ; (Originally this also dodged a lock-handle leak in the loader's
+        ; early return -- review finding on #551 -- but AreaLoader now
+        ; locks only after the ReadFile check, so that's no longer a factor.)
         If FileType("Data\Areas\" + Ar\Name$ + ".dat") <> 1
             Toast_Show("No visual zone data (Data\Areas\" + Ar\Name$ + ".dat)", "warning")
             WriteLog(LoomLog, "ZoneViewport: no visual .dat for " + Ar\Name$ + " -- staying schematic")
