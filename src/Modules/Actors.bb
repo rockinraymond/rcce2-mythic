@@ -1565,7 +1565,17 @@ Function DestroyActorEffect( AE.ActorEffect )
 End Function
 
 Function RemoveActorEffectFromActor( AI.ActorInstance, EffectName$ )
-	For AE.ActorEffect = Each ActorEffect
+	; After-cursor walk (CLAUDE.md "Iterator-during-iteration hazards",
+	; pattern #1). The body Deletes the current AE. Blitz3D's For-Each
+	; advances the cursor via the deleted element's "next" pointer, so the
+	; original `For AE = Each ActorEffect / ... / Delete AE` shape leaves a
+	; dangling cursor. Capture `After AE` BEFORE the Delete and advance via
+	; the saved pointer. Mirrors the effect-expiry sweep in
+	; GameServer.bb::UpdateActorInstances.
+	Local AE.ActorEffect = First ActorEffect
+	Local AENext.ActorEffect = Null
+	While AE <> Null
+		AENext = After AE
 		If AE\Owner = AI
 			If Upper$(AE\Name$) = Upper$(EffectName$)
 				If AE\Owner\RNID > 0
@@ -1586,6 +1596,7 @@ Function RemoveActorEffectFromActor( AI.ActorInstance, EffectName$ )
 				Return True
 			EndIf
 		EndIf
-	Next
+		AE = AENext
+	Wend
 	Return False
 End Function
