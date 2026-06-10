@@ -226,7 +226,7 @@ End Function
 Function ActorHasSlot(A.Actor, SlotI, I.Item)
 
 	; If it's an equipped slot
-	If SlotI < Slot_Backpack
+	If SlotI < SlotI_Backpack
 		If I\ExclusiveRace$ <> ""
 			; Allow even disabled equipment slots to be used if the item is exclusive to this race
 			If Upper$(I\ExclusiveRace$) = Upper$(A\Race$)
