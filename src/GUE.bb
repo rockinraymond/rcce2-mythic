@@ -125,6 +125,9 @@ Graphics3D(GUE_width, GUE_height, 0, 2)
 EnsureRenderSanity(GUE_width, GUE_height, 0, 2)
 If RenderSanityResult <> 0 Then WriteLog(GUELog, "RenderSanity (GUE boot): result " + RenderSanityResult + " -- issue #40 signature")
 FUI_Initialise(GUE_width, GUE_height, 0, 2, True, True, "Realm Crafter Community Edition -" + rcceVersion)
+; FUI_Initialise sets AppTitle unconditionally -- restore the dead-surfaces
+; notice if the probe failed (no-op otherwise).
+RenderSanityReassertNotice()
 SetBuffer(BackBuffer())
 
 ;FUI_RemoveBorder()

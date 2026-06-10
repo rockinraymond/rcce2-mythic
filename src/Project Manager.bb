@@ -52,6 +52,9 @@ Type ProjectManager.RCCEApp
 		ProjectManager::loadProject(self)
 
 		FUI_Initialise(self\width, self\height, 0, 2, False, True, self\title, RCCEApp::version(self))
+		; FUI_Initialise sets AppTitle unconditionally -- restore the issue #40
+		; dead-surfaces notice if the boot probe (RCCEGraphics::init) failed.
+		RenderSanityReassertNotice()
 		
 		RCCEGraphics::resetBuffer(self\gfx)
 
