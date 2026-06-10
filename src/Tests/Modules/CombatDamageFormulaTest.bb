@@ -829,13 +829,17 @@ End Test
 ; ActorAttack -- equipment wear
 ; ============================================================================
 
-; FLAG-FOR-HUMAN: the "Damage armour" block in ActorAttack wears down the
-; ATTACKER's (A1's) equipped armour, not the defender's (A2's), even
-; though A2's armour is what absorbed the blow. Pinned as shipped: after
-; 300 swings with ArmourDamage on, the defender's chest piece is still at
-; exactly 100 health while the attacker's has lost some (1-in-5 chance
-; per swing; P(zero losses in 300) ~ 1e-29).
-Test testArmourWearHitsAttackerNotDefender()
+; The "Damage armour" block in ActorAttack wears down the DEFENDER's
+; (A2's) equipped armour -- the armour that absorbed the blow. This test
+; originally pinned (FLAG-FOR-HUMAN) the opposite, shipped-buggy behavior:
+; the block was a copy-paste of the weapon-wear block above it and wore
+; the ATTACKER's (A1's) armour instead. That bug is now fixed in
+; GameServer.bb (A1 -> A2 in the armour-wear block only), and this test
+; was deliberately flipped to assert the corrected behavior: after 300
+; swings with ArmourDamage on, the defender's chest piece has lost some
+; health (1-in-5 chance per swing; P(zero losses in 300) ~ 1e-29) while
+; the attacker's is still at exactly 100.
+Test testArmourWearHitsDefender()
 	ResetWorld()
 	SeedRnd(4001)
 	CombatFormula = 2
@@ -849,9 +853,9 @@ Test testArmourWearHitsAttackerNotDefender()
 	For i = 1 To 300
 		ActorAttack(A1, A2)
 	Next
-	Assert(DefenderChest\ItemHealth = 100)              ; FLAG-FOR-HUMAN
-	Assert(AttackerChest\ItemHealth < 100)              ; FLAG-FOR-HUMAN
-	Assert(AttackerChest\ItemHealth > 0)
+	Assert(DefenderChest\ItemHealth < 100)
+	Assert(DefenderChest\ItemHealth > 0)
+	Assert(AttackerChest\ItemHealth = 100)
 	ResetWorld()
 End Test
 

@@ -548,16 +548,20 @@ Function ActorAttack(A1.ActorInstance, A2.ActorInstance)
 		EndIf
 	EndIf
 
-	; Damage armour
+	; Damage armour. The DEFENDER's (A2's) equipped armour absorbed the
+	; blow (the damage formulas read GetArmourLevel(A2\Inventory)), so it
+	; is A2's armour that wears -- this block was historically a
+	; copy-paste of the weapon-wear block above, which left the wear
+	; target as A1 (the attacker).
 	If ArmourDamage = True
 		For i = SlotI_Shield To SlotI_Feet
-			If A1\Inventory\Items[i] <> Null
-				If A1\Inventory\Items[i]\ItemHealth > 0
+			If A2\Inventory\Items[i] <> Null
+				If A2\Inventory\Items[i]\ItemHealth > 0
 					If Rand(1, 5) = 1
-						A1\Inventory\Items[i]\ItemHealth = A1\Inventory\Items[i]\ItemHealth - 1
-						If A1\RNID > 0
-							Pa$ = RCE_StrFromInt$(i, 1) + RCE_StrFromInt$(A1\Inventory\Items[i]\ItemHealth, 2)
-							RCE_Send(Host, A1\RNID, P_ItemHealth, Pa$, True)
+						A2\Inventory\Items[i]\ItemHealth = A2\Inventory\Items[i]\ItemHealth - 1
+						If A2\RNID > 0
+							Pa$ = RCE_StrFromInt$(i, 1) + RCE_StrFromInt$(A2\Inventory\Items[i]\ItemHealth, 2)
+							RCE_Send(Host, A2\RNID, P_ItemHealth, Pa$, True)
 						EndIf
 					EndIf
 				EndIf
