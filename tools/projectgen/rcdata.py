@@ -638,13 +638,23 @@ def read_sounds(data):   return MediaDB(data, SOUND).entries()
 #
 # Byte-faithful round-trip form for the index+blob databases. The .dat is NOT
 # a value codec: record bytes live at the offsets the index points to, in
-# insertion order, and Remove*FromDatabase leaves dead (unreferenced) spans
-# behind rather than compacting. The JSON form therefore captures three
-# things: the decoded records (sparse id -> fields map, the part humans diff
-# and merge), the insertion ORDER (ids sorted by blob offset -- appends are
-# strictly increasing, so order reconstructs every offset), and any GAP spans
+# insertion order. The JSON form therefore captures three things: the decoded
+# records (sparse id -> fields map, the part humans diff and merge), the
+# insertion ORDER (ids sorted by blob offset -- appends are strictly
+# increasing, so order reconstructs every offset), and any GAP spans
 # (hex-encoded, keyed by the id whose record follows them; trailing gaps use
 # before=None). Rebuilding replays order/gaps and re-derives each index slot.
+#
+# Engine fact (verified against Media.bb:120/186/242/298): Remove*FromDatabase
+# does NOT leave dead spans -- every Remove* rereads the survivors and
+# rewrites the file compacted in ascending-ID order via CreateDatabase, and
+# the Add* duplicate-scan walks the blob sequentially, so a gapped file is
+# not a state the engine itself produces or can safely append to. The gap
+# mechanism here is a strict fidelity superset: it preserves the bytes of
+# crash-interrupted, legacy, or hand-edited files instead of corrupting them.
+# Corollary for diff readers: an engine-side DELETE rewrites the whole blob
+# (order + every offset change), so it shows as a large JSON diff, not a
+# one-slot change.
 
 def mediadb_to_obj(raw, kind):
     db = MediaDB(raw, kind)

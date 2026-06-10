@@ -22,10 +22,12 @@ Projectiles, Factions, server-side Areas (gameplay) and client-side Areas
 (visual).
 
 Scope (phase 2): the four media databases (Game Data/Meshes.dat, Textures.dat,
-Sounds.dat, Music.dat). These are append-only index+blob structures, not value
-codecs, so their JSON form additionally captures insertion ORDER (ids sorted by
-blob offset) and any dead GAP spans left by Remove*FromDatabase (hex-encoded) --
-enough to rebuild the bytes identically. The actual assets are loose files and
+Sounds.dat, Music.dat). These are index+blob structures, not value codecs, so
+their JSON form additionally captures insertion ORDER (ids sorted by blob
+offset) and any dead GAP spans (hex-encoded) -- enough to rebuild the bytes
+identically. (The engine itself never produces gaps -- Remove*FromDatabase
+compacts via a full rewrite -- the gap mechanism preserves crash-interrupted
+or hand-edited files faithfully instead of corrupting them.) The actual assets are loose files and
 already git-friendly; only these quarter-megabyte indexes used to be guaranteed
 merge conflicts on every asset import.
 

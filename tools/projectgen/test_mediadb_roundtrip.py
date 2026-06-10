@@ -109,8 +109,11 @@ def build_synthetic(kind, placements):
 
 
 def zero_slot(raw, slot_id):
-    """Simulate RemoveFromDatabase the way the engine does: zero the index
-    slot, leave the record bytes in place as a dead span."""
+    """Zero an index slot, leaving the record bytes in place as a dead span.
+    NOTE: this is NOT what the engine's Remove*FromDatabase does -- those
+    compact via a full rewrite (Media.bb). A dead span models a
+    crash-interrupted or hand-edited file, which the gap mechanism must
+    preserve byte-faithfully rather than corrupt."""
     b = bytearray(raw)
     struct.pack_into('<i', b, slot_id * 4, 0)
     return bytes(b)
@@ -162,8 +165,10 @@ def check_sparsity():
 
 
 def check_mid_gap_roundtrip():
-    """3a. SYNTHETIC GAP: three records, middle one deleted engine-style
-    (index slot zeroed, bytes left as a dead span between live records).
+    """3a. SYNTHETIC GAP: three records, the middle one's slot zeroed
+    (a crash-interrupted / hand-edited state -- the engine's own Remove*
+    compacts instead; see zero_slot note) leaving a dead span between
+    live records.
     Round-trip must reproduce the dead bytes exactly."""
     placements = [
         (5,  rec_bytes(rcdata.SOUND, is_3d=1, name='Sounds\\step1.wav')),
