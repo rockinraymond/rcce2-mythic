@@ -19,21 +19,32 @@ param(
 
 $exePath = Resolve-Path $Exe -ErrorAction Stop
 $workDir = Split-Path $exePath
-$resultFile = Join-Path $workDir "gfxprobe_result.txt"
+# The probe writes its result anchored to the EXECUTABLE's directory
+# (SystemProperty("AppDir")). Also check the parent in case an older binary
+# (pre-fix: CWD-relative write + ChangeDir to the project root) is being
+# measured -- a silent location mismatch would tally everything as
+# NO-RESULT and masquerade as a 100% crash rate.
+$resultCandidates = @(
+    (Join-Path $workDir "gfxprobe_result.txt"),
+    (Join-Path (Split-Path $workDir) "gfxprobe_result.txt")
+)
 
 $tally = @{ "PASS" = 0; "RECOVERED" = 0; "FAIL" = 0; "NO-RESULT" = 0 }
 
 for ($i = 1; $i -le $Runs; $i++) {
-    if (Test-Path $resultFile) { Remove-Item $resultFile -Force }
+    foreach ($rf in $resultCandidates) {
+        if (Test-Path $rf) { Remove-Item $rf -Force }
+    }
     $env:RCCE_GFXPROBE = "exit"
-    $p = Start-Process -FilePath $exePath -WorkingDirectory $workDir -PassThru
+    $p = Start-Process -FilePath $exePath -WorkingDirectory $workDir -WindowStyle Minimized -PassThru
     if (-not $p.WaitForExit($TimeoutSec * 1000)) {
         $p.Kill()
         Write-Output ("run {0}: TIMEOUT (killed)" -f $i)
         $tally["NO-RESULT"]++
         continue
     }
-    if (Test-Path $resultFile) {
+    $resultFile = $resultCandidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+    if ($resultFile) {
         $line = (Get-Content $resultFile -TotalCount 1).Trim()
         $key = ($line -split ' ')[0]
         if (-not $tally.ContainsKey($key)) { $key = "NO-RESULT" }
@@ -44,7 +55,7 @@ for ($i = 1; $i -le $Runs; $i++) {
         Write-Output ("run {0}: exited without writing a result" -f $i)
     }
 }
-$env:RCCE_GFXPROBE = ""
+Remove-Item Env:RCCE_GFXPROBE -ErrorAction SilentlyContinue
 
 Write-Output ""
 Write-Output ("=== {0} runs of {1} ===" -f $Runs, (Split-Path $exePath -Leaf))

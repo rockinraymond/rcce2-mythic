@@ -104,17 +104,15 @@ Function EnsureRenderSanity%(w%, h%, d%, mode%)
 		EndIf
 	Next
 
-	If result < 0
-		; Title-bar text is rendered by the OS, not DirectDraw, so this is
-		; readable even though nothing inside the window is.
-		AppTitle "RCCE: GRAPHICS BROKE (no textures - issue #40). Restart; if it recurs, remove bin\dxgi.dll"
-	EndIf
-
 	RenderSanityResult = result
+	RenderSanityReassertNotice()
 
 	; Measurement mode: record + quit so a harness can tally incidence.
+	; Anchor the result file to the EXECUTABLE's directory, not the working
+	; directory -- every shipped target ChangeDirs to the project root
+	; before this runs, while the harness looks next to the exe.
 	If Instr(GetEnv("RCCE_GFXPROBE"), "exit") > 0
-		Local rf.BBStream = WriteFile("gfxprobe_result.txt")
+		Local rf.BBStream = WriteFile(SystemProperty("AppDir") + "gfxprobe_result.txt")
 		If rf <> Null
 			If result = 0
 				WriteLine rf, "PASS"
@@ -130,4 +128,15 @@ Function EnsureRenderSanity%(w%, h%, d%, mode%)
 
 	Return result
 
+End Function
+
+; Re-assert the dead-surfaces title-bar notice. Title text is rendered by
+; the OS, not DirectDraw, so it is readable precisely when nothing inside
+; the window is -- but FUI_Initialise (GUE / Project Manager / Server) sets
+; AppTitle unconditionally AFTER the probe runs, so those boot paths must
+; call this again right after their F-UI init. No-op on healthy boots.
+Function RenderSanityReassertNotice%()
+	If RenderSanityResult >= 0 Then Return False
+	AppTitle "RCCE: GRAPHICS BROKE (no textures - issue #40). Restart; if it recurs, remove bin\dxgi.dll"
+	Return True
 End Function
