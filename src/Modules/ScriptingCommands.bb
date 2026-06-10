@@ -1434,7 +1434,6 @@ Function BVM_ACTORBACKPACK%(Param1%, Param2%)
 		If SlotI_Backpack + Num >= SlotI_Backpack And SlotI_Backpack + Num <= Slots_Inventory
 			Result% = Handle(Actor\Inventory\Items[SlotI_Backpack + Num])
 		EndIf
-		EndIf
 	EndIf
 Return Result
 End Function

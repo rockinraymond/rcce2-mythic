@@ -40,6 +40,17 @@ Function Assist()
 End Function
 
 
+; '/loc' command — prints your current X / Y / Z position. Handy for placing
+; portals, spawns and waypoints on walkable ground: stand where you want something
+; and read off the coordinates. Read-only, so no privilege needed.
+Function Loc()
+
+	Player = Actor()
+	Output(Player, "X: " + ActorX(Player) + "   Y: " + ActorY(Player) + "   Z: " + ActorZ(Player), 120, 200, 255)
+	Return
+
+End Function
+
 ; Example '/wave' command
 Function Wave()
 

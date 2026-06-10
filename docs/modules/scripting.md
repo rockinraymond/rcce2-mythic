@@ -4,7 +4,7 @@
 
 This module is the runtime half of the in-game scripting system: it compiles `.rsl` / `.rcscript` source files into BVM (Blitz Virtual Machine) bytecode at server boot, spawns and dispatches script instances (`ScriptInstance`) in response to game events, and manages the per-instance lifecycle (run, wait, resume, free). The native function surface that scripts can call — 222 `BVM_*` functions covering actor / item / spell / party / world / I/O / chat / persistence — is implemented in [ScriptingCommands.bb](scriptingcommands.md) and catalogued in the auto-generated [BVM scripting reference](../bvm-reference.md). The opcode-dispatch glue that maps BVM bytecode to those native function pointers lives in [RC_Standard_Invoker.bb](rc_standard_invoker.md).
 
-This page is an overview; see the BVM reference for the per-function API.
+This page is an overview of the *engine* half; see the BVM reference for the per-function API. If you are a content author wanting to *write* scripts (syntax, the entry-point functions, the wait/dialog model, and the privilege/allowlist rules), start with the [RSL language guide](../scripting/language.md).
 
 ## Script source files and compilation
 

@@ -77,6 +77,53 @@ jobs:
         shell: cmd
         run: test.bat
 
+      # The Rust client (client-rs/) ships its own deterministic unit + parser
+      # robustness tests. windows-latest has the Rust toolchain preinstalled.
+      # Gate ALL four logic crates on every PR:
+      #   - rcce-data / rcce-net: parsers + wire codec — the "soft-fail, never
+      #     panic on hostile input" invariant must not regress.
+      #   - rcce-render / rcce-client: despite pulling wgpu/winit, they carry
+      #     ~150 PURELY HEADLESS unit tests (overlay projection math, world.rs
+      #     packet-handler regressions, HUD/menu geometry, the EnetTransport Send
+      #     contract, etc.) that run with no GPU/window in <1s. Compiling them
+      #     here also makes CI catch a build break in the client/renderer (the
+      #     crates the project changes most) on a fresh checkout. The one-time
+      #     wgpu/winit compile is amortised by the cache step below (which already
+      #     lists client-rs/target). The i686-only rcenet-ffi-probe is excluded.
+      - name: Cache Rust build (client-rs)
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            client-rs/target
+          key: cargo-${{ runner.os }}-${{ hashFiles('client-rs/Cargo.lock') }}
+          restore-keys: |
+            cargo-${{ runner.os }}-
+
+      - name: Run Rust client tests (logic crates)
+        shell: bash
+        working-directory: client-rs
+        run: cargo test -p rcce-data -p rcce-net -p rcce-render -p rcce-client --locked
+
+      # Clippy gate over the four tested crates plus their vendored enet-sys
+      # transport (lib + bins + tests via --all-targets), failing on ANY lint
+      # (`-D warnings`). enet-sys is included explicitly so the gate is
+      # deterministic: it's a path-dep of rcce-net, so on a cache MISS clippy
+      # would lint it anyway — gating it directly means a green run can't depend
+      # on whether the cache happened to skip it. The workspace allows three
+      # lints that fight idiomatic graphics/parser code (too_many_arguments,
+      # type_complexity, field_reassign_with_default — see client-rs/Cargo.toml
+      # [workspace.lints.clippy]); everything else is denied. The i686-only
+      # rcenet-ffi-probe is excluded (CI is x86_64). This gate already caught
+      # two real correctness bugs (a dead `|| true` find-predicate and an
+      # approximate-TAU literal).
+      - name: Clippy (Rust client logic crates)
+        shell: bash
+        working-directory: client-rs
+        run: cargo clippy -p rcce-data -p rcce-net -p rcce-render -p rcce-client -p enet-sys --all-targets --locked -- -D warnings
+
       # Two reference docs (the wire-protocol packet catalog and the BVM
       # scripting-API catalog) are produced by generator scripts that read
       # line numbers + signatures out of the source. Their `--check` mode

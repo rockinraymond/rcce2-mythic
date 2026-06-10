@@ -270,8 +270,20 @@ Dim FactionDefaultRatings(99, 99)
 ; that want those use FindActorInstanceFromName instead).
 Function FindActorInstanceFromRNID.ActorInstance(RNID)
 
-	If RNID < 1 Or RNID > MaxRNID Then Return Null
-	Return ActorByRNID(RNID)
+	If RNID < 1 Then Return Null
+	; Small connection ids resolve through the O(1) ActorByRNID index.
+	If RNID <= MaxRNID Then Return ActorByRNID(RNID)
+	; RCEnet's RCE_GetMessageConnection returns iSender = (int)Event.peer — a
+	; heap POINTER (> MaxRNID) — so M\FromID (and the \RNID set from it at
+	; StartGame) overflows the O(1) index and the <=MaxRNID guard skips the
+	; ActorByRNID population. The pointer is stable per connection, so fall
+	; back to an O(n) scan of the unconditionally-set \RNID field. Without
+	; this every client P_StandardUpdate / gameplay packet that resolves the
+	; sender via FindActorInstanceFromRNID is silently dropped.
+	For A.ActorInstance = Each ActorInstance
+		If A\RNID = RNID Then Return A
+	Next
+	Return Null
 
 End Function
 
@@ -509,6 +521,23 @@ Function ReadActorInstance.ActorInstance(Stream)
 	For i = 0 To 999
 		A\KnownSpells[i] = ReadShort(Stream)
 		A\SpellLevels[i] = ReadShort(Stream)
+		; KnownSpells[i] is a spell ID used directly as a SpellsList(...)
+		; index (Dim'd (65534), valid 0..65534). ReadShort can carry a
+		; corrupt/tampered Accounts.dat slot outside that range -- a
+		; negative value, or an unsigned read-back of one (e.g. 65535).
+		; Release builds emit no array-bounds check (debug-only), so
+		; SpellsList(OOB) reads garbage memory, casts it to a Spell handle,
+		; and crashes the SHARED server process on character-list send
+		; (ServerNet.bb P_FetchCharacter: the `If Sp <> Null` guard runs
+		; AFTER the OOB read). Zero both the id and its paired level so the
+		; slot is inert everywhere the `SpellLevels[i] > 0` gate is checked,
+		; mirroring the MemorisedSpells clamp just below and the ServerNet
+		; recovery branch. The two-sided test catches the OOB regardless of
+		; ReadShort's signedness.
+		If A\KnownSpells[i] < 0 Or A\KnownSpells[i] > 65534
+			A\KnownSpells[i] = 0
+			A\SpellLevels[i] = 0
+		EndIf
 	Next
 	For i = 0 To 9
 		A\MemorisedSpells[i] = ReadShort(Stream)

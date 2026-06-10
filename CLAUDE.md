@@ -55,6 +55,8 @@ Always run from the repo root.
 .\compile.bat -t           # build engine only (skip tools — ~10x faster)
 .\compile.bat -b           # also rebuild BlitzForge (slow, MSBuild)
 .\compile.bat -e           # skip engine, build tools only
+.\compile.bat -r           # also build the Rust client → bin\ClientRS.exe (needs cargo; skips if absent)
+.\compile.bat -e -t -r     # build ONLY the Rust client (skip engine + tools)
 .\test.bat                 # compile + run every Strict test under src/Tests/
 .\test.bat ItemsTest       # run only files whose basename contains "ItemsTest"
 
@@ -67,6 +69,10 @@ Always run from the repo root.
 `test.bat` / `test.sh` print a `[RUN ]` / `[PASS]` / `[FAIL]` marker per file and an end-of-run `Ran N files: P passed, F failed.` summary with a bulleted list of any failing files. CI still calls the runner with no args and only checks the exit code, so the default behavior is unchanged. The positional substring filter is the documented way to reproduce the known intermittent `ItemsTest.bb` flake locally without re-running the whole suite — see the **Known intermittent flake** note under [CI](#ci-githubworkflowsciyml) below.
 
 After any change to a `.bb` file under `src/`, run `compile.bat -t` and confirm clean compile before committing. `Local`-shadowing-a-`Global`, missing field, wrong sigil — Strict mode catches all of these at compile time.
+
+**Rust client (`bin\ClientRS.exe`).** `compile.bat -r` / `compile.sh -r` `cargo build --release`s the `client-rs` workspace's `client-window` binary and copies it to `bin\ClientRS.exe` — a self-contained 64-bit drop-in alongside the Blitz `bin\Client.exe` (the two coexist; `-r` never touches the Blitz client). The flag is opt-in (a clean wgpu build is ~1–2 min) and skips gracefully with a message if `cargo` isn't on `PATH`, so CI without Rust is unaffected. `ClientRS.exe` finds the project `data\` via `RCCE_DATA`, else a `data\` dir next to or above its own location (so `bin\..\data` resolves) or the working directory. It boots into a **login screen** (account/password) → **character select** (create / delete / enter world), then connects to a running `bin\Server.exe -UNLOCK` and renders the live world. See `client-rs/` and the **Rust client port** memory for the feature set.
+
+Runtime env vars (all optional): `RCCE_DATA` (project `data\` dir), `RCCE_USER` (pre-fills the login account, default `rustbot`), `RCCE_AUTOLOGIN` (skip the login screen, log straight into the world — implied by `RCCE_BENCH`/`RCCE_AUTOWALK`), `RCCE_AUTOSUBMIT` / `RCCE_AUTOENTER` (headless test hooks: auto-submit the login / auto-enter the first character, for screenshotting the menu→world path), `RCCE_AUTOWALK` (headless movement self-test), `RCCE_CPUSKIN` (force the legacy CPU skinning path; GPU linear-blend skinning for actor bodies is now the **default** — faster + smoother — with a per-actor CPU fallback when an appearance can't be skinned), `RCCE_GPUSKIN` (now a no-op opt-in, kept for back-compat), `RCCE_BENCH=N` (after a 120-frame warmup, time N frames, print `[bench] avg fps …`, exit — measure with vs. without `RCCE_CPUSKIN` to compare), `RCCE_SHOT=<path>` / `RCCE_SHOT_FRAME=N` (capture the live world or menu to a PNG at frame N and exit — headless render verification), `RCCE_PHASE` / `RCCE_DAYNIGHT_SECS` (pin / set the day-night cycle), `RCCE_WEAPON_MESH` (force a weapon mesh on every actor, for gear-attach verification).
 
 The compile target (`Server.exe`, `Client.exe`, `GUE.exe`, `Project Manager.exe`) depends on which top-level `.bb` includes the file. Most modules are included by Server *and* Client, so check both compile.
 

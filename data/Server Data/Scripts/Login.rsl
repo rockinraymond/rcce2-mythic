@@ -23,6 +23,18 @@ Function Main()
 		PushGlobal(Player, 8, 1, CurrentDate$, ",", 10)
 		PushGlobal(Player, 8, 2, "1", ",", 10)
 		League = 1
+
+;       --- RCCE2 first-ever-login starting kit (so new players aren't helpless) ---
+;       Runs once (first login only). GiveItem is privileged -> "Login" is on
+;       Data\Server Data\Privileged Scripts.dat. Items must exist in Items.dat.
+		GiveItem(Player, "Long Sword", 1)
+		GiveItem(Player, "Scarred Shield", 1)
+		GiveItem(Player, "Potion of Healing", 3)
+		ChangeGold(Player, 50)
+		If AbilityKnown(Player, "Heal") = 0
+			AddAbility(Player, "Heal", 1)
+		EndIf
+		Output(Player, "A starting kit is in your pack: a Long Sword, a Scarred Shield, 3 potions and 50 gold. Press I to open your inventory and equip them.", 0, 255, 0)
 	Else
 		League = Int(PullGlobal$(Player, 8, 2, ","))
 		Result = CheckDate%(PullGlobal$(Player, 8, 1, ","), 182)

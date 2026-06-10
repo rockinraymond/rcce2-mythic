@@ -1001,6 +1001,7 @@ Function UpdateInterface()
 						AttackTarget = False
 					//EndIf
 					.SkipActorSelect
+					
 					;HideEntity(ClickMarkerEN) ;{@@@~}
 				; Target is a dropped item
 				ElseIf Target$ = "D"
@@ -4966,7 +4967,14 @@ Function UpdateActionBarIcons()
 			CurrentSpellCharge = Me\SpellCharge[Num]
          EndIf
          GYG.GY_Gadget = Object.GY_Gadget(BActionBar(i))
-         EntityTexture(GYG\EN, GetTexture(Sp\ThumbnailTexID)) 
+         If Sp <> Null
+            EntityTexture(GYG\EN, GetTexture(Sp\ThumbnailTexID)) 
+         Else
+            ; Stale slot -- clear it and show the default button face.
+            ActionBarSlots(i + Offset) = 0
+            GYB.GY_Button = Object.GY_Button(GYG\TypeHandle)
+            EntityTexture GYG\EN, GYB\UserTexture
+         EndIf
 		If CurrentSpellCharge > 0 
          	EntityAlpha(GYG\EN, 0.5)
 		Else
