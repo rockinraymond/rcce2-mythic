@@ -85,11 +85,15 @@ Function LoadGame()
 	Select FullScreen
 		Case 0
 			Graphics3D(Width, Height, Depth,2)
+			EnsureRenderSanity(Width, Height, Depth, 2)
 			Initext
 		Case 1
 			Graphics3D(Width, Height, Depth,1)
+			EnsureRenderSanity(Width, Height, Depth, 1)
 			Initext
 	End Select
+	; Issue #40 instrumentation (see Modules\Graphics\RenderSanity.bb).
+	If RenderSanityResult <> 0 Then WriteLog(MainLog, "RenderSanity (game boot): result " + RenderSanityResult + " -- issue #40 signature")
 			;multithreading cysis145 ???
 				;Local pointer1 = FunctionPointer()
 				;Goto skip1
