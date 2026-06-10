@@ -12,10 +12,12 @@ EnableGC
 ; computes today, including the surprising forks. Anything that looks like
 ; a latent bug is pinned as-is and marked with a `; FLAG-FOR-HUMAN:`
 ; comment at the assertion. Current flags:
-;   1. ActorHasSlot's exclusivity fork gates on `SlotI < Slot_Backpack`
-;      (the 1-based slot NAME constant, 11) instead of SlotI_Backpack (the
-;      slot INDEX, 14), so indices 11-13 (Ring4, Amulet1, Amulet2) skip
-;      the ExclusiveRace$/ExclusiveClass$ checks entirely.
+;   1. FIXED: ActorHasSlot's exclusivity fork used to gate on
+;      `SlotI < Slot_Backpack` (the 1-based slot NAME constant, 11) instead
+;      of SlotI_Backpack (the slot INDEX, 14), letting indices 11-13 (Ring4,
+;      Amulet1, Amulet2) skip the ExclusiveRace$/ExclusiveClass$ checks.
+;      The gate now uses SlotI_Backpack; the assertions below pin the
+;      corrected denials.
 ;   2. A matching ExclusiveRace$ returns True immediately, skipping both
 ;      the ExclusiveClass$ check and the disabled-slot flag check.
 ;
@@ -225,7 +227,7 @@ Test testActorHasSlotRaceMatchOverridesDisabledSlot()
 	Assert(ActorHasSlot(A\Actor, SlotI_Ring3, elfBlade) = True)
 
 	; The override only applies to the exclusivity-checked index range
-	; (SlotI < Slot_Backpack = 11). A backpack index still falls through to
+	; (SlotI < SlotI_Backpack = 14). A backpack index still falls through to
 	; the (disabled) backpack flag.
 	Assert(ActorHasSlot(A\Actor, SlotI_Backpack, elfBlade) = False)
 
@@ -245,15 +247,13 @@ Test testActorHasSlotWrongRaceDenied()
 	Assert(ActorHasSlot(A\Actor, SlotI_Ring1, orcAxe) = False)
 	Assert(ActorHasSlot(A\Actor, SlotI_Ring3, orcAxe) = False)
 
-	; FLAG-FOR-HUMAN: the exclusivity fork gates on `SlotI < Slot_Backpack`
-	; -- Slot_Backpack is the 1-based slot NAME constant (11), not the slot
-	; INDEX SlotI_Backpack (14). Slot indices 11..13 (Ring4, Amulet1,
-	; Amulet2) therefore SKIP the race/class exclusivity check entirely: a
-	; wrong-race ring is denied in Ring1-3 but ALLOWED in Ring4, and a
-	; wrong-race amulet is allowed in both amulet slots (flag permitting).
-	Assert(ActorHasSlot(A\Actor, SlotI_Ring4, orcAxe) = True)
-	Assert(ActorHasSlot(A\Actor, SlotI_Amulet1, orcAxe) = True)
-	Assert(ActorHasSlot(A\Actor, SlotI_Amulet2, orcAxe) = True)
+	; Fixed: the exclusivity fork now gates on `SlotI < SlotI_Backpack` (the
+	; slot INDEX, 14) instead of Slot_Backpack (the 1-based NAME constant,
+	; 11), so indices 11..13 (Ring4, Amulet1, Amulet2) run the race check
+	; like every other equip index: wrong race is denied everywhere.
+	Assert(ActorHasSlot(A\Actor, SlotI_Ring4, orcAxe) = False)
+	Assert(ActorHasSlot(A\Actor, SlotI_Amulet1, orcAxe) = False)
+	Assert(ActorHasSlot(A\Actor, SlotI_Amulet2, orcAxe) = False)
 
 	; Backpack indices never run the exclusivity check either -- a
 	; wrong-race item can always sit in the backpack (flag permitting).
@@ -274,9 +274,9 @@ Test testActorHasSlotClassExclusivity()
 	; Wrong class: denied on exclusivity-checked indices despite enabled flags.
 	Local W.ActorInstance = MakeActor(MaskAll, "", "Warrior")
 	Assert(ActorHasSlot(W\Actor, SlotI_Weapon, staff) = False)
-	; FLAG-FOR-HUMAN: same index-vs-name confusion as the race fork --
-	; Ring4/Amulet1/Amulet2 (indices 11..13) skip the class check too.
-	Assert(ActorHasSlot(W\Actor, SlotI_Ring4, staff) = True)
+	; Fixed: the gate now uses SlotI_Backpack (14), so Ring4 (index 11)
+	; runs the class check like every other equip index.
+	Assert(ActorHasSlot(W\Actor, SlotI_Ring4, staff) = False)
 
 	; Matching class (case-insensitive) falls through to the flag check --
 	; unlike the race match, it does NOT override a disabled slot.
