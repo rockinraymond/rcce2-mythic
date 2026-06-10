@@ -837,6 +837,18 @@ Function UpdateActorInstances(Broadcast)
 			; Update AI
 			If AI\RNID = -1
 				AInstance.AreaInstance = Object.AreaInstance(AI\ServerArea)
+				; Stale-handle Null discipline (CLAUDE.md): AI\ServerArea is
+				; re-resolved here, but it can change mid-tick (a combat or
+				; water-damage warp earlier in this same iteration) or the
+				; zone can be freed by another actor processed earlier this
+				; tick. Either makes Object.AreaInstance return Null, and the
+				; AI block below derefs AInstance\Area\SpawnWaypoint[],
+				; WaypointX/Y/Z[], WaypointPause[], etc. for waypoint/patrol
+				; movement -- each an unguarded one-tick server crash. Skip
+				; the AI update this tick when the lookup is Null; the actor's
+				; intrinsic state (position, HP, mode) is preserved and the
+				; next tick re-resolves once SetArea settles.
+				If AInstance <> Null
 				; Wait mode
 				If AI\AIMode = AI_Wait
 					; Look for targets now and then
@@ -1040,6 +1052,7 @@ Function UpdateActorInstances(Broadcast)
 						EndIf
 					EndIf
 				EndIf
+				EndIf  ; closes the re-resolved AInstance <> Null guard (AI\RNID = -1)
 			EndIf
 			EndIf  ; closes the AInstance <> Null guard added above
 		EndIf
