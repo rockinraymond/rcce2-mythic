@@ -279,6 +279,22 @@ Function FindActorInstanceFromRNID.ActorInstance(RNID)
 
 End Function
 
+; Bounded RuntimeIDList lookup for wire-supplied RuntimeIDs.
+;
+; RuntimeIDList is Dim(65535). A 2-byte wire field decodes to 0..65535
+; (RCEnet.bb:85 -- RCE_IntFromStr zero-fills the bank and only writes the
+; bytes present), so every current caller is already in range. This wraps
+; the index in the documented bounds-before-index convention (CLAUDE.md)
+; at the wire boundary so a FUTURE read-width change (or a non-2-byte
+; caller) cannot index the Dim out of bounds and crash the shared server
+; process. Returns Null for an out-of-range ID; callers already Null-check
+; the result (the active protection today), matching the ActorList guard
+; in P_CreateCharacter (ServerNet.bb ~2814).
+Function RuntimeActorFromWire.ActorInstance(RuntimeID)
+	If RuntimeID < 0 Or RuntimeID > 65535 Then Return Null
+	Return RuntimeIDList(RuntimeID)
+End Function
+
 ; Finds an actor instance based on their name
 Function FindActorInstanceFromName.ActorInstance(Name$)
 
