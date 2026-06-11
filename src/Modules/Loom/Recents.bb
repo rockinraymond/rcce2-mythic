@@ -357,10 +357,20 @@ Type Recents
         Local modalY% = (sh - RECENTS_MODAL_H) / 3
 
         LoomShadowCard(modalX, modalY, RECENTS_MODAL_W, RECENTS_MODAL_H)
-        LoomFill(modalX, modalY, RECENTS_MODAL_W, RECENTS_MODAL_H, LOOM_STONE_850_R, LOOM_STONE_850_G, LOOM_STONE_850_B)
+        // Modal backdrop varies by chrome mode (mirrors Composer::
+        // renderAndUpdate): tool=flat, balanced=subtle gradient,
+        // in-world=dramatic gradient + brass bottom-rule ornament.
+        If Loom_ChromeIsTool() = True
+            LoomFill(modalX, modalY, RECENTS_MODAL_W, RECENTS_MODAL_H, LOOM_STONE_850_R, LOOM_STONE_850_G, LOOM_STONE_850_B)
+        Else If Loom_ChromeIsInWorld() = True
+            LoomGradientV(modalX, modalY, RECENTS_MODAL_W, RECENTS_MODAL_H, LOOM_STONE_700_R, LOOM_STONE_700_G, LOOM_STONE_700_B, LOOM_STONE_950_R, LOOM_STONE_950_G, LOOM_STONE_950_B)
+        Else
+            LoomGradientV(modalX, modalY, RECENTS_MODAL_W, RECENTS_MODAL_H, LOOM_STONE_850_R, LOOM_STONE_850_G, LOOM_STONE_850_B, LOOM_STONE_900_R, LOOM_STONE_900_G, LOOM_STONE_900_B)
+        EndIf
         LoomBorder(modalX, modalY, RECENTS_MODAL_W, RECENTS_MODAL_H, LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
         LoomBorder(modalX + 1, modalY + 1, RECENTS_MODAL_W - 2, RECENTS_MODAL_H - 2, LOOM_BRASS_700_R, LOOM_BRASS_700_G, LOOM_BRASS_700_B)
         LoomFill(modalX, modalY, RECENTS_MODAL_W, 3, LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
+        If Loom_ChromeIsInWorld() = True Then LoomFill(modalX, modalY + RECENTS_MODAL_H - 3, RECENTS_MODAL_W, 3, LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
 
         LoomTheme_UseDisplay()
         LoomText(modalX + RECENTS_PAD, modalY + 6, "RECENTS  |  " + Str(self\entryCount) + " entries", LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
@@ -370,7 +380,7 @@ Type Recents
 
         Local hy% = modalY + RECENTS_MODAL_H - RECENTS_HINT_H - 4
         LoomHRule(modalX + RECENTS_PAD, hy - 2, RECENTS_MODAL_W - RECENTS_PAD * 2, LOOM_BRASS_700_R, LOOM_BRASS_700_G, LOOM_BRASS_700_B)
-        LoomText(modalX + RECENTS_PAD, hy + 4, "Click a row to jump  |  arrows scroll  |  Esc to close", LOOM_STONE_300_R, LOOM_STONE_300_G, LOOM_STONE_300_B)
+        LoomText(modalX + RECENTS_PAD, hy + 4, "Click a row to jump  |  scroll / arrows  |  Esc to close", LOOM_STONE_300_R, LOOM_STONE_300_G, LOOM_STONE_300_B)
 
         If clicked = True
             If mx < modalX Or mx >= modalX + RECENTS_MODAL_W Or my < modalY Or my >= modalY + RECENTS_MODAL_H
@@ -405,6 +415,51 @@ Type Recents
                 Recents::drawOneEntry(self, e, rx, ry, rw, mx, my, clicked)
             EndIf
         Next
+
+        // Scrollbar thumb in the right margin when the list overflows the
+        // visible band -- gives the wheel/arrow scroll a position indicator,
+        // matching the Composer body + browser grid.
+        If self\entryCount > rowsVisible
+            Recents::drawScrollbar(self, rx + rw + 4, listY, rowsVisible * RECENTS_ROW_H)
+        EndIf
+    End Method
+
+
+    // -------------------------------------------------------------------------
+    // drawScrollbar -- thin brass thumb in row space (mirrors Composer::
+    // drawScrollbar, which works in pixel space). Track spans the visible
+    // band; thumb height + position reflect rowsVisible / entryCount and the
+    // current scrollOffset. Only called when the list overflows.
+    // -------------------------------------------------------------------------
+    Method drawScrollbar(barX%, barTopY%, barH%)
+        If self\entryCount <= 0 Then Return
+
+        LoomFill(barX, barTopY, 4, barH, LOOM_STONE_700_R, LOOM_STONE_700_G, LOOM_STONE_700_B)
+
+        Local thumbH% = (barH * barH) / (self\entryCount * RECENTS_ROW_H)
+        If thumbH < 16 Then thumbH = 16
+        If thumbH > barH Then thumbH = barH
+
+        Local maxScroll% = Recents::maxScroll(self)
+        Local travelTrack% = barH - thumbH
+        Local thumbY% = barTopY
+        If maxScroll > 0 Then thumbY = barTopY + (self\scrollOffset * travelTrack) / maxScroll
+
+        LoomFill(barX, thumbY, 4, thumbH, LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
+    End Method
+
+
+    // -------------------------------------------------------------------------
+    // maxScroll -- highest valid scrollOffset: entryCount minus the rows that
+    // fit in the list band, floored at 0. Shared by pumpKeyboard's clamp and
+    // the scrollbar thumb geometry.
+    // -------------------------------------------------------------------------
+    Method maxScroll%()
+        Local listH% = RECENTS_MODAL_H - RECENTS_HEADER_H - RECENTS_HINT_H - 12
+        Local rowsVisible% = listH / RECENTS_ROW_H
+        Local m% = self\entryCount - rowsVisible
+        If m < 0 Then m = 0
+        Return m
     End Method
 
 
@@ -453,14 +508,26 @@ Type Recents
             Recents::closeModal(self)
             Return
         EndIf
-        If KeyHit(200) And self\scrollOffset > 0
-            self\scrollOffset = self\scrollOffset - 1
+
+        // Arrow keys nudge one row.
+        If KeyHit(200) Then self\scrollOffset = self\scrollOffset - 1
+        If KeyHit(208) Then self\scrollOffset = self\scrollOffset + 1
+
+        // Mouse wheel scroll. Loom_MouseWheel() is the per-frame DELTA;
+        // wheel-up is positive and scrolls toward the most-recent entry,
+        // matching the Composer body + browser grid convention. Consume the
+        // tick so a surface painted earlier this frame can't also act on it.
+        Local wheel% = Loom_MouseWheel()
+        If wheel <> 0
+            self\scrollOffset = self\scrollOffset - wheel
+            Loom_ConsumeWheel()
         EndIf
-        If KeyHit(208)
-            self\scrollOffset = self\scrollOffset + 1
-            If self\scrollOffset >= self\entryCount Then self\scrollOffset = self\entryCount - 1
-            If self\scrollOffset < 0 Then self\scrollOffset = 0
-        EndIf
+
+        // Clamp to [0, maxScroll] so the last page sits flush against the
+        // footer (keeps the scrollbar thumb honest).
+        Local maxScroll% = Recents::maxScroll(self)
+        If self\scrollOffset > maxScroll Then self\scrollOffset = maxScroll
+        If self\scrollOffset < 0 Then self\scrollOffset = 0
     End Method
 
 

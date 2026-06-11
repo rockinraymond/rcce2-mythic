@@ -1168,7 +1168,7 @@ Function UpdateNetwork()
 							; bytes to be present.
 							If Len(M\MessageData$) >= 5
 								RuntimeID = RCE_IntFromStr(Mid$(M\MessageData$, 4, 2))
-								Context = RuntimeIDList(RuntimeID)
+								Context = RuntimeActorFromWire(RuntimeID)
 								; Reject targets that are dead or in a different
 								; area. Without this, the spell script fires
 								; against an actor whose FreeActorInstance is
@@ -1336,7 +1336,7 @@ Function UpdateNetwork()
 					SlotIndex = RCE_IntFromStr(Left$(M\MessageData$, 1))
 					Local ItemScriptGateOk% = True
 					If Len(M\MessageData$) = 3
-						A2.ActorInstance = RuntimeIDList(RCE_IntFromStr(Mid$(M\MessageData$, 2)))
+						A2.ActorInstance = RuntimeActorFromWire(RCE_IntFromStr(Mid$(M\MessageData$, 2)))
 						; Same-area + InteractDist gate when the item
 						; targets another actor. Mirrors P_RightClick
 						; (range) and P_AttackActor (area). Items used
@@ -1429,12 +1429,24 @@ Function UpdateNetwork()
 			Case P_RightClick
 				AI.ActorInstance = FindActorInstanceFromRNID(M\FromID)
 				If AI <> Null And Len(M\MessageData$) = 2
-					A2.ActorInstance = RuntimeIDList(RCE_IntFromStr(M\MessageData$))
+					A2.ActorInstance = RuntimeActorFromWire(RCE_IntFromStr(M\MessageData$))
 					If A2 <> Null
+						; Same-area gate. Mirrors P_Examine / P_Trade /
+						; P_AttackActor. P_RightClick previously checked only
+						; InteractDist, so a wire-injecting client could trigger
+						; any actor's RightClick script -- and the mount branch
+						; below -- on actors anywhere on the shard, not just ones
+						; co-located with the sender. The same-area predicate
+						; (AInstance <> Null And AInstance = TInstance) is folded
+						; into the range test so the script/mount only fires when
+						; the target shares the sender's AreaInstance; otherwise
+						; the packet is dropped.
+						AInstance.AreaInstance = Object.AreaInstance(AI\ServerArea)
+						TInstance.AreaInstance = Object.AreaInstance(A2\ServerArea)
 						XDist# = Abs(AI\X# - A2\X#)
 						ZDist# = Abs(AI\Z# - A2\Z#)
 						Dist# = (XDist# * XDist#) + (ZDist# * ZDist#)
-						If Dist# < InteractDist
+						If Dist# < InteractDist And AInstance <> Null And AInstance = TInstance
 							; Start right click script
 							If A2\Script$ <> ""
 								Running = False
@@ -1492,7 +1504,7 @@ Function UpdateNetwork()
 			Case P_Examine
 				AI.ActorInstance = FindActorInstanceFromRNID(M\FromID)
 				If AI <> Null And Len(M\MessageData$) = 2
-					A2.ActorInstance = RuntimeIDList(RCE_IntFromStr(M\MessageData$))
+					A2.ActorInstance = RuntimeActorFromWire(RCE_IntFromStr(M\MessageData$))
 					If A2 <> Null
 						; Same-area + InteractDist gate. Mirrors
 						; P_AttackActor (area) and P_RightClick (range).
@@ -1533,7 +1545,7 @@ Function UpdateNetwork()
 				Case P_Trade
 				AI.ActorInstance = FindActorInstanceFromRNID(M\FromID)
 				If AI <> Null And Len(M\MessageData$) = 2
-					A2.ActorInstance = RuntimeIDList(RCE_IntFromStr(M\MessageData$))
+					A2.ActorInstance = RuntimeActorFromWire(RCE_IntFromStr(M\MessageData$))
 					If A2 <> Null
 						; Same-area + InteractDist gate. Without it, a
 						; wire-injecting client could pin any remote
@@ -1559,7 +1571,7 @@ Function UpdateNetwork()
 				If AI <> Null And Len(M\MessageData$) = 2
 					; Check combat delay and whether actor is riding a mount, to prevent cheating
 					If MilliSecs() - AI\LastAttack >= (CombatDelay + GetActorAttackSpeed(AI)) And AI\Mount = Null
-						A2.ActorInstance = RuntimeIDList(RCE_IntFromStr(M\MessageData$))
+						A2.ActorInstance = RuntimeActorFromWire(RCE_IntFromStr(M\MessageData$))
 						If A2 <> Null
 							; Require attacker and target to be in the same
 							; AreaInstance. Without this, a target mid-portal
@@ -1730,11 +1742,20 @@ Function UpdateNetwork()
 						; Bound BEFORE the Amount comparison at line 1346.
 						If SlotA < 0 Or SlotA > Slots_Inventory Then SlotA = -1
 						If SlotB < 0 Or SlotB > Slots_Inventory Then SlotB = -1
-						AI.ActorInstance = RuntimeIDList(RuntimeID)
+						AI.ActorInstance = RuntimeActorFromWire(RuntimeID)
 						ThreadScript("InventoryUpdate", "Main", Handle(AI), 0)
 						AIFrom.ActorInstance = FindActorInstanceFromRNID(M\FromID)
-						; Check that actor instance is valid (e.g. it isn't trying to change someone else's inventory)
-						If AI <> Null And AIFrom <> Null And SlotA >= 0 And SlotB >= 0
+						; Reject truncated "S"/"A" packets. The payload is
+						; opcode(1) + RuntimeID(2) + SlotA(1) + SlotB(1) +
+						; Amount(2) = 7 bytes; the four Mid$ reads above have no
+						; length guard, so on a short packet RCE_IntFromStr of an
+						; empty slice decodes to 0 -- aliasing RuntimeID/slots to
+						; 0. The reads are pure and bounded (no OOB), so gating
+						; the full payload length HERE, before any inventory
+						; mutation, drops the malformed packet with no effect.
+						; Also check actor validity (e.g. not changing someone
+						; else's inventory).
+						If Len(M\MessageData$) >= 7 And AI <> Null And AIFrom <> Null And SlotA >= 0 And SlotB >= 0
 							; Walk AIFrom's FirstSlave chain to check if the
 							; target actor (AI) is one of the sender's pets.
 							; Replaces a global ActorInstance walk filtered

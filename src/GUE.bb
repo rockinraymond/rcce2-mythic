@@ -6,8 +6,25 @@ Global LogMode = 1; (0 = standard logging, 1 = debug mode)
 
 ChangeDir RootDir$
 
+; Collision types (mirrors Client.bb). GUE.bb never declared these even though
+; AreaLoader.bb (scenery Collides branches), Actors3D.bb (EntityType C_Actor /
+; C_ActorTri1 / C_ActorTri2) and GUE.bb's own undo-restore path reference them.
+; Under non-Strict Blitz an undeclared identifier silently reads as 0, so every
+; `If Collides = C_Sphere` compared against 0 and the pick-mode/radius/box
+; setup never ran as intended. Must be declared BEFORE the module Includes.
+Const C_None      = 0
+Const C_Sphere    = 1
+Const C_Box       = 2
+Const C_Triangle  = 3
+Const C_Actor     = 4
+Const C_Player    = 5
+Const C_Cam       = 6
+Const C_ActorTri1 = 7
+Const C_ActorTri2 = 8
+
 ; Includes --------------------------------------------------------------------------------------------------------------------------
 
+Include "Modules\Graphics\RenderSanity.bb" ; Issue #40 boot probe (dead-surface detection + bounded re-init)
 Include "Modules\Path.bb"
 Include "Modules\RCEnet.bb"
 Include "Modules\Media.bb"
@@ -25,6 +42,7 @@ Include "Modules\Actors3D.bb"
 Include "Modules\Environment.bb"
 Include "Modules\Interface.bb"
 Include "Modules\RCTrees.bb"
+Include "Modules\AreaLoader.bb"
 Include "Modules\ClientAreas.bb"
 Include "Modules\ServerAreas.bb"
 Include "Modules\RottParticles.bb"
@@ -101,12 +119,22 @@ If (GUE_width < 1280 And GUE_height< 960)
 EndIf
 WriteLog(GUELog, "Initialising windowed graphics mode")
 Graphics3D(GUE_width, GUE_height, 0, 2)
+; Issue #40 boot probe -- MUST run before FUI_Initialise: a probe-triggered
+; re-init re-issues Graphics3D, which would orphan any F-UI fonts/images
+; created beforehand. See Modules\Graphics\RenderSanity.bb.
+EnsureRenderSanity(GUE_width, GUE_height, 0, 2)
+If RenderSanityResult <> 0 Then WriteLog(GUELog, "RenderSanity (GUE boot): result " + RenderSanityResult + " -- issue #40 signature")
 FUI_Initialise(GUE_width, GUE_height, 0, 2, True, True, "Realm Crafter Community Edition -" + rcceVersion)
+; FUI_Initialise sets AppTitle unconditionally -- restore the dead-surfaces
+; notice if the probe failed (no-op otherwise).
+RenderSanityReassertNotice()
 SetBuffer(BackBuffer())
 
 ;FUI_RemoveBorder()
 
-AppTitle("RCCE 2")
+; Keep the probe's title-bar failure notice (the only OS-rendered,
+; always-visible text when surfaces are dead) instead of overwriting it.
+If RenderSanityResult >= 0 Then AppTitle("RCCE 2")
 Global DefaultLight = CreateLight()
 RotateEntity(DefaultLight, 30, 0, 0)
 AmbientLight(100, 100, 100)

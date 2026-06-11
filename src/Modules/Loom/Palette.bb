@@ -264,12 +264,22 @@ Type Palette
     // -------------------------------------------------------------------------
     Method drawModalChrome(modalX%, modalY%)
         LoomShadowCard(modalX, modalY, PAL_MODAL_W, PAL_MODAL_H)
-        LoomFill(modalX, modalY, PAL_MODAL_W, PAL_MODAL_H, LOOM_STONE_850_R, LOOM_STONE_850_G, LOOM_STONE_850_B)
+        // Modal backdrop varies by chrome mode (mirrors Composer::
+        // renderAndUpdate): tool=flat, balanced=subtle gradient,
+        // in-world=dramatic gradient + brass bottom-rule ornament.
+        If Loom_ChromeIsTool() = True
+            LoomFill(modalX, modalY, PAL_MODAL_W, PAL_MODAL_H, LOOM_STONE_850_R, LOOM_STONE_850_G, LOOM_STONE_850_B)
+        Else If Loom_ChromeIsInWorld() = True
+            LoomGradientV(modalX, modalY, PAL_MODAL_W, PAL_MODAL_H, LOOM_STONE_700_R, LOOM_STONE_700_G, LOOM_STONE_700_B, LOOM_STONE_950_R, LOOM_STONE_950_G, LOOM_STONE_950_B)
+        Else
+            LoomGradientV(modalX, modalY, PAL_MODAL_W, PAL_MODAL_H, LOOM_STONE_850_R, LOOM_STONE_850_G, LOOM_STONE_850_B, LOOM_STONE_900_R, LOOM_STONE_900_G, LOOM_STONE_900_B)
+        EndIf
         LoomBorder(modalX, modalY, PAL_MODAL_W, PAL_MODAL_H, LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
         LoomBorder(modalX + 1, modalY + 1, PAL_MODAL_W - 2, PAL_MODAL_H - 2, LOOM_BRASS_700_R, LOOM_BRASS_700_G, LOOM_BRASS_700_B)
 
         // Top brass strip + LOOM tag
         LoomFill(modalX, modalY, PAL_MODAL_W, 3, LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
+        If Loom_ChromeIsInWorld() = True Then LoomFill(modalX, modalY + PAL_MODAL_H - 3, PAL_MODAL_W, 3, LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
         LoomTheme_UseDisplay()
         LoomText(modalX + PAL_PAD, modalY + 6, "FIND  ANYTHING", LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
         LoomTheme_UseBody()

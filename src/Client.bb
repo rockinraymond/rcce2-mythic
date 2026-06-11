@@ -121,6 +121,7 @@ Global LootBagEN
 
 ; Includes --------------------------------------------------------------------------------------------------------------------------
 
+Include "Modules\Graphics\RenderSanity.bb" ; Issue #40 boot probe (dead-surface detection + bounded re-init)
 Include "Modules\Language.bb"              ; Language module (allows users to change string constants)
 Include "Modules\RottParticles.bb"         ; Particle system
 Include "Modules\RCEnet.bb"                ; Network library

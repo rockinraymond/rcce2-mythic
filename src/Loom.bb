@@ -79,6 +79,7 @@ Global EnvironmentSaved = True
 //
 // Order matters for Type declarations -- mirror GUE.bb's order.
 // -----------------------------------------------------------------------------
+Include "Modules\Graphics\RenderSanity.bb" // Issue #40 boot probe (dead-surface detection + bounded re-init)
 Include "Modules\Path.bb"
 Include "Modules\RCEnet.bb"
 Include "Modules\Media.bb"
@@ -92,10 +93,25 @@ Include "Modules\Spells.bb"
 Include "Modules\Actors.bb"
 Include "Modules\Environment.bb"
 Include "Modules\Interface.bb"
-// ClientAreas.bb deliberately omitted -- depends on GetFilename$ which lives
-// inside GUE.bb. We don't need 3D zone meshes for the alpha; the composer
-// renders zone metadata as text + portal chips. See
-// docs/loom/decisions/004-deferred-3d-viewport.md.
+// ClientAreas.bb (GUE's loading-screen UI + SaveArea) stays omitted, but the
+// DATA half of the zone loader is ours since ADR-004 Phase B carved it into
+// AreaLoader.bb: LoadAreaData / UnloadArea plus the area Types, free of
+// Gooey/F-UI. Phase C (the world mode in Modules\Loom\ZoneViewport.bb)
+// consumes it. RottParticles + RCTrees are LoadAreaData's two remaining
+// engine deps (emitters, tree unload) -- both UI-free.
+//
+// AreaLoader references the C_* collision-type constants that Client.bb
+// declares at program scope. Declare them here with the same values
+// (Client.bb:103-105). (GUE never declares them -- a separate latent
+// reads-as-0 finding -- so Loom actually gets the intended pick/collision
+// branches.) The AreaLoad* presentation hooks AreaLoader requires live in
+// Modules\Loom\ZoneViewport.bb as no-ops.
+Const C_Sphere    = 1
+Const C_Box       = 2
+Const C_Triangle  = 3
+Include "Modules\RottParticles.bb"
+Include "Modules\RCTrees.bb"
+Include "Modules\AreaLoader.bb"
 Include "Modules\ServerAreas.bb"
 Include "Modules\Packets.bb"
 Include "Modules\Logging.bb"
@@ -433,12 +449,18 @@ If (boot_width < 1280 And boot_height < 800)
 EndIf
 
 Graphics3D(boot_width, boot_height, 0, 2)
+// Issue #40 boot probe (dead-surface detection + bounded re-init); see
+// Modules\Graphics\RenderSanity.bb. Runs before anything creates surfaces.
+EnsureRenderSanity(Int(boot_width), Int(boot_height), 0, 2)
 SetBuffer(BackBuffer())
-AppTitle("Loom -- World Editor (Alpha) -- Realm Crafter " + rcceVersion$)
+// Keep the probe's title-bar failure notice (the only OS-rendered text
+// visible when every surface is dead) instead of overwriting it.
+If RenderSanityResult >= 0 Then AppTitle("Loom -- World Editor (Alpha) -- Realm Crafter " + rcceVersion$)
 
 // Log -- Data\Logs\Loom Log.txt (relative to project root, next to GUE's log).
 Global LoomLog = StartLog("Loom Log", False)
 WriteLog(LoomLog, "** Loom startup begins **", True, True)
+If RenderSanityResult <> 0 Then WriteLog(LoomLog, "RenderSanity (Loom boot): result " + RenderSanityResult + " -- issue #40 signature")
 WriteLog(LoomLog, "Resolution: " + Str(boot_width) + "x" + Str(boot_height))
 
 // Resolve project name from the working directory leaf.

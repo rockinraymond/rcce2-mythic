@@ -28,6 +28,10 @@ EnableGC
 ;   BVM_SETACTORFACE        (cosmetic griefing) RequirePrivileged
 ;   BVM_SETACTORCLOTHES     (cosmetic griefing) RequirePrivileged
 ;   BVM_REMOVEZONEINSTANCE  (admin-only)        RequirePrivileged
+;   BVM_SETACTORGLOBAL      (per-actor state)   RequireSelfOrPrivileged
+;   BVM_SETSUPERGLOBAL      (server-wide state) RequirePrivileged
+;   BVM_DELETEABILITY       BVM_SETABILITYLEVEL RequirePrivileged
+;   BVM_DELETEQUEST         (quest-log wipe)    RequirePrivileged
 ;
 ; Four sibling functions (SETACTORAISTATE / SETACTORTARGET / SETNAME /
 ; SETTAG) intentionally stay UNGATED -- shipped content scripts in
@@ -107,6 +111,10 @@ Global MutationSetResistance = 0
 Global MutationSetActorAppearance = 0  ; shared counter for the 5 appearance setters
 Global MutationSetActorGroup = 0
 Global MutationRemoveZone = 0
+Global MutationSetActorGlobal = 0  ; self-or-priv gated
+Global MutationSetSuperGlobal = 0  ; full-priv gated
+Global MutationDeleteAbility = 0   ; full-priv gated
+Global MutationDeleteQuest = 0     ; full-priv gated
 
 Function MockBVM_CHANGEGOLD(Param1%, Param2%)
 	If Not BVM_RequirePrivileged() Then Return
@@ -201,6 +209,44 @@ Function MockBVM_SETACTORGROUP(Param1%, Param2%)
 	MutationSetActorGroup = MutationSetActorGroup + 1
 End Function
 
+; SetActorGlobal gate. ScriptGlobals$[] is per-actor script state.
+; Self-or-priv (NOT full-priv) because shipped non-priv scripts write
+; their OWN actor's globals: Login.rsl (Player = Actor() -> SI\AI),
+; the BlackSmithing skill template, and the ProcessGlobals PushGlobal
+; helper. The privileged marriage scripts target a *second* actor and
+; pass via the priv branch. The gate's job is to stop a non-priv
+; clicker script from injecting into a third actor's globals.
+Function MockBVM_SETACTORGLOBAL(Param1%, Param2%, Param3$)
+	If Not BVM_RequireSelfOrPrivileged(Param1%) Then Return
+	MutationSetActorGlobal = MutationSetActorGlobal + 1
+End Function
+
+; SetSuperGlobal gate. SuperGlobals$() is server-wide shared state with
+; no actor handle -> full-priv (no "self" to scope to). Zero shipped
+; content-script callers, so the gate breaks nothing.
+Function MockBVM_SETSUPERGLOBAL(Param1%, Param2$)
+	If Not BVM_RequirePrivileged() Then Return
+	MutationSetSuperGlobal = MutationSetSuperGlobal + 1
+End Function
+
+; DeleteAbility gate. Strips an ability/spell from any actor handle --
+; equivalent-effect bypass of the gated SETABILITYLEVEL (deleting is
+; strictly worse than zeroing the level). Param1 is an actor handle and
+; the clicker-spawn shape makes SI\AI = Handle(clicker), so full-priv
+; (not self-or-priv). Zero shipped content-script callers.
+Function MockBVM_DELETEABILITY(Param1%, Param2$)
+	If Not BVM_RequirePrivileged() Then Return
+	MutationDeleteAbility = MutationDeleteAbility + 1
+End Function
+
+; DeleteQuest gate. Wipes a target's quest-log entry -- a non-priv
+; clicker script could erase a player's quest progress. Same clicker
+; SI\AI = Handle(clicker) shape, so full-priv. Zero shipped callers.
+Function MockBVM_DELETEQUEST(Param1%, Param2$)
+	If Not BVM_RequirePrivileged() Then Return
+	MutationDeleteQuest = MutationDeleteQuest + 1
+End Function
+
 ; --- Test fixture helpers ----------------------------------------------
 Function ResetMutationCounters()
 	MutationGold = 0
@@ -219,6 +265,10 @@ Function ResetMutationCounters()
 	MutationSetActorAppearance = 0
 	MutationSetActorGroup = 0
 	MutationRemoveZone = 0
+	MutationSetActorGlobal = 0
+	MutationSetSuperGlobal = 0
+	MutationDeleteAbility = 0
+	MutationDeleteQuest = 0
 	LastScriptLog$ = ""
 End Function
 
@@ -702,4 +752,145 @@ Test testSetActorGroupGatePassesForPrivileged()
 	ResetMutationCounters()
 	MockBVM_SETACTORGROUP(999, 5)
 	Assert(MutationSetActorGroup = 1)
+End Test
+
+; ======================================================================
+; SetActorGlobal gate -- self-or-privileged. ScriptGlobals$[] is
+; per-actor script state; the gate must (a) refuse a non-priv script
+; writing an arbitrary third actor's globals, while (b) still allowing
+; a non-priv script to write its OWN actor/context globals (Login.rsl,
+; BlackSmithing skill template, ProcessGlobals helper all rely on this),
+; and (c) allowing any target for a privileged script (marriage writes
+; the spouse actor). RequireSelfOrPrivileged is the right gate; a full
+; priv gate would silently break the shipped self-targeting scripts.
+; ======================================================================
+
+Test testSetActorGlobalGateBlocksArbitraryTarget()
+	; Non-priv script, target is neither SI\AI nor SI\AIContext.
+	InstallScript(0, 100, 200)
+	ResetMutationCounters()
+	MockBVM_SETACTORGLOBAL(999, 8, "evil")
+	Assert(MutationSetActorGlobal = 0)
+	; Refusal must be audit-logged.
+	Assert(Len(LastScriptLog$) > 0)
+End Test
+
+Test testSetActorGlobalGateAllowsOwnAITarget()
+	; Login.rsl shape: Player = Actor() = SI\AI. Non-priv self-write
+	; must go through, or the shipped login/skill scripts break.
+	InstallScript(0, 777, 0)
+	ResetMutationCounters()
+	MockBVM_SETACTORGLOBAL(777, 8, "0,0,1,0,0,0,0,0,0,0")
+	Assert(MutationSetActorGlobal = 1)
+End Test
+
+Test testSetActorGlobalGateAllowsOwnContextTarget()
+	; A spawn shape where the writable actor is the context actor.
+	InstallScript(0, 100, 888)
+	ResetMutationCounters()
+	MockBVM_SETACTORGLOBAL(888, 1, "state")
+	Assert(MutationSetActorGlobal = 1)
+End Test
+
+Test testSetActorGlobalGatePassesForPrivileged()
+	; marriage.rsl is on Privileged Scripts.dat and writes the SPOUSE
+	; actor (Found), not its own. The priv branch must allow any target.
+	InstallScript(1, 0, 0)
+	ResetMutationCounters()
+	MockBVM_SETACTORGLOBAL(999, 1, "1|Spouse|spouseacct")
+	Assert(MutationSetActorGlobal = 1)
+End Test
+
+; ======================================================================
+; SetSuperGlobal gate -- full privileged. SuperGlobals$() is server-wide
+; shared state with no actor handle, so there is no "self" to scope to:
+; any non-priv write poisons global state for every script and player.
+; Zero shipped content-script callers, so full-priv breaks nothing.
+; ======================================================================
+
+Test testSetSuperGlobalGateBlocksNonPrivileged()
+	InstallScript(0, 0, 0)
+	ResetMutationCounters()
+	MockBVM_SETSUPERGLOBAL(5, "poison")
+	Assert(MutationSetSuperGlobal = 0)
+	Assert(Len(LastScriptLog$) > 0)
+End Test
+
+Test testSetSuperGlobalGateBlocksNonPrivilegedClickerShape()
+	; Even with SI\AI / SI\AIContext set (clicker-driven spawn), there's
+	; no actor handle on this BVM, so full-priv must still refuse.
+	InstallScript(0, 777, 200)
+	ResetMutationCounters()
+	MockBVM_SETSUPERGLOBAL(5, "poison")
+	Assert(MutationSetSuperGlobal = 0)
+End Test
+
+Test testSetSuperGlobalGatePassesForPrivileged()
+	InstallScript(1, 0, 0)
+	ResetMutationCounters()
+	MockBVM_SETSUPERGLOBAL(5, "value")
+	Assert(MutationSetSuperGlobal = 1)
+End Test
+
+; ======================================================================
+; DeleteAbility / DeleteQuest gates -- full privileged. Both take an
+; actor/target handle and destroy persistent player state (a learned
+; ability, a quest-log entry). They are equivalent-effect bypasses of
+; the gated SETABILITYLEVEL / quest-progression mutators: deleting is
+; strictly worse than zeroing. The clicker-driven spawn shape sets
+; SI\AI = Handle(clicker), so a self-or-priv gate would let
+; DeleteAbility(clicker, ...) / DeleteQuest(clicker, ...) through --
+; full RequirePrivileged refuses regardless of how the target relates
+; to SI\AI. Zero shipped content-script callers, so the gate breaks
+; nothing.
+; ======================================================================
+
+Test testDeleteAbilityGateBlocksNonPrivileged()
+	InstallScript(0, 0, 0)
+	ResetMutationCounters()
+	MockBVM_DELETEABILITY(999, "Fireball")
+	Assert(MutationDeleteAbility = 0)
+	; Refusal must be audit-logged, not silently dropped.
+	Assert(Len(LastScriptLog$) > 0)
+End Test
+
+Test testDeleteAbilityGateBlocksStrippingOwnAITarget()
+	; Clicker shape: SI\AI = clicker handle (777), Param1 = clicker.
+	; A self-or-priv gate would match SI\AI and let the strip through;
+	; full-priv must still refuse.
+	InstallScript(0, 777, 200)
+	ResetMutationCounters()
+	MockBVM_DELETEABILITY(777, "Fireball")
+	Assert(MutationDeleteAbility = 0)
+End Test
+
+Test testDeleteAbilityGatePassesForPrivileged()
+	InstallScript(1, 0, 0)
+	ResetMutationCounters()
+	MockBVM_DELETEABILITY(999, "Fireball")
+	Assert(MutationDeleteAbility = 1)
+End Test
+
+Test testDeleteQuestGateBlocksNonPrivileged()
+	InstallScript(0, 0, 0)
+	ResetMutationCounters()
+	MockBVM_DELETEQUEST(999, "MainQuest")
+	Assert(MutationDeleteQuest = 0)
+	Assert(Len(LastScriptLog$) > 0)
+End Test
+
+Test testDeleteQuestGateBlocksWipingOwnAITarget()
+	; Clicker shape: SI\AI = clicker (777), Param1 = clicker. Full-priv
+	; refuses where self-or-priv would not.
+	InstallScript(0, 777, 200)
+	ResetMutationCounters()
+	MockBVM_DELETEQUEST(777, "MainQuest")
+	Assert(MutationDeleteQuest = 0)
+End Test
+
+Test testDeleteQuestGatePassesForPrivileged()
+	InstallScript(1, 0, 0)
+	ResetMutationCounters()
+	MockBVM_DELETEQUEST(999, "MainQuest")
+	Assert(MutationDeleteQuest = 1)
 End Test

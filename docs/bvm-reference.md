@@ -91,7 +91,7 @@ none = void/Bool. Parameter sigils inside the argument list use the same.
 | `SETACTORDESTINATION` | `SETACTORDESTINATION(PARAM1%, PARAM2#, PARAM3#)` | SelfOrPrivileged |
 | `SETACTORFACE` | `SETACTORFACE(PARAM1%, PARAM2%)` | Privileged |
 | `SETACTORGENDER` | `SETACTORGENDER(PARAM1%, PARAM2%)` | Privileged |
-| `SETACTORGLOBAL` | `SETACTORGLOBAL(PARAM1%, PARAM2%, PARAM3$)` | None |
+| `SETACTORGLOBAL` | `SETACTORGLOBAL(PARAM1%, PARAM2%, PARAM3$)` | SelfOrPrivileged |
 | `SETACTORGROUP` | `SETACTORGROUP(PARAM1%, PARAM2%)` | Privileged |
 | `SETACTORGUILD` | `SETACTORGUILD(PARAM1%, PARAM2%)` | Privileged |
 | `SETACTORHAIR` | `SETACTORHAIR(PARAM1%, PARAM2%)` | Privileged |
@@ -268,9 +268,9 @@ none = void/Bool. Parameter sigils inside the argument list use the same.
 | `CREATEEMITTER` | `CREATEEMITTER(PARAM1%, PARAM2$, PARAM3%, PARAM4%, PARAM5#=0, PARAM6#=0, PARAM7#=0, PARAM8%=0)` | None |
 | `DAY` | `DAY()` : Int | None |
 | `DEFAULTFACTIONRATING` | `DEFAULTFACTIONRATING(PARAM1$, PARAM2$)` : Int | None |
-| `DELETEABILITY` | `DELETEABILITY(PARAM1%, PARAM2$)` | None |
+| `DELETEABILITY` | `DELETEABILITY(PARAM1%, PARAM2$)` | Privileged |
 | `DELETEACTOREFFECT` | `DELETEACTOREFFECT(PARAM1%, PARAM2$)` | None |
-| `DELETEQUEST` | `DELETEQUEST(PARAM1%, PARAM2$)` | None |
+| `DELETEQUEST` | `DELETEQUEST(PARAM1%, PARAM2$)` | Privileged |
 | `DEQUOTE` | `DEQUOTE(PARAM1$)` : String | None |
 | `DOTTEDIP` | `DOTTEDIP(Param1%)` : String | Privileged |
 | `FINDACTOR` | `FINDACTOR(PARAM1$, ACTORTYPE% = 3)` : Int | None |
@@ -321,7 +321,7 @@ none = void/Bool. Parameter sigils inside the argument list use the same.
 | `SETOWNER` | `SETOWNER(PARAM1%, PARAM2$, PARAM3%, PARAM4% = 0)` | Dead |
 | `SETREPUTATION` | `SETREPUTATION(PARAM1%, PARAM2%)` | Privileged |
 | `SETRESISTANCE` | `SETRESISTANCE(PARAM1%, PARAM2$, PARAM3%)` | Privileged |
-| `SETSUPERGLOBAL` | `SETSUPERGLOBAL(PARAM1%, PARAM2$)` | None |
+| `SETSUPERGLOBAL` | `SETSUPERGLOBAL(PARAM1%, PARAM2$)` | Privileged |
 | `SETTAG` | `SETTAG(PARAM1%, PARAM2$)` | Privileged |
 | `SETWAITINFO` | `SETWAITINFO(PARAM1%, PARAM2%)` | None |
 | `SETWAITING` | `SETWAITING(X%)` | None |

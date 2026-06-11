@@ -1,8 +1,20 @@
+; AreaLoader.bb -- data-only zone loader shared by GUE (and, per ADR-004
+; Phase C, eventually Loom). Carved out of ClientAreas.bb (ADR-004 Phase B):
+; every function here is free of Gooey/F-UI references so a target can
+; Include this module without pulling in the GUE UI stack. Presentation
+; during a load is delegated to three hook functions the including target
+; MUST define:
+;   AreaLoadBegin(DisplayItems) -- loading music / loading screen setup
+;   AreaLoadProgress(Pct)       -- progress-bar milestone (0..100)
+;   AreaLoadEnd()               -- loading screen / music teardown
+; GUE's Gooey implementations live in ClientAreas.bb.
+
+;Set Constants
 Const MaxFogFar# = 2000.0
 
 Global SkyEN, CloudEN, StarsEN
-Global SkyTexID = -1, CloudTexID = -1, StormCloudTexID = 65535, StarsTexID = -1
-Global FogR=200, FogG=200, FogB=200, FogNear#=0.0, FogFar#=2000.0
+Global SkyTexID = 65535, CloudTexID = 65535, StormCloudTexID = 65535, StarsTexID = 65535
+Global FogR, FogG, FogB, FogNear#, FogFar#
 Global Outdoors
 Global AmbientR = 100, AmbientG = 100, AmbientB = 100
 Global DefaultLightPitch#, DefaultLightYaw#
@@ -19,16 +31,29 @@ Type Cluster
 End Type
 
 Type Scenery
-	Field SceneryID ; Set by user, used for scenery ownerships
+	Field SceneryID ; Set by user, used for scenery ownerships {##}
 	Field EN, MeshID
 	Field AnimationMode ; 0 = no animation, 1 = constant animation (loops), 2 = constant (ping-pongs), 3 = animate when selected
 	Field ScaleX#, ScaleY#, ScaleZ#
 	Field Lightmap$     ; Lightmap filename
 	Field RCTE$         ; Used by toolbox editors only
-	Field TextureID    ; To alter the texture loaded automatically with the model, if required (65535 to ignore)
+	Field TextureID     ; To alter the texture loaded automatically with the model, if required (65535 to ignore)
 	Field CatchRain
 	Field Locked
-	Field Collides
+	
+	Field CastShadow ;[010]
+	Field ReceiveShadow
+	Field RenderRange ;[011]
+	
+	Field SceneryType$ ;Variable declaration for view distance Ramoida
+	Field ENWF$
+	Field LightID ; Dynamic lighting
+	Field ENName$ 
+	Field ENLight$
+	Field TexHandle
+	Field ENFM$
+	Field ENFL$
+	Field Name$
 End Type
 
 Type Water
@@ -37,20 +62,18 @@ Type Water
 	Field ScaleX#, ScaleZ#
 	Field TexHandle, TexScale#, U#, V#
 	Field ServerWater ; Used by editor only
-	Field X#, Y#, Z#
+	; Water refraction terrier 
+    Field WaterClipplane
 End Type
+
 
 Type ColBox
 	Field EN
 	Field ScaleX#, ScaleY#, ScaleZ#
-	Field X#, Y#, Z#
-	Field Pitch#, Yaw#, Roll#
 End Type
 
 Type Emitter
 	Field Config, ConfigName$, EN, TexID
-	Field X#, Y#, Z#
-	Field Pitch#, Yaw#, Roll#
 End Type
 
 Type Terrain
@@ -69,7 +92,6 @@ Type SoundZone
 	Field LoadedSound, MusicFilename$
 	Field Is3D
 	Field Channel, Timer, Fade# ; Variables for updating the sound zone in the client
-	Field X#, Y#, Z#
 End Type
 
 ; Generated from scenery objects to prevent rain/snow particles falling through
@@ -80,9 +102,12 @@ End Type
 ; Creates a subdivided plane (used for water)
 Function CreateSubdividedPlane(XDivs, ZDivs, UScale# = 1.0, VScale# = 1.0, Parent = 0)
 
-	; Clamp divisions to a sane minimum (see ClientAreas.bb for the
-	; full reasoning). XDivs/ZDivs of 1 would divide-by-zero on the
-	; XPos/ZPos normalization. Below 2 has no actual subdivision.
+	; Clamp divisions to a sane minimum. A water with ScaleX or ScaleZ
+	; below the Ceil/15.0 threshold (or a misconfigured area data file)
+	; would arrive here with XDivs / ZDivs = 1, then divide-by-zero on
+	; the XPos / ZPos normalization below. Below 2 there's no actual
+	; subdivision; force at least a 2x2 grid so the mesh has a real
+	; surface and the normalization divisor is non-zero.
 	If XDivs < 2 Then XDivs = 2
 	If ZDivs < 2 Then ZDivs = 2
 
@@ -110,17 +135,22 @@ Function CreateSubdividedPlane(XDivs, ZDivs, UScale# = 1.0, VScale# = 1.0, Paren
 
 End Function
 
-; Loads the client (3D) data for an area
-Function LoadArea(Name$, CameraEN, DisplayItems = False, UpdateRottNet = False)
+; Loads the client (3D) data for an area: parses Data\Areas\<name>.dat and
+; builds the terrain / scenery / water / collision / emitter / sound-zone
+; entities. UI-free: loading-screen, progress-bar and loading-music
+; presentation goes through the AreaLoad* hooks (see module header).
+Function LoadAreaData(Name$, CameraEN, DisplayItems = False, UpdateRottNet = False)
 
 	; RottNet update
-	RNUpdateTime = MilliSecs()
-	Local PLoadMusic%, CLoadMusic%
-
-	; Open file. Lock AFTER the missing-file check (matching AreaLoader.bb):
-	; locking first leaked both Media.bb lock handles on every failed load,
-	; since the next Lock call overwrites the handle Global without closing
-	; the old one. The early return below holds no locks.
+	Local RNUpdateTime% = MilliSecs()
+	
+	; Open file. The Lock calls come AFTER this check: LockMeshes/LockTextures
+	; (Media.bb) each open a database file and stash the handle in a Global;
+	; locking before the missing-file early return leaked both handles on
+	; every failed load (the next Lock call overwrites the Global without
+	; closing the old handle). With the order below, the early return holds
+	; no locks and the success path pairs with UnlockMeshes/UnlockTextures
+	; at the end of this function.
 	F = ReadFile("Data\Areas\" + Name$ + ".dat")
 	If F = 0 Then Return False
 
@@ -130,71 +160,13 @@ Function LoadArea(Name$, CameraEN, DisplayItems = False, UpdateRottNet = False)
 		; Loading screen
 		LoadingTexID = ReadShort(F)
 		LoadingMusicID = ReadShort(F)
-		If DisplayItems = False
-			; Progress bar
-			LoadProgressBar = GY_CreateProgressBar(0, 0.3, 0.9, 0.4, 0.03, 0, 100, 255, 255, 255, -3012)
-			; Preset image
-			LoadScreen = CreateMesh(GY_Cam)
-			Surf = CreateSurface(LoadScreen)
-			v1 = AddVertex(Surf, 0.0, -1.0, 0.0, 0.0, 1.0)
-			v2 = AddVertex(Surf, 1.0, -1.0, 0.0, 1.0, 1.0)
-			v3 = AddVertex(Surf, 1.0, 0.0, 0.0, 1.0, 0.0)
-			v4 = AddVertex(Surf, 0.0, 0.0, 0.0, 0.0, 0.0)
-			AddTriangle Surf, v3, v2, v1
-			AddTriangle Surf, v4, v3, v1
-			ScaleMesh LoadScreen, 20.0, 15.0, 1.0
-			PositionEntity LoadScreen, -10.0, 7.5, 10.0
-			EntityOrder LoadScreen, -3011
-			EntityFX LoadScreen, 1 + 8
-			If LoadingTexID < 65535
-				Tex = GetTexture(LoadingTexID)
-				If Tex <> 0
-					EntityTexture(LoadScreen, Tex)
-					UnloadTexture(LoadingTexID)
-				EndIf
-			; Random image
-			ElseIf RandomImages > 0
-				D = ReadDir("Data\Textures\Random")
-				If D = 0
-					EntityColor(LoadScreen, 0, 0, 0)
-				Else
-					For i = 1 To Rand(1, RandomImages)
-						Repeat
-							File$ = NextFile$(D)
-						Until FileType("Data\Textures\Random\" + File$) = 1 Or File$ = ""
-						If File$ = "" Then Exit
-					Next
-					If FileType("Data\Textures\Random\" + File$) = 1
-						Tex = LoadTexture("Data\Textures\Random\" + File$)
-						If Tex = 0
-							EntityColor(LoadScreen, 0, 0, 0)
-						Else
-							EntityTexture(LoadScreen, Tex)
-							FreeTexture(Tex)
-						EndIf
-					Else
-						EntityColor(LoadScreen, 0, 0, 0)
-					EndIf
-					CloseDir(D)
-				EndIf
-			; No image
-			Else
-				EntityColor(LoadScreen, 0, 0, 0)
-			EndIf
-			; Music
-			If LoadingMusicID < 65535 Then 
-				PLoadMusic = LoadSound("Data\Music\" + GetMusicName$(LoadingMusicID), False)
-				LoopSound PLoadMusic
-				CLoadMusic = PlaySound(PLoadMusic)
-			EndIf
-		EndIf
+
+		; UI hook: loading music + loading screen / progress bar are the
+		; including target's concern (GUE: ClientAreas.bb, via Gooey).
+		AreaLoadBegin(DisplayItems)
 
 		; Loading bar update
-		If LoadScreen <> 0
-			GY_UpdateProgressBar(LoadProgressBar, 0)
-			RenderWorld()
-			Flip()
-		EndIf
+		AreaLoadProgress(0)
 
 		; Environment
 		SkyTexID = ReadShort(F)
@@ -255,11 +227,7 @@ Function LoadArea(Name$, CameraEN, DisplayItems = False, UpdateRottNet = False)
 		If UpdateRottNet = True And MilliSecs() - RNUpdateTime > 500 Then RCE_Update() : RCE_CreateMessages() : RNUpdateTime = MilliSecs()
 
 		; Loading bar update
-		If LoadScreen <> 0
-			GY_UpdateProgressBar(LoadProgressBar, 5)
-			RenderWorld()
-			Flip()
-		EndIf
+		AreaLoadProgress(5)
 
 		; Scenery
 		Sceneries = ReadShort(F)
@@ -267,13 +235,18 @@ Function LoadArea(Name$, CameraEN, DisplayItems = False, UpdateRottNet = False)
 			S.Scenery = New Scenery
 			; Mesh (from media database ID)
 			S\MeshID = ReadShort(F)
-
-			; Nasty hack to disable decryption on RCTE terrains in a subfolder
+			
+		; Nasty hack to disable decryption on RCTE terrains in a subfolder DISABLED terrains are no longer encrypted so no need to keep code.
 			NoDecrypt = False
-			Name$ = Upper$(GetMeshName$(S\MeshID))
-			If Instr(Name$, "RCTE\") = 1 Or Instr(Name$, "RCTE/") = 1
-				If Instr(Name$, "\", 6) > 0 Or Instr(Name$, "/", 6) > 0 Then NoDecrypt = True
-			EndIf
+			; Distinct local: assigning to Name$ here clobbered the zone-name
+			; parameter, so the soft-fail logs below reported a mesh path.
+			; (meshName$ is taken -- Blitz identifiers are case-insensitive
+			; and GetMeshNameClean$ overwrites it inside the BUMPED branch.)
+			MeshPath$ = Upper$(GetMeshName$(S\MeshID))
+			;If Instr(MeshPath$, "RCTE\") = 1 Or Instr(MeshPath$, "RCTE/") = 1
+			;	If Instr(MeshPath$, "\", 6) > 0 Or Instr(MeshPath$, "/", 6) > 0 Then NoDecrypt = True
+			;EndIf
+			
 			; Load the mesh
 			S\EN = GetMesh(S\MeshID, False)
 
@@ -281,55 +254,122 @@ Function LoadArea(Name$, CameraEN, DisplayItems = False, UpdateRottNet = False)
 			X# = ReadFloat#(F) : Y# = ReadFloat#(F) : Z# = ReadFloat#(F)
 			Pitch# = ReadFloat#(F) : Yaw# = ReadFloat#(F) : Roll# = ReadFloat#(F)
 			S\ScaleX# = ReadFloat#(F) : S\ScaleY# = ReadFloat#(F) : S\ScaleZ# = ReadFloat#(F)
+		
+			; is it a bump mesh? [BUMP]
+         If Instr(MeshPath$, "BUMPED\") Then
+        	 meshName$ = GetMeshNameClean$(S\MeshID)
+        	 bumpMap = LoadTexture("Data\Meshes\"+meshName$+"_NORMAL.jpg")
+			 ;TextureCoords(colorMap, 1)
+			 EntityTexture S\EN, bumpMap, 0, 1
+        	 TextureBlend bumpMap,4
+			 FreeTexture(bumpMap)
+         EndIf
+
+			; bump mesh end
+			
 			; Animation mode and ownership ID
 			S\AnimationMode = ReadByte(F)
-			S\SceneryID = ReadByte(F)
+			S\SceneryID = ReadByte(F) ;{##}
 			; Retexturing
 			S\TextureID = ReadShort(F)
 			; Collision/picking
 			S\CatchRain = ReadByte(F)
+			
+			
+			
 			Collides = ReadByte(F)
 			; Lightmap information and RCTE data. Bound the asset paths
 			; so a corrupted Area data file can't hang the loader on a
 			; wild ReadInt length prefix (260 = Windows MAX_PATH).
 			S\Lightmap$ = ReadBoundedString$(F, 260)
 			S\RCTE$ = ReadBoundedString$(F, 260)
+			
+			;v1.104 options cysis145 [010]
+			S\CastShadow = ReadByte(F)
+			S\ReceiveShadow = ReadByte(F)
+			
+			S\RenderRange = ReadByte(F) ;[011]
 
 			If S\EN <> 0
-				; Toolbox extras
-				If Len(S\RCTE$) > 5
-					Select Left$(S\RCTE$, 5)
-						Case "_TREE"
-							If DisplayItems = False
-								swingsty = Int(Mid$(S\RCTE$, 6, 1))
-								evergrn = Int(Mid$(S\RCTE$, 7, 1))
-								S\EN = LoadTree("", evergrn, S\EN, swingsty)
-							EndIf
-						Case "_GRSS"
-							swingsty = Int(Mid$(S\RCTE$, 6, 1))
-							evergrn = Int(Mid$(S\RCTE$, 7, 1))
-							S\EN = LoadGrass("", evergrn, S\EN, swingsty)
-						Case "_TRRN", "_RCDN"
-							If DisplayItems = False
-								RotateMesh(S\EN, Pitch#, Yaw#, Roll#)
-								ScaleMesh(S\EN, S\ScaleX#, S\ScaleY#, S\ScaleZ#)
-								ChunkTerrain(S\EN, 3, 3, 3, X#, Y#, Z#)
-								Delete S
-								Goto CancelScenery
-							EndIf
-					End Select
-				EndIf
+				; Toolbox extras [~@~]
+				;If Len(S\RCTE$) > 5
+				;	Select Left$(S\RCTE$, 5)
+				;		Case "_TREE"
+				;			If DisplayItems = False
+				;				swingsty = Int(Mid$(S\RCTE$, 6, 1))
+				;				evergrn = Int(Mid$(S\RCTE$, 7, 1))
+				;				S\EN = LoadTree("", evergrn, S\EN, swingsty)
+				;			EndIf
+				;		Case "_GRSS"
+				;			swingsty = Int(Mid$(S\RCTE$, 6, 1))
+				;			evergrn = Int(Mid$(S\RCTE$, 7, 1))
+				;			S\EN = LoadGrass("", evergrn, S\EN, swingsty)
+				;		Case "_RCDN"
+				;			If DisplayItems = False
+				;				RotateMesh(S\EN, Pitch#, Yaw#, Roll#)
+				;				ScaleEntity(S\EN, S\ScaleX#, S\ScaleY#, S\ScaleZ#)
+				;				ChunkTerrain(S\EN, 3, 3, 3, X#, Y#, Z#)
+				;				Delete S
+				;				Goto CancelScenery
+				;			EndIf
+				;	End Select
+				;EndIf
 
 				; Set position/rotation
 				PositionEntity S\EN, X#, Y#, Z# : RotateEntity S\EN, Pitch#, Yaw#, Roll#
 				ScaleEntity S\EN, S\ScaleX#, S\ScaleY#, S\ScaleZ#
+				
+				;Dynamic Lighting
+				S\ENName=Left(Lower(GetFilename$(MeshPath$)), 2)
+				S\LightID=0
+				S\ENLight=Lower(GetFilename$(MeshPath$))
+				S\ENWF=Lower(GetFilename$(MeshPath$))
+				S\ENFM=Lower(GetFilename$(MeshPath$))
+								
+				If Left$(S\ENLight$, 6) = "light_" ;And S\LightID=0 And EntityDistance# (S\EN,Me\EN)<=10.0
+					
+					TypeLength% = Len(S\ENLight$)
+					newTypeName$ = Left(S\ENLight$,TypeLength% - 4)
 
+					entTypeLoc% = (Instr(newTypeName$, "_", 1) - 1) ;This gets how long the word of the type is
+			
+					numLen% = Instr(newTypeName$, "_",1) + 1
+			
+			;Get Setting 1
+			tempLength1% = (Instr(newTypeName$, "_", numLen%))
+			realLength% = (Instr(newTypeName$, "_", numLen%)-numLen%)
+			setting1$ = Mid$(newTypeName$, entTypeLoc%+2, realLength%)
+			setting1Num# = setting1$ ;Convert setting to a number (float)
+			
+			;Get Setting 2
+			realLength2% = (Instr(newTypeName$, "_", ((entTypeLoc%+2) + realLength%+2))-tempLength1%)
+			setting2$ = Mid$(newTypeName$, (tempLength1%+1), (realLength2%-1))
+			setting2Num# = setting2$ ;Convert setting to a number (float)
+			
+			;Get Setting 3
+			realLength3% = Instr(newTypeName$, "_", (tempLength1%+realLength2% + 1))
+			tempL% = realLength3% - (tempLength1% + realLength2%+1)
+			setting3$ = Mid$(newTypeName$, (tempLength1%+realLength2% + 1), tempL%)
+			setting3Num# = setting3$ ;Convert setting to a number (float)
+			
+			;Get Setting 4
+			realLength4% = (tempLength1%+realLength2% + 1) + tempL%
+			rLength% = Len(newTypeName$) - realLength4%
+			setting4$ = Right(newTypeName$, rLength%)
+			setting4Num# = setting4$ ;Convert setting to a number (float)
+
+			    S\LightID = CreateLight(2) 
+    	        LightColor(S\LightID, setting2Num#, setting3Num#, setting4Num#) 
+	            LightRange S\LightID,setting1Num#
+				PositionEntity S\LightID, EntityX(S\EN), EntityY(S\EN), EntityZ(S\EN)			
+		EndIf
+				
 				; Chunking for dungeons etc.
 				If DisplayItems = False
-					Name$ = Upper$(GetMeshName$(S\MeshID))
-					If Instr(Name$, "RCDUNGEON\") Or Instr(Name$, "CUSTOMCHUNK\")
+					MeshPath$ = Upper$(GetMeshName$(S\MeshID))
+					If Instr(MeshPath$, "RCDUNGEON\") Or Instr(MeshPath$, "CUSTOMCHUNK\")
 						RotateMesh(S\EN, Pitch#, Yaw#, Roll#)
-						ScaleMesh(S\EN, S\ScaleX#, S\ScaleY#, S\ScaleZ#)
+						ScaleEntity(S\EN, S\ScaleX#, S\ScaleY#, S\ScaleZ#)
 						ChunkTerrain(S\EN, 3, 3, 3, X#, Y#, Z#)
 						Delete S
 						Goto CancelScenery
@@ -345,7 +385,48 @@ Function LoadArea(Name$, CameraEN, DisplayItems = False, UpdateRottNet = False)
 				EndIf
 
 				; Retexturing
-				If S\TextureID < 65535 Then EntityTexture S\EN, GetTexture(S\TextureID)
+           ; If Instr(MeshPath$, "BUMPED\") Then
+        ;	    colorMap = LoadTexture ("Data\Meshes\"+meshName$+"_DIMMER.jpg")
+		;		;TextureCoords(colorMap, 1)
+		;		EntityTexture S\EN, colorMap, 0, 0
+         ;	 	TextureBlend colorMap, 3
+		;		FreeTexture(colorMap)
+         ;   Else
+        ;	    If S\TextureID < 65535 Then EntityTexture S\EN, GetTexture(S\TextureID)
+         ;   EndIf
+
+			If Instr(MeshPath$, "BUMPED\") Then
+        	    colorMap = LoadTexture ("Data\Meshes\"+meshName$+"_SPEC.jpg")
+				;TextureCoords(colorMap, 1)
+				EntityTexture S\EN, colorMap, 0, 0
+         	 	TextureBlend colorMap, 3
+				FreeTexture(colorMap)
+            Else
+        	    If S\TextureID < 65535 Then EntityTexture S\EN, GetTexture(S\TextureID)
+            EndIf
+
+			If Instr(MeshPath$, "BUMPED\") Then
+        	    colorMap = LoadTexture ("Data\Meshes\"+meshName$+"_COLOR.jpg")
+				;TextureCoords(colorMap, 1)
+				EntityTexture S\EN, colorMap, 0, 2
+         	 	TextureBlend colorMap, 2
+				FreeTexture(colorMap)
+            Else
+        	    If S\TextureID < 65535 Then EntityTexture S\EN, GetTexture(S\TextureID)
+            EndIf
+
+
+			;Glow models
+	;		If Instr(MeshPath$, "GLOWMODELS\") Then
+    ;    	    colorMap = LoadTexture ("Data\Meshes\"+meshName$+"_GLOW.jpg")
+	;			;TextureCoords(colorMap, 1)
+	;			EntityTexture S\EN, colorMap, 0, 4
+    ;     	 	TextureBlend colorMap, 3
+	;			FreeTexture(colorMap)
+    ;        Else
+    ;    	    If S\TextureID < 65535 Then EntityTexture S\EN, GetTexture(S\TextureID)
+    ;        EndIf
+
 
 				; Type handle
 				NameEntity S\EN, Handle(S)
@@ -370,10 +451,10 @@ Function LoadArea(Name$, CameraEN, DisplayItems = False, UpdateRottNet = False)
 					EntityPickMode(S\EN, 2)
 				ElseIf Collides = C_Box
 					EntityPickMode(S\EN, 3)
-					Width# = MeshWidth#(S\EN) * S\ScaleX#
-					Height# = MeshHeight#(S\EN) * S\ScaleY#
-					Depth# = MeshDepth#(S\EN) * S\ScaleZ#
-					EntityBox(S\EN, Width# / -2.0, Height# / -2.0, Depth# / -2.0, Width#, Height#, Depth#)
+					WidthT# = MeshWidth#(S\EN) * S\ScaleX#
+					HeightT# = MeshHeight#(S\EN) * S\ScaleY#
+					DepthT# = MeshDepth#(S\EN) * S\ScaleZ#
+					EntityBox(S\EN, WidthT# / -2.0, HeightT# / -2.0, DepthT# / -2.0, WidthT#, HeightT#, DepthT#)
 				EndIf
 				ResetEntity(S\EN)
 
@@ -389,11 +470,12 @@ Function LoadArea(Name$, CameraEN, DisplayItems = False, UpdateRottNet = False)
 				EndIf
 			; Mesh has been deleted or removed from the database!
 			Else
-				; Soft-fail matching the FE / GUE variants -- log + drop.
-				; Terrain Editor previously took the silent-Delete
-				; branch in normal use; the RuntimeError fallback now
-				; logs instead so any caller passing DisplayItems=False
-				; doesn't crash mid-zone-load.
+				; Soft-fail (matching ClientAreas_FE.bb fix): log + drop.
+				; In GUE this previously took the Delete-only branch
+				; silently; in any caller that passes DisplayItems=False
+				; it RuntimeError'd. Unified to log + drop so neither
+				; admin nor live player gets a crash from missing world
+				; meshes.
 				WriteLog(MainLog, "LoadArea: scenery MeshID " + S\MeshID + " not found in model database; dropping scenery (zone: " + Name$ + ")")
 				Delete(S)
 			EndIf
@@ -402,12 +484,8 @@ Function LoadArea(Name$, CameraEN, DisplayItems = False, UpdateRottNet = False)
 			; RottNet update
 			If UpdateRottNet = True And MilliSecs() - RNUpdateTime > 500 Then RCE_Update() : RCE_CreateMessages() : RNUpdateTime = MilliSecs()
 
-			; Loading bar update every alternate object
-			If LoadScreen <> 0 And (i Mod 2) = 0
-				GY_UpdateProgressBar(LoadProgressBar, 5 + (40 * i) / Sceneries)
-				RenderWorld()
-				Flip()
-			EndIf
+		; Loading bar update every alternate object
+		If (i Mod 2) = 0 Then AreaLoadProgress(5 + (40 * i) / Sceneries)
 		Next
 
 		; Water
@@ -429,7 +507,10 @@ Function LoadArea(Name$, CameraEN, DisplayItems = False, UpdateRottNet = False)
 			ScaleEntity W\EN, W\ScaleX#, 1.0, W\ScaleZ#
 			PositionEntity W\EN, X#, Y#, Z#
 			ScaleTexture W\TexHandle, W\TexScale#, W\TexScale#
-			EntityTexture W\EN, W\TexHandle
+			
+			EntityTexture W\EN, W\TexHandle,0,2 ; 1 par d�faut mais invisible avec refract		
+			
+			
 			; Colour
 			W\Red = ReadByte(F)
 			W\Green = ReadByte(F)
@@ -444,6 +525,7 @@ Function LoadArea(Name$, CameraEN, DisplayItems = False, UpdateRottNet = False)
 			Alpha# = Float#(W\Opacity) / 100.0
 			If Alpha# > 1.0 Then Alpha# = 1.0
 			EntityAlpha(W\EN, Alpha#)
+				
 			; Picking
 			EntityBox W\EN, W\ScaleX# / -2.0, -1.0, W\ScaleZ# / -2.0, W\ScaleX#, 2.0, W\ScaleZ#
 			; Type handle
@@ -471,11 +553,7 @@ Function LoadArea(Name$, CameraEN, DisplayItems = False, UpdateRottNet = False)
 		Next
 
 		; Loading bar update
-		If LoadScreen <> 0
-			GY_UpdateProgressBar(LoadProgressBar, 60)
-			RenderWorld()
-			Flip()
-		EndIf
+		AreaLoadProgress(60)
 
 		; Collision zones
 		ColBoxes = ReadShort(F)
@@ -498,22 +576,19 @@ Function LoadArea(Name$, CameraEN, DisplayItems = False, UpdateRottNet = False)
 		Next
 
 		; Loading bar update
-		If LoadScreen <> 0
-			GY_UpdateProgressBar(LoadProgressBar, 65)
-			RenderWorld()
-			Flip()
-		EndIf
+		AreaLoadProgress(65)
 
 		; Emitters
 		Emitters = ReadShort(F)
 		For i = 1 To Emitters
 			; Create emitter parent entity
 			E.Emitter = New Emitter
-			If DisplayItems = True
+			If DisplayItems = True 
 				E\EN = CreateCone() : ScaleMesh E\EN, 3, 3, 3 : EntityAlpha E\EN, 0.5
-			Else
+			Else 
 				E\EN = CreatePivot()
 			EndIf
+								
 			; Read in emitter data. Same length-prefix DoS hardening.
 			E\ConfigName$ = ReadBoundedString$(F, 260)
 			E\TexID = ReadShort(F)
@@ -522,35 +597,33 @@ Function LoadArea(Name$, CameraEN, DisplayItems = False, UpdateRottNet = False)
 			Pitch# = ReadFloat#(F) : Yaw# = ReadFloat#(F) : Roll# = ReadFloat#(F)
 			; Load config
 			E\Config = RP_LoadEmitterConfig("Data\Emitter Configs\" + E\ConfigName$ + ".rpc", Texture, CameraEN)
+			
 			; Loaded successfully, create the emitter
-			If E\Config <> 0
+			If E\Config <> 0 
 				EmitterEN = RP_CreateEmitter(E\Config)
 				EntityParent EmitterEN, E\EN, False
 				EntityPickMode E\EN, 2
 				NameEntity E\EN, Handle(E)
 				; Position/rotation
 				PositionEntity E\EN, X#, Y#, Z#
-				RotateEntity E\EN, Pitch#, Yaw#, Roll#
-			; Failed to load config -- soft-fail matching the FE / GUE
-			; variants. Note this variant lacks the HideEntity call
-			; the others have (TE doesn't hide before free); preserving
-			; the existing TE-specific cleanup shape.
+				RotateEntity E\EN, Pitch#, Yaw#, Roll# 
+			; Failed to load config -- soft-fail matching the FE variant.
 			Else
 				WriteLog(MainLog, "LoadArea: emitter config '" + E\ConfigName$ + "' could not load; dropping emitter (zone: " + Name$ + ")")
+				HideEntity(E\EN)
 				FreeEntity(E\EN)
 				Delete(E)
 			EndIf
-
+			
+		;	EntityAutoFade E\EN, 10, 20 
+			
+						
 			; RottNet update
 			If UpdateRottNet = True And MilliSecs() - RNUpdateTime > 500 Then RCE_Update() : RCE_CreateMessages() : RNUpdateTime = MilliSecs()
 		Next
 
 		; Loading bar update
-		If LoadScreen <> 0
-			GY_UpdateProgressBar(LoadProgressBar, 80)
-			RenderWorld()
-			Flip()
-		EndIf
+		AreaLoadProgress(80)
 
 		; Blitz LOD terrains
 		Terrains = ReadShort(F)
@@ -609,19 +682,11 @@ Function LoadArea(Name$, CameraEN, DisplayItems = False, UpdateRottNet = False)
 			If UpdateRottNet = True And MilliSecs() - RNUpdateTime > 500 Then RCE_Update() : RCE_CreateMessages() : RNUpdateTime = MilliSecs()
 
 			; Loading bar update
-			If LoadScreen <> 0
-				GY_UpdateProgressBar(LoadProgressBar, 80 + ((15 * i) / Terrains))
-				RenderWorld()
-				Flip()
-			EndIf
+			AreaLoadProgress(80 + ((15 * i) / Terrains))
 		Next
 
 		; Loading bar update
-		If LoadScreen <> 0
-			GY_UpdateProgressBar(LoadProgressBar, 95)
-			RenderWorld()
-			Flip()
-		EndIf
+		AreaLoadProgress(98)
 
 		; Sound zones
 		Sounds = ReadShort(F)
@@ -662,441 +727,13 @@ Function LoadArea(Name$, CameraEN, DisplayItems = False, UpdateRottNet = False)
 	UnlockMeshes()
 	UnlockTextures()
 
-	; End loading screen
-	If LoadScreen <> 0
-		FreeEntity(LoadScreen)
-		GY_FreeGadget(LoadProgressBar)
-	EndIf
-	If ChannelPlaying(CLoadMusic) = True Then StopChannel(CLoadMusic)
-	FreeSound PLoadMusic
+	; UI hook: free the loading screen / progress bar, stop the loading music.
+	AreaLoadEnd()
 
 	Return True
 
 End Function
 
-; Loads the client (3D) data for an area
-Function LoadAreaTE(Name$)
-	
-	; Open file
-	F = ReadFile(Name$)
-	If F = 0 Then Return False
-	
-		; Loading screen
-	LoadingTexID = ReadShort(F)
-	LoadingMusicID = ReadShort(F)
-	
-		; Environment
-	SkyTexID = ReadShort(F)
-	CloudTexID = ReadShort(F)
-	StormCloudTexID = ReadShort(F)
-	StarsTexID = ReadShort(F)
-	
-	FogR = ReadByte(F)
-	FogG = ReadByte(F)
-	FogB = ReadByte(F)
-	FogNear# = ReadFloat#(F)
-	FogFar#  = ReadFloat#(F)
-	
-	MapTexID = ReadShort(F)
-	Outdoors = ReadByte(F)
-	AmbientR = ReadByte(F)
-	AmbientG = ReadByte(F)
-	AmbientB = ReadByte(F)
-	DefaultLightPitch# = ReadFloat#(F)
-	DefaultLightYaw# = ReadFloat#(F)
-	SlopeRestrict# = ReadFloat#(F)
-	
-		; Scenery
-	Sceneries = ReadShort(F)
-	For i = 1 To Sceneries
-		dm.dropmodel = New dropmodel
-		dm\id = ReadShort(F)
-		dm\x# = ReadFloat#(F) : dm\y# = ReadFloat#(F) : dm\z# = ReadFloat#(F)
-		dm\pitch# = ReadFloat#(F) : dm\yaw# = ReadFloat#(F) : dm\roll# = ReadFloat#(F)
-		dm\sx# = ReadFloat#(F) : dm\sy# = ReadFloat#(F) : dm\sz# = ReadFloat#(F)
-		dm\AnimationMode = ReadByte(F)
-		dm\SceneryID = ReadByte(F)
-		dm\TextureID = ReadShort(F)
-		dm\CatchRain = ReadByte(F)
-		dm\Collides = ReadByte(F)
-		; Bound the asset paths (260 = Windows MAX_PATH).
-		dm\Lightmap$ = ReadBoundedString$(F, 260)
-		dm\rcTe$ = ReadBoundedString$(F, 260)
-		
-		If Left$(dm\rcTe$,5)<>"_TRRN"
-			dm\ent = GetMesh(dm\id)
-			dm\ModelFileName$=getmeshname$(dm\id)
-			dm\modelfilepath$=dm\ModelFileName$
-			dm\Alpha# = 1.0
-			If dm\ent <> 0
-				PositionEntity dm\ent,dm\x,dm\y,dm\z
-				ScaleEntity dm\ent,dm\sx,dm\sy,dm\sz
-				RotateEntity dm\ent,dm\pitch,dm\yaw,dm\roll
-				EntityFX dm\ent,2
-			Else
-				; Soft-fail (Terrain-Editor-specific scenery load path):
-				; log + skip placement. Refusing to load the entire
-				; zone for one missing mesh used to require restarting
-				; the editor; logging instead lets the author notice
-				; and fix the bad reference.
-				WriteLog(MainLog, "LoadAreaTE: scenery dm\id " + dm\id + " could not load mesh; skipping placement")
-			EndIf
-		Else
-			loadworkpath$ = dm\rcTe$
-			Delete dm
-		EndIf
-	Next
-	
-	
-		; Water
-	Waters = ReadShort(F)
-	For i = 1 To Waters
-		W.Water = New Water
-		W\TexID = ReadShort(F)
-		W\TexHandle = GetTexture(W\TexID, True)
-		W\TexScale# = ReadFloat#(F)
-		W\X# = ReadFloat#(F) : W\Y# = ReadFloat#(F) : W\Z# = ReadFloat#(F)
-		W\ScaleX# = ReadFloat#(F) : W\ScaleZ# = ReadFloat#(F)
-		W\Red = ReadByte(F)
-		W\Green = ReadByte(F)
-		W\Blue = ReadByte(F)
-		W\Opacity = ReadByte(F)
-	Next
-	
-		; Collision zones
-	ColBoxes = ReadShort(F)
-	For i = 1 To ColBoxes
-		C.ColBox = New ColBox
-		C\X# = ReadFloat#(F) : C\Y# = ReadFloat#(F) : C\Z# = ReadFloat#(F)
-		C\Pitch# = ReadFloat#(F) : C\Yaw# = ReadFloat#(F) : C\Roll# = ReadFloat#(F)
-		C\ScaleX# = ReadFloat#(F) : C\ScaleY# = ReadFloat#(F) : C\ScaleZ# = ReadFloat#(F)
-	Next
-	
-	
-		; Emitters
-	Emitters = ReadShort(F)
-	For i = 1 To Emitters
-		E.Emitter = New Emitter
-		E\ConfigName$ = ReadBoundedString$(F, 260)
-		E\TexID = ReadShort(F)
-		E\X# = ReadFloat#(F) : E\Y# = ReadFloat#(F) : E\Z# = ReadFloat#(F)
-		E\Pitch# = ReadFloat#(F) : E\Yaw# = ReadFloat#(F) : E\Roll# = ReadFloat#(F)
-	Next
-	
-		; Blitz LOD terrains
-	Terrains = ReadShort(F)
-	If Terrains = 0 ; Test if Blitz LOD Terrains are being used
-			; Sound zones
-		Sounds = ReadShort(F)
-		For i = 1 To Sounds
-			SZ.SoundZone = New SoundZone
-			SZ\X# = ReadFloat#(F) : SZ\Y# = ReadFloat#(F) : SZ\Z# = ReadFloat#(F)
-			SZ\Radius# = ReadFloat#(F)
-			SZ\SoundID = ReadShort(F)
-			SZ\MusicID = ReadShort(F)
-			SZ\RepeatTime = ReadInt(F)
-			SZ\Volume = ReadByte(F)
-		Next
-	Else
-		RuntimeError("Blitz Terrain already in use!")
-	EndIf	
-	
-	CloseFile(F)
-	
-End Function
-
-; Saves the current area back to file
-; Routes through SafeWriteOpen / SafeWriteCommit so a crash mid-flush
-; doesn't leave the previous (good) area dat truncated. RC Terrain
-; Editor authors hand-build areas over hours; without the atomic
-; wrapper a single mistimed crash loses every waypoint, spawn, and
-; portal in the zone. Mirrors the canonical GUE SaveArea migration
-; in ClientAreas.bb (PR audit at line ~817 there).
-Function SaveAreaTE(Name$)
-
-	Local FinalPath$ = "Data\Areas\" + Name$ + ".dat"
-	Local TempPath$ = SafeWriteOpen(FinalPath$)
-	F = WriteFile(TempPath$)
-	If F = 0 Then Return False
-	
-		; Loading screen
-	WriteShort F, LoadingTexID
-	WriteShort F, LoadingMusicID
-	
-		; Environment
-	WriteShort F, SkyTexID
-	WriteShort F, CloudTexID
-	WriteShort F, StormCloudTexID
-	WriteShort F, StarsTexID
-	
-	WriteByte F, FogR
-	WriteByte F, FogG
-	WriteByte F, FogB
-	WriteFloat F, FogNear#
-	WriteFloat F, FogFar#
-	
-	WriteShort F, MapTexID
-	WriteByte F, Outdoors
-	WriteByte F, AmbientR
-	WriteByte F, AmbientG
-	WriteByte F, AmbientB
-	WriteFloat F, DefaultLightPitch#
-	WriteFloat F, DefaultLightYaw#
-	WriteFloat F, SlopeRestrict#
-	
-		; Scenery
-	Count = 0
-	For S.Scenery = Each Scenery : Count = Count + 1 : Next
-	WriteShort F, Count
-	For S.Scenery = Each Scenery
-		WriteShort F, S\MeshID
-		WriteFloat F, EntityX#(S\EN, True)
-		WriteFloat F, EntityY#(S\EN, True)
-		WriteFloat F, EntityZ#(S\EN, True)
-		WriteFloat F, EntityPitch#(S\EN, True)
-		WriteFloat F, EntityYaw#(S\EN, True)
-		WriteFloat F, EntityRoll#(S\EN, True)
-		WriteFloat F, S\ScaleX#
-		WriteFloat F, S\ScaleY#
-		WriteFloat F, S\ScaleZ#
-		WriteByte F, S\AnimationMode
-		WriteByte F, S\SceneryID
-		WriteShort F, S\TextureID
-		WriteByte F, S\CatchRain
-		WriteByte F, S\Collides
-		WriteString F, S\Lightmap$
-		WriteString F, S\RCTE$ ; Extra data for RTCE
-	Next
-	
-		; Water
-	Count = 0
-	For W.Water = Each Water : Count = Count + 1 : Next
-	WriteShort F, Count
-	For W.Water = Each Water
-		WriteShort F, W\TexID
-		WriteFloat F, W\TexScale#
-		WriteFloat F, W\X#
-		WriteFloat F, W\Y#
-		WriteFloat F, W\Z#
-		WriteFloat F, W\ScaleX#
-		WriteFloat F, W\ScaleZ#
-		WriteByte F, W\Red
-		WriteByte F, W\Green
-		WriteByte F, W\Blue
-		WriteByte F, W\Opacity
-	Next
-	
-		; Collision boxes
-	Count = 0
-	For C.ColBox = Each ColBox : Count = Count + 1 : Next
-	WriteShort F, Count
-	For C.ColBox = Each ColBox
-		WriteFloat F, C\X#
-		WriteFloat F, C\Y#
-		WriteFloat F, C\Z#
-		WriteFloat F, C\Pitch#
-		WriteFloat F, C\Yaw#
-		WriteFloat F, C\Roll#
-		WriteFloat F, C\ScaleX#
-		WriteFloat F, C\ScaleY#
-		WriteFloat F, C\ScaleZ#
-	Next
-	
-		; Emitters
-	Count = 0
-	For E.Emitter = Each Emitter : Count = Count + 1 : Next
-	WriteShort F, Count
-	For E.Emitter = Each Emitter
-		WriteString F, E\ConfigName$
-		WriteShort F, E\TexID
-		WriteFloat F, E\X#
-		WriteFloat F, E\Y#
-		WriteFloat F, E\Z#
-		WriteFloat F, E\Pitch#
-		WriteFloat F, E\Yaw#
-		WriteFloat F, E\Roll#
-	Next
-	
-		; Blitz Terrains
-	Count = 0
-	WriteShort F, Count
-	
-	
-		; Sound zones
-	Count = 0
-	For SZ.SoundZone = Each SoundZone : Count = Count + 1 : Next
-	WriteShort F, Count
-	For SZ.SoundZone = Each SoundZone
-		WriteFloat F, SZ\X#
-		WriteFloat F, SZ\Y#
-		WriteFloat F, SZ\Z#
-		WriteFloat F, SZ\Radius#
-		WriteShort F, SZ\SoundID
-		WriteShort F, SZ\MusicID
-		WriteInt F, SZ\RepeatTime
-		WriteByte F, SZ\Volume
-	Next
-
-	Return SafeWriteCommit(TempPath$, FinalPath$, F)
-
-End Function
-
-
-; Saves the current area back to file
-; Atomic-write parity with SaveAreaTE above and the canonical
-; ClientAreas.bb SaveArea. Same threat model: hand-authored area
-; dat lost on a crash mid-write.
-Function SaveArea(Name$)
-
-	Local FinalPath$ = "Data\Areas\" + Name$ + ".dat"
-	Local TempPath$ = SafeWriteOpen(FinalPath$)
-	F = WriteFile(TempPath$)
-	If F = 0 Then Return False
-
-		; Loading screen
-		WriteShort F, LoadingTexID
-		WriteShort F, LoadingMusicID
-
-		; Environment
-		WriteShort F, SkyTexID
-		WriteShort F, CloudTexID
-		WriteShort F, StormCloudTexID
-		WriteShort F, StarsTexID
-
-		WriteByte F, FogR
-		WriteByte F, FogG
-		WriteByte F, FogB
-		WriteFloat F, FogNear#
-		WriteFloat F, FogFar#
-
-		WriteShort F, MapTexID
-		WriteByte F, Outdoors
-		WriteByte F, AmbientR
-		WriteByte F, AmbientG
-		WriteByte F, AmbientB
-		WriteFloat F, DefaultLightPitch#
-		WriteFloat F, DefaultLightYaw#
-		WriteFloat F, SlopeRestrict#
-
-		; Scenery
-		Count = 0
-		For S.Scenery = Each Scenery : Count = Count + 1 : Next
-		WriteShort F, Count
-		For S.Scenery = Each Scenery
-			WriteShort F, S\MeshID
-			WriteFloat F, EntityX#(S\EN, True)
-			WriteFloat F, EntityY#(S\EN, True)
-			WriteFloat F, EntityZ#(S\EN, True)
-			WriteFloat F, EntityPitch#(S\EN, True)
-			WriteFloat F, EntityYaw#(S\EN, True)
-			WriteFloat F, EntityRoll#(S\EN, True)
-			WriteFloat F, S\ScaleX#
-			WriteFloat F, S\ScaleY#
-			WriteFloat F, S\ScaleZ#
-			WriteByte F, S\AnimationMode
-			WriteByte F, S\SceneryID
-			WriteShort F, S\TextureID
-			WriteByte F, S\CatchRain
-			WriteByte F, GetEntityType(S\EN)
-			WriteString F, S\Lightmap$
-			WriteString F, S\RCTE$ ; Extra data for RTCE
-		Next
-
-		; Water
-		Count = 0
-		For W.Water = Each Water : Count = Count + 1 : Next
-		WriteShort F, Count
-		For W.Water = Each Water
-			WriteShort F, W\TexID
-			WriteFloat F, W\TexScale#
-			WriteFloat F, EntityX#(W\EN, True)
-			WriteFloat F, EntityY#(W\EN, True)
-			WriteFloat F, EntityZ#(W\EN, True)
-			WriteFloat F, W\ScaleX#
-			WriteFloat F, W\ScaleZ#
-			WriteByte F, W\Red
-			WriteByte F, W\Green
-			WriteByte F, W\Blue
-			WriteByte F, W\Opacity
-		Next
-
-		; Collision boxes
-		Count = 0
-		For C.ColBox = Each ColBox : Count = Count + 1 : Next
-		WriteShort F, Count
-		For C.ColBox = Each ColBox
-			WriteFloat F, EntityX#(C\EN, True)
-			WriteFloat F, EntityY#(C\EN, True)
-			WriteFloat F, EntityZ#(C\EN, True)
-			WriteFloat F, EntityPitch#(C\EN, True)
-			WriteFloat F, EntityYaw#(C\EN, True)
-			WriteFloat F, EntityRoll#(C\EN, True)
-			WriteFloat F, C\ScaleX#
-			WriteFloat F, C\ScaleY#
-			WriteFloat F, C\ScaleZ#
-		Next
-
-		; Emitters
-		Count = 0
-		For E.Emitter = Each Emitter : Count = Count + 1 : Next
-		WriteShort F, Count
-		For E.Emitter = Each Emitter
-			WriteString F, E\ConfigName$
-			WriteShort F, E\TexID
-			WriteFloat F, EntityX#(E\EN, True)
-			WriteFloat F, EntityY#(E\EN, True)
-			WriteFloat F, EntityZ#(E\EN, True)
-			WriteFloat F, EntityPitch#(E\EN, True)
-			WriteFloat F, EntityYaw#(E\EN, True)
-			WriteFloat F, EntityRoll#(E\EN, True)
-		Next
-
-		; Terrains
-		Count = 0
-		For T.Terrain = Each Terrain :  Count = Count + 1 : Next
-		WriteShort F, Count
-		For T.Terrain = Each Terrain
-			WriteShort F, T\BaseTexID
-			WriteShort F, T\DetailTexID
-			WriteInt F, TerrainSize(T\EN)
-			For X = 0 To TerrainSize(T\EN)
-				For Z = 0 To TerrainSize(T\EN)
-					WriteFloat F, TerrainHeight#(T\EN, X, Z)
-				Next
-			Next
-			WriteFloat F, EntityX#(T\EN, True)
-			WriteFloat F, EntityY#(T\EN, True)
-			WriteFloat F, EntityZ#(T\EN, True)
-			WriteFloat F, EntityPitch#(T\EN, True)
-			WriteFloat F, EntityYaw#(T\EN, True)
-			WriteFloat F, EntityRoll#(T\EN, True)
-			WriteFloat F, T\ScaleX#
-			WriteFloat F, T\ScaleY#
-			WriteFloat F, T\ScaleZ#
-			WriteFloat F, T\DetailTexScale#
-			WriteInt   F, T\Detail
-			WriteByte  F, T\Morph
-			WriteByte  F, T\Shading
-		Next
-
-		; Sound zones
-		Count = 0
-		For SZ.SoundZone = Each SoundZone : Count = Count + 1 : Next
-		WriteShort F, Count
-		For SZ.SoundZone = Each SoundZone
-			WriteFloat F, EntityX#(SZ\EN, True)
-			WriteFloat F, EntityY#(SZ\EN, True)
-			WriteFloat F, EntityZ#(SZ\EN, True)
-			WriteFloat F, SZ\Radius#
-			WriteShort F, SZ\SoundID
-			WriteShort F, SZ\MusicID
-			WriteInt F, SZ\RepeatTime
-			WriteByte F, SZ\Volume
-		Next
-
-	Return SafeWriteCommit(TempPath$, FinalPath$, F)
-
-End Function
 
 ; Unloads the current area from memory
 Function UnloadArea()
@@ -1108,16 +745,19 @@ Function UnloadArea()
 
 	UnloadTrees(False)
 
-	; Six After-cursor walks; same bug class as #254 (GUE
-	; ClientAreas.bb sibling). RC Terrain Editor's UnloadArea
-	; ran six For-Each + Delete loops in sequence -- the
-	; original shape corrupted the cursor for any multi-element
-	; resource type. Documented in CLAUDE.md (#247).
+	; Six After-cursor walks. Each For-Each below Deletes the
+	; current element inside the body -- the original For/Next
+	; shape corrupted the cursor on every multi-element area
+	; unload (which is every legitimate zone transition).
+	; Documented in CLAUDE.md (#247).
 	Local S.Scenery = First Scenery
 	Local SNext.Scenery = Null
 	While S <> Null
 		SNext = After S
 		If S\TextureID < 65535 Then UnloadTexture(S\TextureID)
+		;Dynamic Lights
+		If S\LightID>0 Then FreeEntity(S\LightID)
+		S\LightID=0
 		UnloadMesh(S\MeshID)
 		FreeEntity(S\EN)
 		Delete(S)
@@ -1131,6 +771,9 @@ Function UnloadArea()
 		UnloadTexture(W\TexID)
 		FreeTexture(W\TexHandle)
 		FreeEntity(W\EN)
+
+		;FreeTexture(W\BumpTexA)
+
 		Delete(W)
 		W = WNext
 	Wend
@@ -1220,9 +863,9 @@ Function ChunkTerrain(Mesh, chx# = 10, chy# = 10, chz# = 10, XPos# = 0.0, YPos# 
 	cz# = Int((MeshDepth#(Mesh)) / chz#)
 
 	; Let the chunking begin
-	sos = CountSurfaces(Mesh)
+	sos = CountSurfaces(mesh)
 	For s = 1 To sos
-		surf = GetSurface(Mesh, s)
+		surf = GetSurface(mesh, s)
 		brush = GetSurfaceBrush(surf)
 
 		For t = 0 To CountTriangles(surf) - 1
@@ -1249,12 +892,6 @@ Function ChunkTerrain(Mesh, chx# = 10, chy# = 10, chz# = 10, XPos# = 0.0, YPos# 
 			x2#  = VertexX#(surf, TriangleVertex(surf, t, 2))
 			y2#  = VertexY#(surf, TriangleVertex(surf, t, 2))
 			z2#  = VertexZ#(surf, TriangleVertex(surf, t, 2))
-			u0a# = VertexU#(surf, TriangleVertex(surf, t, 0), 0)
-			v0a# = VertexV#(surf, TriangleVertex(surf, t, 0), 0)
-			u1a# = VertexU#(surf, TriangleVertex(surf, t, 1), 0)
-			v1a# = VertexV#(surf, TriangleVertex(surf, t, 1), 0)
-			u2a# = VertexU#(surf, TriangleVertex(surf, t, 2), 0)
-			v2a# = VertexV#(surf, TriangleVertex(surf, t, 2), 0)
 			nx2# = VertexNX#(surf, TriangleVertex(surf, t, 2))
 			ny2# = VertexNY#(surf, TriangleVertex(surf, t, 2))
 			nz2# = VertexNZ#(surf, TriangleVertex(surf, t, 2))
@@ -1262,6 +899,21 @@ Function ChunkTerrain(Mesh, chx# = 10, chy# = 10, chz# = 10, XPos# = 0.0, YPos# 
 			cr2# = VertexRed#(surf, TriangleVertex(surf, t, 2))
 			cg2# = VertexGreen#(surf, TriangleVertex(surf, t, 2))
 			cb2# = VertexBlue#(surf, TriangleVertex(surf, t, 2))
+			
+			u0a# = VertexU#(surf, TriangleVertex(surf, t, 0), 0)
+			v0a# = VertexV#(surf, TriangleVertex(surf, t, 0), 0)
+			u1a# = VertexU#(surf, TriangleVertex(surf, t, 1), 0)
+			v1a# = VertexV#(surf, TriangleVertex(surf, t, 1), 0)
+			u2a# = VertexU#(surf, TriangleVertex(surf, t, 2), 0)
+			v2a# = VertexV#(surf, TriangleVertex(surf, t, 2), 0)
+			
+			
+			u0b# = VertexU#(surf, TriangleVertex(surf, t, 0), 1)
+			v0b# = VertexV#(surf, TriangleVertex(surf, t, 0), 1)
+			u1b# = VertexU#(surf, TriangleVertex(surf, t, 1), 1)
+			v1b# = VertexV#(surf, TriangleVertex(surf, t, 1), 1)
+			u2b# = VertexU#(surf, TriangleVertex(surf, t, 2), 1)
+			v2b# = VertexV#(surf, TriangleVertex(surf, t, 2), 1)
 
 			; Let's see which chunk we'll assign this vert to
 			x_c# = NearestPower(VertexX#(surf, TriangleVertex(surf, t, 0)), cx#)
@@ -1273,15 +925,18 @@ Function ChunkTerrain(Mesh, chx# = 10, chy# = 10, chz# = 10, XPos# = 0.0, YPos# 
 					If Cl\Surf[s] <> 0
 						Found = True
 						v0 = AddVertex(Cl\Surf[s], x0, y0, z0)
-						VertexTexCoords Cl\Surf[s], v0, u0a, v0a, 0
+						VertexTexCoords Cl\Surf[s], v0, u0a, v0a, 1, 0
+						VertexTexCoords Cl\Surf[s], v0, u0b, v0b, 1, 1
 						VertexColor Cl\Surf[s], v0, cr0, cg0, cb0, al0
 						VertexNormal Cl\Surf[s], v0, nx0, ny0, nz0
 						v1 = AddVertex(Cl\Surf[s], x1, y1, z1)
-						VertexTexCoords Cl\Surf[s], v1, u1a, v1a, 0
+						VertexTexCoords Cl\Surf[s], v1, u1a, v1a, 1, 0
+						VertexTexCoords Cl\Surf[s], v1, u1b, v1b, 1, 1
 						VertexColor Cl\Surf[s], v1, cr1, cg1, cb1, al1
 						VertexNormal Cl\Surf[s], v1, nx1, ny1, nz1
 						v2 = AddVertex(Cl\Surf[s], x2, y2, z2)
-						VertexTexCoords Cl\Surf[s], v2, u2a, v2a, 0
+						VertexTexCoords Cl\Surf[s], v2, u2a, v2a, 1, 0
+						VertexTexCoords Cl\Surf[s], v2, u2b, v2b, 1, 1
 						VertexColor Cl\Surf[s], v2, cr2, cg2, cb2, al2
 						VertexNormal Cl\Surf[s], v2, nx2, ny2, nz2
 						nope = AddTriangle(Cl\Surf[s], v0, v1, v2)
@@ -1305,15 +960,18 @@ Function ChunkTerrain(Mesh, chx# = 10, chy# = 10, chz# = 10, XPos# = 0.0, YPos# 
                     PaintSurface Cl\Surf[ss], brush
 				Next
 				v0 = AddVertex(Cl\Surf[s], x0, y0, z0)
-				VertexTexCoords Cl\Surf[s], v0, u0a, v0a, 0
+				VertexTexCoords Cl\Surf[s], v0, u0a, v0a, 1, 0
+				VertexTexCoords Cl\Surf[s], v0, u0b, v0b, 1, 1
 				VertexColor Cl\Surf[s], v0, cr0, cg0, cb0, al0
 				VertexNormal Cl\Surf[s], v0, nx0, ny0, nz0
 				v1 = AddVertex(Cl\Surf[s], x1, y1, z1)
-				VertexTexCoords Cl\Surf[s], v1, u1a, v1a, 0
+				VertexTexCoords Cl\Surf[s], v1, u1a, v1a, 1, 0
+				VertexTexCoords Cl\Surf[s], v1, u1b, v1b, 1, 1
 				VertexColor Cl\Surf[s], v1, cr1, cg1, cb1, al1
 				VertexNormal Cl\Surf[s], v1, nx1, ny1, nz1
 				v2 = AddVertex(Cl\Surf[s], x2, y2, z2)
-				VertexTexCoords Cl\Surf[s], v2, u2a, v2a, 0
+				VertexTexCoords Cl\Surf[s], v2, u2a, v2a, 1, 0
+				VertexTexCoords Cl\Surf[s], v2, u2b, v2b, 1, 1
 				VertexColor Cl\Surf[s], v2, cr2, cg2, cb2, al2
 				VertexNormal Cl\Surf[s], v2, nx2, ny2, nz2
 				nope = AddTriangle(Cl\Surf[s], v0, v1, v2)
@@ -1331,7 +989,7 @@ Function ChunkTerrain(Mesh, chx# = 10, chy# = 10, chz# = 10, XPos# = 0.0, YPos# 
 			EndIf
 		Next
 		Cl\Mesh = RemoveSurface(Cl\Mesh)
-		EntityFX Cl\Mesh, 1 + 2
+		;EntityFX Cl\Mesh, 1 + 2
 		PositionEntity Cl\Mesh, XPos#, YPos#, ZPos#
 		ScaleEntity Cl\Mesh, XScale#, YScale#, ZScale#
 		EntityType Cl\Mesh, C_Triangle
@@ -1404,6 +1062,14 @@ Function RemoveSurface(Ent)
 				v_v0# = VertexV(surf, TriangleVertex(surf, tri, 0))
 				v_v1# = VertexV(surf, TriangleVertex(surf, tri, 1))
 				v_v2# = VertexV(surf, TriangleVertex(surf, tri, 2))
+				
+				v_u0b# = VertexU#(surf, TriangleVertex(surf, tri, 0),1)
+				v_u1b# = VertexU#(surf, TriangleVertex(surf, tri, 1),1)
+				v_u2b# = VertexU#(surf, TriangleVertex(surf, tri, 2),1)
+
+				v_v0b# = VertexV(surf, TriangleVertex(surf, tri, 0),1)
+				v_v1b# = VertexV(surf, TriangleVertex(surf, tri, 1),1)
+				v_v2b# = VertexV(surf, TriangleVertex(surf, tri, 2),1)
 
 				v_a0# = VertexAlpha#(surf, TriangleVertex(surf, tri, 0))
 				v_a1# = VertexAlpha#(surf, TriangleVertex(surf, tri, 1))
@@ -1412,6 +1078,9 @@ Function RemoveSurface(Ent)
 				v0 = AddVertex(newsurf, v_x0, v_y0, v_z0, v_u0, v_v0)
 				v1 = AddVertex(newsurf, v_x1, v_y1, v_z1, v_u1, v_v1)
 				v2 = AddVertex(newsurf, v_x2, v_y2, v_z2, v_u2, v_v2)
+				VertexTexCoords newsurf, v0, v_u0b, v_v0b, 1, 1
+				VertexTexCoords newsurf, v1, v_u1b, v_v1b, 1, 1
+				VertexTexCoords newsurf, v2, v_u2b, v_v2b, 1, 1
 				AddTriangle(newsurf, v0, v1, v2)
 
 				VertexColor newsurf, v0, v_r1, v_g1, v_b1, v_a0

@@ -17,13 +17,23 @@ it to JSON text, parses it back, re-encodes, and asserts the bytes are identical
 to the original -- so `export` then `build` is provably lossless before anyone
 trusts it.
 
-Scope (phase 1): the symmetric value-codec formats only -- Spells, Items, Actors,
+Scope (phase 1): the symmetric value-codec formats -- Spells, Items, Actors,
 Projectiles, Factions, server-side Areas (gameplay) and client-side Areas
-(visual). The Meshes/Textures/Sounds media databases are append-only index+blob
-structures (not value codecs -- a rebuild from their decoded entries would lose
-insertion order / gap layout and change the bytes), so a git-friendly form for
-them is deferred to phase 2. Unrecognised `.dat` files are reported and left
-untouched, never silently mangled.
+(visual).
+
+Scope (phase 2): the four media databases (Game Data/Meshes.dat, Textures.dat,
+Sounds.dat, Music.dat). These are index+blob structures, not value codecs, so
+their JSON form additionally captures insertion ORDER (ids sorted by blob
+offset) and any dead GAP spans (hex-encoded) -- enough to rebuild the bytes
+identically. (The engine itself never produces gaps -- Remove*FromDatabase
+compacts via a full rewrite -- the gap mechanism preserves crash-interrupted
+or hand-edited files faithfully instead of corrupting them.) The actual assets are loose files and
+already git-friendly; only these quarter-megabyte indexes used to be guaranteed
+merge conflicts on every asset import.
+
+Still unrecognised (reported and left untouched, never silently mangled):
+Gubbins.dat / Animations.dat / Interface.dat (different formats, phase 3) and
+Game Data/xMeshes.dat (legacy artifact -- zero references anywhere in src/).
 """
 import os
 import sys
@@ -32,6 +42,9 @@ import glob
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import rcdata
+
+def _mediadb_reader(kind):
+    return lambda raw: rcdata.mediadb_to_obj(raw, kind)
 
 # codec key -> (decode bytes->obj, encode obj->bytes)
 CODECS = {
@@ -42,6 +55,12 @@ CODECS = {
     'factions':    (rcdata.read_factions,    rcdata.write_factions),
     'server_area': (rcdata.read_server_area, rcdata.write_server_area),
     'client_area': (rcdata.read_client_area, rcdata.write_client_area),
+    # Phase 2: media databases. The encode side is kind-agnostic (the JSON
+    # object carries its own kind); the decode side binds it.
+    'mediadb_mesh':    (_mediadb_reader(rcdata.MESH),    rcdata.obj_to_mediadb),
+    'mediadb_texture': (_mediadb_reader(rcdata.TEXTURE), rcdata.obj_to_mediadb),
+    'mediadb_sound':   (_mediadb_reader(rcdata.SOUND),   rcdata.obj_to_mediadb),
+    'mediadb_music':   (_mediadb_reader(rcdata.MUSIC),   rcdata.obj_to_mediadb),
 }
 
 # Exact project-relative paths (forward slashes) for the single-file catalogs.
@@ -51,6 +70,10 @@ _EXACT = {
     'Server Data/Actors.dat':      'actors',
     'Server Data/Projectiles.dat': 'projectiles',
     'Server Data/Factions.dat':    'factions',
+    'Game Data/Meshes.dat':        'mediadb_mesh',
+    'Game Data/Textures.dat':      'mediadb_texture',
+    'Game Data/Sounds.dat':        'mediadb_sound',
+    'Game Data/Music.dat':         'mediadb_music',
 }
 
 

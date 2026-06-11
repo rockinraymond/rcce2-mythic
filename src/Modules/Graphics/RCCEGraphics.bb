@@ -1,6 +1,7 @@
 Strict
 
 Include "Modules\Traits\Dim\ScaleTrait.bb"
+Include "Modules\Graphics\RenderSanity.bb" ; Issue #40 boot probe (dead-surface detection + bounded re-init)
 
 Type RCCEGraphics
     Field scale.ScaleTrait
@@ -18,6 +19,10 @@ Type RCCEGraphics
 
     Method init()
         Graphics3D(self\scale\x, self\scale\y, self\scale\z, self\mode)
+        ; Issue #40 boot probe -- dead-surface detection + bounded re-init,
+        ; run before any buffer state is cached. No log file exists on this
+        ; target; the probe sets an AppTitle notice on final failure.
+        EnsureRenderSanity(self\scale\x, self\scale\y, self\scale\z, self\mode)
         RCCEGraphics::resetBuffer(self)
     End Method
 

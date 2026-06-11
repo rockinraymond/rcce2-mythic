@@ -168,10 +168,21 @@ Type ExitPrompt
         Local modalY% = (sh - EXITPROMPT_MODAL_H) / 3
 
         LoomShadowCard(modalX, modalY, EXITPROMPT_MODAL_W, EXITPROMPT_MODAL_H)
-        LoomFill(modalX, modalY, EXITPROMPT_MODAL_W, EXITPROMPT_MODAL_H, LOOM_STONE_850_R, LOOM_STONE_850_G, LOOM_STONE_850_B)
+        // Modal backdrop varies by chrome mode (mirrors Composer::
+        // renderAndUpdate): tool=flat, balanced=subtle gradient,
+        // in-world=dramatic gradient + brass bottom-rule ornament. The
+        // warning-colored top strip + border are preserved in every mode.
+        If Loom_ChromeIsTool() = True
+            LoomFill(modalX, modalY, EXITPROMPT_MODAL_W, EXITPROMPT_MODAL_H, LOOM_STONE_850_R, LOOM_STONE_850_G, LOOM_STONE_850_B)
+        Else If Loom_ChromeIsInWorld() = True
+            LoomGradientV(modalX, modalY, EXITPROMPT_MODAL_W, EXITPROMPT_MODAL_H, LOOM_STONE_700_R, LOOM_STONE_700_G, LOOM_STONE_700_B, LOOM_STONE_950_R, LOOM_STONE_950_G, LOOM_STONE_950_B)
+        Else
+            LoomGradientV(modalX, modalY, EXITPROMPT_MODAL_W, EXITPROMPT_MODAL_H, LOOM_STONE_850_R, LOOM_STONE_850_G, LOOM_STONE_850_B, LOOM_STONE_900_R, LOOM_STONE_900_G, LOOM_STONE_900_B)
+        EndIf
         LoomBorder(modalX, modalY, EXITPROMPT_MODAL_W, EXITPROMPT_MODAL_H, LOOM_WARNING_R, LOOM_WARNING_G, LOOM_WARNING_B)
         LoomBorder(modalX + 1, modalY + 1, EXITPROMPT_MODAL_W - 2, EXITPROMPT_MODAL_H - 2, LOOM_BRASS_700_R, LOOM_BRASS_700_G, LOOM_BRASS_700_B)
         LoomFill(modalX, modalY, EXITPROMPT_MODAL_W, 3, LOOM_WARNING_R, LOOM_WARNING_G, LOOM_WARNING_B)
+        If Loom_ChromeIsInWorld() = True Then LoomFill(modalX, modalY + EXITPROMPT_MODAL_H - 3, EXITPROMPT_MODAL_W, 3, LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B)
 
         LoomTheme_UseDisplay()
         LoomText(modalX + EXITPROMPT_PAD, modalY + 12, "UNSAVED CHANGES", LOOM_WARNING_R, LOOM_WARNING_G, LOOM_WARNING_B)

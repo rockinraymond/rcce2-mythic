@@ -44,10 +44,21 @@ Function b3dReadString$()
 End Function
 
 Function b3dReadChunk$()
+	; Soft-fail guard for malformed / hostile .b3d input. b3d_stack is
+	; Dim'd (100) -> valid indices 0..100, so b3d_tos must never exceed
+	; 100. A file nested deeper than the stack capacity would otherwise
+	; OOB-write b3d_stack on the push below. Return an empty tag (which
+	; no chunk reader matches) without pushing, rather than corrupt memory.
+	If b3d_tos+1 > 100 Then Return ""
 	For k=1 To 4
 		tag$=tag$+Chr$(b3dReadByte())
 	Next
 	sz=ReadInt( b3d_file )
+	; Reject a negative chunk size read from the file: b3d_stack(tos) is
+	; FilePos+sz and is later consumed by b3dChunkSize()/b3dExitChunk() as
+	; a seek target. A negative sz seeks backwards (infinite re-read); soft-
+	; fail the same way (empty tag, no push) instead of mis-seeking.
+	If sz<0 Then Return ""
 	b3d_tos=b3d_tos+1
 	b3d_stack(b3d_tos)=FilePos( b3d_file )+sz
 	Return tag$

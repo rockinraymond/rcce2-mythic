@@ -78,11 +78,13 @@ The next-tier roadmap items, in rough order of leverage:
 
 ## Deferred (with reasons — read before reopening)
 
-### Literal 3D zone viewport
+### Literal 3D zone viewport — no longer deferred (shipped via ADR-004 Phases A-C)
 
-**Reason:** `ClientAreas.bb`'s `LoadArea` is entangled with GUE-specific UI globals — `GY_Cam`, `GY_CreateProgressBar`, `ResolutionType`, `RandomImages`, `GetMusicName$`, `GetTexture`, `GetFilename$` (which lives inside `GUE.bb` itself, not in a shared module). Pulling it into Loom would lock the two editors together at the UI layer — defeating the entire point of Loom as a parallel editor.
+**Original reason for deferral (resolved):** `ClientAreas.bb`'s `LoadArea` was entangled with GUE-specific UI globals — `GY_Cam`, `GY_CreateProgressBar`, `ResolutionType`, `RandomImages`, `GetMusicName$`, `GetTexture`, `GetFilename$` (which lived inside `GUE.bb` itself, not in a shared module). The ADR-004 phased refactor dissolved that entanglement.
 
 **Path to unblocking:** Either (a) extract the data-only parts of `LoadArea` into a new `Modules/AreaMeshLoader.bb` that both GUE and Loom can call, or (b) write a Loom-side mesh loader that parses the same `.dat` format independently. (a) is correct, (b) risks drift. Either is a meaningful refactor — probably needs to be its own multi-PR project before Loom can pick it up.
+
+**Status: SHIPPED.** All three ADR-004 phases are merged: Phase A (shared `Path.bb`, PR #429), Phase B (data-only `Modules/AreaLoader.bb`, PR #547), and Phase C — the zone viewport's **world mode**: a toggle pill loads the focused zone's real terrain/scenery/water via `LoadAreaData` and overlays the schematic markers at their true coordinates, soft-failing back to schematic when a zone has no visual `.dat`. Editing interactions (add/drag-move, which pick against the schematic ground plane) remain schematic-mode-only; world-mode editing against real terrain is the natural follow-up.
 
 See [decisions/004-deferred-3d-viewport.md](decisions/004-deferred-3d-viewport.md) for full context.
 

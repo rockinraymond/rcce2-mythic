@@ -287,6 +287,22 @@ Function FindActorInstanceFromRNID.ActorInstance(RNID)
 
 End Function
 
+; Bounded RuntimeIDList lookup for wire-supplied RuntimeIDs.
+;
+; RuntimeIDList is Dim(65535). A 2-byte wire field decodes to 0..65535
+; (RCEnet.bb:85 -- RCE_IntFromStr zero-fills the bank and only writes the
+; bytes present), so every current caller is already in range. This wraps
+; the index in the documented bounds-before-index convention (CLAUDE.md)
+; at the wire boundary so a FUTURE read-width change (or a non-2-byte
+; caller) cannot index the Dim out of bounds and crash the shared server
+; process. Returns Null for an out-of-range ID; callers already Null-check
+; the result (the active protection today), matching the ActorList guard
+; in P_CreateCharacter (ServerNet.bb ~2814).
+Function RuntimeActorFromWire.ActorInstance(RuntimeID)
+	If RuntimeID < 0 Or RuntimeID > 65535 Then Return Null
+	Return RuntimeIDList(RuntimeID)
+End Function
+
 ; Finds an actor instance based on their name
 Function FindActorInstanceFromName.ActorInstance(Name$)
 
@@ -1611,7 +1627,17 @@ Function DestroyActorEffect( AE.ActorEffect )
 End Function
 
 Function RemoveActorEffectFromActor( AI.ActorInstance, EffectName$ )
-	For AE.ActorEffect = Each ActorEffect
+	; After-cursor walk (CLAUDE.md "Iterator-during-iteration hazards",
+	; pattern #1). The body Deletes the current AE. Blitz3D's For-Each
+	; advances the cursor via the deleted element's "next" pointer, so the
+	; original `For AE = Each ActorEffect / ... / Delete AE` shape leaves a
+	; dangling cursor. Capture `After AE` BEFORE the Delete and advance via
+	; the saved pointer. Mirrors the effect-expiry sweep in
+	; GameServer.bb::UpdateActorInstances.
+	Local AE.ActorEffect = First ActorEffect
+	Local AENext.ActorEffect = Null
+	While AE <> Null
+		AENext = After AE
 		If AE\Owner = AI
 			If Upper$(AE\Name$) = Upper$(EffectName$)
 				If AE\Owner\RNID > 0
@@ -1632,7 +1658,8 @@ Function RemoveActorEffectFromActor( AI.ActorInstance, EffectName$ )
 				Return True
 			EndIf
 		EndIf
-	Next
+		AE = AENext
+	Wend
 	Return False
 End Function
 

@@ -1690,6 +1690,20 @@ Function BVM_ACTORHASEFFECT%(Param1%, Param2$)
 Return Result%
 End Function
 
+; --- Open cosmetic-broadcast BVM cluster (intentionally ungated) ---
+; SCREENFLASH / CREATEFLOATINGNUMBER / CREATEEMITTER / PLAYSOUND /
+; PLAYSPEECH / PLAYMUSIC / OUTPUT are pure client-facing cosmetic
+; broadcasts: they push an effect packet to receiving clients and
+; mutate NO authoritative server state (no HP/gold/faction/position/
+; inventory change). A hostile non-priv clicker script can at worst
+; produce client-side annoyance, not a brick or a state exploit, so
+; they are deliberately left WITHOUT a privilege gate -- mirroring the
+; appearance-cluster note above, this is recorded so future audits
+; don't re-flag the cluster as "missing RequirePrivileged".
+; The only hardening applied here is bounding unbounded int params
+; that control on-client duration (flash Length, emitter Time) so a
+; spammed cosmetic can't linger near-permanently as a client-view DoS.
+; Do NOT add privilege gates to this cluster.
 Function BVM_SCREENFLASH(Param1%, Param2%, Param3%, Param4%, Param5%, Param6%, Param7%=0)
 	Actor.ActorInstance = Object.ActorInstance(Param1%)
 	If Actor <> Null
@@ -1698,7 +1712,15 @@ Function BVM_SCREENFLASH(Param1%, Param2%, Param3%, Param4%, Param5%, Param6%, P
 			G = Param3%
 			B = Param4%
 			Alpha = Param5%
+			; Length is the flash duration in ms (client UpdateScreenFlash
+			; fades it out over MilliSecs()). Unbounded it is a 4-byte int,
+			; so a hostile non-priv clicker could pin a near-opaque full-
+			; screen overlay for ~24 days. Clamp to 30000 ms (30s) -- far
+			; beyond any legitimate flash and BVM_SCREENFLASH has zero
+			; shipped callers, so this changes no shipped behavior.
 			Length = Param6%
+			If Length > 30000 Then Length = 30000
+			If Length < 0 Then Length = 0
 			TexID = Param7%
 			Pa$ = RCE_StrFromInt$(R, 1) + RCE_StrFromInt$(G, 1) + RCE_StrFromInt$(B, 1) + RCE_StrFromInt$(Alpha, 1) + RCE_StrFromInt$(Length, 4)
 			RCE_Send(Host, Actor\RNID, P_ScreenFlash, Pa$ + RCE_StrFromInt$(TexID, 2), True)
@@ -1741,6 +1763,16 @@ Function BVM_ADDABILITY(Param1%, Param2$, Param3%=1)
 End Function
 
 Function BVM_DELETEABILITY(Param1%, Param2$)
+	; Full-priv gate. Strips an ability/spell from any actor handle --
+	; equivalent-effect bypass of the already-gated BVM_SETABILITYLEVEL
+	; (which gates because zeroing ability levels bricks a player's
+	; combat toolkit; deleting the ability outright is strictly worse).
+	; For Examine/Trade/RightClick/ItemScript spawns SI\AI = Handle(clicker),
+	; so a self-or-priv gate would let DeleteAbility(clicker, "<spell>")
+	; through -- RequirePrivileged refuses regardless of the target.
+	; No shipped content script calls DeleteAbility (grep of data/ found
+	; zero callers), so the gate breaks nothing.
+	If Not BVM_RequirePrivileged() Then Return
 	Actor.ActorInstance = Object.ActorInstance(Param1%)
 	If Actor <> Null
 		SpellName$ = Upper$(Param2$)
@@ -1931,7 +1963,16 @@ Function BVM_CREATEEMITTER(Param1%, Param2$, Param3%, Param4%, Param5#=0, Param6
 	If Actor <> Null Then RuntimeID = Actor\RuntimeID Else RuntimeID = 0
 	Name$ = Param2$
 	TexID = Param3%
+	; Time is the emitter lifetime in ms (client P_CreateEmitter stores
+	; it as Em\Length against MilliSecs()). Unbounded it is a 4-byte int,
+	; so a non-priv clicker can spam near-permanent emitters -- a client-
+	; view DoS. Clamp to 60000 ms (60s); all 5 shipped callers pass <= 600
+	; (Spell_Fireball 100, the EMITTERNAME templates / Poison Potion 500,
+	; Spell_FlameNova 600), so this 100x-headroom cap changes no shipped
+	; behavior.
 	Time = Param4%
+	If Time > 60000 Then Time = 60000
+	If Time < 0 Then Time = 0
 	; Sanitise offset floats -- NaN broadcast to receiving clients
 	; poisons emitter positioning on each receiver. Emitter offsets
 	; are actor-relative and usually small; ClampSaneFloat is the
@@ -2419,6 +2460,15 @@ Function BVM_COMPLETEQUEST(Param1%, Param2$)
 End Function
 
 Function BVM_DELETEQUEST(Param1%, Param2$)
+	; Full-priv gate. Wipes a target's quest-log entry -- equivalent-effect
+	; bypass of the gated quest/progression mutators: a non-priv clicker
+	; script could erase a player's quest progress. For Examine/Trade/
+	; RightClick/ItemScript spawns SI\AI = Handle(clicker), so a self-or-priv
+	; gate would let DeleteQuest(clicker, "<quest>") through --
+	; RequirePrivileged refuses regardless of the target. No shipped content
+	; script calls DeleteQuest (grep of data/ found zero callers), so the
+	; gate breaks nothing.
+	If Not BVM_RequirePrivileged() Then Return
 	Actor.ActorInstance = Object.ActorInstance(Param1%)
 	If Actor <> Null
 		If Actor\RNID > 0
@@ -3061,6 +3111,20 @@ Function BVM_OPENTRADING(Param1%, Param2%)
 End Function
 
 Function BVM_SETACTORGLOBAL(Param1%, Param2%, Param3$)
+	; Self-or-priv gate. ScriptGlobals$[] is per-actor script state
+	; (skill XP, quest/login flags, marriage state). Shipped non-priv
+	; scripts legitimately write their OWN actor's globals -- Login.rsl
+	; (Player = Actor() -> SI\AI), the BlackSmithing skill template, and
+	; the ProcessGlobals.rcm PushGlobal helper they call. The privileged
+	; marriage / Click_marriage scripts (on Privileged Scripts.dat) write
+	; a *second* actor (the spouse, `Found`) and pass via the priv branch.
+	; The gate blocks a non-priv clicker-driven NPC script (Examine /
+	; Trade / RightClick / ItemScript, where SI\AI = Handle(clicker))
+	; from injecting into a THIRD actor's globals. Full-priv would break
+	; the shipped self-targeting scripts, so RequireSelfOrPrivileged is
+	; the correct choice here (peer: BVM_SETSUPERGLOBAL is full-priv as
+	; it has no actor handle and is server-wide state).
+	If Not BVM_RequireSelfOrPrivileged(Param1%) Then Return
 	; ScriptGlobals$ is Field [9] (10 slots); without this bound a
 	; script could write past the actor record into adjacent fields.
 	If Param2% < 0 Or Param2% > 9 Then Return
@@ -3430,6 +3494,13 @@ Function BVM_GETWAITRESULT$()
 End Function
 
 Function BVM_SETSUPERGLOBAL(Param1%, Param2$)
+	; Full-priv gate. SuperGlobals$() is server-wide shared state with no
+	; actor handle -- there is no "self" to scope to, so any non-priv
+	; script writing it is poisoning global state every other script and
+	; player observes (peer: BVM_SETGOLD-style server-state mutators are
+	; full-priv). No shipped content script calls SetSuperGlobal (grep of
+	; data/ found zero callers), so the gate breaks nothing.
+	If Not BVM_RequirePrivileged() Then Return
 	; SuperGlobals$ is Dim'd (99) -> 100 slots, indices 0..99.
 	; Without this bound a script's bad index is a Blitz Dim OOB write
 	; (no runtime check) and corrupts adjacent globals or crashes.

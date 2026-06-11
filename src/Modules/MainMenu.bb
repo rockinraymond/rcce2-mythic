@@ -51,22 +51,29 @@ Function RunMenu()
        Select FullScreen 
           Case 0 
              Graphics3D(Width, Height, Depth,2) 
+				EnsureRenderSanity(Width, Height, Depth, 2)
 				InitExt
 
           Case 1 
              Graphics3D(Width, Height, Depth,1) ;1
+				EnsureRenderSanity(Width, Height, Depth, 1)
 				InitExt
        End Select 
     Else 
        Select FullScreen 
           Case 0 
              Graphics3D(800, 600, 0,2) 
+				EnsureRenderSanity(800, 600, 0, 2)
 				InitExt
           Case 1 
              Graphics3D(800, 600, 0,1) 
+				EnsureRenderSanity(800, 600, 0, 1)
 				InitExt
        End Select 
     EndIf
+	; Issue #40 instrumentation: 0 = clean, N = recovered after N re-inits,
+	; -1 = surfaces still dead (the probe module set an AppTitle notice).
+	If RenderSanityResult <> 0 Then WriteLog(MainLog, "RenderSanity (menu boot): result " + RenderSanityResult + " -- issue #40 signature")
 				;multithreading cysis145 ???
 				;Local pointer1 = FunctionPointer()
 				;Goto skip1

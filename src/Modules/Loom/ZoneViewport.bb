@@ -1,14 +1,25 @@
 ; =============================================================================
-; Loom/ZoneViewport.bb -- schematic 3D viewport for zone sub-entities
+; Loom/ZoneViewport.bb -- 3D viewport for zone sub-entities, two modes:
 ; =============================================================================
 ;
-; The "real" 3D zone viewport (with terrain meshes, scenery, water, sky) is
-; still deferred per ADR 004 -- ClientAreas.bb's LoadArea is entangled with
-; GUE-specific UI globals.  But Loom already has every PORTAL / SPAWN /
-; TRIGGER / WAYPOINT coordinate in memory via ServerLoadArea (the
-; data-only loader).  That's enough for a SCHEMATIC viewport that shows
-; the zone's topology: where portals are, where spawns cluster, where
-; triggers fire, how waypoints connect.
+;   SCHEMATIC (default)  portal/spawn/trigger/waypoint markers over a flat
+;                        ground plane, from ServerLoadArea's gameplay data.
+;   WORLD (toggle pill)  the zone's REAL terrain/scenery/water loaded from
+;                        Data\Areas\<name>.dat via LoadAreaData -- the
+;                        data-only loader ADR-004 Phase B carved out of
+;                        GUE's LoadArea -- with the markers overlaid at
+;                        their true coordinates. This is ADR-004 Phase C.
+;
+; World-mode mechanics: the schematic scene lives at y=VP_SCENE_Y_OFFSET
+; (camera isolation from MeshPreview); LoadAreaData places geometry at
+; real coordinates (y~=0). Rather than re-parenting the loaded world, the
+; whole viewport rides a mode-dependent offset (VPSceneYOff#): the const
+; in schematic mode, 0.0 in world mode (markers reload at real coords and
+; the camera / grid / drag math follow the same variable). Zones without
+; a visual .dat soft-fail back to schematic with a toast. Editing
+; interactions that pick against the ground plane (add / drag-move) are
+; schematic-mode-only for now -- in world mode the pick ray lands on
+; terrain/scenery, which the handlers already treat as a no-op miss.
 ;
 ; Visual:
 ;   Ground plane           dark stone-900 quad at y=0
@@ -58,6 +69,13 @@ Const VP_MAX_SPAWN_MESHES = 200           ; cap loaded actor meshes per zone
 
 
 ; ---- Module state -----------------------------------------------------------
+; Mode-dependent Y offset for everything the viewport places or projects:
+; VP_SCENE_Y_OFFSET# in schematic mode, 0.0 in world mode (the loaded world
+; sits at real coordinates and cannot be re-parented upward).
+Global VPSceneYOff#  = VP_SCENE_Y_OFFSET#
+Global VPWorldMode   = False     ; user-facing toggle state
+Global VPWorldLoaded = False     ; an UnloadArea() is owed when True
+
 Global VPCam        = 0
 Global VPLight      = 0
 Global VPRT         = 0
@@ -97,6 +115,12 @@ Global VPMarkerDragArH    = 0            ; Handle(Area) of the zone being edited
 ; without breaking the gesture.
 Global VPMarkerDragYMode = False
 Global VPMarkerDragLastMY = 0    ; per-frame Y delta basis
+; True once a drag actually committed a coordinate write. The release
+; handler only toasts "Moved ..." + marks the zone dirty when a write
+; happened -- an XZ drag whose every pick missed the ground (e.g. the
+; ground is hidden) used to fire a false success toast and a spurious
+; dirty flag. (Review finding on #551.)
+Global VPMarkerDragChanged = False
 
 ; MMB pan state. Middle-mouse drag translates VPSceneCenterX/Z in
 ; camera-aligned screen-right and screen-forward directions so the
@@ -149,6 +173,22 @@ Global LoomComposer.Composer = Null
 
 
 ; =============================================================================
+; AreaLoad* presentation hooks -- the contract AreaLoader.bb requires of any
+; including target (GUE implements them with the Gooey loading screen in
+; ClientAreas.bb). Loom needs no loading presentation: editor-side zone
+; loads are sub-second and the viewport repaints continuously.
+; =============================================================================
+Function AreaLoadBegin(DisplayItems)
+End Function
+
+Function AreaLoadProgress(Pct)
+End Function
+
+Function AreaLoadEnd()
+End Function
+
+
+; =============================================================================
 ; Loom_InitZoneViewport -- one-time setup at boot.
 ; =============================================================================
 Function Loom_InitZoneViewport()
@@ -198,8 +238,94 @@ Function Loom_InitZoneViewport()
     PositionEntity VPPivot, 0, VP_SCENE_Y_OFFSET#, 0
     HideEntity VPPivot
 
+    ; Sky-entity shim for world mode: LoadAreaData unconditionally calls
+    ; EntityTexture / EntityAlpha on the SkyEN / CloudEN / StarsEN globals
+    ; (declared in AreaLoader.bb) and SetViewDistance scales them. Client
+    ; and GUE create those entities in their environment setup; Loom has
+    ; none, and entity commands on handle 0 are a crash. Create them as
+    ; hidden placeholder spheres so the loader's calls land on real
+    ; entities without rendering a sky in the editor viewport.
+    If SkyEN = 0 Then SkyEN = CreateSphere(4) : HideEntity SkyEN
+    If CloudEN = 0 Then CloudEN = CreateSphere(4) : HideEntity CloudEN
+    If StarsEN = 0 Then StarsEN = CreateSphere(4) : HideEntity StarsEN
+
     VPInitOK = True
     WriteLog(LoomLog, "ZoneViewport: initialized (RT=" + VP_RT_SIZE + "x" + VP_RT_SIZE + ")")
+End Function
+
+
+; =============================================================================
+; Loom_UnloadWorld -- tear down a loaded world: free the loader's entities
+; (terrain / scenery / water / colboxes / emitters / sound zones) and undo
+; the loader's camera + ambient side effects. Safe to call when nothing is
+; loaded. Does NOT touch mode flags or markers -- callers own those.
+; =============================================================================
+Function Loom_UnloadWorld()
+    If VPWorldLoaded = False Then Return
+    UnloadArea()
+    VPWorldLoaded = False
+    ; LoadAreaData set the camera's range/fog/cls colors (SetViewDistance +
+    ; CameraFogColor/CameraClsColor) and the global AmbientLight from the
+    ; zone's environment block. Restore the viewport's boot values; ambient
+    ; goes back to the Blitz default so MeshPreview lighting is unaffected.
+    If VPCam <> 0
+        CameraRange    VPCam, 1.0, 10000.0
+        CameraClsColor VPCam, 16, 16, 22
+    EndIf
+    AmbientLight 127, 127, 127
+    WriteLog(LoomLog, "ZoneViewport: world unloaded")
+End Function
+
+
+; =============================================================================
+; Loom_SetWorldMode -- toggle between schematic and world rendering for the
+; focused zone. Loading the world soft-fails (toast + stay schematic) when
+; the zone has no visual data file (Data\Areas\<name>.dat) -- many gameplay
+; zones don't. On success the whole viewport drops its Y offset to 0 and
+; the markers reload at real coordinates over the loaded geometry.
+; =============================================================================
+Function Loom_SetWorldMode(zoneHandle, enable)
+    Local Ar.Area = Object.Area(zoneHandle)
+    If Ar = Null Then Return
+
+    If enable = True
+        If VPWorldLoaded = True Then Loom_UnloadWorld()
+        ; Pre-check the visual data file rather than letting LoadAreaData's
+        ; missing-file Return False handle it, so the common Loom case --
+        ; toggling world view on a gameplay-only zone -- gets the specific
+        ; "no visual zone data" toast instead of a generic load failure.
+        ; (Originally this also dodged a lock-handle leak in the loader's
+        ; early return -- review finding on #551 -- but AreaLoader now
+        ; locks only after the ReadFile check, so that's no longer a factor.)
+        If FileType("Data\Areas\" + Ar\Name$ + ".dat") <> 1
+            Toast_Show("No visual zone data (Data\Areas\" + Ar\Name$ + ".dat)", "warning")
+            WriteLog(LoomLog, "ZoneViewport: no visual .dat for " + Ar\Name$ + " -- staying schematic")
+            VPWorldMode = False
+            Return
+        EndIf
+        If LoadAreaData(Ar\Name$, VPCam, True, False) = False
+            Toast_Show("World load failed for " + Ar\Name$, "warning")
+            WriteLog(LoomLog, "ZoneViewport: world load failed for " + Ar\Name$ + " -- staying schematic")
+            VPWorldMode = False
+            Return
+        EndIf
+        VPWorldLoaded = True
+        VPWorldMode = True
+        VPSceneYOff# = 0.0
+        If VPGround <> 0 Then HideEntity VPGround
+        Loom_LoadZoneMarkers(Ar)
+        VPDirty = True
+        Toast_Show("World view: " + Ar\Name$, "success")
+        WriteLog(LoomLog, "ZoneViewport: world loaded for " + Ar\Name$)
+    Else
+        Loom_UnloadWorld()
+        VPWorldMode = False
+        VPSceneYOff# = VP_SCENE_Y_OFFSET#
+        If VPGround <> 0 Then ShowEntity VPGround
+        Loom_LoadZoneMarkers(Ar)
+        VPDirty = True
+        WriteLog(LoomLog, "ZoneViewport: back to schematic for " + Ar\Name$)
+    EndIf
 End Function
 
 
@@ -271,7 +397,7 @@ End Function
 ; =============================================================================
 Function Loom_MakeAxisMarkers()
     Local ox# = 0.0
-    Local oy# = VP_SCENE_Y_OFFSET#
+    Local oy# = VPSceneYOff#
     Local oz# = 0.0
     Loom_MakeLine ox#, oy#, oz#, ox# + VP_AXIS_LENGTH#, oy#, oz#, 220, 60, 60
     Loom_MakeLine ox#, oy#, oz#, ox#, oy# + VP_AXIS_LENGTH#, oz#, 60, 220, 60
@@ -347,6 +473,14 @@ End Function
 ; =============================================================================
 Function Loom_DeleteMarkerAtClick(zoneHandle, localX, localY)
     If VPInitOK = False Then Return
+    ; World mode is read-only (the hint bar says so). Without this gate a
+    ; Ctrl+LMB on a marker deletes zone data from the "view" mode: the pick
+    ; here is marker-vs-marker, so hiding VPGround doesn't protect this
+    ; path the way it does the add/drag-XZ paths. (Review finding on #551.)
+    If VPWorldMode = True
+        Toast_Show("World view is read-only -- switch to schematic to delete", "warning")
+        Return
+    EndIf
     Local Ar.Area = Object.Area(zoneHandle)
     If Ar = Null Then Return
 
@@ -719,7 +853,7 @@ Function Loom_LoadZoneMarkers(Ar.Area)
         If Ar\PortalName$[i] <> ""
             Local pEn = CreateCube()
             ScaleEntity pEn, VP_MARKER_SIZE#, VP_MARKER_SIZE#, VP_MARKER_SIZE#
-            PositionEntity pEn, Ar\PortalX#[i], VP_SCENE_Y_OFFSET# + Ar\PortalY#[i] + VP_MARKER_SIZE#, Ar\PortalZ#[i]
+            PositionEntity pEn, Ar\PortalX#[i], VPSceneYOff# + Ar\PortalY#[i] + VP_MARKER_SIZE#, Ar\PortalZ#[i]
             EntityColor pEn, LOOM_BRASS_500_R, LOOM_BRASS_500_G, LOOM_BRASS_500_B
             EntityPickMode pEn, 1     ; box-pick eligible
             Local pm.ZoneViewportMarker = New ZoneViewportMarker
@@ -753,14 +887,14 @@ Function Loom_LoadZoneMarkers(Ar.Area)
                 If sEn <> 0
                     ; Actor mesh: origin at the feet -> sit it on the ground.
                     spawnMeshCount = spawnMeshCount + 1
-                    PositionEntity sEn, Ar\WaypointX#[waypointIdx], VP_SCENE_Y_OFFSET# + Ar\WaypointY#[waypointIdx], Ar\WaypointZ#[waypointIdx]
+                    PositionEntity sEn, Ar\WaypointX#[waypointIdx], VPSceneYOff# + Ar\WaypointY#[waypointIdx], Ar\WaypointZ#[waypointIdx]
                     Local A2.Actor = ActorList(Ar\SpawnActor[i])
                     If A2 <> Null And A2\Scale# > 0.0 Then spawnScale# = A2\Scale#
                 Else
                     ; Fallback marker cube (centered -> lift by half-size).
                     sEn = CreateCube()
                     ScaleEntity sEn, VP_MARKER_SIZE#, VP_MARKER_SIZE#, VP_MARKER_SIZE#
-                    PositionEntity sEn, Ar\WaypointX#[waypointIdx], VP_SCENE_Y_OFFSET# + Ar\WaypointY#[waypointIdx] + VP_MARKER_SIZE#, Ar\WaypointZ#[waypointIdx]
+                    PositionEntity sEn, Ar\WaypointX#[waypointIdx], VPSceneYOff# + Ar\WaypointY#[waypointIdx] + VP_MARKER_SIZE#, Ar\WaypointZ#[waypointIdx]
                     EntityColor sEn, LOOM_ARCANE_500_R, LOOM_ARCANE_500_G, LOOM_ARCANE_500_B
                 EndIf
                 EntityPickMode sEn, 1
@@ -784,7 +918,7 @@ Function Loom_LoadZoneMarkers(Ar.Area)
         If Ar\TriggerScript$[i] <> ""
             Local tEn = CreateCube()
             ScaleEntity tEn, VP_MARKER_SIZE#, VP_MARKER_SIZE#, VP_MARKER_SIZE#
-            PositionEntity tEn, Ar\TriggerX#[i], VP_SCENE_Y_OFFSET# + Ar\TriggerY#[i] + VP_MARKER_SIZE#, Ar\TriggerZ#[i]
+            PositionEntity tEn, Ar\TriggerX#[i], VPSceneYOff# + Ar\TriggerY#[i] + VP_MARKER_SIZE#, Ar\TriggerZ#[i]
             EntityColor tEn, LOOM_WARNING_R, LOOM_WARNING_G, LOOM_WARNING_B
             EntityPickMode tEn, 1
             Local tm.ZoneViewportMarker = New ZoneViewportMarker
@@ -806,7 +940,7 @@ Function Loom_LoadZoneMarkers(Ar.Area)
         If Ar\WaypointX#[i] <> 0.0 Or Ar\WaypointZ#[i] <> 0.0
             Local wEn = CreateCube()
             ScaleEntity wEn, VP_WAYPOINT_SIZE#, VP_WAYPOINT_SIZE#, VP_WAYPOINT_SIZE#
-            PositionEntity wEn, Ar\WaypointX#[i], VP_SCENE_Y_OFFSET# + Ar\WaypointY#[i] + VP_WAYPOINT_SIZE#, Ar\WaypointZ#[i]
+            PositionEntity wEn, Ar\WaypointX#[i], VPSceneYOff# + Ar\WaypointY#[i] + VP_WAYPOINT_SIZE#, Ar\WaypointZ#[i]
             EntityColor wEn, 140, 140, 150
             EntityPickMode wEn, 1
             Local wm.ZoneViewportMarker = New ZoneViewportMarker
@@ -831,13 +965,13 @@ Function Loom_LoadZoneMarkers(Ar.Area)
             Local na = Ar\NextWaypointA[i]
             If na >= 0 And na <= 1999
                 If Ar\WaypointX#[na] <> 0.0 Or Ar\WaypointZ#[na] <> 0.0
-                    Loom_MakeLine Ar\WaypointX#[i], VP_SCENE_Y_OFFSET# + Ar\WaypointY#[i] + VP_WAYPOINT_SIZE#, Ar\WaypointZ#[i], Ar\WaypointX#[na], VP_SCENE_Y_OFFSET# + Ar\WaypointY#[na] + VP_WAYPOINT_SIZE#, Ar\WaypointZ#[na], 100, 100, 110
+                    Loom_MakeLine Ar\WaypointX#[i], VPSceneYOff# + Ar\WaypointY#[i] + VP_WAYPOINT_SIZE#, Ar\WaypointZ#[i], Ar\WaypointX#[na], VPSceneYOff# + Ar\WaypointY#[na] + VP_WAYPOINT_SIZE#, Ar\WaypointZ#[na], 100, 100, 110
                 EndIf
             EndIf
             Local nb = Ar\NextWaypointB[i]
             If nb >= 0 And nb <= 1999
                 If Ar\WaypointX#[nb] <> 0.0 Or Ar\WaypointZ#[nb] <> 0.0
-                    Loom_MakeLine Ar\WaypointX#[i], VP_SCENE_Y_OFFSET# + Ar\WaypointY#[i] + VP_WAYPOINT_SIZE#, Ar\WaypointZ#[i], Ar\WaypointX#[nb], VP_SCENE_Y_OFFSET# + Ar\WaypointY#[nb] + VP_WAYPOINT_SIZE#, Ar\WaypointZ#[nb], 100, 100, 110
+                    Loom_MakeLine Ar\WaypointX#[i], VPSceneYOff# + Ar\WaypointY#[i] + VP_WAYPOINT_SIZE#, Ar\WaypointZ#[i], Ar\WaypointX#[nb], VPSceneYOff# + Ar\WaypointY#[nb] + VP_WAYPOINT_SIZE#, Ar\WaypointZ#[nb], 100, 100, 110
                 EndIf
             EndIf
         EndIf
@@ -852,7 +986,7 @@ Function Loom_LoadZoneMarkers(Ar.Area)
     While W <> Null
         Local wEn2 = CreateCube()
         ScaleEntity wEn2, W\Width# / 2.0, 1.0, W\Depth# / 2.0
-        PositionEntity wEn2, W\X#, VP_SCENE_Y_OFFSET# + W\Y#, W\Z#
+        PositionEntity wEn2, W\X#, VPSceneYOff# + W\Y#, W\Z#
         ; Color by damage: 0 = water (blue), 1+ = damage type tinted
         If W\Damage > 0
             EntityColor wEn2, 200, 70, 70    ; harmful = red tint
@@ -945,7 +1079,21 @@ Function Loom_DrawZoneViewport(zoneHandle, x, y, w, h)
     EndIf
 
     If zoneHandle <> VPLoadedZoneH
-        Loom_LoadZoneMarkers(Ar)
+        ; World mode follows the focused zone: drop the old zone's world and
+        ; try the new zone's. Loom_SetWorldMode soft-fails back to schematic
+        ; (offset restored, ground shown) when the new zone has no visual
+        ; data, and reloads markers in both outcomes.
+        If VPWorldMode = True
+            Loom_SetWorldMode(zoneHandle, True)
+            If VPWorldMode = False
+                ; Load failed -- finish the fallback to schematic placement.
+                VPSceneYOff# = VP_SCENE_Y_OFFSET#
+                If VPGround <> 0 Then ShowEntity VPGround
+                Loom_LoadZoneMarkers(Ar)
+            EndIf
+        Else
+            Loom_LoadZoneMarkers(Ar)
+        EndIf
         VPLoadedZoneH = zoneHandle
         VPDirty = True
         WriteLog(LoomLog, "ZoneViewport: loaded zone " + Ar\Name$)
@@ -1022,7 +1170,11 @@ Function Loom_DrawZoneViewport(zoneHandle, x, y, w, h)
             ; should still be valid since nothing has moved.
             CameraPick VPCam, mx - x, my - y
             Local pickedEN = PickedEntity()
-            If pickedEN <> 0 And pickedEN <> VPGround
+            ; Marker drag is schematic-only: in world mode the XZ branch
+            ; would no-op (ground hidden) but the shift+RMB Y-mode branch
+            ; uses raw mouse deltas and would mutate zone data from the
+            ; read-only view. Gate the drag START. (Review finding on #551.)
+            If pickedEN <> 0 And pickedEN <> VPGround And VPWorldMode = False
                 Local pm.ZoneViewportMarker
                 For pm = Each ZoneViewportMarker
                     If pm\EN = pickedEN And (pm\Kind = "portal" Or pm\Kind = "trigger" Or pm\Kind = "spawn")
@@ -1060,7 +1212,8 @@ Function Loom_DrawZoneViewport(zoneHandle, x, y, w, h)
                     Local newY# = curY# + yDelta#
                     PositionEntity VPMarkerDragEN, curX#, newY#, curZ#
                     ; Convert to scene-relative Y (subtract VP_SCENE_Y_OFFSET).
-                    Loom_CommitMarkerY(VPMarkerDragArH, VPMarkerDragKind$, VPMarkerDragIdx, newY# - VP_SCENE_Y_OFFSET#)
+                    Loom_CommitMarkerY(VPMarkerDragArH, VPMarkerDragKind$, VPMarkerDragIdx, newY# - VPSceneYOff#)
+                    VPMarkerDragChanged = True
                     VPDirty = True
                 EndIf
             Else
@@ -1079,6 +1232,7 @@ Function Loom_DrawZoneViewport(zoneHandle, x, y, w, h)
                     ; Update the underlying Area field via the existing zone
                     ; setter dispatch (handles Strict-mode dim-write trap).
                     Loom_CommitMarkerCoord(VPMarkerDragArH, VPMarkerDragKind$, VPMarkerDragIdx, newX#, newZ#)
+                    VPMarkerDragChanged = True
                     VPDirty = True
                 EndIf
             EndIf
@@ -1086,15 +1240,20 @@ Function Loom_DrawZoneViewport(zoneHandle, x, y, w, h)
     Else
         If VPMarkerDragging = True
             ; Commit on release. The per-frame updates already wrote
-            ; through to the Area; just fire a toast + mark dirty.
-            If LoomComposer <> Null Then Composer::markDirtyForKind(LoomComposer, "zone")
-            Toast_Show("Moved " + VPMarkerDragKind$ + " " + Str(VPMarkerDragIdx), "success")
-            WriteLog(LoomLog, "ZoneViewport: drag commit " + VPMarkerDragKind$ + " " + Str(VPMarkerDragIdx))
+            ; through to the Area; only toast + mark dirty when a write
+            ; actually happened (a drag whose picks all missed commits
+            ; nothing and must not flip the zone dirty).
+            If VPMarkerDragChanged = True
+                If LoomComposer <> Null Then Composer::markDirtyForKind(LoomComposer, "zone")
+                Toast_Show("Moved " + VPMarkerDragKind$ + " " + Str(VPMarkerDragIdx), "success")
+                WriteLog(LoomLog, "ZoneViewport: drag commit " + VPMarkerDragKind$ + " " + Str(VPMarkerDragIdx))
+            EndIf
             VPMarkerDragging = False
             VPMarkerDragEN   = 0
             VPMarkerDragKind$ = ""
             VPMarkerDragIdx  = -1
             VPMarkerDragYMode = False
+            VPMarkerDragChanged = False
         EndIf
     EndIf
 
@@ -1241,14 +1400,14 @@ Function Loom_DrawZoneViewport(zoneHandle, x, y, w, h)
     ; build anyway) we re-render each frame. CameraViewport (set above)
     ; confines RenderWorld's clear + draw to the (x,y,w,h) rect.
     Local cx# = VPSceneCenterX# + Cos(VPPitch#) * Sin(VPYaw#) * VPDistance#
-    Local cy# = VP_SCENE_Y_OFFSET# + VPSceneCenterY# + Sin(VPPitch#) * VPDistance#
+    Local cy# = VPSceneYOff# + VPSceneCenterY# + Sin(VPPitch#) * VPDistance#
     Local cz# = VPSceneCenterZ# - Cos(VPPitch#) * Cos(VPYaw#) * VPDistance#
     PositionEntity VPCam, cx#, cy#, cz#
     ; Look at the orbit pivot (the scene centre), NOT VPGround at the origin.
     ; The camera position above is computed at distance VPDistance from this
     ; same point, so pointing here makes orbit pure-rotation and zoom
     ; pure-dolly with the content staying centred.
-    PositionEntity VPPivot, VPSceneCenterX#, VP_SCENE_Y_OFFSET# + VPSceneCenterY#, VPSceneCenterZ#
+    PositionEntity VPPivot, VPSceneCenterX#, VPSceneYOff# + VPSceneCenterY#, VPSceneCenterZ#
     PointEntity VPCam, VPPivot
 
     ShowEntity VPCam
@@ -1273,21 +1432,21 @@ Function Loom_DrawZoneViewport(zoneHandle, x, y, w, h)
         ; on the top-left corner. ProjectedZ()>0 means the point is in view;
         ; capture each endpoint's values before the next CameraProject
         ; overwrites them, and only draw when BOTH endpoints are visible.
-        CameraProject VPCam, -gridSpan#, VP_SCENE_Y_OFFSET#, g#
+        CameraProject VPCam, -gridSpan#, VPSceneYOff#, g#
         Local ax = x + ProjectedX()
         Local ay = y + ProjectedY()
         Local az# = ProjectedZ#()
-        CameraProject VPCam,  gridSpan#, VP_SCENE_Y_OFFSET#, g#
+        CameraProject VPCam,  gridSpan#, VPSceneYOff#, g#
         Local bx = x + ProjectedX()
         Local by = y + ProjectedY()
         Local bz# = ProjectedZ#()
         If az# > 0.0 And bz# > 0.0 Then Line ax, ay, bx, by
         ; Z-direction line: constant x = g, z varies
-        CameraProject VPCam, g#, VP_SCENE_Y_OFFSET#, -gridSpan#
+        CameraProject VPCam, g#, VPSceneYOff#, -gridSpan#
         Local cx2 = x + ProjectedX()
         Local cy2 = y + ProjectedY()
         Local cz2# = ProjectedZ#()
-        CameraProject VPCam, g#, VP_SCENE_Y_OFFSET#,  gridSpan#
+        CameraProject VPCam, g#, VPSceneYOff#,  gridSpan#
         Local dx2 = x + ProjectedX()
         Local dy2 = y + ProjectedY()
         Local dz2# = ProjectedZ#()
@@ -1299,13 +1458,13 @@ Function Loom_DrawZoneViewport(zoneHandle, x, y, w, h)
     ; camera so they tilt with the view). Only draw when in view, else they'd
     ; stack in the top-left corner like the grid lines did.
     Color 200, 200, 110   ; brass-light for compass letters
-    CameraProject VPCam, 0, VP_SCENE_Y_OFFSET#, gridSpan#
+    CameraProject VPCam, 0, VPSceneYOff#, gridSpan#
     If ProjectedZ#() > 0.0 Then Text x + ProjectedX(), y + ProjectedY(), "N", True, True
-    CameraProject VPCam, 0, VP_SCENE_Y_OFFSET#, -gridSpan#
+    CameraProject VPCam, 0, VPSceneYOff#, -gridSpan#
     If ProjectedZ#() > 0.0 Then Text x + ProjectedX(), y + ProjectedY(), "S", True, True
-    CameraProject VPCam, gridSpan#, VP_SCENE_Y_OFFSET#, 0
+    CameraProject VPCam, gridSpan#, VPSceneYOff#, 0
     If ProjectedZ#() > 0.0 Then Text x + ProjectedX(), y + ProjectedY(), "E", True, True
-    CameraProject VPCam, -gridSpan#, VP_SCENE_Y_OFFSET#, 0
+    CameraProject VPCam, -gridSpan#, VPSceneYOff#, 0
     If ProjectedZ#() > 0.0 Then Text x + ProjectedX(), y + ProjectedY(), "W", True, True
     Viewport 0, 0, GraphicsWidth(), GraphicsHeight()
 
@@ -1342,6 +1501,27 @@ Function Loom_DrawZoneViewport(zoneHandle, x, y, w, h)
         Loom_ConsumeClick()
     EndIf
 
+    ; World/schematic toggle pill -- left of Reset View. World mode loads
+    ; the zone's real terrain/scenery via LoadAreaData (ADR-004 Phase C);
+    ; the label shows the mode you'd SWITCH TO, matching pill conventions.
+    Local wmW = 64
+    Local wmX = rsX - wmW - 6
+    Local wmY = rsY
+    Local wmLabel$ = "world view"
+    If VPWorldMode = True Then wmLabel$ = "schematic"
+    Local wmHover = (mx >= wmX And mx < wmX + wmW And my >= wmY And my < wmY + 16)
+    If wmHover = True
+        LoomFill wmX, wmY, wmW, 16, LOOM_ARCANE_500_R, LOOM_ARCANE_500_G, LOOM_ARCANE_500_B
+        LoomText wmX + 4, wmY + 1, wmLabel$, LOOM_PARCHMENT_100_R, LOOM_PARCHMENT_100_G, LOOM_PARCHMENT_100_B
+    Else
+        LoomBorder wmX, wmY, wmW, 16, LOOM_ARCANE_500_R, LOOM_ARCANE_500_G, LOOM_ARCANE_500_B
+        LoomText wmX + 4, wmY + 1, wmLabel$, LOOM_ARCANE_500_R, LOOM_ARCANE_500_G, LOOM_ARCANE_500_B
+    EndIf
+    If wmHover = True And Loom_MouseClicked() = True
+        Loom_SetWorldMode(zoneHandle, Not VPWorldMode)
+        Loom_ConsumeClick()
+    EndIf
+
     ; Highlighted-marker name label: project the highlighted marker's
     ; world position to screen via CameraProject and float its label
     ; above the marker. Gives a clear visual cross-reference between
@@ -1371,7 +1551,11 @@ Function Loom_DrawZoneViewport(zoneHandle, x, y, w, h)
     EndIf
 
     If inside = True
-        LoomText x + 8, y + h - 18, "LMB: orbit  |  MMB: pan  |  wheel: zoom  |  hold RMB + WASD fly / QE up-down  |  RMB drag a marker: move  |  Shift+LMB: add portal  |  Ctrl+LMB: delete", LOOM_STONE_300_R, LOOM_STONE_300_G, LOOM_STONE_300_B
+        If VPWorldMode = True
+            LoomText x + 8, y + h - 18, "WORLD VIEW (read-only)  |  LMB: orbit / pick marker  |  MMB: pan  |  wheel: zoom  |  hold RMB + WASD fly / QE up-down  |  switch to schematic to add/move", LOOM_STONE_300_R, LOOM_STONE_300_G, LOOM_STONE_300_B
+        Else
+            LoomText x + 8, y + h - 18, "LMB: orbit  |  MMB: pan  |  wheel: zoom  |  hold RMB + WASD fly / QE up-down  |  RMB drag a marker: move  |  Shift+LMB: add portal  |  Ctrl+LMB: delete", LOOM_STONE_300_R, LOOM_STONE_300_G, LOOM_STONE_300_B
+        EndIf
     EndIf
 
     Return True
@@ -1382,7 +1566,11 @@ End Function
 ; Loom_ShutdownZoneViewport -- free GPU resources at exit.
 ; =============================================================================
 Function Loom_ShutdownZoneViewport()
+    Loom_UnloadWorld()
     Loom_FreeZoneMarkers()
+    If SkyEN <> 0 Then FreeEntity SkyEN : SkyEN = 0
+    If CloudEN <> 0 Then FreeEntity CloudEN : CloudEN = 0
+    If StarsEN <> 0 Then FreeEntity StarsEN : StarsEN = 0
     If VPGround <> 0 Then FreeEntity VPGround : VPGround = 0
     If VPPivot <> 0 Then FreeEntity VPPivot : VPPivot = 0
     If VPCam <> 0 Then FreeEntity VPCam : VPCam = 0
