@@ -826,3 +826,155 @@ Item ID: 206
 Item Name: Dagger +5
 Range: 0.0
 
+Item ID: 207
+Item Name: Leather Armor +5
+Range: 0.0
+
+Item ID: 208
+Item Name: Chainmail Armor +5
+Range: 0.0
+
+Item ID: 209
+Item Name: Leather Boots +5
+Range: 0.0
+
+Item ID: 210
+Item Name: Hand Axe +5
+Range: 0.0
+
+Item ID: 211
+Item Name: Battle Axe +5
+Range: 0.0
+
+Item ID: 212
+Item Name: Great Axe +5
+Range: 0.0
+
+Item ID: 213
+Item Name: Short Sword +5
+Range: 0.0
+
+Item ID: 214
+Item Name: Long Sword +5
+Range: 0.0
+
+Item ID: 215
+Item Name: Scimitar +5
+Range: 0.0
+
+Item ID: 216
+Item Name: Two-handed Sword +5
+Range: 0.0
+
+Item ID: 217
+Item Name: Warhammer +5
+Range: 0.0
+
+Item ID: 218
+Item Name: Mace +5
+Range: 0.0
+
+Item ID: 219
+Item Name: Morning Star +5
+Range: 0.0
+
+Item ID: 220
+Item Name: Morning Star +5
+Range: 0.0
+
+Item ID: 221
+Item Name: Maul +5
+Range: 0.0
+
+Item ID: 222
+Item Name: Pole Arm +5
+Range: 0.0
+
+Item ID: 223
+Item Name: Short Spear +5
+Range: 0.0
+
+Item ID: 224
+Item Name: Long Spear +5
+Range: 0.0
+
+Item ID: 225
+Item Name: Short Bow +5
+Range: 80.0
+
+Item ID: 226
+Item Name: Long Bow +5
+Range: 150.0
+
+Item ID: 227
+Item Name: Quarter Staff +5
+Range: 0.0
+
+Item ID: 228
+Item Name: Leather Cap +5
+Range: 0.0
+
+Item ID: 229
+Item Name: Leather Trousers +5
+Range: 0.0
+
+Item ID: 230
+Item Name: Leather Gloves +5
+Range: 0.0
+
+Item ID: 231
+Item Name: Leather Belt +5
+Range: 0.0
+
+Item ID: 232
+Item Name: Skull Cap +5
+Range: 0.0
+
+Item ID: 233
+Item Name: Chainmail Greaves +5
+Range: 0.0
+
+Item ID: 234
+Item Name: Chainmail Boots +5
+Range: 0.0
+
+Item ID: 235
+Item Name: Chainmail Gauntlets +5
+Range: 0.0
+
+Item ID: 236
+Item Name: Chainmail Belt +5
+Range: 0.0
+
+Item ID: 237
+Item Name: Round Shield +5
+Range: 0.0
+
+Item ID: 238
+Item Name: Full Helm +5
+Range: 0.0
+
+Item ID: 239
+Item Name: Plated Greaves +5
+Range: 0.0
+
+Item ID: 240
+Item Name: Plated Boots +5
+Range: 0.0
+
+Item ID: 241
+Item Name: Plated Gauntlets +5
+Range: 0.0
+
+Item ID: 242
+Item Name: Plated Belt +5
+Range: 0.0
+
+Item ID: 243
+Item Name: Kite Shield +5
+Range: 0.0
+
+Item ID: 244
+Item Name: Platemail Armor +5
+Range: 0.0
+

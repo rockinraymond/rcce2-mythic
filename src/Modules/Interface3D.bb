@@ -2028,7 +2028,7 @@ EndIf
 							DamType$ = DamageTypes$(Me\Inventory\Items[i]\Item\WeaponDamageType)
 							WepType$ = GetWeaponType$(Me\Inventory\Items[i]\Item)
 							WepClass$ = GetWeaponClass$(Me\Inventory\Items[i]\Item)
-							GY_CreateLabel(WTooltip, 0.02, Y#, LanguageString$(LS_Damage) + " " + Str$(Dam))
+							GY_CreateLabel(WTooltip, 0.02, Y#, LanguageString$(LS_Damage) + " d" + Str$(Dam))
 							GY_CreateLabel(WTooltip, 0.32, Y#, "Accuracy: " + Str$(Accuracy))
 							GY_CreateLabel(WTooltip, 0.62, Y#, "Speed: " + GetAttackSpeedString$(Speed))
 							Y# = Y# + YInterval#
@@ -2201,7 +2201,7 @@ EndIf
 							DamType$ = DamageTypes$(Me\Inventory\Items[i + SlotI_Backpack]\Item\WeaponDamageType)
 							WepType$ = GetWeaponType$(Me\Inventory\Items[i + SlotI_Backpack]\Item)
 							WepClass$ = GetWeaponClass$(Me\Inventory\Items[i + SlotI_Backpack]\Item)
-							GY_CreateLabel(WTooltip, 0.02, Y#, LanguageString$(LS_Damage) + " " + Str$(Dam))
+							GY_CreateLabel(WTooltip, 0.02, Y#, LanguageString$(LS_Damage) + " d" + Str$(Dam))
 							GY_CreateLabel(WTooltip, 0.32, Y#, "Accuracy: " + Str$(Accuracy))
 							GY_CreateLabel(WTooltip, 0.62, Y#, "Speed: " + GetAttackSpeedString$(Speed))
 							Y# = Y# + YInterval#
@@ -2368,7 +2368,7 @@ EndIf
 							DamType$ = DamageTypes$(TradeItems(i)\Item\WeaponDamageType)
 							WepType$ = GetWeaponType$(TradeItems(i)\Item)
 							WepClass$ = GetWeaponClass$(TradeItems(i)\Item)
-							GY_CreateLabel(WTooltip, 0.02, Y#, LanguageString$(LS_Damage) + " " + Str$(Dam))
+							GY_CreateLabel(WTooltip, 0.02, Y#, LanguageString$(LS_Damage) + " d" + Str$(Dam))
 							GY_CreateLabel(WTooltip, 0.32, Y#, "Accuracy: " + Str$(Accuracy))
 							GY_CreateLabel(WTooltip, 0.62, Y#, "Speed: " + GetAttackSpeedString$(Speed))
 							Y# = Y# + YInterval#
