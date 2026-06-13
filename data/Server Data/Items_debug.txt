@@ -978,3 +978,195 @@ Item ID: 244
 Item Name: Platemail Armor +5
 Range: 0.0
 
+Item ID: 245
+Item Name: Topaz Ring +1
+Range: 0.0
+
+Item ID: 246
+Item Name: Malachite Ring +1
+Range: 0.0
+
+Item ID: 247
+Item Name: Amethyst Ring +1
+Range: 0.0
+
+Item ID: 248
+Item Name: Garnet Ring +1
+Range: 0.0
+
+Item ID: 249
+Item Name: Sapphire Ring +1
+Range: 0.0
+
+Item ID: 250
+Item Name: Emerald Ring +1
+Range: 0.0
+
+Item ID: 251
+Item Name: Ruby Ring +1
+Range: 0.0
+
+Item ID: 252
+Item Name: Diamond Ring +1
+Range: 0.0
+
+Item ID: 253
+Item Name: Sapphire Amulet +1
+Range: 0.0
+
+Item ID: 254
+Item Name: Emerald Amulet +1
+Range: 0.0
+
+Item ID: 255
+Item Name: Ruby Amulet +1
+Range: 0.0
+
+Item ID: 256
+Item Name: Diamond Amulet +1
+Range: 0.0
+
+Item ID: 257
+Item Name: Topaz Ring +2
+Range: 0.0
+
+Item ID: 258
+Item Name: Malachite Ring +2
+Range: 0.0
+
+Item ID: 259
+Item Name: Amethyst Ring +2
+Range: 0.0
+
+Item ID: 260
+Item Name: Garnet Ring +2
+Range: 0.0
+
+Item ID: 261
+Item Name: Sapphire Ring +2
+Range: 0.0
+
+Item ID: 262
+Item Name: Emerald Ring +2
+Range: 0.0
+
+Item ID: 263
+Item Name: Ruby Ring +2
+Range: 0.0
+
+Item ID: 264
+Item Name: Diamond Ring +2
+Range: 0.0
+
+Item ID: 265
+Item Name: Sapphire Amulet +2
+Range: 0.0
+
+Item ID: 266
+Item Name: Emerald Amulet +2
+Range: 0.0
+
+Item ID: 267
+Item Name: Ruby Amulet +2
+Range: 0.0
+
+Item ID: 268
+Item Name: Diamond Amulet +2
+Range: 0.0
+
+Item ID: 269
+Item Name: Topaz Ring +3
+Range: 0.0
+
+Item ID: 270
+Item Name: Malachite Ring +3
+Range: 0.0
+
+Item ID: 271
+Item Name: Amethyst Ring +3
+Range: 0.0
+
+Item ID: 272
+Item Name: Garnet Ring +3
+Range: 0.0
+
+Item ID: 273
+Item Name: Sapphire Ring +3
+Range: 0.0
+
+Item ID: 274
+Item Name: Emerald Ring +3
+Range: 0.0
+
+Item ID: 275
+Item Name: Ruby Ring +3
+Range: 0.0
+
+Item ID: 276
+Item Name: Diamond Ring +3
+Range: 0.0
+
+Item ID: 277
+Item Name: Sapphire Amulet +3
+Range: 0.0
+
+Item ID: 278
+Item Name: Emerald Amulet +3
+Range: 0.0
+
+Item ID: 279
+Item Name: Ruby Amulet +3
+Range: 0.0
+
+Item ID: 280
+Item Name: Diamond Amulet +3
+Range: 0.0
+
+Item ID: 281
+Item Name: Topaz Ring +4
+Range: 0.0
+
+Item ID: 282
+Item Name: Malachite Ring +4
+Range: 0.0
+
+Item ID: 283
+Item Name: Amethyst Ring +4
+Range: 0.0
+
+Item ID: 284
+Item Name: Garnet Ring +4
+Range: 0.0
+
+Item ID: 285
+Item Name: Sapphire Ring +4
+Range: 0.0
+
+Item ID: 286
+Item Name: Emerald Ring +4
+Range: 0.0
+
+Item ID: 287
+Item Name: Ruby Ring +4
+Range: 0.0
+
+Item ID: 288
+Item Name: Diamond Ring +4
+Range: 0.0
+
+Item ID: 289
+Item Name: Sapphire Amulet +4
+Range: 0.0
+
+Item ID: 290
+Item Name: Emerald Amulet +4
+Range: 0.0
+
+Item ID: 291
+Item Name: Ruby Amulet +4
+Range: 0.0
+
+Item ID: 292
+Item Name: Diamond Amulet +4
+Range: 0.0
+
