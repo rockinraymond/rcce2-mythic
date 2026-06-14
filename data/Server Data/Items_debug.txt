@@ -1,1172 +1,1216 @@
 Item ID: 0
 Item Name: Hand Axe
-Range: 0.0
+Value: 400
 
 Item ID: 1
 Item Name: Battle Axe
-Range: 0.0
+Value: 700
 
 Item ID: 2
 Item Name: Great Axe
-Range: 0.0
+Value: 1400
 
 Item ID: 3
 Item Name: Dagger
-Range: 0.0
+Value: 200
 
 Item ID: 4
 Item Name: Short Sword
-Range: 0.0
+Value: 600
 
 Item ID: 5
 Item Name: Long Sword
-Range: 0.0
+Value: 1000
 
 Item ID: 6
 Item Name: Scimitar
-Range: 0.0
+Value: 1000
 
 Item ID: 7
 Item Name: Two-handed Sword
-Range: 0.0
+Value: 1800
 
 Item ID: 8
 Item Name: Warhammer
-Range: 0.0
+Value: 400
 
 Item ID: 9
 Item Name: Mace
-Range: 0.0
+Value: 600
 
 Item ID: 10
 Item Name: Morning Star
-Range: 0.0
+Value: 700
 
 Item ID: 11
 Item Name: Maul
-Range: 0.0
+Value: 1000
 
 Item ID: 12
 Item Name: Cudgel
-Range: 0.0
+Value: 50
 
 Item ID: 13
 Item Name: Pole Arm
-Range: 0.0
+Value: 900
 
 Item ID: 14
 Item Name: Short Spear
-Range: 0.0
+Value: 500
 
 Item ID: 15
 Item Name: Long Spear
-Range: 0.0
+Value: 700
 
 Item ID: 16
 Item Name: Short Bow
-Range: 80.0
+Value: 2500
 
 Item ID: 17
 Item Name: Long Bow
-Range: 150.0
+Value: 6000
 
 Item ID: 18
 Item Name: Arrow
-Range: 0.0
+Value: 15
 
 Item ID: 19
 Item Name: Quarter Staff
-Range: 0.0
+Value: 20000
 
 Item ID: 20
 Item Name: Leather Armor
-Range: 0.0
+Value: 1000
 
 Item ID: 21
 Item Name: Leather Cap
-Range: 0.0
+Value: 200
 
 Item ID: 22
 Item Name: Leather Trousers
-Range: 0.0
+Value: 300
 
 Item ID: 23
 Item Name: Leather Boots
-Range: 0.0
+Value: 100
 
 Item ID: 24
 Item Name: Leather Gloves
-Range: 0.0
+Value: 100
 
 Item ID: 25
 Item Name: Leather Belt
-Range: 0.0
+Value: 100
 
 Item ID: 26
 Item Name: Chainmail Armor
-Range: 0.0
+Value: 3000
 
 Item ID: 27
 Item Name: Skull Cap
-Range: 0.0
+Value: 450
 
 Item ID: 28
 Item Name: Chainmail Greaves
-Range: 0.0
+Value: 1000
 
 Item ID: 29
 Item Name: Chainmail Boots
-Range: 0.0
+Value: 450
 
 Item ID: 30
 Item Name: Chainmail Gauntlets
-Range: 0.0
+Value: 450
 
 Item ID: 31
 Item Name: Chainmail Belt
-Range: 0.0
+Value: 450
 
 Item ID: 32
 Item Name: Round Shield
-Range: 0.0
+Value: 700
 
 Item ID: 33
 Item Name: Dagger +1
-Range: 0.0
+Value: 20000
 
 Item ID: 34
 Item Name: Platemail Armor
-Range: 0.0
+Value: 20000
 
 Item ID: 35
 Item Name: Full Helm
-Range: 0.0
+Value: 2500
 
 Item ID: 36
 Item Name: Plated Greaves
-Range: 0.0
+Value: 5000
 
 Item ID: 37
 Item Name: Plated Boots
-Range: 0.0
+Value: 2500
 
 Item ID: 38
 Item Name: Plated Gauntlets
-Range: 0.0
+Value: 2500
 
 Item ID: 39
 Item Name: Plated Belt
-Range: 0.0
+Value: 2500
 
 Item ID: 40
 Item Name: Kite Shield
-Range: 0.0
+Value: 3000
 
 Item ID: 41
 Item Name: Leather Armor +1
-Range: 0.0
+Value: 100000
 
 Item ID: 42
 Item Name: Chainmail Armor +1
-Range: 0.0
+Value: 300000
 
 Item ID: 43
 Item Name: Leather Boots +1
-Range: 0.0
+Value: 100000
 
 Item ID: 44
 Item Name: Hand Axe +1
-Range: 0.0
+Value: 40000
 
 Item ID: 45
 Item Name: Battle Axe +1
-Range: 0.0
+Value: 70000
 
 Item ID: 46
 Item Name: Great Axe +2
-Range: 0.0
+Value: 280000
 
 Item ID: 47
 Item Name: Short Sword +1
-Range: 0.0
+Value: 60000
 
 Item ID: 48
 Item Name: Long Sword +1
-Range: 0.0
+Value: 100000
 
 Item ID: 49
 Item Name: Scimitar +1
-Range: 0.0
+Value: 100000
 
 Item ID: 50
 Item Name: Two-handed Sword +1
-Range: 0.0
+Value: 180000
 
 Item ID: 51
 Item Name: Warhammer +1
-Range: 0.0
+Value: 40000
 
 Item ID: 52
 Item Name: Mace +1
-Range: 0.0
+Value: 60000
 
 Item ID: 53
 Item Name: Pole Arm +1
-Range: 0.0
+Value: 90000
 
 Item ID: 54
 Item Name: Short Spear +1
-Range: 0.0
+Value: 50000
 
 Item ID: 55
 Item Name: Long Spear +1
-Range: 0.0
+Value: 70000
 
 Item ID: 56
 Item Name: Short Bow +1
-Range: 80.0
+Value: 250000
 
 Item ID: 57
 Item Name: Long Bow +1
-Range: 150.0
+Value: 600000
 
 Item ID: 58
 Item Name: Quarter Staff +1
-Range: 0.0
+Value: 200000
 
 Item ID: 59
 Item Name: Leather Cap +1
-Range: 0.0
+Value: 20000
 
 Item ID: 60
 Item Name: Leather Trousers +1
-Range: 0.0
+Value: 300000
 
 Item ID: 61
 Item Name: Leather Gloves +1
-Range: 0.0
+Value: 10000
 
 Item ID: 62
 Item Name: Leather Belt +1
-Range: 0.0
+Value: 10000
 
 Item ID: 63
 Item Name: Skull Cap +1
-Range: 0.0
+Value: 45000
 
 Item ID: 64
 Item Name: Chainmail Greaves +1
-Range: 0.0
+Value: 100000
 
 Item ID: 65
 Item Name: Chainmail Boots +1
-Range: 0.0
+Value: 45000
 
 Item ID: 66
 Item Name: Chainmail Gauntlets +1
-Range: 0.0
+Value: 45000
 
 Item ID: 67
 Item Name: Chainmail Belt +1
-Range: 0.0
+Value: 45000
 
 Item ID: 68
 Item Name: Round Shield +1
-Range: 0.0
+Value: 70000
 
 Item ID: 69
 Item Name: Platemail Armor +1
-Range: 0.0
+Value: 2000000
 
 Item ID: 70
 Item Name: Full Helm +1
-Range: 0.0
+Value: 250000
 
 Item ID: 71
 Item Name: Plated Greaves +1
-Range: 0.0
+Value: 500000
 
 Item ID: 72
 Item Name: Plated Boots +1
-Range: 0.0
+Value: 250000
 
 Item ID: 73
 Item Name: Plated Gauntlets +1
-Range: 0.0
+Value: 250000
 
 Item ID: 74
 Item Name: Plated Belt +1
-Range: 0.0
+Value: 250000
 
 Item ID: 75
 Item Name: Kite Shield +1
-Range: 0.0
+Value: 300000
 
 Item ID: 76
 Item Name: Dagger +2
-Range: 0.0
+Value: 40000
 
 Item ID: 77
 Item Name: Leather Armor +2
-Range: 0.0
+Value: 200000
 
 Item ID: 78
 Item Name: Chainmail Armor +2
-Range: 0.0
+Value: 600000
 
 Item ID: 79
 Item Name: Leather Boots +2
-Range: 0.0
+Value: 20000
 
 Item ID: 80
 Item Name: Hand Axe +2
-Range: 0.0
+Value: 80000
 
 Item ID: 81
 Item Name: Battle Axe +2
-Range: 0.0
+Value: 140000
 
 Item ID: 82
 Item Name: Short Sword +2
-Range: 0.0
+Value: 120000
 
 Item ID: 83
 Item Name: Long Sword +2
-Range: 0.0
+Value: 200000
 
 Item ID: 84
 Item Name: Scimitar +2
-Range: 0.0
+Value: 200000
 
 Item ID: 85
 Item Name: Two-handed Sword +2
-Range: 0.0
+Value: 360000
 
 Item ID: 86
 Item Name: Warhammer +2
-Range: 0.0
+Value: 80000
 
 Item ID: 87
 Item Name: Mace +2
-Range: 0.0
+Value: 120000
 
 Item ID: 88
 Item Name: Morning Star +1
-Range: 0.0
+Value: 70000
 
 Item ID: 89
 Item Name: Morning Star +2
-Range: 0.0
+Value: 140000
 
 Item ID: 90
 Item Name: Maul +1
-Range: 0.0
+Value: 100000
 
 Item ID: 91
 Item Name: Maul +2
-Range: 0.0
+Value: 200000
 
 Item ID: 92
 Item Name: Pole Arm +2
-Range: 0.0
+Value: 180000
 
 Item ID: 93
 Item Name: Short Spear +2
-Range: 0.0
+Value: 100000
 
 Item ID: 94
 Item Name: Long Spear +2
-Range: 0.0
+Value: 140000
 
 Item ID: 95
 Item Name: Short Bow +2
-Range: 80.0
+Value: 500000
 
 Item ID: 96
 Item Name: Long Bow +2
-Range: 150.0
+Value: 1200000
 
 Item ID: 97
 Item Name: Quarter Staff +2
-Range: 0.0
+Value: 400000
 
 Item ID: 98
 Item Name: Leather Cap +2
-Range: 0.0
+Value: 40000
 
 Item ID: 99
 Item Name: Leather Trousers +2
-Range: 0.0
+Value: 600000
 
 Item ID: 100
 Item Name: Leather Gloves +2
-Range: 0.0
+Value: 20000
 
 Item ID: 101
 Item Name: Leather Belt +2
-Range: 0.0
+Value: 20000
 
 Item ID: 102
 Item Name: Skull Cap +2
-Range: 0.0
+Value: 90000
 
 Item ID: 103
 Item Name: Chainmail Greaves +2
-Range: 0.0
+Value: 200000
 
 Item ID: 104
 Item Name: Chainmail Boots +2
-Range: 0.0
+Value: 90000
 
 Item ID: 105
 Item Name: Chainmail Gauntlets +2
-Range: 0.0
+Value: 90000
 
 Item ID: 106
 Item Name: Chainmail Belt +2
-Range: 0.0
+Value: 90000
 
 Item ID: 107
 Item Name: Round Shield +2
-Range: 0.0
+Value: 140000
 
 Item ID: 108
 Item Name: Platemail Armor +2
-Range: 0.0
+Value: 4000000
 
 Item ID: 109
 Item Name: Full Helm +2
-Range: 0.0
+Value: 500000
 
 Item ID: 110
 Item Name: Plated Greaves +2
-Range: 0.0
+Value: 1000000
 
 Item ID: 111
 Item Name: Plated Boots +2
-Range: 0.0
+Value: 500000
 
 Item ID: 112
 Item Name: Plated Gauntlets +2
-Range: 0.0
+Value: 500000
 
 Item ID: 113
 Item Name: Plated Belt +2
-Range: 0.0
+Value: 500000
 
 Item ID: 114
 Item Name: Kite Shield +2
-Range: 0.0
+Value: 600000
 
 Item ID: 115
 Item Name: Platemail Armor +3
-Range: 0.0
+Value: 8000000
 
 Item ID: 116
 Item Name: Lockpick
-Range: 0.0
+Value: 200
 
 Item ID: 117
 Item Name: Trap Disarming Kit
-Range: 0.0
+Value: 2000
 
 Item ID: 118
 Item Name: Topaz Ring
-Range: 0.0
+Value: 20000
 
 Item ID: 119
 Item Name: Malachite Ring
-Range: 0.0
+Value: 40000
 
 Item ID: 120
 Item Name: Amethyst Ring
-Range: 0.0
+Value: 60000
 
 Item ID: 121
 Item Name: Garnet Ring
-Range: 0.0
+Value: 80000
 
 Item ID: 122
 Item Name: Sapphire Ring
-Range: 0.0
+Value: 100000
 
 Item ID: 123
 Item Name: Emerald Ring
-Range: 0.0
+Value: 120000
 
 Item ID: 124
 Item Name: Ruby Ring
-Range: 0.0
+Value: 140000
 
 Item ID: 125
 Item Name: Diamond Ring
-Range: 0.0
+Value: 160000
 
 Item ID: 126
 Item Name: Sapphire Amulet
-Range: 0.0
+Value: 120000
 
 Item ID: 127
 Item Name: Emerald Amulet
-Range: 0.0
+Value: 140000
 
 Item ID: 128
 Item Name: Ruby Amulet
-Range: 0.0
+Value: 160000
 
 Item ID: 129
 Item Name: Diamond Amulet
-Range: 0.0
+Value: 180000
 
 Item ID: 130
 Item Name: Dagger +3
-Range: 0.0
+Value: 80000
 
 Item ID: 131
 Item Name: Great Axe +1
-Range: 0.0
+Value: 140000
 
 Item ID: 132
 Item Name: Leather Armor +3
-Range: 0.0
+Value: 400000
 
 Item ID: 133
 Item Name: Chainmail Armor +3
-Range: 0.0
+Value: 1200000
 
 Item ID: 134
 Item Name: Leather Boots +3
-Range: 0.0
+Value: 40000
 
 Item ID: 135
 Item Name: Hand Axe +3
-Range: 0.0
+Value: 160000
 
 Item ID: 136
 Item Name: Battle Axe +3
-Range: 0.0
+Value: 280000
 
 Item ID: 137
 Item Name: Great Axe +3
-Range: 0.0
+Value: 560000
 
 Item ID: 138
 Item Name: Short Sword +3
-Range: 0.0
+Value: 240000
 
 Item ID: 139
 Item Name: Long Sword +3
-Range: 0.0
+Value: 400000
 
 Item ID: 140
 Item Name: Scimitar +3
-Range: 0.0
+Value: 400000
 
 Item ID: 141
 Item Name: Two-handed Sword +3
-Range: 0.0
+Value: 720000
 
 Item ID: 142
 Item Name: Warhammer +3
-Range: 0.0
+Value: 160000
 
 Item ID: 143
 Item Name: Mace +3
-Range: 0.0
+Value: 240000
 
 Item ID: 144
 Item Name: Morning Star +3
-Range: 0.0
+Value: 280000
 
 Item ID: 145
 Item Name: Maul +3
-Range: 0.0
+Value: 400000
 
 Item ID: 146
 Item Name: Pole Arm +3
-Range: 0.0
+Value: 360000
 
 Item ID: 147
 Item Name: Short Spear +3
-Range: 0.0
+Value: 200000
 
 Item ID: 148
 Item Name: Long Spear +3
-Range: 0.0
+Value: 280000
 
 Item ID: 149
 Item Name: Short Bow +3
-Range: 80.0
+Value: 1000000
 
 Item ID: 150
 Item Name: Long Bow +3
-Range: 150.0
+Value: 2400000
 
 Item ID: 151
 Item Name: Quarter Staff +3
-Range: 0.0
+Value: 800000
 
 Item ID: 152
 Item Name: Leather Cap +3
-Range: 0.0
+Value: 40000
 
 Item ID: 153
 Item Name: Leather Trousers +3
-Range: 0.0
+Value: 1200000
 
 Item ID: 154
 Item Name: Leather Gloves +3
-Range: 0.0
+Value: 40000
 
 Item ID: 155
 Item Name: Leather Belt +3
-Range: 0.0
+Value: 40000
 
 Item ID: 156
 Item Name: Skull Cap +3
-Range: 0.0
+Value: 180000
 
 Item ID: 157
 Item Name: Chainmail Greaves +3
-Range: 0.0
+Value: 400000
 
 Item ID: 158
 Item Name: Chainmail Boots +3
-Range: 0.0
+Value: 180000
 
 Item ID: 159
 Item Name: Chainmail Gauntlets +3
-Range: 0.0
+Value: 180000
 
 Item ID: 160
 Item Name: Chainmail Belt +3
-Range: 0.0
+Value: 180000
 
 Item ID: 161
 Item Name: Round Shield +3
-Range: 0.0
+Value: 280000
 
 Item ID: 162
 Item Name: Full Helm +3
-Range: 0.0
+Value: 1000000
 
 Item ID: 163
 Item Name: Plated Greaves +3
-Range: 0.0
+Value: 2000000
 
 Item ID: 164
 Item Name: Plated Boots +3
-Range: 0.0
+Value: 1000000
 
 Item ID: 165
 Item Name: Plated Gauntlets +3
-Range: 0.0
+Value: 1000000
 
 Item ID: 166
 Item Name: Plated Belt +3
-Range: 0.0
+Value: 1000000
 
 Item ID: 167
 Item Name: Kite Shield +3
-Range: 0.0
+Value: 1200000
 
 Item ID: 168
 Item Name: Dagger +4
-Range: 0.0
+Value: 160000
 
 Item ID: 169
 Item Name: Leather Armor +4
-Range: 0.0
+Value: 800000
 
 Item ID: 170
 Item Name: Chainmail Armor +4
-Range: 0.0
+Value: 2400000
 
 Item ID: 171
 Item Name: Leather Boots +4
-Range: 0.0
+Value: 80000
 
 Item ID: 172
 Item Name: Hand Axe +4
-Range: 0.0
+Value: 320000
 
 Item ID: 173
 Item Name: Battle Axe +4
-Range: 0.0
+Value: 560000
 
 Item ID: 174
 Item Name: Great Axe +4
-Range: 0.0
+Value: 1120000
 
 Item ID: 175
 Item Name: Short Sword +4
-Range: 0.0
+Value: 480000
 
 Item ID: 176
 Item Name: Long Sword +4
-Range: 0.0
+Value: 800000
 
 Item ID: 177
 Item Name: Scimitar +4
-Range: 0.0
+Value: 800000
 
 Item ID: 178
 Item Name: Two-handed Sword +4
-Range: 0.0
+Value: 1440000
 
 Item ID: 179
 Item Name: Warhammer +4
-Range: 0.0
+Value: 320000
 
 Item ID: 180
 Item Name: Mace +4
-Range: 0.0
+Value: 480000
 
 Item ID: 181
 Item Name: Morning Star +4
-Range: 0.0
+Value: 560000
 
 Item ID: 182
 Item Name: Maul +4
-Range: 0.0
+Value: 800000
 
 Item ID: 183
 Item Name: Pole Arm +4
-Range: 0.0
+Value: 720000
 
 Item ID: 184
 Item Name: Short Spear +4
-Range: 0.0
+Value: 400000
 
 Item ID: 185
 Item Name: Long Spear +4
-Range: 0.0
+Value: 560000
 
 Item ID: 186
 Item Name: Short Bow +4
-Range: 80.0
+Value: 2000000
 
 Item ID: 187
 Item Name: Long Bow +4
-Range: 150.0
+Value: 4800000
 
 Item ID: 188
 Item Name: Quarter Staff +4
-Range: 0.0
+Value: 1600000
 
 Item ID: 189
 Item Name: Leather Cap +4
-Range: 0.0
+Value: 160000
 
 Item ID: 190
 Item Name: Leather Trousers +4
-Range: 0.0
+Value: 2400000
 
 Item ID: 191
 Item Name: Leather Gloves +4
-Range: 0.0
+Value: 80000
 
 Item ID: 192
 Item Name: Leather Belt +4
-Range: 0.0
+Value: 80000
 
 Item ID: 193
 Item Name: Skull Cap +4
-Range: 0.0
+Value: 360000
 
 Item ID: 194
 Item Name: Chainmail Greaves +4
-Range: 0.0
+Value: 800000
 
 Item ID: 195
 Item Name: Chainmail Boots +4
-Range: 0.0
+Value: 360000
 
 Item ID: 196
 Item Name: Chainmail Gauntlets +4
-Range: 0.0
+Value: 360000
 
 Item ID: 197
 Item Name: Chainmail Belt +4
-Range: 0.0
+Value: 360000
 
 Item ID: 198
 Item Name: Round Shield +4
-Range: 0.0
+Value: 560000
 
 Item ID: 199
 Item Name: Full Helm +4
-Range: 0.0
+Value: 2000000
 
 Item ID: 200
 Item Name: Plated Greaves +4
-Range: 0.0
+Value: 4000000
 
 Item ID: 201
 Item Name: Plated Boots +4
-Range: 0.0
+Value: 2000000
 
 Item ID: 202
 Item Name: Plated Gauntlets +4
-Range: 0.0
+Value: 2000000
 
 Item ID: 203
 Item Name: Plated Belt +4
-Range: 0.0
+Value: 2000000
 
 Item ID: 204
 Item Name: Kite Shield +4
-Range: 0.0
+Value: 2400000
 
 Item ID: 205
 Item Name: Platemail Armor +4
-Range: 0.0
+Value: 16000000
 
 Item ID: 206
 Item Name: Dagger +5
-Range: 0.0
+Value: 320000
 
 Item ID: 207
 Item Name: Leather Armor +5
-Range: 0.0
+Value: 1600000
 
 Item ID: 208
 Item Name: Chainmail Armor +5
-Range: 0.0
+Value: 4800000
 
 Item ID: 209
 Item Name: Leather Boots +5
-Range: 0.0
+Value: 160000
 
 Item ID: 210
 Item Name: Hand Axe +5
-Range: 0.0
+Value: 640000
 
 Item ID: 211
 Item Name: Battle Axe +5
-Range: 0.0
+Value: 1120000
 
 Item ID: 212
 Item Name: Great Axe +5
-Range: 0.0
+Value: 2240000
 
 Item ID: 213
 Item Name: Short Sword +5
-Range: 0.0
+Value: 960000
 
 Item ID: 214
 Item Name: Long Sword +5
-Range: 0.0
+Value: 1600000
 
 Item ID: 215
 Item Name: Scimitar +5
-Range: 0.0
+Value: 1600000
 
 Item ID: 216
 Item Name: Two-handed Sword +5
-Range: 0.0
+Value: 2880000
 
 Item ID: 217
 Item Name: Warhammer +5
-Range: 0.0
+Value: 640000
 
 Item ID: 218
 Item Name: Mace +5
-Range: 0.0
+Value: 960000
 
 Item ID: 219
 Item Name: Morning Star +5
-Range: 0.0
-
-Item ID: 220
-Item Name: Morning Star +5
-Range: 0.0
+Value: 1120000
 
 Item ID: 221
 Item Name: Maul +5
-Range: 0.0
+Value: 1600000
 
 Item ID: 222
 Item Name: Pole Arm +5
-Range: 0.0
+Value: 1440000
 
 Item ID: 223
 Item Name: Short Spear +5
-Range: 0.0
+Value: 800000
 
 Item ID: 224
 Item Name: Long Spear +5
-Range: 0.0
+Value: 1120000
 
 Item ID: 225
 Item Name: Short Bow +5
-Range: 80.0
+Value: 4000000
 
 Item ID: 226
 Item Name: Long Bow +5
-Range: 150.0
+Value: 9600000
 
 Item ID: 227
 Item Name: Quarter Staff +5
-Range: 0.0
+Value: 3200000
 
 Item ID: 228
 Item Name: Leather Cap +5
-Range: 0.0
+Value: 320000
 
 Item ID: 229
 Item Name: Leather Trousers +5
-Range: 0.0
+Value: 4800000
 
 Item ID: 230
 Item Name: Leather Gloves +5
-Range: 0.0
+Value: 160000
 
 Item ID: 231
 Item Name: Leather Belt +5
-Range: 0.0
+Value: 160000
 
 Item ID: 232
 Item Name: Skull Cap +5
-Range: 0.0
+Value: 720000
 
 Item ID: 233
 Item Name: Chainmail Greaves +5
-Range: 0.0
+Value: 1600000
 
 Item ID: 234
 Item Name: Chainmail Boots +5
-Range: 0.0
+Value: 720000
 
 Item ID: 235
 Item Name: Chainmail Gauntlets +5
-Range: 0.0
+Value: 720000
 
 Item ID: 236
 Item Name: Chainmail Belt +5
-Range: 0.0
+Value: 720000
 
 Item ID: 237
 Item Name: Round Shield +5
-Range: 0.0
+Value: 1120000
 
 Item ID: 238
 Item Name: Full Helm +5
-Range: 0.0
+Value: 4000000
 
 Item ID: 239
 Item Name: Plated Greaves +5
-Range: 0.0
+Value: 8000000
 
 Item ID: 240
 Item Name: Plated Boots +5
-Range: 0.0
+Value: 4000000
 
 Item ID: 241
 Item Name: Plated Gauntlets +5
-Range: 0.0
+Value: 4000000
 
 Item ID: 242
 Item Name: Plated Belt +5
-Range: 0.0
+Value: 4000000
 
 Item ID: 243
 Item Name: Kite Shield +5
-Range: 0.0
+Value: 4800000
 
 Item ID: 244
 Item Name: Platemail Armor +5
-Range: 0.0
+Value: 576000000
 
 Item ID: 245
 Item Name: Topaz Ring +1
-Range: 0.0
+Value: 200000
 
 Item ID: 246
 Item Name: Malachite Ring +1
-Range: 0.0
+Value: 400000
 
 Item ID: 247
 Item Name: Amethyst Ring +1
-Range: 0.0
+Value: 600000
 
 Item ID: 248
 Item Name: Garnet Ring +1
-Range: 0.0
+Value: 800000
 
 Item ID: 249
 Item Name: Sapphire Ring +1
-Range: 0.0
+Value: 1000000
 
 Item ID: 250
 Item Name: Emerald Ring +1
-Range: 0.0
+Value: 1200000
 
 Item ID: 251
 Item Name: Ruby Ring +1
-Range: 0.0
+Value: 1400000
 
 Item ID: 252
 Item Name: Diamond Ring +1
-Range: 0.0
+Value: 1600000
 
 Item ID: 253
 Item Name: Sapphire Amulet +1
-Range: 0.0
+Value: 1200000
 
 Item ID: 254
 Item Name: Emerald Amulet +1
-Range: 0.0
+Value: 1400000
 
 Item ID: 255
 Item Name: Ruby Amulet +1
-Range: 0.0
+Value: 1600000
 
 Item ID: 256
 Item Name: Diamond Amulet +1
-Range: 0.0
+Value: 1800000
 
 Item ID: 257
 Item Name: Topaz Ring +2
-Range: 0.0
+Value: 400000
 
 Item ID: 258
 Item Name: Malachite Ring +2
-Range: 0.0
+Value: 800000
 
 Item ID: 259
 Item Name: Amethyst Ring +2
-Range: 0.0
+Value: 1200000
 
 Item ID: 260
 Item Name: Garnet Ring +2
-Range: 0.0
+Value: 1600000
 
 Item ID: 261
 Item Name: Sapphire Ring +2
-Range: 0.0
+Value: 2000000
 
 Item ID: 262
 Item Name: Emerald Ring +2
-Range: 0.0
+Value: 2400000
 
 Item ID: 263
 Item Name: Ruby Ring +2
-Range: 0.0
+Value: 2800000
 
 Item ID: 264
 Item Name: Diamond Ring +2
-Range: 0.0
+Value: 3200000
 
 Item ID: 265
 Item Name: Sapphire Amulet +2
-Range: 0.0
+Value: 2400000
 
 Item ID: 266
 Item Name: Emerald Amulet +2
-Range: 0.0
+Value: 2800000
 
 Item ID: 267
 Item Name: Ruby Amulet +2
-Range: 0.0
+Value: 3200000
 
 Item ID: 268
 Item Name: Diamond Amulet +2
-Range: 0.0
+Value: 3200000
 
 Item ID: 269
 Item Name: Topaz Ring +3
-Range: 0.0
+Value: 800000
 
 Item ID: 270
 Item Name: Malachite Ring +3
-Range: 0.0
+Value: 1600000
 
 Item ID: 271
 Item Name: Amethyst Ring +3
-Range: 0.0
+Value: 2400000
 
 Item ID: 272
 Item Name: Garnet Ring +3
-Range: 0.0
+Value: 3200000
 
 Item ID: 273
 Item Name: Sapphire Ring +3
-Range: 0.0
+Value: 4000000
 
 Item ID: 274
 Item Name: Emerald Ring +3
-Range: 0.0
+Value: 4800000
 
 Item ID: 275
 Item Name: Ruby Ring +3
-Range: 0.0
+Value: 5600000
 
 Item ID: 276
 Item Name: Diamond Ring +3
-Range: 0.0
+Value: 6400000
 
 Item ID: 277
 Item Name: Sapphire Amulet +3
-Range: 0.0
+Value: 4800000
 
 Item ID: 278
 Item Name: Emerald Amulet +3
-Range: 0.0
+Value: 5600000
 
 Item ID: 279
 Item Name: Ruby Amulet +3
-Range: 0.0
+Value: 6400000
 
 Item ID: 280
 Item Name: Diamond Amulet +3
-Range: 0.0
+Value: 7200000
 
 Item ID: 281
 Item Name: Topaz Ring +4
-Range: 0.0
+Value: 1600000
 
 Item ID: 282
 Item Name: Malachite Ring +4
-Range: 0.0
+Value: 3200000
 
 Item ID: 283
 Item Name: Amethyst Ring +4
-Range: 0.0
+Value: 4800000
 
 Item ID: 284
 Item Name: Garnet Ring +4
-Range: 0.0
+Value: 6400000
 
 Item ID: 285
 Item Name: Sapphire Ring +4
-Range: 0.0
+Value: 8000000
 
 Item ID: 286
 Item Name: Emerald Ring +4
-Range: 0.0
+Value: 9600000
 
 Item ID: 287
 Item Name: Ruby Ring +4
-Range: 0.0
+Value: 11200000
 
 Item ID: 288
 Item Name: Diamond Ring +4
-Range: 0.0
+Value: 12800000
 
 Item ID: 289
 Item Name: Sapphire Amulet +4
-Range: 0.0
+Value: 9600000
 
 Item ID: 290
 Item Name: Emerald Amulet +4
-Range: 0.0
+Value: 11200000
 
 Item ID: 291
 Item Name: Ruby Amulet +4
-Range: 0.0
+Value: 12800000
 
 Item ID: 292
 Item Name: Diamond Amulet +4
-Range: 0.0
+Value: 14400000
+
+Item ID: 220
+Item Name: Topaz Ring +5
+Value: 3200000
+
+Item ID: 293
+Item Name: Malachite Ring +5
+Value: 6400000
+
+Item ID: 294
+Item Name: Amethyst Ring +5
+Value: 9600000
+
+Item ID: 295
+Item Name: Garnet Ring +5
+Value: 12800000
+
+Item ID: 296
+Item Name: Sapphire Ring +5
+Value: 16000000
+
+Item ID: 297
+Item Name: Emerald Ring +5
+Value: 19200000
+
+Item ID: 298
+Item Name: Ruby Ring +5
+Value: 22400000
+
+Item ID: 299
+Item Name: Diamond Ring +5
+Value: 25200000
+
+Item ID: 300
+Item Name: Sapphire Amulet +5
+Value: 19200000
+
+Item ID: 301
+Item Name: Emerald Amulet +5
+Value: 22400000
+
+Item ID: 302
+Item Name: Ruby Amulet +5
+Value: 25200000
+
+Item ID: 303
+Item Name: Diamond Amulet +5
+Value: 28800000
 

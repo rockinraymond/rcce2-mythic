@@ -424,7 +424,7 @@ Function SaveItems(Filename$)
 		For I.Item = Each Item
 			WriteLine(G, "Item ID: " + I\ID)
 			WriteLine(G, "Item Name: " + I\Name$)
-			WriteLine(G, "Range: " + I\Range#)
+			WriteLine(G, "Value: " + I\Value)
 			WriteLine(G, "")
 		Next
 	CloseFile(G)
