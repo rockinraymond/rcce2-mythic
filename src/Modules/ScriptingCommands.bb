@@ -737,8 +737,31 @@ End Function
 
 Function BVM_ITEMDAMAGETYPE$(Param1%)
 	Item.ItemInstance = Object.ItemInstance(Param1%)
-	If Item <> Null Then Result$ = DamageTypes$(Item\Item\WeaponDamageType)
+	If Item <> Null Then Result$ = DamageTypes$(Item\WeaponDamageType)
 Return Result$
+End Function
+
+Function BVM_ZZSETITEMDAMAGETYPE(Param1%, Param2$)
+	NewDamageType = FindDamageType(Param2$)
+	Item.ItemInstance = Object.ItemInstance(Param1%)
+	If Item <> Null
+		Item\WeaponDamageType = NewDamageType
+	; If item belongs to a human player, tell them the new health
+		Done = False
+		For AI.ActorInstance = Each ActorInstance
+			If AI\RNID > 0
+				For i = 0 To Slots_Inventory
+					If AI\Inventory\Items[i] = Item
+						Pa$ = "W" + RCE_StrFromInt$(i, 1) + RCE_StrFromInt$(Item\WeaponDamageType, 1)
+						RCE_Send(Host, AI\RNID, P_InventoryUpdate, Pa$, True)
+						Done = True
+						Exit
+					EndIf
+				Next
+			EndIf
+			If Done = True Then Exit
+		Next
+	EndIf
 End Function
 
 Function BVM_ITEMWEAPONTYPE%(Param1%)

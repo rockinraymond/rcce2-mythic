@@ -1194,6 +1194,13 @@ Function UpdateNetwork()
 						If Me\Inventory\Items[SlotI] <> Null
 							Me\Inventory\Items[SlotI]\ItemHealth = Amount
 						EndIf
+					; An item weapon damage type has changed
+					Case "W"
+						SlotI = RCE_IntFromStr(Mid$(M\MessageData$, 2, 1))
+						Amount = RCE_IntFromStr(Mid$(M\MessageData$, 3, 1))
+						If Me\Inventory\Items[SlotI] <> Null
+							Me\Inventory\Items[SlotI]\WeaponDamageType = Amount
+						EndIf
 					; An item attribute has changed
 					Case "A"
 						SlotI = RCE_IntFromStr(Mid$(M\MessageData$, 2, 1))

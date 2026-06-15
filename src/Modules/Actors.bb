@@ -1141,7 +1141,7 @@ End Function
 
 Function GetActorDamageType(AI.ActorInstance)
 	ActorDamageType = AI\Actor\DefaultDamageType
-	If AI\Inventory\Items[SlotI_Weapon] <> Null Then ActorDamageType = AI\Inventory\Items[SlotI_Weapon]\Item\WeaponDamageType
+	If AI\Inventory\Items[SlotI_Weapon] <> Null Then ActorDamageType = AI\Inventory\Items[SlotI_Weapon]\WeaponDamageType
 	Return ActorDamageType
 End Function
 

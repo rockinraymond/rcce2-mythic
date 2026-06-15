@@ -77,6 +77,7 @@ Type ItemInstance
 	Field Item.Item
 	Field Attributes.Attributes ; Replaces Item\Attributes which is merely the default item attributes
 	Field ItemHealth            ; The amount of damage (percentage) the item has left before breaking
+	Field WeaponDamageType
 	Field Resistances[19]
 	Field Assignment, AssignTo.ActorInstance  ; Server use only - Assignment is > 0 if item instance is created but not assigned an inventory slot yet
 End Type
@@ -93,7 +94,7 @@ End Type
 ; Returns the correct length in bytes of an item instance in string form
 Function ItemInstanceStringLength()
 
-	Return 143
+	Return 145
 
 End Function
 
@@ -107,6 +108,8 @@ Function ItemInstanceToString$(I.ItemInstance)
 		Pa$ = Pa$ + RCE_StrFromInt$(I\Attributes\Value[j] + 5000, 2)
 	Next
 	Pa$ = Pa$ + RCE_StrFromInt$(I\ItemHealth, 1)
+	Pa$ = Pa$ + RCE_StrFromInt$(I\WeaponDamageType, 1)
+
 	For k = 0 to 19
 		Pa$ = Pa$ + RCE_StrFromInt$(I\Resistances[k] + 5000, 2)
 	Next
@@ -130,6 +133,7 @@ Function ItemInstanceFromString.ItemInstance(Pa$)
 			Offset = Offset + 2
 		Next
 		I\ItemHealth = RCE_IntFromStr(Mid$(Pa$, Offset, 1))
+		I\WeaponDamageType = RCE_IntFromStr(Mid$(Pa$, Offset, 1))
 		Offset = Offset + 1
 		For k = 0 To 19
 			RCE_IntFromStr(Mid$(Pa$, Offset, 2))
@@ -166,6 +170,7 @@ Function WriteItemInstance(Stream, I.ItemInstance)
 		WriteShort Stream, I\Attributes\Value[j] + 5000
 	Next
 	WriteByte Stream, I\ItemHealth
+	WriteByte Stream, I\WeaponDamageType
 	For k = 0 To 19
 		WriteShort Stream, I\Resistances[k] + 5000
 	Next
@@ -187,6 +192,7 @@ Function ReadItemInstance.ItemInstance(Stream)
 			I\Attributes\Value[j] = ReadShort(Stream) - 5000
 		Next
 		I\ItemHealth = ReadByte(Stream)
+		I\WeaponDamageType = ReadByte(Stream)
 		For k = 0 To 19
 			I\Resistances[k] = ReadShort(Stream) - 5000
 		Next
@@ -205,6 +211,7 @@ Function ItemInstancesIdentical(A.ItemInstance, B.ItemInstance)
 	If A = Null Or B = Null Then Return False
 	If A\Item <> B\Item Then Return False
 	If A\ItemHealth <> B\ItemHealth Then Return False
+	If A\WeaponDamageType <> B\WeaponDamageType Then Return False
 	For i = 0 to 49
 		If A\Attributes\Value[i] <> B\Attributes\Value[i] Then Return False
 	Next
@@ -262,6 +269,7 @@ Function CreateItemInstance.ItemInstance(Item.Item)
 	I.ItemInstance = New ItemInstance
 	I\Item = Item
 	I\ItemHealth = 100
+	I\WeaponDamageType = I\Item\WeaponDamageType
 	I\Attributes = New Attributes
 		For j = 0 to 49
 			I\Attributes\Value[j] = I\Item\Attributes\Value[j]
@@ -281,6 +289,7 @@ Function CopyItemInstance.ItemInstance(A.ItemInstance)
 	I\Attributes = New Attributes
 	I\Item = A\Item
 	I\ItemHealth = A\ItemHealth
+	I\WeaponDamageType = A\WeaponDamageType
 	For j = 0 to 49
 		I\Attributes\Value[j] = A\Attributes\Value[j]
 	Next

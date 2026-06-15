@@ -7,6 +7,8 @@ Function Main()
     NameOfItem$ = ItemName(TargetItem)
 
     Output(Player, "You enchant: " + NameOfItem$, 255, 255, 0)
+
+    ZZSETITEMDAMAGETYPE(TargetItem, "Fire")
 	
 
 	Return
