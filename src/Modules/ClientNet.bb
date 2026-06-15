@@ -1310,6 +1310,16 @@ Function UpdateNetwork()
 								Exit
 							EndIf
 						Next
+					;dropped item damage type updated
+					Case "X"
+						NewDamageType = RCE_IntFromStr(Mid$(M\MessageData$, 2, 1))
+						TargetItemHandle$ = Str(RCE_IntFromStr(Mid$(M\MessageData$, 3,4)))
+						For DItem.DroppedItem = Each DroppedItem
+							If Str(DItem\ServerHandle) = TargetItemHandle$
+								DItem\Item\WeaponDamageType = NewDamageType
+								Exit
+							EndIf
+						Next
 					;dropped item resistance updated
 					Case "V"
 						Amount = RCE_IntFromStr(Mid$(M\MessageData$, 2, 2)) - 5000

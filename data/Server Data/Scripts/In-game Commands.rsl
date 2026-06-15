@@ -132,6 +132,10 @@ ZZSETITEMATTRIBUTE(newarmor, "Carry Weight Mod", 20)
 
 End Function
 
+function giveLockPicks()
+	giveitem(actor(), "Lockpick", 100)
+end function
+
 Function printSpeed()
 Output(Actor(),Attribute(Actor(), "Movement"))
 End Function

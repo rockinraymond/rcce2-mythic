@@ -761,6 +761,21 @@ Function BVM_ZZSETITEMDAMAGETYPE(Param1%, Param2$)
 			EndIf
 			If Done = True Then Exit
 		Next
+		Done = False
+		For D.DroppedItem = Each DroppedItem
+			If D\Item = Item
+				ZoneInstance.AreaInstance = Object.AreaInstance(D\ServerHandle)
+				; Tell other players in the area
+				Pa$ = RCE_StrFromInt$(Item\WeaponDamageType, 1) + RCE_StrFromInt$(Handle(D), 4)
+				A2.ActorInstance = ZoneInstance\FirstInZone
+				While A2 <> Null
+					If A2\RNID > 0 Then RCE_Send(Host, A2\RNID, P_InventoryUpdate, "X" + Pa$, True)
+					A2 = A2\NextInZone
+				Wend
+				Done = True
+			EndIf
+			If Done = True Then Exit
+		Next
 	EndIf
 End Function
 

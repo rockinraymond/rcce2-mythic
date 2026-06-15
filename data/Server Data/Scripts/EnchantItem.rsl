@@ -8,7 +8,7 @@ Function Main()
 
     Output(Player, "You enchant: " + NameOfItem$, 255, 255, 0)
 
-    ZZSETITEMDAMAGETYPE(TargetItem, "Fire")
+    ;ZZSETITEMDAMAGETYPE(TargetItem, "Fire")
 	
 
 	Return

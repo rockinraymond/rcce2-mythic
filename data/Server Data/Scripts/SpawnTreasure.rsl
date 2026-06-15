@@ -1,0 +1,299 @@
+Using "RC_Core.rcm"
+
+Function Main()
+Player = Actor()
+ChestZone$ = Parameter(1)
+
+ChestX = Parameter(2)
+ChestY = Parameter(3)
+ChestZ = Parameter(4)
+ChestLevel = Parameter(5)
+
+DropMagicItems(Player, ChestZone$,ChestX,ChestY,ChestZ, ChestLevel)
+
+End Function
+
+Function DropMagicItems(Player, ChestZone$,ChestX,ChestY,ChestZ, ChestLevel)
+        MaxAmtItems = ChestLevel - 2
+        If MaxAmtItems < 1 Then MaxAmtItems = 1
+        NumOfItems = Rand(1,MaxAmtItems)
+	    For x = 1 to NumOfItems Step 1
+            d100 = Rand(1,100)
+            MagicItemType$ = ""
+            If (d100 >= 1) And ( d100 <= 60)
+                MagicItemType$ = "Weapon"
+            ElseIf (d100 >= 61) And ( d100 <= 90)
+                MagicItemType$ = "Armor"
+            ElseIf (d100 >= 91) And ( d100 <= 100)
+                MagicItemType$ = "Jewelry"
+            EndIf
+            ItemName$ = MagicItemNameGenerator(MagicItemType$, ChestLevel)
+            Spawnitem(ItemName$,1,ChestZone$,ChestX,ChestY,ChestZ)
+            DroppedItem = ZZLASTSPAWNEDITEM(ChestZone)
+            doevents(100)
+            AddMagicItemBonus(DroppedItem,MagicItemType$,Player)
+            doevents(100)
+        Next
+		Return
+End Function
+
+Function AddMagicItemBonus(TargetItem, MagicItemType$, Chest)
+	Select MagicItemType$
+		case "Weapon"
+			d20 = Rand(1,20)
+			If d20 > 17
+				EnchantWeapon(TargetItem,Chest)
+			EndIf
+		case "Armor"
+			d20 = Rand(1,20)
+			If d20 > 13
+				EnchantArmor(TargetItem)
+			EndIf
+		case "Jewelry"
+			;EnchantJewelry(TargetItem)
+			EnchantArmor(TargetItem)	
+	End Select
+	Return
+End Function
+
+Function EnchantWeapon(TargetItem,Chest)
+	NewDamageType$ = "Magical"
+
+	Select Rand(1,5)
+		Case 1
+			NewDamageType$ = "Fire"
+		Case 2
+			NewDamageType$ = "Frost"
+		Case 3
+			NewDamageType$ = "Lightning"
+		Case 4
+			NewDamageType$ = "Holy"
+		Case 5
+			NewDamageType$ = "Unholy"
+	End Select
+	ZZSETITEMDAMAGETYPE(TargetItem, NewDamageType$)
+	;Return
+End Function
+
+Function EnchantArmor(TargetItem)
+	BonusValue = ZZITEMRARITY(TargetItem) - 1
+	BonusCategory = Rand(1,2)
+	TargetStat$ = ""
+
+	Select BonusCategory
+		case 1 ;Attributes
+			Select Rand(1,8)
+				case 1
+					TargetStat$ = "Strength"
+				case 2
+					TargetStat$ = "Toughness"
+				case 3
+					TargetStat$ = "Dexterity"
+				case 4
+					TargetStat$ = "Agility"
+				case 5
+					TargetStat$ = "Constitution"
+				case 6
+					TargetStat$ = "Wisdom"
+				case 7
+					TargetStat$ = "Intelligence"
+				case 8
+					TargetStat$ = "Charisma"
+			End Select
+		case 2 ;Resistances
+			Select Rand(1,15)
+				case 1
+					TargetStat$ = "Blunt"
+				case 2
+					TargetStat$ = "Edged"
+				case 3
+					TargetStat$ = "Missile"
+				case 4
+					TargetStat$ = "Magical"
+				case 5
+					TargetStat$ = "Frost"
+				case 6
+					TargetStat$ = "Fire"
+				case 7
+					TargetStat$ = "Lightning"
+				case 8
+					TargetStat$ = "Holy"
+				case 9
+					TargetStat$ = "Unholy"
+				case 10
+					TargetStat$ = "Poison"
+				case 11
+					TargetStat$ = "Paralysis"
+				case 12
+					TargetStat$ = "Spells"
+				case 13
+					TargetStat$ = "Wands"
+				case 14
+					TargetStat$ = "Dragon Breath"
+				case 15
+					TargetStat$ = "Death Ray"
+			End Select
+	End Select
+
+	If BonusCategory = 2
+		ZZSETITEMRESISTANCE(TargetItem, TargetStat$, BonusValue)
+	Else
+		ZZSETITEMATTRIBUTE(TargetItem, TargetStat$, BonusValue)
+	EndIf
+	Return
+End Function
+
+Function MagicItemNameGenerator$(ItemType$,ChestLevel)
+	LevelMod = (ChestLevel -1 ) * 5
+	ItemName$ = ""
+
+	Select ItemType$
+		Case "Weapon"
+			d100 = Rand(1,100)
+			If (d100 >= 1) And ( d100 <= 2)
+				ItemName$ = "Great Axe"
+			ElseIf (d100 >= 3) And ( d100 <= 9)
+				ItemName$ = "Battle Axe"
+			ElseIf (d100 >= 10) And ( d100 <= 14)
+				ItemName$ = "Hand Axe"
+			ElseIf (d100 >= 15) And ( d100 <= 27)
+				ItemName$ = "Short Bow"
+			ElseIf (d100 >= 28) And ( d100 <= 35)
+				ItemName$ = "Long Bow"
+			ElseIf (d100 >= 36) And ( d100 <= 43)
+				ItemName$ = "Quarter Staff"
+			ElseIf (d100 >= 44) And ( d100 <= 47)
+				ItemName$ = "Morning Star"
+			ElseIf (d100 >= 48) And ( d100 <= 59)
+				ItemName$ = "Dagger"
+			ElseIf (d100 >= 60) And ( d100 <= 65)
+				ItemName$ = "Short Sword"
+			ElseIf (d100 >= 66) And ( d100 <= 79)
+				ItemName$ = "Long Sword"
+			ElseIf (d100 >= 80) And ( d100 <= 81)
+				ItemName$ = "Scimitar"
+			ElseIf (d100 >= 82) And ( d100 <= 83)
+				ItemName$ = "Two-handed Sword"
+			ElseIf (d100 >= 84) And ( d100 <= 86)
+				ItemName$ = "Warhammer"
+			ElseIf (d100 >= 87) And ( d100 <= 94)
+				ItemName$ = "Mace"
+			ElseIf (d100 >= 95) And ( d100 <= 95)
+				ItemName$ = "Maul"
+			ElseIf (d100 >= 96) And ( d100 <= 96)
+				ItemName$ = "Pole Arm"
+			ElseIf (d100 >= 97) And ( d100 <= 98)
+				ItemName$ = "Short Spear"
+			ElseIf (d100 >= 99) And ( d100 <= 100)
+				ItemName$ = "Long Spear"
+			EndIf
+		
+		Case "Armor"
+			d10 = Rand(1,10)
+			If (d10 >= 1) And ( d10 <= 4) ; Leather Armor
+				Select Rand(1,6)
+					Case 1
+						ItemName$ = "Leather Armor"
+					Case 2
+						ItemName$ = "Leather Cap"
+					Case 3
+						ItemName$ = "Leather Trousers"
+					Case 4
+						ItemName$ = "Leather Boots"
+					Case 5
+						ItemName$ = "Leather Gloves"
+					Case 6
+						ItemName$ = "Leather Belt"
+				End Select
+				
+			ElseIf (d10 >= 4) And ( d10 <= 8) ;Chain Armor
+				Select Rand(1,7)
+					Case 1
+						ItemName$ = "Chainmail Armor"
+					Case 2
+						ItemName$ = "Skull Cap"
+					Case 3
+						ItemName$ = "Chainmail Greaves"
+					Case 4
+						ItemName$ = "Chainmail Boots"
+					Case 5
+						ItemName$ = "Chainmail Gauntlets"
+					Case 6
+						ItemName$ = "Chainmail Belt"
+					Case 7
+						ItemName$ = "Round Shield"
+				End Select
+				
+			ElseIf (d10 >= 9) And ( d10 <= 10) ;Plate Armor
+				Select Rand(1,7)
+					Case 1
+						ItemName$ = "Platemail Armor"
+					Case 2
+						ItemName$ = "Full Helm"
+					Case 3
+						ItemName$ = "Plated Greaves"
+					Case 4
+						ItemName$ = "Plated Boots"
+					Case 5
+						ItemName$ = "Plated Gauntlets"
+					Case 6
+						ItemName$ = "Plated Belt"
+					Case 7
+						ItemName$ = "Kite Shield"
+				End Select
+			EndIf
+		Case "Jewelry"
+			d6 = rand(1,6)
+			If (d6 >= 1) And (d6 <= 4) ;Rings
+				d8 = rand(1,8)
+				Select d8
+					Case 1
+						ItemName$ = "Topaz Ring"
+					Case 2
+						ItemName$ = "Malachite Ring"
+					Case 3
+						ItemName$ = "Amethyst Ring"
+					Case 4
+						ItemName$ = "Garnet Ring"
+					Case 5
+						ItemName$ = "Sapphire Ring"
+					Case 6
+						ItemName$ = "Emerald Ring"
+					Case 7
+						ItemName$ = "Ruby Ring"
+					Case 8
+						ItemName$ = "Diamond Ring"
+				End Select
+			ElseIf (d6 >= 5) And ( d6 <= 6) ;Amulets
+				d4 = rand(1,4)
+				Select d4
+					Case 1
+						ItemName$ = "Sapphire Amulet"
+					Case 2
+						ItemName$ = "Emerald Amulet"
+					Case 3
+						ItemName$ = "Ruby Amulet"
+					Case 4
+						ItemName$ = "Diamond Amulet"
+				End Select
+			EndIf
+	End Select
+
+	;Determine power
+	d100 = Rand(1,100) + LevelMod
+	
+	If (d100 >= 1) And ( d100 <= 65)
+		ItemName$ = ItemName$ + " +1"
+	ElseIf (d100 >= 66) And ( d100 <= 90)
+		ItemName$ = ItemName$ + " +2"
+	ElseIf (d100 >= 91) And ( d100 <= 115)
+		ItemName$ = ItemName$ + " +3"
+	ElseIf (d100 >= 116) And ( d100 <= 125)
+		ItemName$ = ItemName$ + " +4"
+	ElseIf (d100 >= 126)
+		ItemName$ = ItemName$ + " +5"
+	EndIf
+
+	Return ItemName$
+
+End Function

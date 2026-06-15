@@ -1,1216 +1,1520 @@
 Item ID: 0
 Item Name: Hand Axe
 Value: 400
+Rarity: 1
 
 Item ID: 1
 Item Name: Battle Axe
 Value: 700
+Rarity: 1
 
 Item ID: 2
 Item Name: Great Axe
 Value: 1400
+Rarity: 1
 
 Item ID: 3
 Item Name: Dagger
 Value: 200
+Rarity: 1
 
 Item ID: 4
 Item Name: Short Sword
 Value: 600
+Rarity: 1
 
 Item ID: 5
 Item Name: Long Sword
 Value: 1000
+Rarity: 1
 
 Item ID: 6
 Item Name: Scimitar
 Value: 1000
+Rarity: 1
 
 Item ID: 7
 Item Name: Two-handed Sword
 Value: 1800
+Rarity: 1
 
 Item ID: 8
 Item Name: Warhammer
 Value: 400
+Rarity: 1
 
 Item ID: 9
 Item Name: Mace
 Value: 600
+Rarity: 1
 
 Item ID: 10
 Item Name: Morning Star
 Value: 700
+Rarity: 1
 
 Item ID: 11
 Item Name: Maul
 Value: 1000
+Rarity: 1
 
 Item ID: 12
 Item Name: Cudgel
 Value: 50
+Rarity: 1
 
 Item ID: 13
 Item Name: Pole Arm
 Value: 900
+Rarity: 1
 
 Item ID: 14
 Item Name: Short Spear
 Value: 500
+Rarity: 1
 
 Item ID: 15
 Item Name: Long Spear
 Value: 700
+Rarity: 1
 
 Item ID: 16
 Item Name: Short Bow
 Value: 2500
+Rarity: 1
 
 Item ID: 17
 Item Name: Long Bow
 Value: 6000
+Rarity: 1
 
 Item ID: 18
 Item Name: Arrow
 Value: 15
+Rarity: 1
 
 Item ID: 19
 Item Name: Quarter Staff
 Value: 20000
+Rarity: 1
 
 Item ID: 20
 Item Name: Leather Armor
 Value: 1000
+Rarity: 1
 
 Item ID: 21
 Item Name: Leather Cap
 Value: 200
+Rarity: 1
 
 Item ID: 22
 Item Name: Leather Trousers
 Value: 300
+Rarity: 1
 
 Item ID: 23
 Item Name: Leather Boots
 Value: 100
+Rarity: 1
 
 Item ID: 24
 Item Name: Leather Gloves
 Value: 100
+Rarity: 1
 
 Item ID: 25
 Item Name: Leather Belt
 Value: 100
+Rarity: 1
 
 Item ID: 26
 Item Name: Chainmail Armor
 Value: 3000
+Rarity: 1
 
 Item ID: 27
 Item Name: Skull Cap
 Value: 450
+Rarity: 1
 
 Item ID: 28
 Item Name: Chainmail Greaves
 Value: 1000
+Rarity: 1
 
 Item ID: 29
 Item Name: Chainmail Boots
 Value: 450
+Rarity: 1
 
 Item ID: 30
 Item Name: Chainmail Gauntlets
 Value: 450
+Rarity: 1
 
 Item ID: 31
 Item Name: Chainmail Belt
 Value: 450
+Rarity: 1
 
 Item ID: 32
 Item Name: Round Shield
 Value: 700
+Rarity: 1
 
 Item ID: 33
 Item Name: Dagger +1
 Value: 20000
+Rarity: 2
 
 Item ID: 34
 Item Name: Platemail Armor
 Value: 20000
+Rarity: 1
 
 Item ID: 35
 Item Name: Full Helm
 Value: 2500
+Rarity: 1
 
 Item ID: 36
 Item Name: Plated Greaves
 Value: 5000
+Rarity: 1
 
 Item ID: 37
 Item Name: Plated Boots
 Value: 2500
+Rarity: 1
 
 Item ID: 38
 Item Name: Plated Gauntlets
 Value: 2500
+Rarity: 1
 
 Item ID: 39
 Item Name: Plated Belt
 Value: 2500
+Rarity: 1
 
 Item ID: 40
 Item Name: Kite Shield
 Value: 3000
+Rarity: 1
 
 Item ID: 41
 Item Name: Leather Armor +1
 Value: 100000
+Rarity: 2
 
 Item ID: 42
 Item Name: Chainmail Armor +1
 Value: 300000
+Rarity: 2
 
 Item ID: 43
 Item Name: Leather Boots +1
 Value: 100000
+Rarity: 2
 
 Item ID: 44
 Item Name: Hand Axe +1
 Value: 40000
+Rarity: 2
 
 Item ID: 45
 Item Name: Battle Axe +1
 Value: 70000
+Rarity: 2
 
 Item ID: 46
 Item Name: Great Axe +2
 Value: 280000
+Rarity: 3
 
 Item ID: 47
 Item Name: Short Sword +1
 Value: 60000
+Rarity: 2
 
 Item ID: 48
 Item Name: Long Sword +1
 Value: 100000
+Rarity: 2
 
 Item ID: 49
 Item Name: Scimitar +1
 Value: 100000
+Rarity: 2
 
 Item ID: 50
 Item Name: Two-handed Sword +1
 Value: 180000
+Rarity: 2
 
 Item ID: 51
 Item Name: Warhammer +1
 Value: 40000
+Rarity: 2
 
 Item ID: 52
 Item Name: Mace +1
 Value: 60000
+Rarity: 2
 
 Item ID: 53
 Item Name: Pole Arm +1
 Value: 90000
+Rarity: 2
 
 Item ID: 54
 Item Name: Short Spear +1
 Value: 50000
+Rarity: 2
 
 Item ID: 55
 Item Name: Long Spear +1
 Value: 70000
+Rarity: 2
 
 Item ID: 56
 Item Name: Short Bow +1
 Value: 250000
+Rarity: 2
 
 Item ID: 57
 Item Name: Long Bow +1
 Value: 600000
+Rarity: 2
 
 Item ID: 58
 Item Name: Quarter Staff +1
 Value: 200000
+Rarity: 2
 
 Item ID: 59
 Item Name: Leather Cap +1
 Value: 20000
+Rarity: 2
 
 Item ID: 60
 Item Name: Leather Trousers +1
 Value: 300000
+Rarity: 2
 
 Item ID: 61
 Item Name: Leather Gloves +1
 Value: 10000
+Rarity: 2
 
 Item ID: 62
 Item Name: Leather Belt +1
 Value: 10000
+Rarity: 2
 
 Item ID: 63
 Item Name: Skull Cap +1
 Value: 45000
+Rarity: 2
 
 Item ID: 64
 Item Name: Chainmail Greaves +1
 Value: 100000
+Rarity: 2
 
 Item ID: 65
 Item Name: Chainmail Boots +1
 Value: 45000
+Rarity: 2
 
 Item ID: 66
 Item Name: Chainmail Gauntlets +1
 Value: 45000
+Rarity: 2
 
 Item ID: 67
 Item Name: Chainmail Belt +1
 Value: 45000
+Rarity: 2
 
 Item ID: 68
 Item Name: Round Shield +1
 Value: 70000
+Rarity: 2
 
 Item ID: 69
 Item Name: Platemail Armor +1
 Value: 2000000
+Rarity: 2
 
 Item ID: 70
 Item Name: Full Helm +1
 Value: 250000
+Rarity: 2
 
 Item ID: 71
 Item Name: Plated Greaves +1
 Value: 500000
+Rarity: 2
 
 Item ID: 72
 Item Name: Plated Boots +1
 Value: 250000
+Rarity: 2
 
 Item ID: 73
 Item Name: Plated Gauntlets +1
 Value: 250000
+Rarity: 2
 
 Item ID: 74
 Item Name: Plated Belt +1
 Value: 250000
+Rarity: 2
 
 Item ID: 75
 Item Name: Kite Shield +1
 Value: 300000
+Rarity: 2
 
 Item ID: 76
 Item Name: Dagger +2
 Value: 40000
+Rarity: 3
 
 Item ID: 77
 Item Name: Leather Armor +2
 Value: 200000
+Rarity: 3
 
 Item ID: 78
 Item Name: Chainmail Armor +2
 Value: 600000
+Rarity: 3
 
 Item ID: 79
 Item Name: Leather Boots +2
 Value: 20000
+Rarity: 3
 
 Item ID: 80
 Item Name: Hand Axe +2
 Value: 80000
+Rarity: 3
 
 Item ID: 81
 Item Name: Battle Axe +2
 Value: 140000
+Rarity: 3
 
 Item ID: 82
 Item Name: Short Sword +2
 Value: 120000
+Rarity: 3
 
 Item ID: 83
 Item Name: Long Sword +2
 Value: 200000
+Rarity: 3
 
 Item ID: 84
 Item Name: Scimitar +2
 Value: 200000
+Rarity: 3
 
 Item ID: 85
 Item Name: Two-handed Sword +2
 Value: 360000
+Rarity: 3
 
 Item ID: 86
 Item Name: Warhammer +2
 Value: 80000
+Rarity: 3
 
 Item ID: 87
 Item Name: Mace +2
 Value: 120000
+Rarity: 3
 
 Item ID: 88
 Item Name: Morning Star +1
 Value: 70000
+Rarity: 2
 
 Item ID: 89
 Item Name: Morning Star +2
 Value: 140000
+Rarity: 3
 
 Item ID: 90
 Item Name: Maul +1
 Value: 100000
+Rarity: 2
 
 Item ID: 91
 Item Name: Maul +2
 Value: 200000
+Rarity: 3
 
 Item ID: 92
 Item Name: Pole Arm +2
 Value: 180000
+Rarity: 3
 
 Item ID: 93
 Item Name: Short Spear +2
 Value: 100000
+Rarity: 3
 
 Item ID: 94
 Item Name: Long Spear +2
 Value: 140000
+Rarity: 3
 
 Item ID: 95
 Item Name: Short Bow +2
 Value: 500000
+Rarity: 3
 
 Item ID: 96
 Item Name: Long Bow +2
 Value: 1200000
+Rarity: 3
 
 Item ID: 97
 Item Name: Quarter Staff +2
 Value: 400000
+Rarity: 3
 
 Item ID: 98
 Item Name: Leather Cap +2
 Value: 40000
+Rarity: 3
 
 Item ID: 99
 Item Name: Leather Trousers +2
 Value: 600000
+Rarity: 3
 
 Item ID: 100
 Item Name: Leather Gloves +2
 Value: 20000
+Rarity: 3
 
 Item ID: 101
 Item Name: Leather Belt +2
 Value: 20000
+Rarity: 3
 
 Item ID: 102
 Item Name: Skull Cap +2
 Value: 90000
+Rarity: 3
 
 Item ID: 103
 Item Name: Chainmail Greaves +2
 Value: 200000
+Rarity: 3
 
 Item ID: 104
 Item Name: Chainmail Boots +2
 Value: 90000
+Rarity: 3
 
 Item ID: 105
 Item Name: Chainmail Gauntlets +2
 Value: 90000
+Rarity: 3
 
 Item ID: 106
 Item Name: Chainmail Belt +2
 Value: 90000
+Rarity: 3
 
 Item ID: 107
 Item Name: Round Shield +2
 Value: 140000
+Rarity: 3
 
 Item ID: 108
 Item Name: Platemail Armor +2
 Value: 4000000
+Rarity: 3
 
 Item ID: 109
 Item Name: Full Helm +2
 Value: 500000
+Rarity: 3
 
 Item ID: 110
 Item Name: Plated Greaves +2
 Value: 1000000
+Rarity: 3
 
 Item ID: 111
 Item Name: Plated Boots +2
 Value: 500000
+Rarity: 3
 
 Item ID: 112
 Item Name: Plated Gauntlets +2
 Value: 500000
+Rarity: 3
 
 Item ID: 113
 Item Name: Plated Belt +2
 Value: 500000
+Rarity: 3
 
 Item ID: 114
 Item Name: Kite Shield +2
 Value: 600000
+Rarity: 3
 
 Item ID: 115
 Item Name: Platemail Armor +3
 Value: 8000000
+Rarity: 4
 
 Item ID: 116
 Item Name: Lockpick
 Value: 200
+Rarity: 1
 
 Item ID: 117
 Item Name: Trap Disarming Kit
 Value: 2000
+Rarity: 1
 
 Item ID: 118
 Item Name: Topaz Ring
 Value: 20000
+Rarity: 1
 
 Item ID: 119
 Item Name: Malachite Ring
 Value: 40000
+Rarity: 1
 
 Item ID: 120
 Item Name: Amethyst Ring
 Value: 60000
+Rarity: 1
 
 Item ID: 121
 Item Name: Garnet Ring
 Value: 80000
+Rarity: 1
 
 Item ID: 122
 Item Name: Sapphire Ring
 Value: 100000
+Rarity: 1
 
 Item ID: 123
 Item Name: Emerald Ring
 Value: 120000
+Rarity: 1
 
 Item ID: 124
 Item Name: Ruby Ring
 Value: 140000
+Rarity: 1
 
 Item ID: 125
 Item Name: Diamond Ring
 Value: 160000
+Rarity: 1
 
 Item ID: 126
 Item Name: Sapphire Amulet
 Value: 120000
+Rarity: 1
 
 Item ID: 127
 Item Name: Emerald Amulet
 Value: 140000
+Rarity: 1
 
 Item ID: 128
 Item Name: Ruby Amulet
 Value: 160000
+Rarity: 1
 
 Item ID: 129
 Item Name: Diamond Amulet
 Value: 180000
+Rarity: 1
 
 Item ID: 130
 Item Name: Dagger +3
 Value: 80000
+Rarity: 4
 
 Item ID: 131
 Item Name: Great Axe +1
 Value: 140000
+Rarity: 2
 
 Item ID: 132
 Item Name: Leather Armor +3
 Value: 400000
+Rarity: 4
 
 Item ID: 133
 Item Name: Chainmail Armor +3
 Value: 1200000
+Rarity: 4
 
 Item ID: 134
 Item Name: Leather Boots +3
 Value: 40000
+Rarity: 4
 
 Item ID: 135
 Item Name: Hand Axe +3
 Value: 160000
+Rarity: 4
 
 Item ID: 136
 Item Name: Battle Axe +3
 Value: 280000
+Rarity: 4
 
 Item ID: 137
 Item Name: Great Axe +3
 Value: 560000
+Rarity: 4
 
 Item ID: 138
 Item Name: Short Sword +3
 Value: 240000
+Rarity: 4
 
 Item ID: 139
 Item Name: Long Sword +3
 Value: 400000
+Rarity: 4
 
 Item ID: 140
 Item Name: Scimitar +3
 Value: 400000
+Rarity: 4
 
 Item ID: 141
 Item Name: Two-handed Sword +3
 Value: 720000
+Rarity: 4
 
 Item ID: 142
 Item Name: Warhammer +3
 Value: 160000
+Rarity: 4
 
 Item ID: 143
 Item Name: Mace +3
 Value: 240000
+Rarity: 4
 
 Item ID: 144
 Item Name: Morning Star +3
 Value: 280000
+Rarity: 4
 
 Item ID: 145
 Item Name: Maul +3
 Value: 400000
+Rarity: 4
 
 Item ID: 146
 Item Name: Pole Arm +3
 Value: 360000
+Rarity: 3
 
 Item ID: 147
 Item Name: Short Spear +3
 Value: 200000
+Rarity: 4
 
 Item ID: 148
 Item Name: Long Spear +3
 Value: 280000
+Rarity: 4
 
 Item ID: 149
 Item Name: Short Bow +3
 Value: 1000000
+Rarity: 4
 
 Item ID: 150
 Item Name: Long Bow +3
 Value: 2400000
+Rarity: 4
 
 Item ID: 151
 Item Name: Quarter Staff +3
 Value: 800000
+Rarity: 4
 
 Item ID: 152
 Item Name: Leather Cap +3
 Value: 40000
+Rarity: 4
 
 Item ID: 153
 Item Name: Leather Trousers +3
 Value: 1200000
+Rarity: 4
 
 Item ID: 154
 Item Name: Leather Gloves +3
 Value: 40000
+Rarity: 4
 
 Item ID: 155
 Item Name: Leather Belt +3
 Value: 40000
+Rarity: 4
 
 Item ID: 156
 Item Name: Skull Cap +3
 Value: 180000
+Rarity: 4
 
 Item ID: 157
 Item Name: Chainmail Greaves +3
 Value: 400000
+Rarity: 4
 
 Item ID: 158
 Item Name: Chainmail Boots +3
 Value: 180000
+Rarity: 4
 
 Item ID: 159
 Item Name: Chainmail Gauntlets +3
 Value: 180000
+Rarity: 4
 
 Item ID: 160
 Item Name: Chainmail Belt +3
 Value: 180000
+Rarity: 4
 
 Item ID: 161
 Item Name: Round Shield +3
 Value: 280000
+Rarity: 4
 
 Item ID: 162
 Item Name: Full Helm +3
 Value: 1000000
+Rarity: 4
 
 Item ID: 163
 Item Name: Plated Greaves +3
 Value: 2000000
+Rarity: 4
 
 Item ID: 164
 Item Name: Plated Boots +3
 Value: 1000000
+Rarity: 4
 
 Item ID: 165
 Item Name: Plated Gauntlets +3
 Value: 1000000
+Rarity: 4
 
 Item ID: 166
 Item Name: Plated Belt +3
 Value: 1000000
+Rarity: 4
 
 Item ID: 167
 Item Name: Kite Shield +3
 Value: 1200000
+Rarity: 4
 
 Item ID: 168
 Item Name: Dagger +4
 Value: 160000
+Rarity: 5
 
 Item ID: 169
 Item Name: Leather Armor +4
 Value: 800000
+Rarity: 5
 
 Item ID: 170
 Item Name: Chainmail Armor +4
 Value: 2400000
+Rarity: 5
 
 Item ID: 171
 Item Name: Leather Boots +4
 Value: 80000
+Rarity: 5
 
 Item ID: 172
 Item Name: Hand Axe +4
 Value: 320000
+Rarity: 5
 
 Item ID: 173
 Item Name: Battle Axe +4
 Value: 560000
+Rarity: 5
 
 Item ID: 174
 Item Name: Great Axe +4
 Value: 1120000
+Rarity: 5
 
 Item ID: 175
 Item Name: Short Sword +4
 Value: 480000
+Rarity: 5
 
 Item ID: 176
 Item Name: Long Sword +4
 Value: 800000
+Rarity: 5
 
 Item ID: 177
 Item Name: Scimitar +4
 Value: 800000
+Rarity: 5
 
 Item ID: 178
 Item Name: Two-handed Sword +4
 Value: 1440000
+Rarity: 5
 
 Item ID: 179
 Item Name: Warhammer +4
 Value: 320000
+Rarity: 5
 
 Item ID: 180
 Item Name: Mace +4
 Value: 480000
+Rarity: 5
 
 Item ID: 181
 Item Name: Morning Star +4
 Value: 560000
+Rarity: 5
 
 Item ID: 182
 Item Name: Maul +4
 Value: 800000
+Rarity: 5
 
 Item ID: 183
 Item Name: Pole Arm +4
 Value: 720000
+Rarity: 5
 
 Item ID: 184
 Item Name: Short Spear +4
 Value: 400000
+Rarity: 5
 
 Item ID: 185
 Item Name: Long Spear +4
 Value: 560000
+Rarity: 5
 
 Item ID: 186
 Item Name: Short Bow +4
 Value: 2000000
+Rarity: 5
 
 Item ID: 187
 Item Name: Long Bow +4
 Value: 4800000
+Rarity: 5
 
 Item ID: 188
 Item Name: Quarter Staff +4
 Value: 1600000
+Rarity: 5
 
 Item ID: 189
 Item Name: Leather Cap +4
 Value: 160000
+Rarity: 5
 
 Item ID: 190
 Item Name: Leather Trousers +4
 Value: 2400000
+Rarity: 5
 
 Item ID: 191
 Item Name: Leather Gloves +4
 Value: 80000
+Rarity: 5
 
 Item ID: 192
 Item Name: Leather Belt +4
 Value: 80000
+Rarity: 5
 
 Item ID: 193
 Item Name: Skull Cap +4
 Value: 360000
+Rarity: 5
 
 Item ID: 194
 Item Name: Chainmail Greaves +4
 Value: 800000
+Rarity: 5
 
 Item ID: 195
 Item Name: Chainmail Boots +4
 Value: 360000
+Rarity: 5
 
 Item ID: 196
 Item Name: Chainmail Gauntlets +4
 Value: 360000
+Rarity: 5
 
 Item ID: 197
 Item Name: Chainmail Belt +4
 Value: 360000
+Rarity: 5
 
 Item ID: 198
 Item Name: Round Shield +4
 Value: 560000
+Rarity: 5
 
 Item ID: 199
 Item Name: Full Helm +4
 Value: 2000000
+Rarity: 5
 
 Item ID: 200
 Item Name: Plated Greaves +4
 Value: 4000000
+Rarity: 5
 
 Item ID: 201
 Item Name: Plated Boots +4
 Value: 2000000
+Rarity: 5
 
 Item ID: 202
 Item Name: Plated Gauntlets +4
 Value: 2000000
+Rarity: 5
 
 Item ID: 203
 Item Name: Plated Belt +4
 Value: 2000000
+Rarity: 5
 
 Item ID: 204
 Item Name: Kite Shield +4
 Value: 2400000
+Rarity: 5
 
 Item ID: 205
 Item Name: Platemail Armor +4
 Value: 16000000
+Rarity: 5
 
 Item ID: 206
 Item Name: Dagger +5
 Value: 320000
+Rarity: 6
 
 Item ID: 207
 Item Name: Leather Armor +5
 Value: 1600000
+Rarity: 6
 
 Item ID: 208
 Item Name: Chainmail Armor +5
 Value: 4800000
+Rarity: 6
 
 Item ID: 209
 Item Name: Leather Boots +5
 Value: 160000
+Rarity: 6
 
 Item ID: 210
 Item Name: Hand Axe +5
 Value: 640000
+Rarity: 6
 
 Item ID: 211
 Item Name: Battle Axe +5
 Value: 1120000
+Rarity: 6
 
 Item ID: 212
 Item Name: Great Axe +5
 Value: 2240000
+Rarity: 6
 
 Item ID: 213
 Item Name: Short Sword +5
 Value: 960000
+Rarity: 6
 
 Item ID: 214
 Item Name: Long Sword +5
 Value: 1600000
+Rarity: 6
 
 Item ID: 215
 Item Name: Scimitar +5
 Value: 1600000
+Rarity: 6
 
 Item ID: 216
 Item Name: Two-handed Sword +5
 Value: 2880000
+Rarity: 6
 
 Item ID: 217
 Item Name: Warhammer +5
 Value: 640000
+Rarity: 6
 
 Item ID: 218
 Item Name: Mace +5
 Value: 960000
+Rarity: 6
 
 Item ID: 219
 Item Name: Morning Star +5
 Value: 1120000
+Rarity: 6
 
 Item ID: 221
 Item Name: Maul +5
 Value: 1600000
+Rarity: 6
 
 Item ID: 222
 Item Name: Pole Arm +5
 Value: 1440000
+Rarity: 6
 
 Item ID: 223
 Item Name: Short Spear +5
 Value: 800000
+Rarity: 6
 
 Item ID: 224
 Item Name: Long Spear +5
 Value: 1120000
+Rarity: 6
 
 Item ID: 225
 Item Name: Short Bow +5
 Value: 4000000
+Rarity: 6
 
 Item ID: 226
 Item Name: Long Bow +5
 Value: 9600000
+Rarity: 6
 
 Item ID: 227
 Item Name: Quarter Staff +5
 Value: 3200000
+Rarity: 6
 
 Item ID: 228
 Item Name: Leather Cap +5
 Value: 320000
+Rarity: 6
 
 Item ID: 229
 Item Name: Leather Trousers +5
 Value: 4800000
+Rarity: 6
 
 Item ID: 230
 Item Name: Leather Gloves +5
 Value: 160000
+Rarity: 6
 
 Item ID: 231
 Item Name: Leather Belt +5
 Value: 160000
+Rarity: 6
 
 Item ID: 232
 Item Name: Skull Cap +5
 Value: 720000
+Rarity: 6
 
 Item ID: 233
 Item Name: Chainmail Greaves +5
 Value: 1600000
+Rarity: 6
 
 Item ID: 234
 Item Name: Chainmail Boots +5
 Value: 720000
+Rarity: 6
 
 Item ID: 235
 Item Name: Chainmail Gauntlets +5
 Value: 720000
+Rarity: 6
 
 Item ID: 236
 Item Name: Chainmail Belt +5
 Value: 720000
+Rarity: 6
 
 Item ID: 237
 Item Name: Round Shield +5
 Value: 1120000
+Rarity: 6
 
 Item ID: 238
 Item Name: Full Helm +5
 Value: 4000000
+Rarity: 6
 
 Item ID: 239
 Item Name: Plated Greaves +5
 Value: 8000000
+Rarity: 6
 
 Item ID: 240
 Item Name: Plated Boots +5
 Value: 4000000
+Rarity: 6
 
 Item ID: 241
 Item Name: Plated Gauntlets +5
 Value: 4000000
+Rarity: 6
 
 Item ID: 242
 Item Name: Plated Belt +5
 Value: 4000000
+Rarity: 6
 
 Item ID: 243
 Item Name: Kite Shield +5
 Value: 4800000
+Rarity: 6
 
 Item ID: 244
 Item Name: Platemail Armor +5
 Value: 32000000
+Rarity: 6
 
 Item ID: 245
 Item Name: Topaz Ring +1
 Value: 200000
+Rarity: 2
 
 Item ID: 246
 Item Name: Malachite Ring +1
 Value: 400000
+Rarity: 2
 
 Item ID: 247
 Item Name: Amethyst Ring +1
 Value: 600000
+Rarity: 2
 
 Item ID: 248
 Item Name: Garnet Ring +1
 Value: 800000
+Rarity: 2
 
 Item ID: 249
 Item Name: Sapphire Ring +1
 Value: 1000000
+Rarity: 2
 
 Item ID: 250
 Item Name: Emerald Ring +1
 Value: 1200000
+Rarity: 2
 
 Item ID: 251
 Item Name: Ruby Ring +1
 Value: 1400000
+Rarity: 2
 
 Item ID: 252
 Item Name: Diamond Ring +1
 Value: 1600000
+Rarity: 2
 
 Item ID: 253
 Item Name: Sapphire Amulet +1
 Value: 1200000
+Rarity: 2
 
 Item ID: 254
 Item Name: Emerald Amulet +1
 Value: 1400000
+Rarity: 2
 
 Item ID: 255
 Item Name: Ruby Amulet +1
 Value: 1600000
+Rarity: 2
 
 Item ID: 256
 Item Name: Diamond Amulet +1
 Value: 1800000
+Rarity: 2
 
 Item ID: 257
 Item Name: Topaz Ring +2
 Value: 400000
+Rarity: 3
 
 Item ID: 258
 Item Name: Malachite Ring +2
 Value: 800000
+Rarity: 3
 
 Item ID: 259
 Item Name: Amethyst Ring +2
 Value: 1200000
+Rarity: 3
 
 Item ID: 260
 Item Name: Garnet Ring +2
 Value: 1600000
+Rarity: 3
 
 Item ID: 261
 Item Name: Sapphire Ring +2
 Value: 2000000
+Rarity: 3
 
 Item ID: 262
 Item Name: Emerald Ring +2
 Value: 2400000
+Rarity: 3
 
 Item ID: 263
 Item Name: Ruby Ring +2
 Value: 2800000
+Rarity: 3
 
 Item ID: 264
 Item Name: Diamond Ring +2
 Value: 3200000
+Rarity: 3
 
 Item ID: 265
 Item Name: Sapphire Amulet +2
 Value: 2400000
+Rarity: 3
 
 Item ID: 266
 Item Name: Emerald Amulet +2
 Value: 2800000
+Rarity: 3
 
 Item ID: 267
 Item Name: Ruby Amulet +2
 Value: 3200000
+Rarity: 3
 
 Item ID: 268
 Item Name: Diamond Amulet +2
 Value: 3200000
+Rarity: 3
 
 Item ID: 269
 Item Name: Topaz Ring +3
 Value: 800000
+Rarity: 4
 
 Item ID: 270
 Item Name: Malachite Ring +3
 Value: 1600000
+Rarity: 4
 
 Item ID: 271
 Item Name: Amethyst Ring +3
 Value: 2400000
+Rarity: 4
 
 Item ID: 272
 Item Name: Garnet Ring +3
 Value: 3200000
+Rarity: 4
 
 Item ID: 273
 Item Name: Sapphire Ring +3
 Value: 4000000
+Rarity: 4
 
 Item ID: 274
 Item Name: Emerald Ring +3
 Value: 4800000
+Rarity: 4
 
 Item ID: 275
 Item Name: Ruby Ring +3
 Value: 5600000
+Rarity: 4
 
 Item ID: 276
 Item Name: Diamond Ring +3
 Value: 6400000
+Rarity: 4
 
 Item ID: 277
 Item Name: Sapphire Amulet +3
 Value: 4800000
+Rarity: 4
 
 Item ID: 278
 Item Name: Emerald Amulet +3
 Value: 5600000
+Rarity: 4
 
 Item ID: 279
 Item Name: Ruby Amulet +3
 Value: 6400000
+Rarity: 4
 
 Item ID: 280
 Item Name: Diamond Amulet +3
 Value: 7200000
+Rarity: 4
 
 Item ID: 281
 Item Name: Topaz Ring +4
 Value: 1600000
+Rarity: 5
 
 Item ID: 282
 Item Name: Malachite Ring +4
 Value: 3200000
+Rarity: 5
 
 Item ID: 283
 Item Name: Amethyst Ring +4
 Value: 4800000
+Rarity: 5
 
 Item ID: 284
 Item Name: Garnet Ring +4
 Value: 6400000
+Rarity: 5
 
 Item ID: 285
 Item Name: Sapphire Ring +4
 Value: 8000000
+Rarity: 5
 
 Item ID: 286
 Item Name: Emerald Ring +4
 Value: 9600000
+Rarity: 5
 
 Item ID: 287
 Item Name: Ruby Ring +4
 Value: 11200000
+Rarity: 5
 
 Item ID: 288
 Item Name: Diamond Ring +4
 Value: 12800000
+Rarity: 5
 
 Item ID: 289
 Item Name: Sapphire Amulet +4
 Value: 9600000
+Rarity: 5
 
 Item ID: 290
 Item Name: Emerald Amulet +4
 Value: 11200000
+Rarity: 5
 
 Item ID: 291
 Item Name: Ruby Amulet +4
 Value: 12800000
+Rarity: 5
 
 Item ID: 292
 Item Name: Diamond Amulet +4
 Value: 14400000
+Rarity: 5
 
 Item ID: 220
 Item Name: Topaz Ring +5
 Value: 3200000
+Rarity: 6
 
 Item ID: 293
 Item Name: Malachite Ring +5
 Value: 6400000
+Rarity: 6
 
 Item ID: 294
 Item Name: Amethyst Ring +5
 Value: 9600000
+Rarity: 6
 
 Item ID: 295
 Item Name: Garnet Ring +5
 Value: 12800000
+Rarity: 6
 
 Item ID: 296
 Item Name: Sapphire Ring +5
 Value: 16000000
+Rarity: 6
 
 Item ID: 297
 Item Name: Emerald Ring +5
 Value: 19200000
+Rarity: 6
 
 Item ID: 298
 Item Name: Ruby Ring +5
 Value: 22400000
+Rarity: 6
 
 Item ID: 299
 Item Name: Diamond Ring +5
 Value: 25200000
+Rarity: 6
 
 Item ID: 300
 Item Name: Sapphire Amulet +5
 Value: 19200000
+Rarity: 6
 
 Item ID: 301
 Item Name: Emerald Amulet +5
 Value: 22400000
+Rarity: 6
 
 Item ID: 302
 Item Name: Ruby Amulet +5
 Value: 25200000
+Rarity: 6
 
 Item ID: 303
 Item Name: Diamond Amulet +5
 Value: 28800000
+Rarity: 6
 

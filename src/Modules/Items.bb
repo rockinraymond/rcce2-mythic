@@ -94,7 +94,7 @@ End Type
 ; Returns the correct length in bytes of an item instance in string form
 Function ItemInstanceStringLength()
 
-	Return 145
+	Return 144
 
 End Function
 
@@ -133,6 +133,7 @@ Function ItemInstanceFromString.ItemInstance(Pa$)
 			Offset = Offset + 2
 		Next
 		I\ItemHealth = RCE_IntFromStr(Mid$(Pa$, Offset, 1))
+		Offset = Offset + 1
 		I\WeaponDamageType = RCE_IntFromStr(Mid$(Pa$, Offset, 1))
 		Offset = Offset + 1
 		For k = 0 To 19
@@ -434,6 +435,7 @@ Function SaveItems(Filename$)
 			WriteLine(G, "Item ID: " + I\ID)
 			WriteLine(G, "Item Name: " + I\Name$)
 			WriteLine(G, "Value: " + I\Value)
+			WriteLine(G, "Rarity: " + I\Rarity)
 			WriteLine(G, "")
 		Next
 	CloseFile(G)
