@@ -741,44 +741,6 @@ Function BVM_ITEMDAMAGETYPE$(Param1%)
 Return Result$
 End Function
 
-Function BVM_ZZSETITEMDAMAGETYPE(Param1%, Param2$)
-	NewDamageType = FindDamageType(Param2$)
-	Item.ItemInstance = Object.ItemInstance(Param1%)
-	If Item <> Null
-		Item\WeaponDamageType = NewDamageType
-	; If item belongs to a human player, tell them the new health
-		Done = False
-		For AI.ActorInstance = Each ActorInstance
-			If AI\RNID > 0
-				For i = 0 To Slots_Inventory
-					If AI\Inventory\Items[i] = Item
-						Pa$ = "W" + RCE_StrFromInt$(i, 1) + RCE_StrFromInt$(Item\WeaponDamageType, 1)
-						RCE_Send(Host, AI\RNID, P_InventoryUpdate, Pa$, True)
-						Done = True
-						Exit
-					EndIf
-				Next
-			EndIf
-			If Done = True Then Exit
-		Next
-		Done = False
-		For D.DroppedItem = Each DroppedItem
-			If D\Item = Item
-				ZoneInstance.AreaInstance = Object.AreaInstance(D\ServerHandle)
-				; Tell other players in the area
-				Pa$ = RCE_StrFromInt$(Item\WeaponDamageType, 1) + RCE_StrFromInt$(Handle(D), 4)
-				A2.ActorInstance = ZoneInstance\FirstInZone
-				While A2 <> Null
-					If A2\RNID > 0 Then RCE_Send(Host, A2\RNID, P_InventoryUpdate, "X" + Pa$, True)
-					A2 = A2\NextInZone
-				Wend
-				Done = True
-			EndIf
-			If Done = True Then Exit
-		Next
-	EndIf
-End Function
-
 Function BVM_ITEMWEAPONTYPE%(Param1%)
 	Item.ItemInstance = Object.ItemInstance(Param1%)
 	If Item <> Null Then Result% = Item\Item\WeaponType
@@ -857,6 +819,45 @@ Function BVM_ITEMATTRIBUTE%(Param1%, Param2$, Param3% = 0)
 Return Result%
 End Function
 
+Function BVM_ZZSETITEMDAMAGETYPE(Param1%, Param2$)
+	NewDamageType = FindDamageType(Param2$)
+	Item.ItemInstance = Object.ItemInstance(Param1%)
+	If Item <> Null
+		Item\WeaponDamageType = NewDamageType
+	; If item belongs to a human player, tell them the new health
+		Done = False
+		For AI.ActorInstance = Each ActorInstance
+			If AI\RNID > 0
+				For i = 0 To Slots_Inventory
+					If AI\Inventory\Items[i] = Item
+						Pa$ = "W" + RCE_StrFromInt$(i, 1) + RCE_StrFromInt$(Item\WeaponDamageType, 1)
+						RCE_Send(Host, AI\RNID, P_InventoryUpdate, Pa$, True)
+						Done = True
+						Exit
+					EndIf
+				Next
+			EndIf
+			If Done = True Then Exit
+		Next
+		Done = False
+		For D.DroppedItem = Each DroppedItem
+			If D\Item = Item
+				ZoneInstance.AreaInstance = Object.AreaInstance(D\ServerHandle)
+				; Tell other players in the area
+				Pa$ = RCE_StrFromInt$(Item\WeaponDamageType, 1) + RCE_StrFromInt$(Handle(D), 4)
+				A2.ActorInstance = ZoneInstance\FirstInZone
+				While A2 <> Null
+					If A2\RNID > 0 Then RCE_Send(Host, A2\RNID, P_InventoryUpdate, "X" + Pa$, True)
+					A2 = A2\NextInZone
+				Wend
+				Done = True
+				Exit
+			EndIf
+			If Done = True Then Exit
+		Next
+	EndIf
+End Function
+
 Function BVM_ZZSETITEMATTRIBUTE(Param1%, Param2$, Param3%)
 	Item.ItemInstance = Object.ItemInstance(Param1%)
 	If Item <> Null
@@ -890,6 +891,7 @@ Function BVM_ZZSETITEMATTRIBUTE(Param1%, Param2$, Param3%)
 					A2 = A2\NextInZone
 				Wend
 				Done = True
+				Exit
 			EndIf
 			If Done = True Then Exit
 		Next
@@ -929,6 +931,7 @@ Function BVM_ZZSETITEMRESISTANCE(Param1%, Param2$, Param3%)
 					A2 = A2\NextInZone
 				Wend
 				Done = True
+				Exit
 			EndIf
 			If Done = True Then Exit
 		Next

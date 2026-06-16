@@ -9,20 +9,17 @@ ChestY = Parameter(3)
 ChestZ = Parameter(4)
 ChestLevel = Parameter(5)
 
-DropMagicItems(Player, ChestZone$,ChestX,ChestY,ChestZ, ChestLevel)
+DropMagicItem(Player, ChestZone$,ChestX,ChestY,ChestZ, ChestLevel)
 
 End Function
 
-Function DropMagicItems(Player, ChestZone$,ChestX,ChestY,ChestZ, ChestLevel)
-        MaxAmtItems = ChestLevel - 2
-        If MaxAmtItems < 1 Then MaxAmtItems = 1
-        NumOfItems = Rand(1,MaxAmtItems)
-	    For x = 1 to NumOfItems Step 1
+Function DropMagicItem(Player, ChestZone$,ChestX,ChestY,ChestZ, ChestLevel)
+        
             d100 = Rand(1,100)
             MagicItemType$ = ""
-            If (d100 >= 1) And ( d100 <= 60)
+            If (d100 >= 1) And ( d100 <= 50)
                 MagicItemType$ = "Weapon"
-            ElseIf (d100 >= 61) And ( d100 <= 90)
+            ElseIf (d100 >= 51) And ( d100 <= 90)
                 MagicItemType$ = "Armor"
             ElseIf (d100 >= 91) And ( d100 <= 100)
                 MagicItemType$ = "Jewelry"
@@ -33,7 +30,7 @@ Function DropMagicItems(Player, ChestZone$,ChestX,ChestY,ChestZ, ChestLevel)
             doevents(100)
             AddMagicItemBonus(DroppedItem,MagicItemType$,Player)
             doevents(100)
-        Next
+        
 		Return
 End Function
 
@@ -72,7 +69,7 @@ Function EnchantWeapon(TargetItem,Chest)
 			NewDamageType$ = "Unholy"
 	End Select
 	ZZSETITEMDAMAGETYPE(TargetItem, NewDamageType$)
-	;Return
+	Return
 End Function
 
 Function EnchantArmor(TargetItem)
