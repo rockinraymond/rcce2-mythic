@@ -155,7 +155,7 @@ Function DropJewelry(Player, ChestZone$,ChestX,ChestY,ChestZ, ChestLevel)
             ; Send to each in turn
             For Count = 1 to PartyCount Step 1
                 Ac = PartyMember(Player, Count)
-                Output(Player, ItemName$ + " dropped on the ground!", 255, 255, 0)                   
+                Output(Ac, ItemName$ + " dropped on the ground!", 255, 255, 0)                   
             Next
         EndIf                    
     Next
@@ -469,12 +469,15 @@ End Function
             Output(Player, "You opened a Chest!", 0, 255, 0)
             If CopperShare > 0
                 Output(Player, "You recieve " + CopperShare + " copper piece(s)!", 184, 115, 51)
+                ;Output(Player, "You recieve " + CopperShare + "(" + TotalCopper + ")" + " copper piece(s)!", 184, 115, 51)
             EndIf
             If SilverShare > 0
                 Output(Player, "You recieve " + SilverShare + " silver piece(s)!", 192, 192, 192)
+                ;Output(Player, "You recieve " + SilverShare + "(" + TotalSilver + ")" + " silver piece(s)!", 192, 192, 192)
             EndIf
             If GoldShare > 0
                 Output(Player, "You recieve " + GoldShare + " gold piece(s)!", 255, 215, 0)
+                ;Output(Player, "You recieve " + GoldShare + "(" + TotalGold + ")" + " gold piece(s)!", 255, 215, 0)
             EndIf
             ChangeMoney(Player, TotalShare)
             
