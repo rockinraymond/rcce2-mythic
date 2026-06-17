@@ -310,9 +310,10 @@ Function TriggerTrap(Player, Chest, D)
 			Output(Player, TrapName$ + " hits you for " + DamageRoll + " " + TrapDamageType$ + " damage!", 255, 50, 50)
 			If NewHealth < 0
 				SetAttribute(Player, "Health", 0)
+			Else
+				SetAttribute(Player, "Health", NewHealth)
 			EndIf
-			SetAttribute(Player, "Health", NewHealth)
-		Else
+	Else
 			Output(Player, "You have been slain by poison!", 0, 150, 0)
 			SetAttribute(Player, "Health", 0)
 		EndIf
