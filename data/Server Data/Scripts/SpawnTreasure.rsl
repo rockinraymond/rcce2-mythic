@@ -1,20 +1,163 @@
 Using "RC_Core.rcm"
 
 Function Main()
-Player = Actor()
-ChestZone$ = Parameter(1)
+        Player = Actor()
+        ChestZone$ = Parameter(1)
 
-ChestX = Parameter(2)
-ChestY = Parameter(3)
-ChestZ = Parameter(4)
-ChestLevel = Parameter(5)
+        ChestX = Parameter(2)
+        ChestY = Parameter(3)
+        ChestZ = Parameter(4)
+        ChestLevel = Parameter(5)
 
-DropMagicItem(Player, ChestZone$,ChestX,ChestY,ChestZ, ChestLevel)
+        ;Generate and give out gold
+        TotalCopper = GenerateCoins("Copper",ChestLevel)
+        TotalSilver = GenerateCoins("Silver",ChestLevel)
+        TotalGold = GenerateCoins("Gold",ChestLevel)
+        DivideMoneyForParty(Player,TotalCopper,TotalSilver,TotalGold)
+
+        ;Chance of Dropping Jewlery
+        JewelryDrop = Rand(1,100)
+        If (JewelryDrop <= 45 + (ChestLevel * 5))   
+            DropJewelry(Player, ChestZone$,ChestX,ChestY,ChestZ, ChestLevel)
+        EndIf
+
+        ;Chance of Dropping a Magic Item
+        MagicItemDrop = Rand(1,100)
+        If (MagicItemDrop <= 35 + (ChestLevel * 5))   
+            DropMagicItem(Player, ChestZone$,ChestX,ChestY,ChestZ, ChestLevel)
+        EndIf
+
+End Function
+
+Function GenerateCoins(CoinType$, ChestLevel)
+
+    Amount = 1
+    Chance = 1
+
+    Select CoinType$
+        Case "Copper"
+            Select ChestLevel
+                Case 1
+                    Amount = Rand(1,8) * 100
+                    Chance = 75
+                Case 2
+                    Amount = Rand(1,10) * 100
+                    Chance = 50
+                Case 3
+                    Amount = (Rand(1,6) + Rand(1,6)) * 100
+                    Chance = 30
+                Case 4
+                    Amount = (Rand(1,6) + Rand(1,6) + Rand(1,6)) * 100
+                    Chance = 20
+                Case 5
+                    Amount = (Rand(1,6) + Rand(1,6) + Rand(1,6) + Rand(1,6)) * 100
+                    Chance = 15
+                End Select
+        Case "Silver"
+            Select ChestLevel
+                Case 1
+                    Amount = Rand(1,6) * 100
+                    Chance = 50
+                Case 2
+                    Amount = Rand(1,8) * 100
+                    Chance = 50
+                Case 3
+                    Amount = Rand(1,10) * 100
+                    Chance = 50
+                Case 4
+                    Amount = (Rand(1,6) + Rand(1,6)) * 100
+                    Chance = 50
+                Case 5
+                    Amount = (Rand(1,6) + Rand(1,6) + Rand(1,6)) * 100
+                    Chance = 50
+                End Select
+        Case "Gold"
+            Select ChestLevel
+                Case 1
+                    Amount = Rand(1,4) * 100
+                    Chance = 15
+                Case 2
+                    Amount = Rand(1,6) * 100
+                    Chance = 20
+                Case 3
+                    Amount = Rand(1,8) * 100
+                    Chance = 50
+                Case 4
+                    Amount = (Rand(1,6) + Rand(1,6)) * 100
+                    Chance = 50
+                Case 5
+                    Amount = (Rand(1,8) + Rand(1,8)) * 100
+                    Chance = 70
+                End Select
+    End Select
+
+    CoinRoll = Rand(1,100)
+
+    If CoinRoll > Chance
+        Amount = 0
+    EndIf
+
+    Return Amount
+End Function
+
+Function DropJewelry(Player, ChestZone$,ChestX,ChestY,ChestZ, ChestLevel)
+    PartyCount = CountPartyMembers(Player) + 1
+    MaxAmt = 3 + ChestLevel
+   
+    DropAmt = Rand(1,MaxAmt)
+    For Count = 1 to DropAmt Step 1
+        ItemName$ = ""
+        d6 = rand(1,6)
+			If (d6 >= 1) And (d6 <= 4) ;Rings
+				d8 = rand(1,8)
+				Select d8
+					Case 1
+						ItemName$ = "Topaz Ring"
+					Case 2
+						ItemName$ = "Malachite Ring"
+					Case 3
+						ItemName$ = "Amethyst Ring"
+					Case 4
+						ItemName$ = "Garnet Ring"
+					Case 5
+						ItemName$ = "Sapphire Ring"
+					Case 6
+						ItemName$ = "Emerald Ring"
+					Case 7
+						ItemName$ = "Ruby Ring"
+					Case 8
+						ItemName$ = "Diamond Ring"
+				End Select
+			ElseIf (d6 >= 5) And ( d6 <= 6) ;Amulets
+				d4 = rand(1,4)
+				Select d4
+					Case 1
+						ItemName$ = "Sapphire Amulet"
+					Case 2
+						ItemName$ = "Emerald Amulet"
+					Case 3
+						ItemName$ = "Ruby Amulet"
+					Case 4
+						ItemName$ = "Diamond Amulet"
+				End Select
+			EndIf
+        Output(Player, ItemName$ + " dropped on the ground!", 255, 255, 0)
+        Spawnitem(ItemName$,1,ChestZone$,ChestX,ChestY,ChestZ)
+        If PartyCount > 1
+            Count = 1
+            ; Send to each in turn
+            For Count = 1 to PartyCount Step 1
+                Ac = PartyMember(Player, Count)
+                Output(Player, ItemName$ + " dropped on the ground!", 255, 255, 0)                   
+            Next
+        EndIf                    
+    Next
 
 End Function
 
 Function DropMagicItem(Player, ChestZone$,ChestX,ChestY,ChestZ, ChestLevel)
-        
+            PartyCount = CountPartyMembers(Player) + 1
+            
             d100 = Rand(1,100)
             MagicItemType$ = ""
             If (d100 >= 1) And ( d100 <= 50)
@@ -25,6 +168,16 @@ Function DropMagicItem(Player, ChestZone$,ChestX,ChestY,ChestZ, ChestLevel)
                 MagicItemType$ = "Jewelry"
             EndIf
             ItemName$ = MagicItemNameGenerator(MagicItemType$, ChestLevel)
+            Output(Player, ItemName$ + " dropped on the ground!", 255, 50, 255)  
+            If PartyCount > 1
+                Count = 1
+                ; Send to each in turn
+                For Count = 1 to PartyCount Step 1
+                    Ac = PartyMember(Player, Count)
+                    Output(Ac, ItemName$ + " dropped on the ground!", 255, 50, 255)                    
+                Next
+            EndIf
+
             Spawnitem(ItemName$,1,ChestZone$,ChestX,ChestY,ChestZ)
             DroppedItem = ZZLASTSPAWNEDITEM(ChestZone)
             doevents(100)
@@ -294,3 +447,52 @@ Function MagicItemNameGenerator$(ItemType$,ChestLevel)
 	Return ItemName$
 
 End Function
+
+; Send a message to a player's party
+		Function DivideMoneyForParty(Player,TotalCopper,TotalSilver,TotalGold)
+			PlayerName$ = Name(Player)
+            PartyCount = CountPartyMembers(Player) + 1
+
+            CopperShare = TotalCopper / PartyCount
+            SilverShare = TotalSilver / PartyCount
+            GoldShare = TotalGold / PartyCount
+            TotalShare = CopperShare + (SilverShare * 10) + (GoldShare * 100)
+            
+            ;Give to Opening Player
+            Output(Player, "You opened a Chest!", 0, 255, 0)
+            If CopperShare > 0
+                Output(Player, "You recieve " + CopperShare + " copper piece(s)!", 184, 115, 51)
+            EndIf
+            If SilverShare > 0
+                Output(Player, "You recieve " + SilverShare + " silver piece(s)!", 192, 192, 192)
+            EndIf
+            If GoldShare > 0
+                Output(Player, "You recieve " + GoldShare + " gold piece(s)!", 255, 215, 0)
+            EndIf
+            ChangeMoney(Player, TotalShare)
+            
+            GiveXP(Player,TotalShare/100)
+            
+            
+            If PartyCount > 1
+                Count = 1
+                ; Send to each in turn
+                For Count = 1 to PartyCount Step 1
+                    Ac = PartyMember(Player, Count)
+                    Output(Ac, PlayerName$ + " opened a Chest!", 0, 255, 0)
+                    If CopperShare > 0
+                        Output(Ac, "You recieve " + CopperShare + " copper piece(s)!", 184, 115, 51)
+                    EndIf
+                    If SilverShare > 0
+                        Output(Ac, "You recieve " + SilverShare + " silver piece(s)!", 192, 192, 192)
+                    EndIf
+                    If GoldShare > 0
+                        Output(Ac, "You recieve " + GoldShare + " gold piece(s)!", 255, 215, 0)
+                    EndIf
+                    ChangeMoney(Ac, TotalShare)
+                Next
+            EndIf
+
+
+			Return
+		End Function
