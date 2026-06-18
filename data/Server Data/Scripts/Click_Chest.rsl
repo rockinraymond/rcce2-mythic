@@ -258,6 +258,7 @@ End Function
 
 Function TriggerTrap(Player, Chest, D)
 	TrapType = Attribute(Chest, "Attack Bonus")
+	PartyCount = CountPartyMembers(Player)
 	;TrapDamageDie = Attribute(Chest, "Damage Bonus")
 	ChestLevel = ActorLevel(Chest) 
 
@@ -295,6 +296,14 @@ Function TriggerTrap(Player, Chest, D)
 			SaveAttribute$ = "Constitution"
 	End Select
 	Output(Player, "You have sprung a " + TrapName$ + "!", 255, 150, 0)
+	
+	If PartyCount > 0
+		; Send to each in turn
+		For Count = 1 to PartyCount Step 1
+			Ac = PartyMember(Player, Count)
+			Output(Ac, Name(Player) + " has sprung a " + TrapName$ + "!", 255, 150, 0)                    
+		Next
+    EndIf
 	SetAttribute(Chest, "Stealth Mod", 1)
 	SetAttribute(Chest, "Attack Bonus", 0)
 
@@ -304,10 +313,24 @@ Function TriggerTrap(Player, Chest, D)
 
 	If SaveRoll < SaveTarget
 		Output(Player, "You fail to save against " + TrapSaveType$ + "!", 255, 50, 50)
+		If PartyCount > 0
+			; Send to each in turn
+			For Count = 1 to PartyCount Step 1
+				Ac = PartyMember(Player, Count)
+				Output(Ac, Name(Player) + " has failed to save against " + TrapSaveType$ + "!", 255, 50, 50)                  
+			Next
+   		EndIf
 		If TrapSaveType$ <> "Poison"
 			DamageRoll = Rand(1,TrapDamageDie) + TrapDamageBonus - Resistance(Player, TrapDamageType$)
 			NewHealth = Attribute(Player, "Health") - DamageRoll
 			Output(Player, TrapName$ + " hits you for " + DamageRoll + " " + TrapDamageType$ + " damage!", 255, 50, 50)
+			If PartyCount > 0
+				; Send to each in turn
+				For Count = 1 to PartyCount Step 1
+					Ac = PartyMember(Player, Count)
+					Output(Ac, TrapName$ + " hits "+ Name(Player) +" for " + DamageRoll + " " + TrapDamageType$ + " damage!", 255, 50, 50)                 
+				Next
+   			EndIf
 			If NewHealth < 0
 				SetAttribute(Player, "Health", 0)
 			Else
@@ -315,10 +338,24 @@ Function TriggerTrap(Player, Chest, D)
 			EndIf
 	Else
 			Output(Player, "You have been slain by poison!", 0, 150, 0)
+			If PartyCount > 0
+				; Send to each in turn
+				For Count = 1 to PartyCount Step 1
+					Ac = PartyMember(Player, Count)
+					Output(Ac, Name(Player) +" has been slain by poison!", 0, 150, 0)             
+				Next
+   			EndIf
 			SetAttribute(Player, "Health", 0)
 		EndIf
 	Else
 		Output(Player, "You successfully save against " + TrapSaveType$ + "!", 50, 255, 50)
+		If PartyCount > 0
+			; Send to each in turn
+			For Count = 1 to PartyCount Step 1
+				Ac = PartyMember(Player, Count)
+				Output(Ac, Name(Player) +" has successfully saved against " + TrapSaveType$ + "!", 50, 255, 50)          
+			Next
+		EndIf
 	EndIf
 	Return 1
 

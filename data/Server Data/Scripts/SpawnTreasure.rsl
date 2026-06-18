@@ -27,8 +27,8 @@ Function Main()
         ;Chance of Dropping a Magic Item
         MagicItemDrop = Rand(1,100)
         If (MagicItemDrop <= 35 + (ChestLevel * 5))   
-            DropMagicItem(Player, ChestZone$,ChestX,ChestY,ChestZ, ChestLevel)
-            ChestXP = ChestXp + 500
+            AmtOfMagItems = DropMagicItems(Player, ChestZone$,ChestX,ChestY,ChestZ, ChestLevel)
+            ChestXP = ChestXp + (500 * AmtOfMagItems)
         EndIf
 
         If ChestXP > 0
@@ -109,10 +109,11 @@ End Function
 
 Function DropJewelry(Player, ChestZone$,ChestX,ChestY,ChestZ, ChestLevel)
     PartyCount = CountPartyMembers(Player) + 1
+    
     MaxAmt = 1 + ChestLevel
-   
     DropAmt = Rand(1,MaxAmt)
-    For Count = 1 to DropAmt Step 1
+
+    For JewelryCount = 1 to DropAmt Step 1
         ItemName$ = ""
         d6 = rand(1,6)
 			If (d6 >= 1) And (d6 <= 4) ;Rings
@@ -151,9 +152,8 @@ Function DropJewelry(Player, ChestZone$,ChestX,ChestY,ChestZ, ChestLevel)
         Output(Player, ItemName$ + " dropped on the ground!", 255, 255, 0)
         Spawnitem(ItemName$,1,ChestZone$,ChestX,ChestY,ChestZ)
         If PartyCount > 1
-            Count = 1
             ; Send to each in turn
-            For Count = 1 to PartyCount Step 1
+            For Count = 1 to (PartyCount - 1) Step 1
                 Ac = PartyMember(Player, Count)
                 Output(Ac, ItemName$ + " dropped on the ground!", 255, 255, 0)                   
             Next
@@ -162,36 +162,43 @@ Function DropJewelry(Player, ChestZone$,ChestX,ChestY,ChestZ, ChestLevel)
     Return DropAmt
 End Function
 
-Function DropMagicItem(Player, ChestZone$,ChestX,ChestY,ChestZ, ChestLevel)
+Function DropMagicItems(Player, ChestZone$,ChestX,ChestY,ChestZ, ChestLevel)
             PartyCount = CountPartyMembers(Player) + 1
             
-            d100 = Rand(1,100)
-            MagicItemType$ = ""
-            If (d100 >= 1) And ( d100 <= 50)
-                MagicItemType$ = "Weapon"
-            ElseIf (d100 >= 51) And ( d100 <= 90)
-                MagicItemType$ = "Armor"
-            ElseIf (d100 >= 91) And ( d100 <= 100)
-                MagicItemType$ = "Jewelry"
+            MaxAmt = ChestLevel - 2
+            If MaxAmt < 1
+                MaxAmt = 1
             EndIf
-            ItemName$ = MagicItemNameGenerator(MagicItemType$, ChestLevel)
-            Output(Player, ItemName$ + " dropped on the ground!", 255, 50, 255)  
-            If PartyCount > 1
-                Count = 1
-                ; Send to each in turn
-                For Count = 1 to PartyCount Step 1
-                    Ac = PartyMember(Player, Count)
-                    Output(Ac, ItemName$ + " dropped on the ground!", 255, 50, 255)                    
-                Next
-            EndIf
+            DropAmt = Rand(1,MaxAmt)
 
-            Spawnitem(ItemName$,1,ChestZone$,ChestX,ChestY,ChestZ)
-            doevents(100)
-            DroppedItem = ZZLASTSPAWNEDITEM(ChestZone)
-            doevents(10)
-            AddMagicItemBonus(DroppedItem,MagicItemType$,Player)
+            For MagItemCount = 1 to DropAmt Step 1
+                d100 = Rand(1,100)
+                MagicItemType$ = ""
+                If (d100 >= 1) And ( d100 <= 50)
+                    MagicItemType$ = "Weapon"
+                ElseIf (d100 >= 51) And ( d100 <= 90)
+                    MagicItemType$ = "Armor"
+                ElseIf (d100 >= 91) And ( d100 <= 100)
+                    MagicItemType$ = "Jewelry"
+                EndIf
+                ItemName$ = MagicItemNameGenerator(MagicItemType$, ChestLevel)
+                Output(Player, ItemName$ + " dropped on the ground!", 255, 50, 255)  
+                If PartyCount > 1
+                    ; Send to each in turn
+                    For Count = 1 to (PartyCount -1) Step 1
+                        Ac = PartyMember(Player, Count)
+                        Output(Ac, ItemName$ + " dropped on the ground!", 255, 50, 255)                    
+                    Next
+                EndIf
+
+                Spawnitem(ItemName$,1,ChestZone$,ChestX,ChestY,ChestZ)
+                doevents(100)
+                DroppedItem = ZZLASTSPAWNEDITEM(ChestZone)
+                doevents(10)
+                AddMagicItemBonus(DroppedItem,MagicItemType$,Player)
+            Next
         
-		Return
+		Return DropAmt
 End Function
 
 Function AddMagicItemBonus(TargetItem, MagicItemType$, Chest)
@@ -464,6 +471,7 @@ End Function
             SilverShare = TotalSilver / PartyCount
             GoldShare = TotalGold / PartyCount
             TotalShare = CopperShare + (SilverShare * 10) + (GoldShare * 100)
+            AllCoins = TotalCopper + (TotalSilver * 10) + (TotalGold * 100)
             
             ;Give to Opening Player
             Output(Player, "You opened a Chest!", 0, 255, 0)
@@ -482,9 +490,8 @@ End Function
             ChangeMoney(Player, TotalShare)
             
             If PartyCount > 1
-                Count = 1
                 ; Send to each in turn
-                For Count = 1 to PartyCount Step 1
+                For Count = 1 to (PartyCount - 1) Step 1
                     Ac = PartyMember(Player, Count)
                     Output(Ac, PlayerName$ + " opened a Chest!", 0, 255, 0)
                     If CopperShare > 0
@@ -501,5 +508,5 @@ End Function
             EndIf
 
 
-			Return TotalShare/100
+			Return AllCoins/100
 		End Function
