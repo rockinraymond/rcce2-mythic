@@ -2032,7 +2032,8 @@ EndIf
 							GY_CreateLabel(WTooltip, 0.32, Y#, "Accuracy: " + Str$(Accuracy))
 							GY_CreateLabel(WTooltip, 0.62, Y#, "Speed: " + GetAttackSpeedString$(Speed))
 							Y# = Y# + YInterval#
-							GY_CreateLabel(WTooltip, 0.02, Y#, LanguageString$(LS_DamageType) + " " + DamType$)
+							SetDamageTypeColor(DamType$)
+							GY_CreateLabel(WTooltip, 0.02, Y#, LanguageString$(LS_DamageType) + " " + DamType$,ToolTipDamageTypeRGB(0),ToolTipDamageTypeRGB(1),ToolTipDamageTypeRGB(2))
 							Y# = Y# + YInterval#
 							GY_CreateLabel(WTooltip, 0.02, Y#, "Weapon Size: " + WepType$)
 							Y# = Y# + YInterval#
@@ -2205,7 +2206,8 @@ EndIf
 							GY_CreateLabel(WTooltip, 0.32, Y#, "Accuracy: " + Str$(Accuracy))
 							GY_CreateLabel(WTooltip, 0.62, Y#, "Speed: " + GetAttackSpeedString$(Speed))
 							Y# = Y# + YInterval#
-							GY_CreateLabel(WTooltip, 0.02, Y#, LanguageString$(LS_DamageType) + " " + DamType$)
+							SetDamageTypeColor(DamType$)
+							GY_CreateLabel(WTooltip, 0.02, Y#, LanguageString$(LS_DamageType) + " " + DamType$,ToolTipDamageTypeRGB(0),ToolTipDamageTypeRGB(1),ToolTipDamageTypeRGB(2))
 							Y# = Y# + YInterval#
 							GY_CreateLabel(WTooltip, 0.02, Y#, "Weapon Size: " + WepType$)
 							Y# = Y# + YInterval#
@@ -2372,7 +2374,8 @@ EndIf
 							GY_CreateLabel(WTooltip, 0.32, Y#, "Accuracy: " + Str$(Accuracy))
 							GY_CreateLabel(WTooltip, 0.62, Y#, "Speed: " + GetAttackSpeedString$(Speed))
 							Y# = Y# + YInterval#
-							GY_CreateLabel(WTooltip, 0.02, Y#, LanguageString$(LS_DamageType) + " " + DamType$)
+							SetDamageTypeColor(DamType$)
+							GY_CreateLabel(WTooltip, 0.02, Y#, LanguageString$(LS_DamageType) + " " + DamType$,ToolTipDamageTypeRGB(0),ToolTipDamageTypeRGB(1),ToolTipDamageTypeRGB(2))
 							Y# = Y# + YInterval#
 							GY_CreateLabel(WTooltip, 0.02, Y#, "Weapon Size: " + WepType$)
 							Y# = Y# + YInterval#

@@ -19,6 +19,11 @@ Function Main()
         Return
     EndIf
 
+    If (ZZItemRarity(TargetItem) > 1) And (PlayerArmorerSkill < 50)
+        Output(Player, "You need an armorer skill of at least 50 to repair magical items!", 255, 0, 150)
+        Return
+    EndIf
+
     Output(Player, "You begin to repair: " + NameOfItem$ + "...", 0, 255, 255)
 
     ;create progress bar

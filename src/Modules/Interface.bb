@@ -109,6 +109,7 @@ Global WAmount, BAmountOK, TAmount, AmountSlot, AmountVisible
 Global MouseSlotEN, MouseSlotItem.ItemInstance, MouseSlotAmount, MouseSlotSource = -1
 Global ContextItem.ItemInstance, ContextAmount, ContextSource = -1 ;added for item actions
 Dim BSlots(Slots_Inventory)
+Dim ToolTipDamageTypeRGB(2)
 Global WItemWindow, ItemWindowFromInventory ; Image Item Window
 
 ; Trading window
@@ -638,4 +639,38 @@ Function ControlName$(ControlNumber)
 
 	Return LanguageString$(LS_Unknown)
 
+End Function
+
+Function SetDamageTypeColor(DamageType$)
+	Dim ToolTipDamageTypeRGB(2)
+	Select FindDamageType(DamageType$)
+		Case FindDamageType("Fire")
+			ToolTipDamageTypeRGB(0) = 255
+			ToolTipDamageTypeRGB(1) = 125
+			ToolTipDamageTypeRGB(2) = 0
+		Case FindDamageType("Frost")
+			ToolTipDamageTypeRGB(0) = 150
+			ToolTipDamageTypeRGB(1) = 150
+			ToolTipDamageTypeRGB(2) = 255
+		Case FindDamageType("Lightning")
+			ToolTipDamageTypeRGB(0) = 50
+			ToolTipDamageTypeRGB(1) = 0
+			ToolTipDamageTypeRGB(2) = 255
+		Case FindDamageType("Magical")
+			ToolTipDamageTypeRGB(0) = 0
+			ToolTipDamageTypeRGB(1) = 255
+			ToolTipDamageTypeRGB(2) = 0
+		Case FindDamageType("Holy")
+			ToolTipDamageTypeRGB(0) = 255
+			ToolTipDamageTypeRGB(1) = 255
+			ToolTipDamageTypeRGB(2) = 0
+		Case FindDamageType("Unholy")
+			ToolTipDamageTypeRGB(0) = 255
+			ToolTipDamageTypeRGB(1) = 0
+			ToolTipDamageTypeRGB(2) = 255
+		default
+			ToolTipDamageTypeRGB(0) = 255
+			ToolTipDamageTypeRGB(1) = 255
+			ToolTipDamageTypeRGB(2) = 255
+	End Select
 End Function
