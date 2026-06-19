@@ -1518,3 +1518,8 @@ Item Name: Diamond Amulet +5
 Value: 28800000
 Rarity: 6
 
+Item ID: 304
+Item Name: Repair Hammer
+Value: 200
+Rarity: 1
+

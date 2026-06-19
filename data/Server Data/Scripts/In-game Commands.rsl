@@ -132,6 +132,10 @@ ZZSETITEMATTRIBUTE(newarmor, "Carry Weight Mod", 20)
 
 End Function
 
+function testdamagewep()
+	SetItemHealth(ActorWeapon(Actor()), 10)
+end function
+
 function giveLockPicks()
 	giveitem(actor(), "Lockpick", 100)
 end function

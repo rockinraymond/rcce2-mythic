@@ -2,13 +2,106 @@ Using "RC_Core.rcm"
 Function Main()
 
 	Player = Actor()
+    PlayerArmorerSkill = Attribute(Player, "Armorer")
+	PlayerTGHMod = AbilityBonus(Attribute(Player, "Toughness")) * 5
     TargetItem = Parameter(1)
+    CurrentItemHealth = ItemHealth(TargetItem)
 
     NameOfItem$ = ItemName(TargetItem)
 
-    Output(Player, "You repair: " + NameOfItem$, 0, 255, 255)
+    If (HasItem(Player, "Repair Hammer", 1) = 0)
+        Output(Player,"You do not have any repair hammers!", 255, 150, 0)
+        Return
+    EndIf
+
+    If (ItemHealth(TargetItem) = 100)
+        Output(Player, NameOfItem$ + " is already fully repaired!", 255, 255, 0)
+        Return
+    EndIf
+
+    Output(Player, "You begin to repair: " + NameOfItem$ + "...", 0, 255, 255)
+
+    ;create progress bar
+	repairTime = (100 - PlayerArmorerSkill) - PlayerTGHMod
+	Bar = CreateProgressBar(Player,200,200,0,.4,.8,.2,.04,repairTime,0,"Repairing " + NameOfItem$)
+	Repeat
+	UpdateProgressBar(Player,bar,i)
+    DoEvents(100)
+    i =  i + 1
+    If(Attribute(Player, "Health") < 0)
+        Output(Player, "You cannot repair items when you are dead",255, 255, 0)
+        DeleteProgressBar(Player,Bar)
+        Return 1
+    EndIf
+	Until i = repairTime
+	DeleteProgressBar(Player,Bar)
 	
+    ;Repair Item
+    RepairValue = PlayerArmorerSkill + PlayerTGHMod
+    
+    If (CurrentItemHealth + RepairValue) > 100
+        RepairValue = 100 - CurrentItemHealth
+    EndIf
+    NewItemHealth = CurrentItemHealth + RepairValue
+    SetItemHealth(TargetItem, NewItemHealth)
+    Output(Player, "You have repaired: " + NameOfItem$ + "!", 100, 255, 100)
+
+    ZZADDSKILLXP(Player, "Armorer", RepairValue * 7)	
+
+    ;roll for hammerBreak
+	BreakRoll = Rand(1,100) - PlayerTGHMod
+
+	;hammer breaks
+	If BreakRoll > PlayerArmorerSkill
+		Output(Player, "Your repair hammer breaks!", 255, 0, 0)
+		GiveItem(Player,"Repair Hammer",-1)
+	EndIf
 
 	Return
 
+End Function
+
+Function AbilityBonus(SkillLevel%)
+    Select SkillLevel
+    case 3
+    return -3
+    case 4
+    return -2
+    case 5
+    return -2
+    case 6
+    return -1
+    case 7 
+    return -1
+    case 8
+    return -1
+    case 13 
+    return 1
+    case 14
+    return 1
+    case 15
+    return 1
+    case 16
+    return 2
+    case 17
+    return 2
+    case 18
+    return 3
+    Case 19
+    Return 3
+    Case 20
+    Return 4
+    Case 21
+    Return 4
+    Case 22
+    Return 4
+    Case 23
+    Return 4
+    Case 24
+    Return 4
+    Case 25
+    Return 5
+    default 
+    return 0
+    End Select
 End Function
