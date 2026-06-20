@@ -196,6 +196,10 @@ Function DropMagicItems(Player, ChestZone$,ChestX,ChestY,ChestZ, ChestLevel)
                 DroppedItem = ZZLASTSPAWNEDITEM(ChestZone)
                 doevents(10)
                 AddMagicItemBonus(DroppedItem,MagicItemType$,Player)
+				;Roll for curse
+				If Rand(1,100) < 8
+					EnchantJewelry(DroppedItem,1)
+				EndIf
             Next
         
 		Return DropAmt
@@ -214,8 +218,7 @@ Function AddMagicItemBonus(TargetItem, MagicItemType$, Chest)
 				EnchantArmor(TargetItem)
 			EndIf
 		case "Jewelry"
-			;EnchantJewelry(TargetItem)
-			EnchantArmor(TargetItem)	
+			EnchantJewelry(TargetItem)
 	End Select
 	Return
 End Function
@@ -298,6 +301,142 @@ Function EnchantArmor(TargetItem)
 					TargetStat$ = "Death Ray"
 			End Select
 	End Select
+
+	If BonusCategory = 2
+		ZZSETITEMRESISTANCE(TargetItem, TargetStat$, BonusValue)
+	Else
+		ZZSETITEMATTRIBUTE(TargetItem, TargetStat$, BonusValue)
+	EndIf
+	Return
+End Function
+
+Function EnchantJewelry(TargetItem, isCurse=0)
+	BonusValue = ZZITEMRARITY(TargetItem) - 1
+	BonusCategory = Rand(1,4)
+	TargetStat$ = ""
+
+	Select BonusCategory
+		case 1 ;Attributes
+			Select Rand(1,8)
+				case 1
+					TargetStat$ = "Strength"
+				case 2
+					TargetStat$ = "Toughness"
+				case 3
+					TargetStat$ = "Dexterity"
+				case 4
+					TargetStat$ = "Agility"
+				case 5
+					TargetStat$ = "Constitution"
+				case 6
+					TargetStat$ = "Wisdom"
+				case 7
+					TargetStat$ = "Intelligence"
+				case 8
+					TargetStat$ = "Charisma"
+			End Select
+		case 2 ;Resistances
+			Select Rand(1,15)
+				case 1
+					TargetStat$ = "Blunt"
+				case 2
+					TargetStat$ = "Edged"
+				case 3
+					TargetStat$ = "Missile"
+				case 4
+					TargetStat$ = "Magical"
+				case 5
+					TargetStat$ = "Frost"
+				case 6
+					TargetStat$ = "Fire"
+				case 7
+					TargetStat$ = "Lightning"
+				case 8
+					TargetStat$ = "Holy"
+				case 9
+					TargetStat$ = "Unholy"
+				case 10
+					TargetStat$ = "Poison"
+				case 11
+					TargetStat$ = "Paralysis"
+				case 12
+					TargetStat$ = "Spells"
+				case 13
+					TargetStat$ = "Wands"
+				case 14
+					TargetStat$ = "Dragon Breath"
+				case 15
+					TargetStat$ = "Death Ray"
+				End Select
+		case 3 ;Skills
+			BonusValue = BonusValue * 5
+			Select Rand(1,21)
+				case 1
+					TargetStat$ = "Swords"
+				case 2
+					TargetStat$ = "Daggers"
+				case 3
+					TargetStat$ = "Axes"
+				case 4
+					TargetStat$ = "Blunt Weapons"
+				case 5
+					TargetStat$ = "Polearms/Spears"
+				case 6
+					TargetStat$ = "Bows"
+				case 7
+					TargetStat$ = "Staves"
+				case 8
+					TargetStat$ = "Unarmed"
+				case 9
+					TargetStat$ = "Light Armor"
+				case 10
+					TargetStat$ = "Medium Armor"
+				case 11
+					TargetStat$ = "Heavy Armor"
+				case 12
+					TargetStat$ = "Block"
+				case 13
+					TargetStat$ = "Arcane Casting"
+				case 14
+					TargetStat$ = "Divine Casting"
+				case 15
+					TargetStat$ = "Stealth"
+				case 16
+					TargetStat$ = "Trap Disarming"
+				case 17
+					TargetStat$ = "Lockpicking"
+				case 18
+					TargetStat$ = "Pickpocketing"
+				case 19
+					TargetStat$ = "Enchanting"
+				case 20
+					TargetStat$ = "Alchemy"
+				case 21
+					TargetStat$ = "Armorer"
+				End Select
+			case 4 ;Derived Stats
+			Select Rand(1,6)
+				case 1
+					TargetStat$ = "Attack Bonus"
+				case 2
+					TargetStat$ = "Damage Bonus"
+				case 3
+					TargetStat$ = "Armor Bonus"
+				case 4
+					TargetStat$ = "Movement"
+					BonusValue = BonusValue * 5
+				case 5
+					TargetStat$ = "ATK Speed Bonus"
+					BonusValue = BonusValue * 5
+				case 6
+					TargetStat$ = "Carry Weight Mod"
+					BonusValue = BonusValue * 10
+			End Select
+	End Select
+
+	If isCurse = 1
+		BonusValue = BonusValue * -1
+	EndIf
 
 	If BonusCategory = 2
 		ZZSETITEMRESISTANCE(TargetItem, TargetStat$, BonusValue)
