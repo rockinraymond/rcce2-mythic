@@ -1997,7 +1997,7 @@ EndIf
 					If Y# + 0.4 > 0.99 Then Y# = 0.59
 					If X# + 0.4 > 0.99 Then X# = 0.59
 					If LTooltip <> 0 Then GY_FreeGadget(LTooltip) : LTooltip = 0
-					WTooltip = GY_CreateWindowColoredTitle(Name$,NameR,NameG, NameB, X#, Y#, 0.2, 0.25, True, False, False)
+					WTooltip = GY_CreateWindowColoredTitle(Name$,NameR,NameG, NameB, X#, Y#, 0.25, 0.25, True, False, False)
 					WTooltipReturn = WInventory
 					Y# = 0.025
 					YInterval# = 0.055
@@ -2112,9 +2112,9 @@ EndIf
 					ItemDescriptionLine1$ = ItemDescription$
 					ItemDescriptionLine2$ = ""
 
-					If Len(ItemDescription$) > 43
+					If Len(ItemDescription$) > 53
 						SplitChar = 0
-						For i = 43 To 1 Step -1
+						For i = 53 To 1 Step -1
 							If Mid$(ItemDescription$, i, 1) = " " Then SplitChar = i : Exit
 						Next
 						If SplitChar > 0
@@ -2167,7 +2167,7 @@ EndIf
 					If Y# + 0.4 > 0.99 Then Y# = 0.59
 					If X# + 0.4 > 0.99 Then X# = 0.59
 					If LTooltip <> 0 Then GY_FreeGadget(LTooltip) : LTooltip = 0
-					WTooltip = GY_CreateWindowColoredTitle(Name$,NameR,NameG,NameB, X#, Y#, 0.2, 0.25, True, False, False)
+					WTooltip = GY_CreateWindowColoredTitle(Name$,NameR,NameG,NameB, X#, Y#, 0.25, 0.25, True, False, False)
 					WTooltipReturn = WTrading
 					Y# = 0.025
 					GY_CreateLabel(WTooltip, 0.02, Y#, LanguageString$(LS_Type) + " " + GetItemType$(Me\Inventory\Items[i + SlotI_Backpack]\Item))
@@ -2335,7 +2335,7 @@ EndIf
 					If Y# + 0.4 > 0.99 Then Y# = 0.59
 					If X# + 0.4 > 0.99 Then X# = 0.59
 					If LTooltip <> 0 Then GY_FreeGadget(LTooltip) : LTooltip = 0
-					WTooltip = GY_CreateWindowColoredTitle(Name$, NameR, NameG, NameB, X#, Y#, 0.2, 0.25, True, False, False)
+					WTooltip = GY_CreateWindowColoredTitle(Name$, NameR, NameG, NameB, X#, Y#, 0.25, 0.25, True, False, False)
 					WTooltipReturn = WTrading
 					Y# = 0.025
 					YInterval# = 0.055
