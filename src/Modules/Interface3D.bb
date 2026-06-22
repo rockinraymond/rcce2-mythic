@@ -3848,16 +3848,17 @@ Function CreateCharInteractionWindow(AI.ActorInstance)
 	If Trim$(Name$) = "" Then Name$ = AI\Actor\Race$
 	
 	If Resolutiontype = 1
-		WCharInteract = GY_CreateWindow(Name$, 0.89, 0.03, 0.27, 0.15, True, True, False, LoadTexture("Data\Textures\GUI\PartyBG.png"))
+		WCharInteract = GY_CreateWindow("Target", 0.89, 0.03, 0.2, 0.07, True, True, False, LoadTexture("Data\Textures\GUI\PartyBG.png"))
 	Else
-		WCharInteract = GY_CreateWindow(Name$, 0.60, 0.03, 0.27, 0.15, True, True, False, LoadTexture("Data\Textures\GUI\PartyBG.png"))
+		WCharInteract = GY_CreateWindow("Target", 0.60, 0.03, 0.2, 0.07, True, True, False, LoadTexture("Data\Textures\GUI\PartyBG.png"))
 	EndIf
-	GY_CreateLabel(WCharInteract, 0.05, 0.1, AttributeNames$(HealthStat) + ":")
+	//GY_CreateLabel(WCharInteract, 0.05, 0.5, AttributeNames$(HealthStat) + ":")
 	HealthVal = (Float#(AI\Attributes\Value[HealthStat]) / Float#(AI\Attributes\Maximum[HealthStat])) * 500.0
-	SCharInteractHealth = GY_CreateProgressBar(WCharInteract, 0.3, 0.1, 0.6, 0.18, HealthVal, 500, 255, 0, 0)
-	LCharInteractFaction = GY_CreateLabel(WCharInteract, 0.05, 0.35, LanguageString$(LS_Faction) + " " + FactionNames$(AI\HomeFaction))
-	LCharInteractLevel = GY_CreateLabel(WCharInteract, 0.05, 0.55, LanguageString$(LS_Level) + " " + AI\Level)
-	LCharInteractReputation = GY_CreateLabel(WCharInteract, 0.05, 0.75, LanguageString$(LS_Reputation) + " " + AI\Reputation)
+	SCharInteractHealth = GY_CreateProgressBar(WCharInteract, 0.05, 0.5, 0.9, 0.25, HealthVal, 500, 255, 0, 0)
+	LCharInteractName = GY_CreateLabel(WCharInteract, 0.05, 0.1, Name$)
+	;LCharInteractFaction = GY_CreateLabel(WCharInteract, 0.05, 0.35, LanguageString$(LS_Faction) + " " + FactionNames$(AI\HomeFaction))
+	;LCharInteractLevel = GY_CreateLabel(WCharInteract, 0.05, 0.55, LanguageString$(LS_Level) + " " + AI\Level)
+	;LCharInteractReputation = GY_CreateLabel(WCharInteract, 0.05, 0.75, LanguageString$(LS_Reputation) + " " + AI\Reputation)
 
 	GY_GadgetAlpha(WCharInteract, 1.0, True)
 	GY_ActivateWindow(WCharInteract)
@@ -3873,9 +3874,9 @@ Function UpdateCharInteractionWindow()
 	Local AI.ActorInstance = CharInteract
 	HealthVal = (Float#(AI\Attributes\Value[HealthStat]) / Float#(AI\Attributes\Maximum[HealthStat])) * 500.0
 	GY_UpdateProgressBar( SCharInteractHealth, HealthVal )
-	GY_UpdateLabel( LCharInteractFaction, LanguageString$(LS_Faction) + " " + FactionNames$(AI\HomeFaction) )
-	GY_UpdateLabel( LCharInteractLevel, LanguageString$(LS_Level) + " " + AI\Level )
-	GY_UpdateLabel( LCharInteractReputation, LanguageString$(LS_Reputation) + " " + AI\Reputation )
+	;GY_UpdateLabel( LCharInteractFaction, LanguageString$(LS_Faction) + " " + FactionNames$(AI\HomeFaction) )
+	;GY_UpdateLabel( LCharInteractLevel, LanguageString$(LS_Level) + " " + AI\Level )
+	;GY_UpdateLabel( LCharInteractReputation, LanguageString$(LS_Reputation) + " " + AI\Reputation )
 
 End Function
 

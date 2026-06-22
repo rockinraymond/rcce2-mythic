@@ -54,9 +54,10 @@ Global WCharInteract, CharInteractVisible = False
 Global SCharInteractHealth
 Global LCharInteractTalk
 Global CharInteract.ActorInstance = Null
-Global LCharInteractFaction
-Global LCharInteractLevel
-Global LCharInteractReputation
+Global LCharInteractName
+;Global LCharInteractFaction
+;Global LCharInteractLevel
+;Global LCharInteractReputation
 
 ; Tooltip window
 Global WTooltip ; Created/destroyed in the fly
