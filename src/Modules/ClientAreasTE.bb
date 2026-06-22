@@ -707,7 +707,7 @@ Function LoadAreaTE(Name$)
 		dm\rcTe$ = ReadString$(F)
 		
 		If Left$(dm\rcTe$,5)<>"_TRRN"
-			dm\ent = GetMesh(dm\id)
+			dm\ent = GetMesh(dm\id,false)
 			dm\ModelFileName$=getmeshname$(dm\id)
 			dm\modelfilepath$=dm\ModelFileName$
 			dm\Alpha# = 1.0
@@ -717,7 +717,7 @@ Function LoadAreaTE(Name$)
 				RotateEntity dm\ent,dm\pitch,dm\yaw,dm\roll
 				EntityFX dm\ent,2
 			Else
-				RuntimeError("Could not find model with ID " + dm\id)
+				//RuntimeError("Could not find model with ID " + dm\id)
 			EndIf
 		Else
 			loadworkpath$ = dm\rcTe$
