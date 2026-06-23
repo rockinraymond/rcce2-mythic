@@ -537,18 +537,18 @@ Function UpdateNetwork()
 						For i = 0 To 31
 							If TradeItems(i) <> Null Then FreeItemInstance(TradeItems(i))
 							TradeAmounts(i) = 0
-							GYG.GY_Gadget = Object.GY_Gadget(BSlotsHis(i))
-							GYB.GY_Button = Object.GY_Button(GYG\TypeHandle)
-							EntityTexture GYB\Gadget\EN, GYB\UserTexture
-							GY_SetButtonState(BSlotsHis(i), True)
-							GY_LockGadget(BSlotsHis(i), True)
-							GY_SetButtonLabel(BSlotsHis(i), "")
-							GYG.GY_Gadget = Object.GY_Gadget(BSlotsMine(i))
-							GYB.GY_Button = Object.GY_Button(GYG\TypeHandle)
-							EntityTexture GYB\Gadget\EN, GYB\UserTexture
-							GY_SetButtonState(BSlotsMine(i), True)
-							GY_LockGadget(BSlotsMine(i), True)
-							GY_SetButtonLabel(BSlotsMine(i), "")
+								GYG.GY_Gadget = Object.GY_Gadget(BSlotsHis(i))
+								GYB.GY_Button = Object.GY_Button(GYG\TypeHandle)
+								EntityTexture GYB\Gadget\EN, GYB\UserTexture
+								GY_SetButtonState(BSlotsHis(i), True)
+								GY_LockGadget(BSlotsHis(i), True)
+								GY_SetButtonLabel(BSlotsHis(i), "")
+								GYG.GY_Gadget = Object.GY_Gadget(BSlotsMine(i))
+								GYB.GY_Button = Object.GY_Button(GYG\TypeHandle)
+								EntityTexture GYB\Gadget\EN, GYB\UserTexture
+								GY_SetButtonState(BSlotsMine(i), True)
+								GY_LockGadget(BSlotsMine(i), True)
+								GY_SetButtonLabel(BSlotsMine(i), "")
 							If Me\Inventory\Items[i + SlotI_Backpack] <> Null
 								EntityTexture GYB\Gadget\EN, GetTexture(Me\Inventory\Items[i + SlotI_Backpack]\Item\ThumbnailTexID)
 								GY_SetButtonState(BSlotsMine(i), False)
@@ -577,21 +577,25 @@ Function UpdateNetwork()
 							LockTextures()
 							While Offset < Len(M\MessageData$)
 								Item.ItemInstance = ItemInstanceFromString(Mid$(M\MessageData$, Offset, ItemInstanceStringLength()))
-								TradeItems(Num) = Item
-								Offset = Offset + ItemInstanceStringLength()
-								TradeAmounts(Num) = RCE_IntFromStr(Mid$(M\MessageData$, Offset, 2))
-								ServerTradeIDs(Num) = RCE_IntFromStr(Mid$(M\MessageData$, Offset + 2, 4))
-								Offset = Offset + 6
-								GYG.GY_Gadget = Object.GY_Gadget(BSlotsHis(Num))
-								GYB.GY_Button = Object.GY_Button(GYG\TypeHandle)
-								EntityTexture GYB\Gadget\EN, GetTexture(Item\Item\ThumbnailTexID)
-								GY_SetButtonState(BSlotsHis(Num), False)
-								If TradeAmounts(Num) > 1
-									GY_SetButtonLabel(BSlotsHis(Num), TradeAmounts(Num), 100, 255, 0, True)
+								If Item <> Null
+									TradeItems(Num) = Item
+									Offset = Offset + ItemInstanceStringLength()
+									TradeAmounts(Num) = RCE_IntFromStr(Mid$(M\MessageData$, Offset, 2))
+									ServerTradeIDs(Num) = RCE_IntFromStr(Mid$(M\MessageData$, Offset + 2, 4))
+									Offset = Offset + 6
+									GYG.GY_Gadget = Object.GY_Gadget(BSlotsHis(Num))
+									GYB.GY_Button = Object.GY_Button(GYG\TypeHandle)
+									EntityTexture GYB\Gadget\EN, GetTexture(Item\Item\ThumbnailTexID)
+									GY_SetButtonState(BSlotsHis(Num), False)
+									If TradeAmounts(Num) > 1
+										GY_SetButtonLabel(BSlotsHis(Num), TradeAmounts(Num), 100, 255, 0, True)
+									Else
+										GY_SetButtonLabel(BSlotsHis(Num), "")
+									EndIf
+									GY_LockGadget(BSlotsHis(Num), False)
 								Else
-									GY_SetButtonLabel(BSlotsHis(Num), "")
+									Offset = Len(M\MessageData$)
 								EndIf
-								GY_LockGadget(BSlotsHis(Num), False)
 								Num = Num + 1
 							Wend
 							UnlockTextures()

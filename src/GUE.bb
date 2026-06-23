@@ -898,8 +898,8 @@ For Ar.Area = Each Area
 Next
 FUI_Label(TActorsGeneral, 260, 112, "Start portal:")
 Global TActorStartPortal = FUI_TextBox(TActorsGeneral, 340, 110, 90, 20)
-FUI_Label(TActorsGeneral, 20, 142, "XP multiplier:")
-Global SActorXPMultiplier = FUI_Spinner(TActorsGeneral, 120, 140, 90, 20, 1, 1000, 1, 1, DTYPE_INTEGER)
+FUI_Label(TActorsGeneral, 20, 142, "Default Level:")
+Global SActorXPMultiplier = FUI_Spinner(TActorsGeneral, 120, 140, 90, 20, 0, 1000, 1, 1, DTYPE_INTEGER)
 Global BActorPlayable = FUI_CheckBox(TActorsGeneral, 20, 172, "Actor is playable")
 Global BActorRideable = FUI_CheckBox(TActorsGeneral, 20, 192, "Actor can be ridden")
 FUI_Label(TActorsGeneral, 20, 222, "Male animation set:")
