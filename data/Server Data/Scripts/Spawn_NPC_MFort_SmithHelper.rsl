@@ -14,12 +14,12 @@ Function Main()
 
 
     ;Stock Items
-    GiveItem(NPC, "Leather Armor", 2)
-    GiveItem(NPC, "Leather Cap", 2)
-    GiveItem(NPC, "Leather Trousers", 2)
-    GiveItem(NPC, "Leather Boots", 2)
-    GiveItem(NPC, "Leather Gloves", 2)
-    GiveItem(NPC, "Leather Belt", 2)
+    GiveItem(NPC, "Leather Armor", 1)
+    GiveItem(NPC, "Leather Cap", 1)
+    GiveItem(NPC, "Leather Trousers", 1)
+    GiveItem(NPC, "Leather Boots", 1)
+    GiveItem(NPC, "Leather Gloves", 1)
+    GiveItem(NPC, "Leather Belt", 1)
     GiveItem(NPC, "Chainmail Armor", 1)
     GiveItem(NPC, "Skull Cap", 1)
     GiveItem(NPC, "Chainmail Greaves", 1)
@@ -32,7 +32,7 @@ Function Main()
     GiveItem(NPC, "Plated Boots", 1)
     GiveItem(NPC, "Plated Gauntlets", 1)
     GiveItem(NPC, "Plated Belt", 1)
-    GiveItem(NPC, "Round Shield",2)
+    GiveItem(NPC, "Round Shield",1)
     GiveItem(NPC, "Kite Shield",1)
 
 

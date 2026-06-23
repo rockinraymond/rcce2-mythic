@@ -14,7 +14,7 @@ Function Main()
 
 
     ;Stock Items
-    GiveItem(NPC, "Warhammer", 1)
+    ;GiveItem(NPC, "Warhammer", 1)
     GiveItem(NPC, "Dagger", 1)
     GiveItem(NPC, "Short Sword", 1)
     GiveItem(NPC, "Long Sword", 1)

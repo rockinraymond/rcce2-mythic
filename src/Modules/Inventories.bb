@@ -338,34 +338,34 @@ Function ActorHasSlot(AI.ActorInstance, SlotI, I.Item)
 End Function
 
 ; Checks an item matches a particular slot type
-Function SlotsMatch(It.Item, SlotI)
+Function SlotsMatch(It.Item, SlotI, SlotDisabled = 0)
 
 	If SlotI >= SlotI_Backpack Then Return True
 	Select It\ItemType
 		Case I_Weapon
-			If SlotI = SlotI_Weapon Then Return True
+			If (SlotI = SlotI_Weapon And SlotDisabled = 0) Then Return True
 		Case I_Armour
 			Select It\SlotType
 				Case Slot_Shield
-					If SlotI = SlotI_Shield Then Return True
+					If (SlotI = SlotI_Shield And SlotDisabled = 0) Then Return True
 				Case Slot_Hat
-					If SlotI = SlotI_Hat Then Return True
+					If (SlotI = SlotI_Hat And SlotDisabled = 0) Then Return True
 				Case Slot_Chest
-					If SlotI = SlotI_Chest Then Return True
+					If (SlotI = SlotI_Chest And SlotDisabled = 0) Then Return True
 				Case Slot_Hand
-					If SlotI = SlotI_Hand Then Return True
+					If (SlotI = SlotI_Hand And SlotDisabled = 0) Then Return True
 				Case Slot_Belt
-					If SlotI = SlotI_Belt Then Return True
+					If (SlotI = SlotI_Belt And SlotDisabled = 0) Then Return True
 				Case Slot_Legs
-					If SlotI = SlotI_Legs Then Return True
+					If (SlotI = SlotI_Legs And SlotDisabled = 0) Then Return True
 				Case Slot_Feet
-					If SlotI = SlotI_Feet Then Return True
+					If (SlotI = SlotI_Feet And SlotDisabled = 0) Then Return True
 			End Select
 		Case I_Ring
 			If It\SlotType = Slot_Ring
-				If SlotI >= SlotI_Ring1 And SlotI <= SlotI_Ring4 Then Return True
+				If (SlotI >= SlotI_Ring1 And SlotI <= SlotI_Ring4 And SlotDisabled = 0) Then Return True
 			Else
-				If SlotI >= SlotI_Amulet1 And SlotI <= SlotI_Amulet2 Then Return True
+				If (SlotI >= SlotI_Amulet1 And SlotI <= SlotI_Amulet2 And SlotDisabled = 0) Then Return True
 			EndIf
 	End Select
 	Return False

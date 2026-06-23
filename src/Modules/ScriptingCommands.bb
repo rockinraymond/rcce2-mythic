@@ -2530,9 +2530,10 @@ Function BVM_GIVEITEM(Param1%, Param2$, Param3%=1)
 		For It.Item = Each Item
 			If Upper$(It\Name$) = ItemName$
 				; Give
+				SlotDisabled = 0
 				If Amount > 0
 					; Check if Actor can use this slot
-					;If( ActorHasSlot(Actor, It\SlotType, It ) )
+					If( ActorHasSlot(Actor, It\SlotType, It ) = False) Then SlotDisabled = 1
 						; Human
 						If Actor\RNID > 0
 							; Create the item
@@ -2547,7 +2548,7 @@ Function BVM_GIVEITEM(Param1%, Param2$, Param3%=1)
 							II.ItemInstance = CreateItemInstance(It)
 							For i = 0 To Slots_Inventory
 								If Actor\Inventory\Items[i] = Null Or (ItemInstancesIdentical(II, Actor\Inventory\Items[i]) And II\Item\Stackable = True And i >= SlotI_Backpack)
-									If SlotsMatch(It, i)
+									If SlotsMatch(It, i, SlotDisabled)
 										; Only put one item in this slot if it is an equipped slot
 										ThisAmount = Amount
 										If i < SlotI_Backpack Then ThisAmount = 1
