@@ -679,6 +679,7 @@ Function UpdateNetwork()
 										If AI\RNID > 0
 											Pa$ = RCE_StrFromInt$(SlotID, 1) + RCE_StrFromInt$(Amount, 2)
 											RCE_Send(Host, AI\RNID, P_InventoryUpdate, "T" + Pa$, True)
+											ThreadScript("InventoryUpdate", "Main", Handle(AI), 0)
 										EndIf
 									EndIf
 								EndIf
@@ -722,6 +723,7 @@ Function UpdateNetwork()
 											;Ask client to specify a slot to put it in
 											Pa$ = RCE_StrFromInt$(II\Item\ID, 2) + RCE_StrFromInt$(II\Assignment, 2)
 											RCE_Send(Host, AI\RNID, P_InventoryUpdate, "G" + RCE_StrFromInt$(Handle(II), 4) + Pa$, True)
+											ThreadScript("InventoryUpdate", "Main", Handle(AI), 0)
 										Else
 											Change = OldChange
 											FreeItemInstance(II)
@@ -743,6 +745,7 @@ Function UpdateNetwork()
 									RCE_Send(Host, AI\RNID, P_GoldChange, Pa$, True)
 								EndIf
 							;EndIf
+							
 						; Player -> player trading
 						ElseIf AI\IsTrading = 4
 							AI\IsTrading = 5
@@ -835,7 +838,10 @@ Function UpdateNetwork()
 											GiveItem\AssignTo = AI
 											Pa$ = RCE_StrFromInt$(GiveItem\Item\ID, 2) + RCE_StrFromInt$(GiveItem\Assignment, 2)
 											RCE_Send(Host, AI\RNID, P_InventoryUpdate, "G" + RCE_StrFromInt$(Handle(GiveItem), 4) + Pa$, True)
+											
 										EndIf
+										ThreadScript("InventoryUpdate", "Main", Handle(A2), 0)
+										ThreadScript("InventoryUpdate", "Main", Handle(AI), 0)
 									Next
 								 EndIf
 
@@ -848,6 +854,8 @@ Function UpdateNetwork()
 								A2\IsTrading = 0
 								A2\TradingActor = Null
 								RCE_Send(Host, A2\RNID, P_CloseTrading, "", True)
+								
+								
 							EndIf
 						EndIf
 					; Cancel trading
