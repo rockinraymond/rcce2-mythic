@@ -118,7 +118,7 @@ Type:
 Damage:
 INDESTRUCTIBLE
 Value:
-Mass:
+Weight:
 Item can be stacked
 Item cannot be stacked
 Damage Type:
