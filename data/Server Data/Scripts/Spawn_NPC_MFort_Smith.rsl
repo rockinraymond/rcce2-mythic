@@ -1,0 +1,44 @@
+Using "RC_Core.rcm"
+; Define entry function 'Main'
+
+Function Main()
+    
+    ;setup actor
+    NPC = Actor()
+    SetName(NPC, "Rugarr")
+    
+
+   
+    SetActorClothes(NPC,2)
+    SetActorHair(NPC,3)
+
+
+    ;Stock Items
+    GiveItem(NPC, "Warhammer", 1)
+    GiveItem(NPC, "Dagger", 1)
+    GiveItem(NPC, "Short Sword", 1)
+    GiveItem(NPC, "Long Sword", 1)
+    GiveItem(NPC, "Two-handed Sword", 1)
+    GiveItem(NPC, "Hand Axe", 1)
+    GiveItem(NPC, "Battle Axe", 1)
+    GiveItem(NPC, "Great Axe", 1)
+    GiveItem(NPC, "Warhammer", 1)
+    GiveItem(NPC, "Mace", 1)
+    GiveItem(NPC, "Morning Star", 1)
+    GiveItem(NPC, "Maul", 1)
+    GiveItem(NPC, "Short Spear", 1)
+    GiveItem(NPC, "Long Spear", 1)
+    GiveItem(NPC, "Polearm", 1)
+    GiveItem(NPC, "Quarter Staff", 1)
+    GiveItem(NPC, "Short Bow", 1)
+    GiveItem(NPC, "Long Bow", 1)
+    GiveItem(NPC, "Arrow", 99)
+
+
+    
+
+
+
+
+
+End Function

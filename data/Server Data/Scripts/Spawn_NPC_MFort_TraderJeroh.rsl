@@ -1,0 +1,24 @@
+Using "RC_Core.rcm"
+; Define entry function 'Main'
+
+Function Main()
+    
+    ;setup actor
+    NPC = Actor()
+    SetName(NPC, "Jeroh")
+    
+    
+    SetActorClothes(NPC,3)
+    SetActorHair(NPC,2)
+
+
+    ;Stock Items
+    GiveItem(NPC, "Repair Hammer", 25)
+    GiveItem(NPC, "Lockpick", 25)
+    GiveItem(NPC, "Trap Disarming Kit", 1)
+
+
+
+
+
+End Function

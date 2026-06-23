@@ -6,9 +6,13 @@ Function Main()
     MobLevel = ActorLevel(Mob)
 
     MobHP = 0
-    For x = 1 to MobLevel Step 1
-        MobHP = MobHP + Rand(1,8)
-    Next
+    If MobLevel > 0
+        For x = 1 to MobLevel Step 1
+            MobHP = MobHP + Rand(1,8)
+        Next
+    Else
+        MobHp = Rand(1,4)
+    EndIf
 
     SETMaXATTRIBUTE(Mob, "Health", MobHP)
     SETATTRIBUTE(Mob, "Health", MobHP)
