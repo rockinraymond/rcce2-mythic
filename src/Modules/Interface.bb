@@ -146,7 +146,7 @@ Global WSpellError, BSpellError
 Global LMemorising, SMemorising, MemoriseSpell, MemoriseSlot, MemoriseProgress, LastMemoriseUpdate
 Dim BSpellImgs(9)  ; 10 abilities in book
 Dim LSpellNames(9) ; Ability name text
-Dim LSpellLevels(9) ; Ability level text
+Dim LSpellRanks(9) ; Ability level text
 Dim LSpellDesc(9) ; Ability Description
 ;Dim LSpellDesc2(9) ; Ability Description line 2
 Global FirstSpell = -1 ; -1 means we are looking at memorised spells rather than the longer list of known spells

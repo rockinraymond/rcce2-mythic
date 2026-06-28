@@ -1,216 +1,270 @@
 Spell ID: 0
 Spell Name: Magic Missile
 SpellType: 1
+SpellLevel: 1
 
 Spell ID: 1
 Spell Name: Shield
 SpellType: 1
+SpellLevel: 1
 
 Spell ID: 2
 Spell Name: Bless
 SpellType: 4
+SpellLevel: 2
 
 Spell ID: 3
 Spell Name: Protect from Bludgeon
 SpellType: 1
+SpellLevel: 1
 
 Spell ID: 4
 Spell Name: Protect from Blades
 SpellType: 1
+SpellLevel: 2
 
 Spell ID: 5
 Spell Name: Touch of Fire
 SpellType: 1
+SpellLevel: 2
 
 Spell ID: 6
 Spell Name: Touch of Cold
 SpellType: 1
+SpellLevel: 1
 
 Spell ID: 7
 Spell Name: Touch of Lightning
 SpellType: 1
+SpellLevel: 2
 
 Spell ID: 8
 Spell Name: Feather Weight
 SpellType: 1
+SpellLevel: 1
 
 Spell ID: 9
 Spell Name: Weakness To Magic
 SpellType: 1
+SpellLevel: 3
 
 Spell ID: 10
 Spell Name: Cure Light Wounds
 SpellType: 4
+SpellLevel: 1
 
 Spell ID: 11
 Spell Name: Protect From Evil
 SpellType: 4
+SpellLevel: 1
 
 Spell ID: 12
 Spell Name: Resist Cold
 SpellType: 4
+SpellLevel: 1
 
 Spell ID: 13
 Spell Name: Resist Fire
 SpellType: 4
+SpellLevel: 2
 
 Spell ID: 14
 Spell Name: Detect Evil
 SpellType: 4
+SpellLevel: 1
 
 Spell ID: 15
 Spell Name: Cure Blindness
 SpellType: 4
+SpellLevel: 3
 
 Spell ID: 16
 Spell Name: Cure Disease
 SpellType: 4
+SpellLevel: 3
 
 Spell ID: 17
 Spell Name: Bestow Courage
 SpellType: 4
+SpellLevel: 1
 
 Spell ID: 18
 Spell Name: Purify Food and Water
 SpellType: 4
+SpellLevel: 1
 
 Spell ID: 19
 Spell Name: Smite
 SpellType: 4
+SpellLevel: 1
 
 Spell ID: 20
 Spell Name: Charm Animal
 SpellType: 4
+SpellLevel: 2
 
 Spell ID: 21
 Spell Name: Charm Person
 SpellType: 1
+SpellLevel: 1
 
 Spell ID: 22
 Spell Name: Turn Undead
 SpellType: 4
+SpellLevel: 1
 
 Spell ID: 23
 Spell Name: Spritual Hammer
 SpellType: 4
+SpellLevel: 2
 
 Spell ID: 24
 Spell Name: Find Traps
 SpellType: 4
+SpellLevel: 2
 
 Spell ID: 25
 Spell Name: Disarm Traps
 SpellType: 1
+SpellLevel: 3
 
 Spell ID: 26
 Spell Name: Hold Person
 SpellType: 4
+SpellLevel: 2
 
 Spell ID: 27
 Spell Name: Silence
 SpellType: 4
+SpellLevel: 2
 
 Spell ID: 28
 Spell Name: Condemn
 SpellType: 4
+SpellLevel: 3
 
 Spell ID: 29
 Spell Name: Remove Curse
 SpellType: 4
+SpellLevel: 3
 
 Spell ID: 30
 Spell Name: Slow Poison
 SpellType: 4
+SpellLevel: 3
 
 Spell ID: 31
 Spell Name: Resist Lightning
 SpellType: 4
+SpellLevel: 2
 
 Spell ID: 32
 Spell Name: Striking
 SpellType: 4
+SpellLevel: 3
 
 Spell ID: 33
 Spell Name: Cure Many Wounds
 SpellType: 4
+SpellLevel: 3
 
 Spell ID: 34
 Spell Name: Strengthen Animal
 SpellType: 4
+SpellLevel: 3
 
 Spell ID: 35
 Spell Name: Detect Magic
 SpellType: 1
+SpellLevel: 1
 
 Spell ID: 36
 Spell Name: Blinding Light
 SpellType: 1
+SpellLevel: 1
 
 Spell ID: 37
 Spell Name: Sleep
 SpellType: 1
+SpellLevel: 1
 
 Spell ID: 38
 Spell Name: Weakness To Cold
 SpellType: 1
+SpellLevel: 1
 
 Spell ID: 39
 Spell Name: Weakness To Fire
 SpellType: 1
+SpellLevel: 2
 
 Spell ID: 40
 Spell Name: Icicle
 SpellType: 1
+SpellLevel: 2
 
 Spell ID: 41
 Spell Name: Open Lock
 SpellType: 1
+SpellLevel: 2
 
 Spell ID: 42
 Spell Name: Mirrior Image
 SpellType: 1
+SpellLevel: 2
 
 Spell ID: 43
 Spell Name: Web
 SpellType: 1
+SpellLevel: 2
 
 Spell ID: 44
 Spell Name: Invisibility
 SpellType: 1
+SpellLevel: 2
 
 Spell ID: 45
 Spell Name: Weakness To Lightning
 SpellType: 1
+SpellLevel: 2
 
 Spell ID: 46
 Spell Name: Fireball
 SpellType: 1
+SpellLevel: 3
 
 Spell ID: 47
 Spell Name: Lightning Bolt
 SpellType: 1
+SpellLevel: 3
 
 Spell ID: 48
 Spell Name: Haste
 SpellType: 1
+SpellLevel: 3
 
 Spell ID: 49
 Spell Name: Slow
 SpellType: 1
+SpellLevel: 3
 
 Spell ID: 50
 Spell Name: Protect from Missiles
 SpellType: 1
+SpellLevel: 3
 
 Spell ID: 51
 Spell Name: Dispel Magic
 SpellType: 1
+SpellLevel: 3
 
 Spell ID: 52
 Spell Name: Group Shield
 SpellType: 1
+SpellLevel: 3
 
 Spell ID: 53
 Spell Name: Group Invisibility
 SpellType: 1
+SpellLevel: 3
 

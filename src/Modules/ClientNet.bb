@@ -58,7 +58,7 @@ Function Connect()
 								; Must be known
 								Else
 									For j = 0 To 999
-										If Me\SpellLevels[j] > 0
+										If Me\SpellRanks[j] > 0
 											Sp.Spell = SpellsList(Me\KnownSpells[j])
 											If Sp\Name$ = SpellName$
 												ActionBarSlots(SlotNum) = j - 1000
@@ -723,10 +723,10 @@ Function UpdateNetwork()
 			Case P_KnownSpellUpdate
 				; Spell added
 				If Left$(M\MessageData$, 1) = "A"
-					If Me\SpellLevels[Spells] = 0
+					If Me\SpellRanks[Spells] = 0
 						DebugLog "Spell creation entered"
 						Offset = 2
-						Me\SpellLevels[Spells] = RCE_IntFromStr(Mid$(M\MessageData$, Offset, 2))
+						Me\SpellRanks[Spells] = RCE_IntFromStr(Mid$(M\MessageData$, Offset, 2))
 						Sp.Spell = New Spell
 						Sp\ID = RCE_IntFromStr(Mid$(M\MessageData$, Offset + 2, 2))
 						SpellsList(Sp\ID) = Sp
@@ -790,10 +790,10 @@ Function UpdateNetwork()
 					Next
 					; Remove known
 					For i = 0 To 999
-						If Me\SpellLevels[i] > 0
+						If Me\SpellRanks[i] > 0
 							If Upper$(SpellsList(Me\KnownSpells[i])\Name$) = Name$
 								Me\KnownSpells[i] = 0
-								Me\SpellLevels[i] = 0
+								Me\SpellRanks[i] = 0
 							EndIf
 						EndIf
 					Next
@@ -803,8 +803,8 @@ Function UpdateNetwork()
 					Level = RCE_IntFromStr(Mid$(M\MessageData$, 2, 4))
 					Name$ = Upper$(Mid$(M\MessageData$, 6))
 					For i = 0 To 999
-						If Me\SpellLevels[i] > 0
-							If Upper$(SpellsList(Me\KnownSpells[i])\Name$) = Name$ Then Me\SpellLevels[i] = Level
+						If Me\SpellRanks[i] > 0
+							If Upper$(SpellsList(Me\KnownSpells[i])\Name$) = Name$ Then Me\SpellRanks[i] = Level
 						EndIf
 					Next
 					If SpellsVisible Then UpdateSpellbook()
@@ -812,7 +812,7 @@ Function UpdateNetwork()
 				ElseIf Left$(M\MessageData$, 1) = "C"
 					Name$ = Upper$(Mid$(M\MessageData$, 2))
 					For i = 0 To 999
-						If Me\SpellLevels[i] > 0
+						If Me\SpellRanks[i] > 0
 							If Upper$(SpellsList(Me\KnownSpells[i])\Name$) = Name$ 
 								Me\SpellCharge[i] = SpellsList(Me\KnownSpells[i])\RechargeTime
 								UpdateActionBarIcons()

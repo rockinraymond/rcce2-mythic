@@ -692,7 +692,7 @@ Repeat
 	; Update spell memorisation progress
 	For MS.MemorisingSpell = Each MemorisingSpell
 		If MilliSecs() - MS\CreatedTime > 6000
-			If MS\AI\SpellLevels[MS\KnownNum] > 0
+			If MS\AI\SpellRanks[MS\KnownNum] > 0
 				For i = 0 To 9
 					If MS\AI\MemorisedSpells[i] = 5000
 						MS\AI\MemorisedSpells[i] = MS\KnownNum

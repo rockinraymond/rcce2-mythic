@@ -304,13 +304,13 @@ Function Spell_Shield()
         Target = Player
     EndIf
     SpellCost = Parameter(1)
-    SpellRank = Parameter(3)
+    SpellLevel = Parameter(3)
     ResourceName$ = "Mana"
     SpellName$ = "Shield"
     castingTime = 5
     EffectName$ = "Shield"
     EffectAttribute$ = "Armor Bonus"
-    EffectValue = SpellRank
+    EffectValue = SpellLevel
     EffectDuration = 600
     EffectTexID = Parameter(2)
     SkillName$ = "Arcane Casting"
@@ -331,13 +331,13 @@ Function Spell_Focus()
         Target = Player
     EndIf
     SpellCost = Parameter(1)
-    SpellRank = Parameter(3)
+    SpellLevel = Parameter(3)
     ResourceName$ = "Mana"
     SpellName$ = "Focus"
     castingTime = 5
     EffectName$ = "Focus"
     EffectAttribute$ = "Attack Bonus"
-    EffectValue = SpellRank
+    EffectValue = SpellLevel
     EffectDuration = 600
     EffectTexID = Parameter(2)
     SkillName$ = "Arcane Casting"
@@ -358,13 +358,13 @@ Function Spell_FeatherWeight()
         Target = Player
     EndIf
     SpellCost = Parameter(1)
-    SpellRank = Parameter(3)
+    SpellLevel = Parameter(3)
     ResourceName$ = "Mana"
     SpellName$ = "Feather Weight"
     castingTime = 5
     EffectName$ = "Feather Weight"
     EffectAttribute$ = "Carry Weight Mod"
-    EffectValue = 30 * SpellRank
+    EffectValue = 30 * SpellLevel
     EffectDuration = 1800
     EffectTexID = Parameter(2)
     SkillName$ = "Arcane Casting"
@@ -385,13 +385,13 @@ Function Spell_ResistSlash()
         Target = Player
     EndIf
     SpellCost = Parameter(1)
-    SpellRank = Parameter(3)
+    SpellLevel = Parameter(3)
     ResourceName$ = "Mana"
     SpellName$ = "Resist Slashing"
     castingTime = 5
     EffectName$ = SpellName$
     EffectAttribute$ = "Edged"
-    EffectValue = SpellRank
+    EffectValue = SpellLevel
     EffectDuration = 600
     EffectTexID = Parameter(2)
     SkillName$ = "Arcane Casting"
@@ -411,13 +411,13 @@ Function Spell_ResistBlunt()
         Target = Player
     EndIf
     SpellCost = Parameter(1)
-    SpellRank = Parameter(3)
+    SpellLevel = Parameter(3)
     ResourceName$ = "Mana"
     SpellName$ = "Resist Bludgeon"
     castingTime = 5
     EffectName$ = SpellName$
     EffectAttribute$ = "Blunt"
-    EffectValue = SpellRank
+    EffectValue = SpellLevel
     EffectDuration = 600
     EffectTexID = Parameter(2)
     SkillName$ = "Arcane Casting"
@@ -437,13 +437,13 @@ Function Spell_WeaknessMagic()
         Target = Player
     EndIf
     SpellCost = Parameter(1)
-    SpellRank = Parameter(3)
+    SpellLevel = Parameter(3)
     ResourceName$ = "Mana"
     SpellName$ = "Weakness to Magic"
     castingTime = 5
     EffectName$ = SpellName$
     EffectAttribute$ = "Magical"
-    EffectValue = -1 * SpellRank
+    EffectValue = -1 * SpellLevel
     EffectDuration = 300
     EffectTexID = Parameter(2)
     SkillName$ = "Arcane Casting"
@@ -463,13 +463,13 @@ Function Spell_ProtectEvil()
         Target = Player
     EndIf
     SpellCost = Parameter(1)
-    SpellRank = Parameter(3)
+    SpellLevel = Parameter(3)
     ResourceName$ = "Spirit"
     SpellName$ = "Protect from Evil"
     castingTime = 5
     EffectName$ = SpellName$
     EffectAttribute$ = "Unholy"
-    EffectValue = SpellRank
+    EffectValue = SpellLevel
     EffectDuration = 300
     EffectTexID = Parameter(2)
     SkillName$ = "Divine Casting"

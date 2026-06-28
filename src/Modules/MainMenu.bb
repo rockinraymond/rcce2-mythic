@@ -1757,7 +1757,7 @@ Function CharSelect()
 						ElseIf Left$(M\MessageData$, 1) = "S"
 							Offset = 2
 							While Offset < Len(M\MessageData$)
-								Me\SpellLevels[Spells] = RCE_IntFromStr(Mid$(M\MessageData$, Offset, 2))
+								Me\SpellRanks[Spells] = RCE_IntFromStr(Mid$(M\MessageData$, Offset, 2))
 								Sp.Spell = New Spell
 								Sp\ID = RCE_IntFromStr(Mid$(M\MessageData$, Offset + 2, 2))
 								SpellsList(Sp\ID) = Sp
@@ -1772,6 +1772,8 @@ Function CharSelect()
 								NameLen = RCE_IntFromStr(Mid$(M\MessageData$, Offset, 2))
 								Sp\Description$ = Mid$(M\MessageData$, Offset + 2, NameLen)
 								Offset = Offset + 2 + NameLen
+								Sp\SpellLevel = RCE_IntFromStr(Mid$(M\MessageData$, Offset, 2))
+								Offset = Offset + 2
 								If RCE_IntFromStr(Mid$(M\MessageData$, Offset, 1)) = True And Memorised < 10
 									Me\MemorisedSpells[Memorised] = Spells
 									Memorised = Memorised + 1

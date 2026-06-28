@@ -108,7 +108,7 @@ Type ActorInstance
 	Field FootstepPlayedThisCycle   ; To prevent too many footstep noises! See UpdateActorInstances() in Client.bb
 	Field ScriptGlobals$[9]
 	Field KnownSpells[999]
-	Field SpellLevels[999]
+	Field SpellRanks[999]
 	Field MemorisedSpells[9]
 	Field SpellCharge[999] ; How long until the spell is usable
 	Field IsTrading ; 0 for not trading, 1 for trading with NPC, 2 for trading with pet, 3 for trading with player, 4/5 for accepted trading with player
@@ -258,7 +258,7 @@ Function WriteActorInstance(Stream, A.ActorInstance)
 	Next
 	For i = 0 To 999
 		WriteShort Stream, A\KnownSpells[i]
-		WriteShort Stream, A\SpellLevels[i]
+		WriteShort Stream, A\SpellRanks[i]
 	Next
 	For i = 0 To 9
 		WriteShort Stream, A\MemorisedSpells[i]
@@ -338,7 +338,7 @@ Function ReadActorInstance.ActorInstance(Stream)
 	Next
 	For i = 0 To 999
 		A\KnownSpells[i] = ReadShort(Stream)
-		A\SpellLevels[i] = ReadShort(Stream)
+		A\SpellRanks[i] = ReadShort(Stream)
 	Next
 	For i = 0 To 9
 		A\MemorisedSpells[i] = ReadShort(Stream)
@@ -880,10 +880,10 @@ Function AddSpell(AI.ActorInstance, SpellID, Lvl = 1)
 	If Sp = Null Then Return
 	; Find a free slot
 	For i = 0 To 999
-		If AI\SpellLevels[i] <= 0
+		If AI\SpellRanks[i] <= 0
 			; Add the spell
 			AI\KnownSpells[i] = SpellID
-			AI\SpellLevels[i] = Lvl
+			AI\SpellRanks[i] = Lvl
 			; If they are a player in game, tell them
 			If AI\RNID > 0
 				;Sp.Spell = SpellsList(SpellID)
@@ -905,7 +905,7 @@ Function DeleteSpell(AI.ActorInstance, ID)
 	; Remove
 	Sp.Spell = SpellsList(AI\KnownSpells[ID])
 	AI\KnownSpells[ID] = 0
-	AI\SpellLevels[ID] = 0
+	AI\SpellRanks[ID] = 0
 	For i = 0 To 9
 		If AI\MemorisedSpells[i] = ID Then AI\MemorisedSpells[i] = 5000 : Exit
 	Next

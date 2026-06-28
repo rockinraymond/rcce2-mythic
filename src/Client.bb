@@ -1057,7 +1057,7 @@ TalentIndex = 0
 	
 	For i = 0 To 999
 	Sp.Spell = SpellsList(Me\KnownSpells[i])
-		If Me\SpellLevels[i] > 0
+		If Me\SpellRanks[i] > 0
 			For j = 0 To 999
 				Select Sp\SpellType
 					Case S_Spell

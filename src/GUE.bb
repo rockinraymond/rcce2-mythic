@@ -1942,8 +1942,8 @@ FUI_ComboBoxItem(CSpellType, "Magical Spell")
 FUI_ComboBoxItem(CSpellType, "Talent")
 FUI_ComboBoxItem(CSpellType, "Combat")
 FUI_ComboBoxItem(CSpellType, "Spiritual Spell")
-FUI_Label(TSpells, 20, 475, "Rank:")
-Global SSpellRank = FUI_Spinner(TSpells, 250, 475, 100, 20, 0, 60, 0, 1, DTYPE_INTEGER, "")
+FUI_Label(TSpells, 20, 475, "Level:")
+Global SSpellLevel = FUI_Spinner(TSpells, 250, 475, 100, 20, 0, 60, 0, 1, DTYPE_INTEGER, "")
 
 ; Init display
 FUI_SendMessage(CSpellSelected, M_SETINDEX, 1)
@@ -5889,7 +5889,7 @@ Cls
 					Sp\Script$ = SelectedSpell\Script$
 					Sp\SMethod$ = SelectedSpell\SMethod$
 					Sp\SpellType = SelectedSpell\SpellType
-					Sp\SpellRank = SelectedSpell\SpellRank
+					Sp\SpellLevel = SelectedSpell\SpellLevel
 
 					
 					Sp\ThumbnailTexID = SelectedSpell\ThumbnailTexID
@@ -5919,9 +5919,9 @@ Cls
 					SelectedSpell\SpellType = E\EventData
 					SpellsSaved = False
 				EndIf
-			Case SSpellRank
+			Case SSpellLevel
 			If SelectedSpell <> Null
-					SelectedSpell\SpellRank = E\EventData
+					SelectedSpell\SpellLevel = E\EventData
 					SpellsSaved = False
 				EndIf
 			Case BSpellImageID
@@ -7717,7 +7717,7 @@ Function UpdateSpellDisplay()
 		FUI_SendMessage(CSpellScript, M_SETINDEX, 1)
 		FUI_SendMessage(CSpellMethod, M_RESET)
 		FUI_SendMessage(CSpellType, M_SETINDEX, 1)
-		FUI_SendMessage(SSpellRank, M_SETVALUE, 1)
+		FUI_SendMessage(SSpellLevel, M_SETVALUE, 1)
 
 	; Spell selected, fill in relevant information
 	Else
@@ -7726,7 +7726,7 @@ Function UpdateSpellDisplay()
 		FUI_SendMessage(LSpellImageID, M_SETTEXT, "Display icon: " + GetFilename$(EditorTexName$(SelectedSpell\ThumbnailTexID)))
 		FUI_SendMessage(SSpellCharge, M_SETVALUE, SelectedSpell\RechargeTime / 1000)
 		FUI_SendMessage(CSpellType, M_SETINDEX, SelectedSpell\SpellType)
-		FUI_SendMessage(SSpellRank, M_SETVALUE, SelectedSpell\SpellRank)
+		FUI_SendMessage(SSpellLevel, M_SETVALUE, SelectedSpell\SpellLevel)
 
 		
 

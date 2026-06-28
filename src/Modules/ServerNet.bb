@@ -949,7 +949,7 @@ Function UpdateNetwork()
 										If AI\MemorisedSpells[i] = Num
 											Sp.Spell = SpellsList(AI\KnownSpells[Num])
 											If AI\SpellCharge[i] <= 0
-												Params$ = AI\SpellLevels[Num] + "," + Sp\ThumbnailTexID + "," + Sp\SpellRank
+												Params$ = AI\SpellRanks[Num] + "," + Sp\ThumbnailTexID + "," + Sp\SpellLevel
 												ThreadScript(Sp\Script$, Sp\SMethod$, Handle(AI), Handle(Context), Params$)
 												;AI\SpellCharge[i] = Sp\RechargeTime
 											Else
@@ -963,7 +963,7 @@ Function UpdateNetwork()
 								Else
 									Sp.Spell = SpellsList(AI\KnownSpells[Num])
 									If AI\SpellCharge[Num] <= 0
-										Params$ = AI\SpellLevels[Num] + "," + Sp\ThumbnailTexID + "," + Sp\SpellRank
+										Params$ = AI\SpellRanks[Num] + "," + Sp\ThumbnailTexID + "," + Sp\SpellLevel
 										ThreadScript(Sp\Script$, Sp\SMethod$, Handle(AI), Handle(Context), Params$)
 										;AI\SpellCharge[Num] = Sp\RechargeTime
 									Else
@@ -1969,14 +1969,14 @@ Function UpdateNetwork()
 								Pa$ = ""
 								SpellsDone = 0
 								For i = 0 To 999
-									If A\Character[Number]\SpellLevels[i] > 0
+									If A\Character[Number]\SpellRanks[i] > 0
 										OldPa$ = OldPa$ + Pa$
 										Pa$ = ""
 										Sp.Spell = SpellsList(A\Character[Number]\KnownSpells[i])
 										If( Sp <> Null )
-											Pa$ = Pa$ + RCE_StrFromInt$(A\Character[Number]\SpellLevels[i], 2) + RCE_StrFromInt$(Sp\ID, 2)
+											Pa$ = Pa$ + RCE_StrFromInt$(A\Character[Number]\SpellRanks[i], 2) + RCE_StrFromInt$(Sp\ID, 2)
 											Pa$ = Pa$ + RCE_StrFromInt$(Sp\ThumbnailTexID, 2) + RCE_StrFromInt$(Sp\RechargeTime, 2) + RCE_StrFromInt$(Sp\SpellType, 2)
-											Pa$ = Pa$ + RCE_StrFromInt$(Len(Sp\Name$), 2) + Sp\Name$ + RCE_StrFromInt$(Len(Sp\Description$), 2) + Sp\Description$
+											Pa$ = Pa$ + RCE_StrFromInt$(Len(Sp\Name$), 2) + Sp\Name$ + RCE_StrFromInt$(Len(Sp\Description$), 2) + Sp\Description$ + RCE_StrFromInt$(Sp\SpellLevel, 2)
 											Pa$ = Pa$ + RCE_StrFromInt$(0, 1)
 											For j = 0 To 9
 												If A\Character[Number]\MemorisedSpells[j] = i
@@ -1986,7 +1986,7 @@ Function UpdateNetwork()
 											Next
 											SpellsDone = SpellsDone + 1
 										Else
-											A\Character[Number]\SpellLevels[i] = 0
+											A\Character[Number]\SpellRanks[i] = 0
 											A\Character[Number]\KnownSpells[i] = 0
 										EndIf
 										

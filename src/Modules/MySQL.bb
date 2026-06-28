@@ -399,7 +399,7 @@ Function My_SaveActorInstance(A.ActorInstance, Q.QuestLog, C.ActionbarData, IsSl
 	
 	; Update Known Spells
 	For i = 0 To 999
-		FreeSQLQuery(SQLQuery(hSQL, "UPDATE `rc_spells` SET `known` = '"+A\KnownSpells[i]+"', `level` = '"+A\SpellLevels[i]+"' WHERE `id` = '"+(A\Spell_Id + i)+"'"))
+		FreeSQLQuery(SQLQuery(hSQL, "UPDATE `rc_spells` SET `known` = '"+A\KnownSpells[i]+"', `level` = '"+A\SpellRanks[i]+"' WHERE `id` = '"+(A\Spell_Id + i)+"'"))
 	Next
 	
 	; Update Script Globals and Memorised Spells
@@ -738,7 +738,7 @@ Function My_LoadActorInstance.ActorInstance(ActID, Q.Questlog, C.ActionBarData, 
 		; Read in data
 		If i = 0 Then A\Spell_ID	= ReadSQLField(SpellRow, "id")
 		A\KnownSpells[i]			= ReadSQLField(SpellRow, "known")
-		A\SpellLevels[i]			= ReadSQLField(SpellRow, "level")
+		A\SpellRanks[i]			= ReadSQLField(SpellRow, "level")
 		
 		; Clean up
 		FreeSQLRow(SpellRow)

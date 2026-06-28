@@ -1439,7 +1439,7 @@ Function BVM_ADDABILITY(Param1%, Param2$, Param3%=1)
 		; Check it's not already known
 		Known = False
 		For i = 0 To 999
-			If Actor\SpellLevels[i] > 0
+			If Actor\SpellRanks[i] > 0
 				If Upper$(SpellsList(Actor\KnownSpells[i])\Name$) = SpellName$ Then Known = True : Exit
 			EndIf
 		Next
@@ -1456,7 +1456,7 @@ Function BVM_DELETEABILITY(Param1%, Param2$)
 	If Actor <> Null
 		SpellName$ = Upper$(Param2$)
 		For i = 0 To 999
-			If Actor\SpellLevels[i] > 0
+			If Actor\SpellRanks[i] > 0
 				If Upper$(SpellsList(Actor\KnownSpells[i])\Name$) = SpellName$ Then DeleteSpell(Actor, i)
 			EndIf
 		Next
@@ -1468,7 +1468,7 @@ Function BVM_ABILITYKNOWN%(Param1%, Param2$)
 	If Actor <> Null
 		SpellName$ = Upper$(Param2$)
 		For i = 0 To 999
-			If Actor\SpellLevels[i] > 0
+			If Actor\SpellRanks[i] > 0
 				If Upper$(SpellsList(Actor\KnownSpells[i])\Name$) = SpellName$ Then Result% = 1 : Exit
 			EndIf
 		Next
@@ -1495,8 +1495,8 @@ Function BVM_ABILITYLEVEL%(Param1%, Param2$)
 	If Actor <> Null
 		SpellName$ = Upper$(Param2$)
 		For i = 0 To 999
-			If Actor\SpellLevels[i] > 0
-				If Upper$(SpellsList(Actor\KnownSpells[i])\Name$) = SpellName$ Then Result% = Actor\SpellLevels[i] : Exit
+			If Actor\SpellRanks[i] > 0
+				If Upper$(SpellsList(Actor\KnownSpells[i])\Name$) = SpellName$ Then Result% = Actor\SpellRanks[i] : Exit
 			EndIf
 		Next
 	EndIf
@@ -1508,7 +1508,7 @@ Function BVM_ZZRUNABILITYCOOLDOWN(Param1%, Param2$)
 	If Actor <> Null
 		SpellName$ = Upper$(Param2$)
 		For i = 0 To 999
-			If Actor\SpellLevels[i] > 0
+			If Actor\SpellRanks[i] > 0
 				If Upper$(SpellsList(Actor\KnownSpells[i])\Name$) = SpellName$ 
 					Sp.Spell = SpellsList(Actor\KnownSpells[i])
 					Actor\SpellCharge[i] = Sp\RechargeTime
@@ -1529,9 +1529,9 @@ Function BVM_SETABILITYLEVEL(Param1%, Param2$, Param3%)
 		SpellName$ = Upper$(Param2$)
 		Lvl = Param3%
 		For i = 0 To 999
-			If Actor\SpellLevels[i] > 0
+			If Actor\SpellRanks[i] > 0
 				If Upper$(SpellsList(Actor\KnownSpells[i])\Name$) = SpellName$
-					Actor\SpellLevels[i] = Lvl
+					Actor\SpellRanks[i] = Lvl
 					If Actor\RNID > 0
 						Pa$ = RCE_StrFromInt$(Lvl, 4) + SpellsList(Actor\KnownSpells[i])\Name$
 						RCE_Send(Host, Actor\RNID, P_KnownSpellUpdate, "L" + Pa$, True)
