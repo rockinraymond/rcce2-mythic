@@ -1875,7 +1875,7 @@ EndIf
                      If Y# + 0.4 > 0.99 Then Y# = 0.59
                      If X# + 0.4 > 0.99 Then X# = 0.59
                      If LTooltip <> 0 Then GY_FreeGadget(LTooltip) : LTooltip = 0
-                     WTooltip = GY_CreateWindow(Sp\Name$, 0.63, 0.81, 0.37, 0.08, False, False, False, LoadTexture("Data\Textures\GUI\ToolTip.png"))
+                     WTooltip = GY_CreateWindow(Sp\Name$, 0.63, 0.81, 0.37, 0.08, False, False, False)
                      WTooltipReturn = WSpells
                      Desc$ = Sp\Description$
                      If Desc$ = "" Then Desc$ = LanguageString$(LS_NoDescription)
@@ -2493,7 +2493,7 @@ EndIf
 						If Y# + 0.4 > 0.99 Then Y# = 0.59
 						If X# + 0.4 > 0.99 Then X# = 0.59
 						If LTooltip <> 0 Then GY_FreeGadget(LTooltip) : LTooltip = 0
-						WTooltip = GY_CreateWindow(Sp\Name$, X#, Y#, 0.37, 0.08, False, False, False, LoadTexture("Data\Textures\GUI\ToolTip.png"))
+						WTooltip = GY_CreateWindow(Sp\Name$, X#, Y#, 0.37, 0.08, False, False, False)
 						WTooltipReturn = WSpells
 						Desc$ = Sp\Description$
 						If Desc$ = "" Then Desc$ = LanguageString$(LS_NoDescription)
@@ -2507,18 +2507,19 @@ EndIf
 						
 						Y# = 0.07
 						LTitle = GY_CreateLabelBig(WTooltip, 0.02, Y#, Sp\Name$, 0, 0, 255) 
-						RankStr$ = "[Rank ?]"
-						Select SpellView
-						Case S_Spell
-							RankStr$ = "[Rank" + " " + Me\SpellLevels[Me\KnownSpells[KnownSpellSort(FirstSpell + j) - 1]] + "]"
-						Case S_Combat
-							RankStr$ = "[Rank" + " " + Me\SpellLevels[Me\KnownSpells[KnownCombatSort(FirstSpell + j) - 1]] + "]"
-						Case S_Spirit
-							RankStr$ = "[Rank" + " " + Me\SpellLevels[Me\KnownSpells[KnownSpiritSort(FirstSpell + j) - 1]] + "]"
-						Case S_Talent
-							RankStr$ = "[Rank" + " " + Me\SpellLevels[Me\KnownSpells[KnownTalentSort(FirstSpell + j) - 1]] + "]"
-						End Select
-						LRank = GY_CreateLabel(WTooltip, 0.02, Y# + 0.22, RankStr$, 100, 255, 0)
+						; RankStr$ = "[Rank ?]"
+						; Select SpellView
+						; Case S_Spell
+						; 	RankStr$ = "[Level" + " " + Me\SpellLevels[Me\KnownSpells[KnownSpellSort(FirstSpell + j) - 1]] + "]"
+						; Case S_Combat
+						; 	;RankStr$ = "[Rank" + " " + Me\SpellLevels[Me\KnownSpells[KnownCombatSort(FirstSpell + j) - 1]] + "]"
+						; 	RankStr$ = ""
+						; Case S_Spirit
+						; 	RankStr$ = "[Level" + " " + Me\SpellLevels[Me\KnownSpells[KnownSpiritSort(FirstSpell + j) - 1]] + "]"
+						; Case S_Talent
+						; 	RankStr$ = "[Rank" + " " + Me\SpellLevels[Me\KnownSpells[KnownTalentSort(FirstSpell + j) - 1]] + "]"
+						; End Select
+						; LRank = GY_CreateLabel(WTooltip, 0.02, Y# + 0.22, RankStr$, 100, 255, 0)
 						While Desc$ <> ""
 						LDesc = GY_CreateLabel(WTooltip, 0.02, Y# + 0.42, Desc$)
                         Y# = Y# + 0.18
@@ -3746,7 +3747,18 @@ Function UpdateSpellbook()
 				If Me\SpellLevels[KnownSpellArrayByType(Spell,SpellView) - 1] > 0
 					Sp.Spell = FindKnownSpellByType(Me, SpellView, Spell)
 							GY_UpdateLabel(LSpellNames(Count), Sp\Name$, 255, 255, 255)
-							GY_UpdateLabel(LSpellLevels(Count), "[Rank" + " " + Me\SpellLevels[KnownSpellArrayByType(Spell,SpellView) - 1] + "]", 100, 255, 0)
+							RankStr$ = "[Rank ?]"
+						Select SpellView
+						Case S_Spell
+							RankStr$ = "[Level" + " " + Me\SpellLevels[KnownSpellArrayByType(Spell,SpellView) - 1] + "]"
+						Case S_Combat
+							RankStr$ = ""
+						Case S_Spirit
+							RankStr$ = "[Level" + " " + Me\SpellLevels[KnownSpellArrayByType(Spell,SpellView) - 1] + "]"
+						Case S_Talent
+							RankStr$ = "[Rank" + " " + Me\SpellLevels[KnownSpellArrayByType(Spell,SpellView) - 1] + "]"
+						End Select
+				GY_UpdateLabel(LSpellLevels(Count), RankStr$, 100, 255, 0)
 							
 							Lett = Len(Sp\Description$)
 							If Lett > 26

@@ -76,7 +76,7 @@ SpellType: 4
 
 Spell ID: 19
 Spell Name: Smite
-SpellType: 1
+SpellType: 4
 
 Spell ID: 20
 Spell Name: Charm Animal
