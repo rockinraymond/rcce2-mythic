@@ -741,6 +741,8 @@ Function UpdateNetwork()
 						NameLen = RCE_IntFromStr(Mid$(M\MessageData$, Offset, 2))
 						Sp\Description$ = Mid$(M\MessageData$, Offset + 2, NameLen)
 						Offset = Offset + 2 + NameLen
+						Sp\SpellLevel = RCE_IntFromStr(Mid$(M\MessageData$, Offset, 2))
+						Offset = Offset + 2
 						If RCE_IntFromStr(Mid$(M\MessageData$, Offset, 1)) = True And Memorised < 10
 							Me\MemorisedSpells[Memorised] = Spells
 							Memorised = Memorised + 1

@@ -888,7 +888,7 @@ Function AddSpell(AI.ActorInstance, SpellID, Lvl = 1)
 			If AI\RNID > 0
 				;Sp.Spell = SpellsList(SpellID)
 				Pa$ = RCE_StrFromInt$(Lvl, 2) + RCE_StrFromInt$(SpellID,2) +  RCE_StrFromInt$(Sp\ThumbnailTexID, 2) + RCE_StrFromInt$(Sp\RechargeTime, 2) + RCE_StrFromInt$(Sp\SpellType, 2)
-				Pa$ = Pa$ + RCE_StrFromInt$(Len(Sp\Name$), 2) + Sp\Name$ + RCE_StrFromInt$(Len(Sp\Description$), 2) + Sp\Description$
+				Pa$ = Pa$ + RCE_StrFromInt$(Len(Sp\Name$), 2) + Sp\Name$ + RCE_StrFromInt$(Len(Sp\Description$), 2) + Sp\Description$ + RCE_StrFromInt$(Sp\SpellLevel, 2)
 				Pa$ = Pa$ + RCE_StrFromInt$(0, 1)
 				RCE_Send(Host, AI\RNID, P_KnownSpellUpdate, "A" + Pa$, True)
 			EndIf
