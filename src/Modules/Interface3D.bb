@@ -3787,6 +3787,23 @@ Function UpdateSpellbook()
 		Until Count = 10 Or Spell = 1000
 	EndIf
 
+	;CastingLevel
+	Select SpellView
+		Case S_Spell
+			ArcaneSkill = Me\Attributes\Value[FindAttribute("Arcane Casting")]
+			CastLvlStr$ = "Casting Level: " + Str$(FindCastingLevel(ArcaneSkill,Me\Level))
+			GY_UpdateLabel(LSpellsCastingLevel, CastLvlStr$, 150, 100, 255)
+		Case S_Combat
+			CastLvlStr$ = ""
+			GY_UpdateLabel(LSpellsCastingLevel, CastLvlStr$)
+		Case S_Spirit
+			DivineSkill = Me\Attributes\Value[FindAttribute("Divine Casting")]
+			CastLvlStr$ = "Casting Level: " + Str$(FindCastingLevel(DivineSkill,Me\Level))
+			GY_UpdateLabel(LSpellsCastingLevel, CastLvlStr$, 255, 255, 0)
+		Case S_Talent
+			CastLvlStr$ = ""
+			GY_UpdateLabel(LSpellsCastingLevel, CastLvlStr$)
+	End Select
 End Function
 
 ; Updates the experience bar
@@ -4213,7 +4230,8 @@ Function CreateInterface()
 	WSpells = GY_CreateWindow(LanguageString$(LS_Abilities), 0.1, 0.1, 0.6, 0.5, True, True, False, LoadTexture("Data\Textures\GUI\AbilitiesBG.png"))
 	BPrevSpells = GY_CreateButton(WSpells, 0.01, 0.94, 0.05, 0.05, "<<")
 	BNextSpells = GY_CreateButton(WSpells, 0.94, 0.94, 0.05, 0.05, ">>")
-	LSpellsPage = GY_CreateLabel(WSpells, 0.5, 0.94, Upper$(LanguageString$(LS_MemorisedAbilities)), 255, 255, 255, Justify_Centre)
+	LSpellsPage = GY_CreateLabel(WSpells, 0.5, 0.96, Upper$(LanguageString$(LS_MemorisedAbilities)), 255, 255, 255, Justify_Centre)
+	LSpellsCastingLevel = GY_CreateLabel(WSpells, 0.5, 0.93, "Casting Level: 0", 255, 255, 255, Justify_Centre)
 	BShowSpells = GY_CreateButton(WSpells, 0, 0, 0.25, 0.05, "Arcane Spells")
 	BShowTalents = GY_CreateButton(WSpells, 0.75, 0, 0.25, 0.05, "Masteries")
 	BShowCombats = GY_CreateButton(WSpells, 0.5, 0, 0.25, 0.05, "Thief Skills")

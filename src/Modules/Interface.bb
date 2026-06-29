@@ -140,7 +140,7 @@ Dim LResistanceVals(49)
 Global WSpells, SpellsVisible = False
 Global BNextSpells, BPrevSpells
 Global BShowSpells, BShowTalents, BShowCombats, BShowUtils
-Global LSpellsPage
+Global LSpellsPage, LSpellsCastingLevel
 Global WSpellRemove, BSpellRemoveOK, BSpellRemoveCancel, SpellRemoveNum = -1
 Global WSpellError, BSpellError
 Global LMemorising, SMemorising, MemoriseSpell, MemoriseSlot, MemoriseProgress, LastMemoriseUpdate

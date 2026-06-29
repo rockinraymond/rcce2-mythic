@@ -1404,3 +1404,21 @@ Function GetSkillModifier(SkillValue)
 		Return -5
 	EndIf
 End Function
+
+Function FindCastingLevel(CastingSkill,CharLevel)
+
+	If CastingSkill >= 100 And CharLevel >= 11
+		Return 6
+	ElseIf CastingSkill >= 85 And CharLevel >= 9
+		Return 5
+	ElseIf CastingSkill >= 70 And CharLevel >= 7
+		Return 4
+	ElseIf CastingSkill >= 55 And CharLevel >= 5
+		Return 3
+	ElseIf CastingSkill >= 40 And CharLevel >= 3
+		Return 2
+	Else
+		Return 1
+	EndIf
+
+End Function
