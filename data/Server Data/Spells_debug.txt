@@ -114,7 +114,7 @@ SpellType: 4
 SpellLevel: 1
 
 Spell ID: 23
-Spell Name: Spritual Hammer
+Spell Name: Spiritual Hammer
 SpellType: 4
 SpellLevel: 2
 

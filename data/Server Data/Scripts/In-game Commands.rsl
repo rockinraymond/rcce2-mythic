@@ -228,7 +228,7 @@ function DivineSpellTest()
     AddAbility(Actor(), "Silence")
     AddAbility(Actor(), "Resist Lightning")
 
-    AddAbility(Actor(), "Codemn")
+    AddAbility(Actor(), "Condemn")
     AddAbility(Actor(), "Remove Curse")
     AddAbility(Actor(), "Striking")
     AddAbility(Actor(), "Cure Disease")
