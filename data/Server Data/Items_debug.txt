@@ -1523,3 +1523,103 @@ Item Name: Repair Hammer
 Value: 200
 Rarity: 1
 
+Item ID: 305
+Item Name: Magic Missile Tome
+Value: 50000
+Rarity: 2
+
+Item ID: 306
+Item Name: Touch of Cold Tome
+Value: 50000
+Rarity: 2
+
+Item ID: 307
+Item Name: Shield Tome
+Value: 50000
+Rarity: 2
+
+Item ID: 308
+Item Name: Detect Magic Tome
+Value: 50000
+Rarity: 2
+
+Item ID: 309
+Item Name: Blinding Light Tome
+Value: 50000
+Rarity: 2
+
+Item ID: 310
+Item Name: Charm Person Tome
+Value: 50000
+Rarity: 2
+
+Item ID: 311
+Item Name: Sleep Tome
+Value: 50000
+Rarity: 2
+
+Item ID: 312
+Item Name: Feather Weight Tome
+Value: 50000
+Rarity: 2
+
+Item ID: 313
+Item Name: Protect from Bludgeon Tome
+Value: 50000
+Rarity: 2
+
+Item ID: 314
+Item Name: Weakness to Cold Tome
+Value: 50000
+Rarity: 2
+
+Item ID: 315
+Item Name: Weakness to Fire Tome
+Value: 100000
+Rarity: 3
+
+Item ID: 316
+Item Name: Touch of Fire Tome
+Value: 100000
+Rarity: 3
+
+Item ID: 317
+Item Name: Icicle Tome
+Value: 100000
+Rarity: 3
+
+Item ID: 318
+Item Name: Open Lock Tome
+Value: 100000
+Rarity: 3
+
+Item ID: 319
+Item Name: Mirror Image Tome
+Value: 100000
+Rarity: 3
+
+Item ID: 320
+Item Name: Web Tome
+Value: 100000
+Rarity: 3
+
+Item ID: 321
+Item Name: Invisibility Tome
+Value: 100000
+Rarity: 3
+
+Item ID: 322
+Item Name: Protect from Blades Tome
+Value: 100000
+Rarity: 3
+
+Item ID: 323
+Item Name: Weakness to Lightning Tome
+Value: 100000
+Rarity: 3
+
+Item ID: 324
+Item Name: Touch of Lightning Tome
+Value: 100000
+Rarity: 3
+
