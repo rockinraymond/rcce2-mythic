@@ -1623,3 +1623,53 @@ Item Name: Touch of Lightning Tome
 Value: 100000
 Rarity: 3
 
+Item ID: 325
+Item Name: Lightning Bolt Tome
+Value: 150000
+Rarity: 4
+
+Item ID: 326
+Item Name: Fireball Tome
+Value: 150000
+Rarity: 4
+
+Item ID: 327
+Item Name: Haste Tome
+Value: 150000
+Rarity: 4
+
+Item ID: 328
+Item Name: Slow Tome
+Value: 150000
+Rarity: 4
+
+Item ID: 329
+Item Name: Protect from Missiles Tome
+Value: 150000
+Rarity: 4
+
+Item ID: 330
+Item Name: Weakness to Magic Tome
+Value: 150000
+Rarity: 4
+
+Item ID: 331
+Item Name: Dispel Magic Tome
+Value: 150000
+Rarity: 4
+
+Item ID: 332
+Item Name: Group Shield Tome
+Value: 150000
+Rarity: 4
+
+Item ID: 333
+Item Name: Group Invisibility Tome
+Value: 150000
+Rarity: 4
+
+Item ID: 334
+Item Name: Disarm Trap Tome
+Value: 150000
+Rarity: 4
+
