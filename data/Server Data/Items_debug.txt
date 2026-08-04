@@ -1673,3 +1673,123 @@ Item Name: Disarm Trap Tome
 Value: 150000
 Rarity: 4
 
+Item ID: 335
+Item Name: Cure Light Wounds Tome
+Value: 50000
+Rarity: 2
+
+Item ID: 336
+Item Name: Smite Tome
+Value: 50000
+Rarity: 2
+
+Item ID: 337
+Item Name: Resist Cold Tome
+Value: 50000
+Rarity: 2
+
+Item ID: 338
+Item Name: Detect Evil Tome
+Value: 50000
+Rarity: 2
+
+Item ID: 339
+Item Name: Protect From Evil Tome
+Value: 50000
+Rarity: 2
+
+Item ID: 340
+Item Name: Turn Undead Tome
+Value: 50000
+Rarity: 2
+
+Item ID: 341
+Item Name: Purify Food and Water Tome
+Value: 50000
+Rarity: 2
+
+Item ID: 342
+Item Name: Bestow Courage Tome
+Value: 50000
+Rarity: 2
+
+Item ID: 343
+Item Name: Bless Tome
+Value: 100000
+Rarity: 3
+
+Item ID: 344
+Item Name: Charm Animal Tome
+Value: 100000
+Rarity: 3
+
+Item ID: 345
+Item Name: Spiritual Hammer Tome
+Value: 100000
+Rarity: 3
+
+Item ID: 346
+Item Name: Find Traps Tome
+Value: 100000
+Rarity: 3
+
+Item ID: 347
+Item Name: Resist Fire Tome
+Value: 100000
+Rarity: 3
+
+Item ID: 348
+Item Name: Hold Person Tome
+Value: 100000
+Rarity: 3
+
+Item ID: 349
+Item Name: Silence Tome
+Value: 100000
+Rarity: 3
+
+Item ID: 350
+Item Name: Resist Lightning Tome
+Value: 100000
+Rarity: 3
+
+Item ID: 351
+Item Name: Condemn Tome
+Value: 150000
+Rarity: 4
+
+Item ID: 352
+Item Name: Remove Curse Tome
+Value: 150000
+Rarity: 4
+
+Item ID: 353
+Item Name: Striking Tome
+Value: 150000
+Rarity: 4
+
+Item ID: 354
+Item Name: Cure Disease Tome
+Value: 150000
+Rarity: 4
+
+Item ID: 355
+Item Name: Cure Blindness Tome
+Value: 150000
+Rarity: 4
+
+Item ID: 356
+Item Name: Cure Many Wounds Tome
+Value: 150000
+Rarity: 4
+
+Item ID: 357
+Item Name: Strengthen Animal Tome
+Value: 150000
+Rarity: 4
+
+Item ID: 358
+Item Name: Slow Poison Tome
+Value: 150000
+Rarity: 4
+
