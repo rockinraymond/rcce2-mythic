@@ -1,0 +1,56 @@
+Using "RC_Core.rcm"
+; Define entry function 'Main'
+
+Function Main()
+    
+    ;setup actor
+    NPC = Actor()
+    SetName(NPC, "Thelan")
+    setActorLevel(NPC, 4)
+
+    
+    
+    SetActorClothes(NPC,3)
+    SetActorHair(NPC,5)
+
+
+    ;Stock Items
+    GiveItem(NPC, "Touch of Cold Tome", 1)
+    GiveItem(NPC, "Magic Missile Tome", 1)
+    GiveItem(NPC, "Shield Tome", 1)
+    GiveItem(NPC, "Detect Magic Tome", 1)
+    GiveItem(NPC, "Blinding Light Tome", 1)
+    GiveItem(NPC, "Charm Person Tome", 1)
+    GiveItem(NPC, "Sleep Tome", 1)
+    GiveItem(NPC, "Feather Weight Tome", 1)
+    GiveItem(NPC, "Protect from Bludgeon Tome", 1)
+    GiveItem(NPC, "Weakness to Cold Tome", 1)
+    GiveItem(NPC, "Touch of Fire Tome", 1)
+    GiveItem(NPC, "Weakness to Fire Tome", 1)
+    GiveItem(NPC, "Icicle Tome", 1)
+    GiveItem(NPC, "Open Lock Tome", 1)
+    GiveItem(NPC, "Mirror Image Tome", 1)
+    GiveItem(NPC, "Web Tome", 1)
+    GiveItem(NPC, "Invisibility Tome", 1)
+    GiveItem(NPC, "Touch of Lightning Tome", 1)
+    GiveItem(NPC, "Protect from Blades Tome", 1)
+    GiveItem(NPC, "Weakness to Lightning Tome", 1)
+    GiveItem(NPC, "Fireball Tome", 1)
+    GiveItem(NPC, "Lightning Bolt Tome", 1)
+    GiveItem(NPC, "Haste Tome", 1)
+    GiveItem(NPC, "Slow Tome", 1)
+    GiveItem(NPC, "Protect from Missiles Tome", 1)
+    GiveItem(NPC, "Weakness to Magic Tome", 1)
+    GiveItem(NPC, "Dispel Magic Tome", 1)
+    GiveItem(NPC, "Group Shield Tome", 1)
+    GiveItem(NPC, "Group Invisibility Tome", 1)
+    GiveItem(NPC, "Disarm Trap Tome", 1)
+
+
+
+
+
+
+
+
+End Function

@@ -1,0 +1,50 @@
+Using "RC_Core.rcm"
+; Define entry function 'Main'
+
+Function Main()
+    
+    ;setup actor
+    NPC = Actor()
+    SetName(NPC, "Father Theilbane")
+    setActorLevel(NPC, 6)
+
+    
+    
+    SetActorClothes(NPC,2)
+    ;SetActorHair(NPC,2)
+
+
+    ;Stock Items
+    GiveItem(NPC, "Cure Light Wounds Tome", 1)
+    GiveItem(NPC, "Smite Tome", 1)
+    GiveItem(NPC, "Resist Cold Tome", 1)
+    GiveItem(NPC, "Dectect Evil Tome", 1)
+    GiveItem(NPC, "Protect from Evil Tome", 1)
+    GiveItem(NPC, "Turn Undead Tome", 1)
+    GiveItem(NPC, "Purify Food and Water Tome", 1)
+    GiveItem(NPC, "Bestow Courage Tome", 1)
+    GiveItem(NPC, "Bless Tome", 1)
+    GiveItem(NPC, "Charm Animal Tome", 1)
+    GiveItem(NPC, "Spiritual Hammer Tome", 1)
+    GiveItem(NPC, "Find Traps Tome", 1)
+    GiveItem(NPC, "Resist Fire Tome", 1)
+    GiveItem(NPC, "Hold Person Tome", 1)
+    GiveItem(NPC, "Silence Tome", 1)
+    GiveItem(NPC, "Resist Lightning Tome", 1)
+    GiveItem(NPC, "Condemn Tome", 1)
+    GiveItem(NPC, "Remove Curse Tome", 1)
+    GiveItem(NPC, "Striking Tome", 1)
+    GiveItem(NPC, "Cure Disease Tome", 1)
+    GiveItem(NPC, "Cure Blindness Tome", 1)
+    GiveItem(NPC, "Cure Many Wounds Tome", 1)
+    GiveItem(NPC, "Strengthen Animal Tome", 1)
+    GiveItem(NPC, "Slow Poison Tome", 1)
+
+
+
+
+
+
+
+
+End Function
