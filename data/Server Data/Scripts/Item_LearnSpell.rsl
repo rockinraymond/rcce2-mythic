@@ -4,9 +4,16 @@ Using "RC_Core.rcm"
 Function LearnSpell(Player, SpellName$, SpellSchool$, SpellLevel)
     PlayerLevel = ActorLevel(Player)
     CastingSkill = Attribute(Player, SpellSchool$ + " Casting")
+    CastingLevel = FindCastingLevel(CastingSkill, PlayerLevel)
+
+    ;Check if you already know this spell
+    If AbilityKnown(Player, SpellName$)
+        Output(Player, "You already know " + SpellName$, 255,255,155)
+        Return
+    EndIf
 
     ;Check Level
-    If SpellLevel > CastingSkill
+    If CastingLevel < SpellLevel
         Output(Player, "You do not have a high enough " + SpellSchool$ + " casting level to learn " + SpellName$ + "!", 255, 155, 155)
     Else
         Output(Player, "You have learned " + SpellName$ + "!", 155, 255, 155)
@@ -106,7 +113,7 @@ End Function
 
 ; Divine Level 3
 Function Codemn_weak_to_holy()
-	LearnSpell(Actor(), "Codemn", "Divine", 3)
+	LearnSpell(Actor(), "Condemn", "Divine", 3)
 End Function
 
 Function RemoveCurse()
