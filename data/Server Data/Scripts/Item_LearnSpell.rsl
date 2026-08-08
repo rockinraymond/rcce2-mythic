@@ -1,0 +1,257 @@
+Using "RC_Core.rcm"
+; Define entry function 'Main'
+
+Function LearnSpell(Player, SpellName$, SpellSchool$, SpellLevel)
+    PlayerLevel = ActorLevel(Player)
+    CastingSkill = Attribute(Player, SpellSchool$ + " Casting")
+
+    ;Check Level
+    If SpellLevel > CastingSkill
+        Output(Player, "You do not have a high enough " + SpellSchool$ + " casting level to learn " + SpellName$ + "!", 255, 155, 155)
+    Else
+        Output(Player, "You have learned " + SpellName$ + "!", 155, 255, 155)
+        AddAbility(Player, SpellName$)
+        GiveItem(Player, SpellName$ + " Tome", -1)
+    EndIf
+
+End Function
+
+Function FindCastingLevel(CastingSkill,CharLevel)
+
+	If CastingSkill >= 100 And CharLevel >= 11
+		Return 6
+	ElseIf CastingSkill >= 85 And CharLevel >= 9
+		Return 5
+	ElseIf CastingSkill >= 70 And CharLevel >= 7
+		Return 4
+	ElseIf CastingSkill >= 55 And CharLevel >= 5
+		Return 3
+	ElseIf CastingSkill >= 40 And CharLevel >= 3
+		Return 2
+	Else
+		Return 1
+	EndIf
+
+End Function
+
+Function MagicMissile()
+    LearnSpell(Actor(), "Magic Missile", "Arcane", 1)
+End Function
+
+; Divine Level 1
+Function CureLightWounds()
+	LearnSpell(Actor(), "Cure Light Wounds", "Divine", 1)
+End Function
+
+Function Smite()
+	LearnSpell(Actor(), "Smite", "Divine", 1)
+End Function
+
+Function ResistCold()
+	LearnSpell(Actor(), "Resist Cold", "Divine", 1)
+End Function
+
+Function DetectEvil()
+	LearnSpell(Actor(), "Detect Evil", "Divine", 1)
+End Function
+
+Function ProtectFromEvil()
+	LearnSpell(Actor(), "Protect From Evil", "Divine", 1)
+End Function
+
+Function TurnUndead()
+	LearnSpell(Actor(), "Turn Undead", "Divine", 1)
+End Function
+
+Function PurifyFoodAndWater()
+	LearnSpell(Actor(), "Purify Food and Water", "Divine", 1)
+End Function
+
+Function BestowCourage()
+	LearnSpell(Actor(), "Bestow Courage", "Divine", 1)
+End Function
+
+; Divine Level 2
+Function Bless()
+	LearnSpell(Actor(), "Bless", "Divine", 2)
+End Function
+
+Function CharmAnimal()
+	LearnSpell(Actor(), "Charm Animal", "Divine", 2)
+End Function
+
+Function SpiritualHammer()
+	LearnSpell(Actor(), "Spiritual Hammer", "Divine", 2)
+End Function
+
+Function FindTraps()
+	LearnSpell(Actor(), "Find Traps", "Divine", 2)
+End Function
+
+Function ResistFire()
+	LearnSpell(Actor(), "Resist Fire", "Divine", 2)
+End Function
+
+Function HoldPerson()
+	LearnSpell(Actor(), "Hold Person", "Divine", 2)
+End Function
+
+Function Silence()
+	LearnSpell(Actor(), "Silence", "Divine", 2)
+End Function
+
+Function ResistLightning()
+	LearnSpell(Actor(), "Resist Lightning", "Divine", 2)
+End Function
+
+; Divine Level 3
+Function Codemn_weak_to_holy()
+	LearnSpell(Actor(), "Codemn", "Divine", 3)
+End Function
+
+Function RemoveCurse()
+	LearnSpell(Actor(), "Remove Curse", "Divine", 3)
+End Function
+
+Function Striking()
+	LearnSpell(Actor(), "Striking", "Divine", 3)
+End Function
+
+Function CureDisease()
+	LearnSpell(Actor(), "Cure Disease", "Divine", 3)
+End Function
+
+Function CureBlindness()
+	LearnSpell(Actor(), "Cure Blindness", "Divine", 3)
+End Function
+
+Function CureManyWounds()
+	LearnSpell(Actor(), "Cure Many Wounds", "Divine", 3)
+End Function
+
+Function StrengthenAnimal()
+	LearnSpell(Actor(), "Strengthen Animal", "Divine", 3)
+End Function
+
+Function SlowPoison()
+	LearnSpell(Actor(), "Slow Poison", "Divine", 3)
+End Function
+
+; Arcane Level 1
+Function TouchOfCold()
+	LearnSpell(Actor(), "Touch of Cold", "Arcane", 1)
+End Function
+
+Function ShieldSpell()
+	LearnSpell(Actor(), "Shield", "Arcane", 1)
+End Function
+
+Function DetectMagic()
+	LearnSpell(Actor(), "Detect Magic", "Arcane", 1)
+End Function
+
+Function BlindingLight()
+	LearnSpell(Actor(), "Blinding Light", "Arcane", 1)
+End Function
+
+Function CharmPerson()
+	LearnSpell(Actor(), "Charm Person", "Arcane", 1)
+End Function
+
+Function SleepSpell()
+	LearnSpell(Actor(), "Sleep", "Arcane", 1)
+End Function
+
+Function FeatherWeight()
+	LearnSpell(Actor(), "Feather Weight", "Arcane", 1)
+End Function
+
+Function ProtectFromBludgeon()
+	LearnSpell(Actor(), "Protect from Bludgeon", "Arcane", 1)
+End Function
+
+Function WeaknessToCold()
+	LearnSpell(Actor(), "Weakness to Cold", "Arcane", 1)
+End Function
+
+; Arcane Level 2
+Function TouchOfFire()
+	LearnSpell(Actor(), "Touch of Fire", "Arcane", 2)
+End Function
+
+Function WeaknessToFire()
+	LearnSpell(Actor(), "Weakness to Fire", "Arcane", 2)
+End Function
+
+Function Icicle()
+	LearnSpell(Actor(), "Icicle", "Arcane", 2)
+End Function
+
+Function OpenLock()
+	LearnSpell(Actor(), "Open Lock", "Arcane", 2)
+End Function
+
+Function MirrorImage()
+	LearnSpell(Actor(), "Mirror Image", "Arcane", 2)
+End Function
+
+Function WebSpell()
+	LearnSpell(Actor(), "Web", "Arcane", 2)
+End Function
+
+Function Invisibility()
+	LearnSpell(Actor(), "Invisibility", "Arcane", 2)
+End Function
+
+Function TouchOfLightning()
+	LearnSpell(Actor(), "Touch of Lightning", "Arcane", 2)
+End Function
+
+Function ProtectFromBlades()
+	LearnSpell(Actor(), "Protect from Blades", "Arcane", 2)
+End Function
+
+Function WeaknessToLightning()
+	LearnSpell(Actor(), "Weakness to Lightning", "Arcane", 2)
+End Function
+
+; Arcane Level 3
+Function Fireball()
+	LearnSpell(Actor(), "Fireball", "Arcane", 3)
+End Function
+
+Function LightningBolt()
+	LearnSpell(Actor(), "Lightning Bolt", "Arcane", 3)
+End Function
+
+Function Haste()
+	LearnSpell(Actor(), "Haste", "Arcane", 3)
+End Function
+
+Function SlowSpell()
+	LearnSpell(Actor(), "Slow", "Arcane", 3)
+End Function
+
+Function ProtectFromMissiles()
+	LearnSpell(Actor(), "Protect from Missiles", "Arcane", 3)
+End Function
+
+Function WeaknessToMagic()
+	LearnSpell(Actor(), "Weakness to Magic", "Arcane", 3)
+End Function
+
+Function DispelMagic()
+	LearnSpell(Actor(), "Dispel Magic", "Arcane", 3)
+End Function
+
+Function GroupShield()
+	LearnSpell(Actor(), "Group Shield", "Arcane", 3)
+End Function
+
+Function GroupInvisibility()
+	LearnSpell(Actor(), "Group Invisibility", "Arcane", 3)
+End Function
+
+Function DisarmTrap()
+	LearnSpell(Actor(), "Disarm Trap", "Arcane", 3)
+End Function
