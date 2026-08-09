@@ -4,7 +4,7 @@ Function Main()
 
     Player = Actor()
 
-    PlayerCon = Attribute(Player, "Constituion")
+    PlayerCon = Attribute(Player, "Constitution")
     PlayerInt = Attribute(Player, "Intelligence")
     PlayerWis = Attribute(Player, "Wisdom")
 
