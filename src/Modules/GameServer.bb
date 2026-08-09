@@ -1353,3 +1353,18 @@ Function GiveItem(Actor.ActorInstance, Param2$, Param3%=1)
 		Next
 	EndIf
 End Function
+
+Function GetActorAggroRange#(AI.ActorInstance)
+	Stealth = AI\Attributes\Value[FindAttribute("Stealth")]
+	DexBonus = AI\Attributes\Value[FindAttribute("Dexterity")] - 10
+	StealthMod = AI\Attributes\Value[FindAttribute("Stealth Mod")]
+	AggroRange = (125.0 - (Stealth + StealthMod + DexBonus))/2
+
+	AInstance.AreaInstance = Object.AreaInstance(AI\ServerArea)
+	If AInstance\Area\Outdoors = 0
+		AggroRange = AggroRange / 2
+	EndIf
+
+	If AggroRange < 3.0 Then AggroRange = 3.0
+	Return AggroRange
+End Function

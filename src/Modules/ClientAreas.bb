@@ -406,7 +406,7 @@ Function LoadArea(Name$, CameraEN, DisplayItems = False, UpdateRottNet = False)
 				; Chunking for dungeons etc.
 				If DisplayItems = False
 					Name$ = Upper$(GetMeshName$(S\MeshID))
-					If Instr(Name$, "RCDUNGEON\") Or Instr(Name$, "CUSTOMCHUNK\")
+					If Instr(Name$, "Dungeons\") Or Instr(Name$, "CUSTOMCHUNK\")
 						RotateMesh(S\EN, Pitch#, Yaw#, Roll#)
 						ScaleEntity(S\EN, S\ScaleX#, S\ScaleY#, S\ScaleZ#)
 						ChunkTerrain(S\EN, 3, 3, 3, X#, Y#, Z#)

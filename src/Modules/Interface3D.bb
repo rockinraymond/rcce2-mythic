@@ -5236,3 +5236,13 @@ Function FreeInterface()
 	;Next
 
 End Function
+
+Function GetActorAggroRange#(AI.ActorInstance)
+	Stealth = AI\Attributes\Value[FindAttribute("Stealth")]
+	DexBonus = AI\Attributes\Value[FindAttribute("Dexterity")] - 10
+	StealthMod = AI\Attributes\Value[FindAttribute("Stealth Mod")]
+	AggroRange = (125.0 - (Stealth + StealthMod + DexBonus))/2
+
+	If AggroRange < 3.0 Then AggroRange = 3.0
+	Return AggroRange
+End Function
