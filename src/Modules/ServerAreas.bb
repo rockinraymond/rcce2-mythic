@@ -24,9 +24,24 @@ Type Area
 	Field PvP
 	; Gravity strength (0-1000)
 	Field Gravity
+	; Server-side collision map for NPC pathing and AI steering
+	Field CollisionOriginX#, CollisionOriginZ#
+	Field CollisionGridX[40000], CollisionGridZ[40000]
+	Field CollisionRoot.ServerCollisionBox
 	; Track instances
 	Field Instances.AreaInstance[99]
 End Type
+
+Type ServerCollisionBox
+	Field Area.Area
+	Field NextBox.ServerCollisionBox
+	Field X#, Y#, Z#
+	Field SizeX#, SizeY#, SizeZ#
+End Type
+
+;
+; ServerMoveTarget globals removed - move targets are now written
+; into an actor instance's `DestX#`/`DestZ#` by ServerFindMoveTarget.
 
 ; Water areas for damaging things
 Type ServerWater
@@ -90,6 +105,24 @@ Function UpdateWeather(A.AreaInstance)
 
 End Function
 
+; Returns true when there is an unobstructed path between two 2D points for an actor
+Function ServerHasLineOfSight(A.Area, X1#, Z1#, X2#, Z2#, Radius#)
+	If A = Null Then Return False
+	DX# = X2# - X1#
+	DZ# = Z2# - Z1#
+	Dist# = Sqr(DX# * DX# + DZ# * DZ#)
+	If Dist# = 0.0 Then Return True
+	StepSize# = 0.5
+	Steps = Ceil(Dist# / StepSize#)
+	For s = 0 To Steps
+		t# = Float#(s) / Float#(Steps)
+		TX# = X1# + (DX# * t#)
+		TZ# = Z1# + (DZ# * t#)
+		If ServerIsBlocked(A, TX#, TZ#, Radius#) = True Then Return False
+	Next
+	Return True
+End Function
+
 
 ; Creates a new blank area
 Function ServerCreateArea.Area()
@@ -102,6 +135,7 @@ Function ServerCreateArea.Area()
 		If i < 1000 Then A\SpawnFrequency[i] = 10
 	Next
 	A\Gravity = 300
+	;ClearServerCollisionMap(A)
 	ServerCreateAreaInstance(A, 0)
 	Return A
 
@@ -168,14 +202,262 @@ Function ServerUnloadArea(A.Area)
 
 End Function
 
+; Converts a 2D grid coordinate into a flat Blitz-compatible index.
+Function ServerCollisionCellIndex(cx, cz)
+	If cx < 0 Or cx >= 200 Or cz < 0 Or cz >= 200 Then Return -1
+	Return (cx * 200) + cz
+End Function
+
+; Clears all server-side collision blocks for an area.
+Function ClearServerCollisionMap(A.Area)
+	If A = Null Then Return
+	For i = 0 To 39999
+		A\CollisionGridX[i] = 0
+		A\CollisionGridZ[i] = 0
+	Next
+	A\CollisionOriginX# = 0.0
+	A\CollisionOriginZ# = 0.0
+	If A\CollisionRoot <> Null
+		B.ServerCollisionBox = A\CollisionRoot
+		While B <> Null
+			NextB.ServerCollisionBox = B\NextBox
+			Delete(B)
+			B = NextB
+		Wend
+		A\CollisionRoot = Null
+	EndIf
+End Function
+
+; Adds a collision box to the server occupancy map for AI pathing. This matches the client area collision boxes in spirit: a box volume that blocks movement.
+Function ServerAddCollisionBox(A.Area, X#, Y#, Z#, SizeX#, SizeY#, SizeZ#)
+	If A = Null Then Return
+	CellSize# = 0.15
+	If A\CollisionRoot = Null
+		A\CollisionOriginX# = X# - (SizeX# * 0.5)
+		A\CollisionOriginZ# = Z# - (SizeZ# * 0.5)
+	Else
+		MinX# = X# - (SizeX# * 0.5)
+		MinZ# = Z# - (SizeZ# * 0.5)
+		If MinX# < A\CollisionOriginX# Then A\CollisionOriginX# = MinX#
+		If MinZ# < A\CollisionOriginZ# Then A\CollisionOriginZ# = MinZ#
+	EndIf
+
+	B.ServerCollisionBox = New ServerCollisionBox
+	B\Area = A
+	B\X# = X#
+	B\Y# = Y#
+	B\Z# = Z#
+	B\SizeX# = SizeX#
+	B\SizeY# = SizeY#
+	B\SizeZ# = SizeZ#
+	B\NextBox = A\CollisionRoot
+	A\CollisionRoot = B
+
+	MinCellX = Int((X# - (SizeX# * 0.5) - A\CollisionOriginX#) / 0.15)
+	MaxCellX = Int((X# + (SizeX# * 0.5) - A\CollisionOriginX#) / 0.15)
+	MinCellZ = Int((Z# - (SizeZ# * 0.5) - A\CollisionOriginZ#) / 0.15)
+	MaxCellZ = Int((Z# + (SizeZ# * 0.5) - A\CollisionOriginZ#) / 0.15)
+
+	For cx = MinCellX To MaxCellX
+		If cx >= 0 And cx < 200
+			For cz = MinCellZ To MaxCellZ
+				If cz >= 0 And cz < 200
+					Index = ServerCollisionCellIndex(cx, cz)
+					If Index >= 0
+						A\CollisionGridX[Index] = 1
+						A\CollisionGridZ[Index] = 1
+					EndIf
+				EndIf
+			Next
+		EndIf
+	Next
+End Function
+
+; Returns true when the given world-space position is inside a server collision block.
+Function ServerIsBlocked(A.Area, X#, Z#, Radius# = 1.0)
+	If A = Null Then Return False
+	CellSize# = 0.15
+	CellRadius = Ceil(Radius# / CellSize#)
+	CellX = Int((X# - A\CollisionOriginX#) / CellSize#)
+	CellZ = Int((Z# - A\CollisionOriginZ#) / CellSize#)
+	For cx = CellX - CellRadius To CellX + CellRadius
+		If cx >= 0 And cx < 200
+			For cz = CellZ - CellRadius To CellZ + CellRadius
+				If cz >= 0 And cz < 200
+					Index = ServerCollisionCellIndex(cx, cz)
+					If Index >= 0
+						If A\CollisionGridX[Index] = 1 Or A\CollisionGridZ[Index] = 1 Then Return True
+					EndIf
+				EndIf
+			Next
+		EndIf
+	Next
+	Return False
+End Function
+
+; Finds a nearby valid destination around a blocked goal using the server collision map.
+Function ServerFindMoveTarget(A.Area, AI.ActorInstance, StartX#, StartZ#, GoalX#, GoalZ#, Radius#)
+	; Write the chosen move target directly into the supplied actor's DestX#/DestZ#.
+	If AI <> Null
+		AI\DestX# = GoalX#
+		AI\DestZ# = GoalZ#
+	EndIf
+	If A = Null Then Return
+	If ServerIsBlocked(A, GoalX#, GoalZ#, Radius#) = False Then Return
+	SearchRange# = 8.0
+	For SearchStep# = 1.0 To SearchRange# Step 0.5
+		For Dir = 0 To 15
+			Angle# = Float#(Dir) * 22.5
+			TestX# = GoalX# + (Cos#(Angle#) * SearchStep#)
+			TestZ# = GoalZ# + (Sin#(Angle#) * SearchStep#)
+			If ServerIsBlocked(A, TestX#, TestZ#, Radius#) = False
+				If AI <> Null
+					AI\DestX# = TestX#
+					AI\DestZ# = TestZ#
+				EndIf
+				Return
+			EndIf
+		Next
+	Next
+	If AI <> Null
+		AI\DestX# = StartX#
+		AI\DestZ# = StartZ#
+	EndIf
+End Function
+
+; Returns the path to the separate server-only collision file for an area.
+Function ServerCollisionDataPath$(AreaName$)
+	Return "Data\Server Data\Areas\" + AreaName$ + "_collision.dat"
+End Function
+
+; Returns true when the server-only collision file exists for this area.
+Function ServerCollisionDataExists(AreaName$)
+	F = ReadFile(ServerCollisionDataPath$(AreaName$))
+	If F = 0 Then Return False
+	CloseFile(F)
+	Return True
+End Function
+
+; Saves the server collision box data to a separate, server-only file so it never touches
+; the client area file or the base server area save format.
+Function ServerSaveAreaCollisionMap(A.Area)
+	If A = Null Then Return
+	Path$ = ServerCollisionDataPath$(A\Name$)
+	F = WriteFile(Path$)
+	If F = 0
+		If MainLog <> 0 Then WriteLog(MainLog, "ServerSaveAreaCollisionMap: could not open '" + Path$ + "'.")
+		Return
+	EndIf
+
+	ClearServerCollisionMap(A)
+
+	; Include explicit collision boxes from the area.
+	For C.ColBox = Each ColBox
+		If C\EN <> 0
+			X# = EntityX#(C\EN, True)
+			Y# = EntityY#(C\EN, True)
+			Z# = EntityZ#(C\EN, True)
+			ServerAddCollisionBox(A, X#, Y#, Z#, C\ScaleX#, C\ScaleY#, C\ScaleZ#)
+		EndIf
+	Next
+
+	; Include scenery that is currently marked as collidable.
+	For S.Scenery = Each Scenery
+		If S\EN <> 0
+			Collides = GetEntityType(S\EN)
+			If Collides <> 0
+				X# = EntityX#(S\EN, True)
+				Y# = EntityY#(S\EN, True)
+				Z# = EntityZ#(S\EN, True)
+				Width# = MeshWidth#(S\EN) * S\ScaleX#
+				Height# = MeshHeight#(S\EN) * S\ScaleY#
+				Depth# = MeshDepth#(S\EN) * S\ScaleZ#
+				If Width# <= 0.0 Then Width# = 1.0
+				If Height# <= 0.0 Then Height# = 1.0
+				If Depth# <= 0.0 Then Depth# = 1.0
+				ServerAddCollisionBox(A, X#, Y#, Z#, Width#, Height#, Depth#)
+			EndIf
+		EndIf
+	Next
+
+	Count = 0
+	B.ServerCollisionBox = A\CollisionRoot
+	While B <> Null
+		Count = Count + 1
+		B = B\NextBox
+	Wend
+	WriteInt(F, Count)
+
+	B = A\CollisionRoot
+	While B <> Null
+		WriteFloat(F, B\X#)
+		WriteFloat(F, B\Y#)
+		WriteFloat(F, B\Z#)
+		WriteFloat(F, B\SizeX#)
+		WriteFloat(F, B\SizeY#)
+		WriteFloat(F, B\SizeZ#)
+		B = B\NextBox
+	Wend
+	CloseFile(F)
+
+	If MainLog <> 0 Then WriteLog(MainLog, "ServerSaveAreaCollisionMap: saved " + Str$(Count) + " boxes for area '" + A\Name$ + "'.")
+End Function
+
+; Loads the server collision box data from the separate collision file.
+Function ServerLoadAreaCollisionMap(A.Area, AreaName$)
+	If A = Null Then Return
+	Path$ = ServerCollisionDataPath$(AreaName$)
+	F = ReadFile(Path$)
+	If F = 0
+		If MainLog <> 0 Then WriteLog(MainLog, "ServerLoadAreaCollisionMap: no collision file for '" + AreaName$ + "'.")
+		Return
+	EndIf
+
+	ClearServerCollisionMap(A)
+	Count = ReadInt(F)
+	For i = 1 To Count
+		X# = ReadFloat#(F)
+		Y# = ReadFloat#(F)
+		Z# = ReadFloat#(F)
+		SizeX# = ReadFloat#(F)
+		SizeY# = ReadFloat#(F)
+		SizeZ# = ReadFloat#(F)
+		ServerAddCollisionBox(A, X#, Y#, Z#, SizeX#, SizeY#, SizeZ#)
+	Next
+	CloseFile(F)
+
+	If MainLog <> 0 Then WriteLog(MainLog, "ServerLoadAreaCollisionMap: loaded " + Str$(Count) + " boxes for area '" + AreaName$ + "'.")
+End Function
+
+; Ensures the server collision map is present for a zone. It comes from the separate,
+; server-only collision file rather than the current client/server area save formats.
+Function ServerEnsureAreaCollisionMap(A.Area, AreaName$)
+	If A = Null
+		If MainLog <> 0 Then WriteLog(MainLog, "ServerEnsureAreaCollisionMap: area was null for '" + AreaName$ + "'.")
+		Return
+	EndIf
+	If ServerCollisionDataExists(AreaName$) = True
+		If MainLog <> 0 Then WriteLog(MainLog, "ServerEnsureAreaCollisionMap: loading collision map from separate file for '" + AreaName$ + "'.")
+		ServerLoadAreaCollisionMap(A, AreaName$)
+	Else
+		If MainLog <> 0 Then WriteLog(MainLog, "ServerEnsureAreaCollisionMap: no separate collision file found for '" + AreaName$ + "'; skipping server collision setup.")
+	EndIf
+End Function
+
 ; Loads the server data for an area
 Function ServerLoadArea.Area(Name$)
 
+	If MainLog <> 0 Then WriteLog(MainLog, "ServerLoadArea: loading area '" + Name$ + "'.")
+
 	F = ReadFile("Data\Server Data\Areas\" + Name$ + ".dat")
-	If F = 0 Then Return Null
+	If F = 0
+		If MainLog <> 0 Then WriteLog(MainLog, "ServerLoadArea: missing server data file for '" + Name$ + "'.")
+		Return Null
+	EndIf
 
 		A.Area = New Area
 		A\Name$ = Name$
+		;ClearServerCollisionMap(A)
 		For i = 0 To 4 : A\WeatherChance[i] = ReadByte(F) : Next
 		A\EntryScript$ = ReadString$(F)
 		A\ExitScript$  = ReadString$(F)
@@ -235,6 +517,12 @@ Function ServerLoadArea.Area(Name$)
 		Next
 
 	CloseFile(F)
+
+	If MainLog <> 0 Then WriteLog(MainLog, "ServerLoadArea: loaded area '" + Name$ + "' and finished reading server data.")
+
+
+	 ServerEnsureAreaCollisionMap(A, Name$)
+	If MainLog <> 0 Then WriteLog(MainLog, "ServerLoadArea: created server collision for area '" + Name$ + "'.")
 
 	; Create default instance (#0)
 	AInstance.AreaInstance = ServerCreateAreaInstance(A, 0)

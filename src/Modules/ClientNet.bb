@@ -145,21 +145,31 @@ Function UpdateNetwork()
 				If AI <> Null
 					; Move
 					If Left$(M\MessageData$, 1) = "M"
-						AI\X# = RCE_FloatFromStr(Mid$(M\MessageData$, 4, 4))
-						Y# = RCE_FloatFromStr(Mid$(M\MessageData$, 8, 4))
-						AI\Z# = RCE_FloatFromStr(Mid$(M\MessageData$, 12, 4))
+						NewX# = RCE_FloatFromStr(Mid$(M\MessageData$, 4, 4))
+						NewY# = RCE_FloatFromStr(Mid$(M\MessageData$, 8, 4))
+						NewZ# = RCE_FloatFromStr(Mid$(M\MessageData$, 12, 4))
 						MoveCamera = RCE_IntFromStr(Mid$(M\MessageData$, 16, 1))
-						AI\DestX# = AI\X#
-						AI\DestZ# = AI\Z#
-						PositionEntity(AI\CollisionEN, AI\X#, Y#, AI\Z#)
-						; Ignore collision
-						If RCE_IntFromStr(Mid$(M\MessageData$, 16, 1)) = 0 Then ResetEntity(AI\CollisionEN)
-						; Move the camera directly to the new spot, otherwise it will fly there
-						If MoveCamera = False Then PositionEntity(Cam, AI\X#, Y#, AI\Z#)
+						; If position is exactly the same, skip move/position work
+						If NewX# = AI\X# And NewZ# = AI\Z#
+							; no-op - positions identical
+						Else
+							AI\X# = NewX#
+							Y# = NewY#
+							AI\Z# = NewZ#
+							AI\DestX# = AI\X#
+							AI\DestZ# = AI\Z#
+							PositionEntity(AI\CollisionEN, AI\X#, Y#, AI\Z#)
+							; Ignore collision
+							If RCE_IntFromStr(Mid$(M\MessageData$, 16, 1)) = 0 Then ResetEntity(AI\CollisionEN)
+							; Move the camera directly to the new spot, otherwise it will fly there
+							;If MoveCamera = False Then PositionEntity(Cam, AI\X#, AI\Y#, AI\Z#)
+						EndIf
 					; Rotate
 					Else
 						AI\Yaw# = RCE_FloatFromStr(Mid$(M\MessageData$, 4))
-						RotateEntity(AI\CollisionEN, 0, AI\Yaw#, 0)
+						If AI\Yaw# <> RCE_FloatFromStr(Mid$(M\MessageData$, 4)) Then
+							RotateEntity(AI\CollisionEN, 0, AI\Yaw#, 0)
+						EndIf
 					EndIf
 				EndIf
 

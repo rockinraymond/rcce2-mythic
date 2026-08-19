@@ -565,6 +565,26 @@ Function UpdateNetwork()
 				If AI <> Null
 					AI\IgnoreUpdate = 0
 				EndIf
+
+			; Client requests a resync of all actors currently loaded for them
+			Case P_RequestResync
+				AI.ActorInstance = FindActorInstanceFromRNID(M\FromID)
+				If AI <> Null
+					AInstance.AreaInstance = Object.AreaInstance(AI\ServerArea)
+					If AInstance <> Null
+						A2.ActorInstance = AInstance\FirstInZone
+						While A2 <> Null
+							; Skip sending the requesting player's own actor
+							If A2 <> AI
+								; Send move packet for each other actor to requesting client
+								Pa$ = "M" + RCE_StrFromInt$(A2\RuntimeID, 2) + RCE_StrFromFloat$(A2\X#) + RCE_StrFromFloat$(A2\Y#) + RCE_StrFromFloat$(A2\Z#)
+								Pa$ = Pa$ + RCE_StrFromInt$(0, 1) + RCE_StrFromInt$(0, 1)
+								RCE_Send(Host, M\FromID, P_RepositionActor, Pa$, True)
+							EndIf
+							A2 = A2\NextInZone
+						Wend
+					EndIf
+				EndIf
 			
 			; Client has completed zoning for a player
 			Case P_ChangeArea
@@ -1402,14 +1422,22 @@ Function UpdateNetwork()
 						; Players cannot run backwards, this will prevent cheaters from doing so
 						If AI\WalkingBackward = True Then AI\IsRunning = False
 
-						; Adjust to new x/z if they are less far than expected (i.e. client has undergone collision)
-						; Cannot just replace values because client could then lie about the values for an easy speed cheat!
-						;DistX# = Abs(NewX# - AI\OldX#)
-						;If DistX# < Abs(AI\X# - AI\OldX#) Then AI\X# = NewX#
-						;DistZ# = Abs(NewZ# - AI\OldZ#)
-						;If DistZ# < Abs(AI\Z# - AI\OldZ#) Then AI\Z# = NewZ#
-						AI\X# = NewX#
-						AI\Z# = NewZ#
+						; The client can legally stop short of the requested destination if it hit a collision.
+						; Allow that corrected position, but reject impossible longer moves which would be a speed cheat.
+						PrevX# = AI\OldX#
+						PrevZ# = AI\OldZ#
+						DesiredMoveSq# = ((AI\DestX# - PrevX#) * (AI\DestX# - PrevX#)) + ((AI\DestZ# - PrevZ#) * (AI\DestZ# - PrevZ#))
+						ReportedMoveSq# = ((NewX# - PrevX#) * (NewX# - PrevX#)) + ((NewZ# - PrevZ#) * (NewZ# - PrevZ#))
+						MoveTolerance# = 1.0
+						MaxAllowedMoveSq# = DesiredMoveSq# + (MoveTolerance# * MoveTolerance#)
+						If ReportedMoveSq# <= MaxAllowedMoveSq#
+							AI\X# = NewX#
+							AI\Z# = NewZ#
+						Else
+							; client attempted a travel spike beyond the server's movement envelope; keep the last valid position
+							AI\X# = PrevX#
+							AI\Z# = PrevZ#
+						EndIf
 						AI\OldX# = AI\X#
 						AI\OldZ# = AI\Z#
 

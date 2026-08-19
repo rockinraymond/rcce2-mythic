@@ -293,7 +293,8 @@ D = ReadDir("Data\Server Data\Areas")
 File$ = NextFile$(D)
 While File$ <> ""
 	If FileType("Data\Server Data\Areas\" + File$) = 1 And Len(File$) > 4
-		ServerLoadArea(Left$(File$, Len(File$) - 4))
+		Ar.Area = ServerLoadArea(Left$(File$, Len(File$) - 4))
+		If Ar <> Null Then ServerEnsureAreaCollisionMap(Ar, Left$(File$, Len(File$) - 4))
 		TotalZones = TotalZones + 1
 	EndIf
 	File$ = NextFile$(D)
@@ -9499,6 +9500,7 @@ Function ZoneSave()
 	; Save server stuff
 	CurrentArea\Outdoors = Outdoors
 	ServerSaveArea(CurrentArea)
+	ServerSaveAreaCollisionMap(CurrentArea)
 
 	; Done
 	ZoneSaved = True

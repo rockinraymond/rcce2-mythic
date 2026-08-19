@@ -290,6 +290,13 @@ Function ActorAttack(A1.ActorInstance, A2.ActorInstance)
 		CheckDist# = 7.0 + A1\Actor\Radius# + A2\Actor\Radius#
 		If Dist# > CheckDist# * CheckDist# Then Return False
 	EndIf
+	; Line-of-sight / collision barrier check: prevent attacking if collision between actors
+	AInstance.AreaInstance = Object.AreaInstance(A1\ServerArea)
+	If AInstance <> Null
+		MaxRadius# = A1\Actor\Radius#
+		If A2\Actor\Radius# > MaxRadius# Then MaxRadius# = A2\Actor\Radius#
+		If ServerHasLineOfSight(AInstance\Area, A1\X#, A1\Z#, A2\X#, A2\Z#, MaxRadius#) = False Then Return False
+	EndIf
 	; Store time of attack
 	A1\LastAttack = MilliSecs()
 
@@ -701,8 +708,9 @@ Function UpdateActorInstances(Broadcast)
 						Next
 						; Auto-move within an area
 						If SpawnRange# >= 5.0
-							AI\DestX# = AInstance\Area\WaypointX#[AI\CurrentWaypoint] + Rnd#(-SpawnRange#, SpawnRange#)
-							AI\DestZ# = AInstance\Area\WaypointZ#[AI\CurrentWaypoint] + Rnd#(-SpawnRange#, SpawnRange#)
+							GoalX# = AInstance\Area\WaypointX#[AI\CurrentWaypoint] + Rnd#(-SpawnRange#, SpawnRange#)
+							GoalZ# = AInstance\Area\WaypointZ#[AI\CurrentWaypoint] + Rnd#(-SpawnRange#, SpawnRange#)
+							ServerFindMoveTarget(AInstance\Area, AI, AI\X#, AI\Z#, GoalX#, GoalZ#, AI\Actor\Radius# + 1.0)
 						; Follow waypoints
 						Else
 							AI\Y# = AInstance\Area\WaypointY#[AI\CurrentWaypoint] + Rnd#(-1.5, 1.5)
@@ -719,8 +727,9 @@ Function UpdateActorInstances(Broadcast)
 							If NextWP > 1999
 								AI\AIMode = AI_Wait
 							Else
-								AI\DestX# = AInstance\Area\WaypointX#[NextWP] + Rnd#(-2.0, 2.0)
-								AI\DestZ# = AInstance\Area\WaypointZ#[NextWP] + Rnd#(-2.0, 2.0)
+								GoalX# = AInstance\Area\WaypointX#[NextWP] + Rnd#(-2.0, 2.0)
+								GoalZ# = AInstance\Area\WaypointZ#[NextWP] + Rnd#(-2.0, 2.0)
+								ServerFindMoveTarget(AInstance\Area, AI, AI\X#, AI\Z#, GoalX#, GoalZ#, AI\Actor\Radius# + 1.0)
 								AI\CurrentWaypoint = NextWP
 								; Waypoint pause
 								If AInstance\Area\WaypointPause[NextWP] > 0
@@ -766,8 +775,9 @@ Function UpdateActorInstances(Broadcast)
 							AI\IsRunning = False
 						Else
 							AI\AIMode = AI_Pet
-							AI\DestX# = AI\Leader\X#
-							AI\DestZ# = AI\Leader\Z#
+							GoalX# = AI\Leader\X#
+							GoalZ# = AI\Leader\Z#
+								ServerFindMoveTarget(AInstance\Area, AI, AI\X#, AI\Z#, GoalX#, GoalZ#, AI\Actor\Radius# + 1.0)
 							AI\IsRunning = AI\Leader\IsRunning
 						EndIf
 					; Chase target
@@ -786,8 +796,9 @@ Function UpdateActorInstances(Broadcast)
 							EndIf
 							CheckDist# = ActorCombatRange + AI\Actor\Radius# + AI\AITarget\Actor\Radius#
 							If Dist# > CheckDist# * CheckDist#
-								AI\DestX# = AI\AITarget\X#
-								AI\DestZ# = AI\AITarget\Z#
+								GoalX# = AI\AITarget\X#
+								GoalZ# = AI\AITarget\Z#
+								ServerFindMoveTarget(AInstance\Area, AI, AI\X#, AI\Z#, GoalX#, GoalZ#, AI\Actor\Radius# + 1.0)
 								AI\IsRunning = True
 							Else
 								AI\DestX# = AI\X#
@@ -804,8 +815,9 @@ Function UpdateActorInstances(Broadcast)
 				; Pet AI
 				ElseIf AI\AIMode = AI_Pet
 					; Move towards leader's position
-					AI\DestX# = AI\Leader\X#
-					AI\DestZ# = AI\Leader\Z#
+					GoalX# = AI\Leader\X#
+					GoalZ# = AI\Leader\Z#
+							ServerFindMoveTarget(AInstance\Area, AI, AI\X#, AI\Z#, GoalX#, GoalZ#, AI\Actor\Radius# + 1.0)
 					AI\Y# = AI\Y# + ((AI\Leader\Y# - AI\Y#) / 50.0)
 					AI\IsRunning = AI\Leader\IsRunning
 					; When close enough to leader, stop moving
@@ -857,8 +869,9 @@ Function UpdateActorInstances(Broadcast)
 							AI\AITarget = Null
 						; Target available - attack it
 						Else
-							AI\DestX# = AI\AITarget\X#
-							AI\DestZ# = AI\AITarget\Z#
+							GoalX# = AI\AITarget\X#
+							GoalZ# = AI\AITarget\Z#
+							ServerFindMoveTarget(AInstance\Area, AI, AI\X#, AI\Z#, GoalX#, GoalZ#, AI\Actor\Radius# + 1.0)
 							AI\IsRunning = True
 							; Attempt to hit target
 							If MilliSecs() - AI\LastAttack >= CombatDelay + GetActorAttackSpeed(AI)

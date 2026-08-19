@@ -24,6 +24,11 @@ Include "Modules\briskvm.bb"
 Include "Modules\Actors.bb"               ; Actors module
 Include "Modules\Inventories.bb"          ; Inventory module
 Include "Modules\ServerAreas.bb"          ; Areas module
+Include "Modules\ClientAreas.bb"          ; Areas module
+Include "Modules\RCTrees.bb"
+Include "Modules\Media.bb"          ; Areas module
+
+
 Include "Modules\SpawnTracking.bb"        ; Spawn bookkeeping helpers
 Include "Modules\Scripting.bb"            ; Script language module
 Include "Modules\Logging.bb"              ; Logging module
@@ -221,8 +226,10 @@ File$ = NextFile$(Dir)
 Number = 0
 While File$ <> ""
 	If FileType("Data\Server Data\Areas\" + File$) = 1
-		File$ = Replace$(File$, ".dat", "") : File$ = Replace$(File$, ".DAT", "") : File$ = Replace$(File$, ".Dat", "")
-		If ServerLoadArea(File$) <> Null Then Number = Number + 1
+		If Instr(Lower$(File$), "_collision") = 0
+			File$ = Replace$(File$, ".dat", "") : File$ = Replace$(File$, ".DAT", "") : File$ = Replace$(File$, ".Dat", "")
+			If ServerLoadArea(File$) <> Null Then Number = Number + 1
+		EndIf
 	EndIf
 	File$ = NextFile$(Dir)
 Wend
@@ -912,4 +919,13 @@ Function UpdateReputation(AI.ActorInstance, Value)
 			A2 = A2\NextInZone
 		Wend
 	EndIf
+End Function
+
+;For Lights and file finding etc.
+Function GetFileName$(Path$)
+
+	For i = Len(Path$) To 1 Step -1
+		If Mid$(Path$, i, 1) = "\" Or Mid$(Path$, i, 1) = "/" Then Return Mid$(Path$, i+1)
+	Next
+	Return Path$
 End Function

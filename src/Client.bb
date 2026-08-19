@@ -98,6 +98,9 @@ Const BaseFramerate# = 30.0
 ; Network timing
 Const NetworkMS = 1000 / 5
 Global LastNetwork
+; Actor resync timing
+Const ActorResyncIntervalMS = 5000
+Global LastActorResyncMS
 ; Collision types
 Const C_None      = 0
 Const C_Sphere    = 1
@@ -415,6 +418,14 @@ FoamTextureDX#=0
 	; Update network
 	RCE_Update()
 	RCE_CreateMessages()
+
+	; Periodically request authoritative actor positions from server
+	If MilliSecs() - LastActorResyncMS > ActorResyncIntervalMS
+		LastActorResyncMS = MilliSecs()
+		If Me <> Null And Me\RNID > 0
+			RCE_Send(Connection, PeerToHost, P_RequestResync, "", True)
+		EndIf
+	EndIf
 	
 	UpdateNetwork()
 	Until QuitComplete = True
