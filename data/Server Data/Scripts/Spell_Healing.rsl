@@ -141,7 +141,7 @@ Function ClericEquipmentCheck(Player)
 End Function
 
 
-Function Spell_CureWounds()
+Function Spell_CureLightWounds()
     Player = Actor()
     Target = ContextActor()
 
@@ -151,10 +151,7 @@ Function Spell_CureWounds()
    
     SpellCost = Parameter(1)
     ResourceName$ = "Spirit"
-    SpellName$ = "Cure Wounds"
-    
-    
-    
+    SpellName$ = "Cure Light Wounds"
     SkillName$ = "Divine Casting"
     GoverningAttribute$ = "Wisdom"
 

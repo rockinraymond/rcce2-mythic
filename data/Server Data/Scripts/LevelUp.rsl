@@ -50,7 +50,7 @@ Function Main()
 			
 			HpPerLvl = 6 + AbilityBonus(Attribute(Player, "Constitution", 1))
 			If HpPerLvl < 1 Then HpPerLvl = 1
-			NewHp = 4 + (Lvl * HpPerLvl)  
+			NewHp =( 4 + (Lvl * HpPerLvl) ) * 6
 			SETMaXATTRIBUTE(Player, "Health", NewHp)
 			SETATTRIBUTE(Player, "Health", Attribute(Player, "Health") + HpPerLvl)
 			Output(Player, "Your total Health has increased by " + HpPerLvl + "!",255,255,0)
@@ -77,7 +77,7 @@ Function Main()
 
 			HpPerLvl = 6 + AbilityBonus(Attribute(Player, "Constitution", 1))
 			If HpPerLvl < 1 Then HpPerLvl = 1
-			NewHp = 4 + (Lvl * HpPerLvl)  
+			NewHp = (4 + (Lvl * HpPerLvl) ) * 6
 			SETMaXATTRIBUTE(Player, "Health", NewHp)
 			If Attribute(Player , "Health") > MaXATTRIBUTE(Player, "Health") Then SETATTRIBUTE(Player, "Health", MaXATTRIBUTE(Player, "Health"))
 			Output(Player, "Your total Health has decreased by " + HpPerLvl + "!",155,0,255)
