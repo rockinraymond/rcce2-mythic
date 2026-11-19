@@ -836,6 +836,29 @@ Function Spell_ResistLightning()
     ModifyAttributeSpell(Player, Target, SpellCost, ResourceName$, SpellName$, EffectName$, EffectAttribute$, EffectValue, EffectDuration, EffectTexID, SkillName$, GoverningAttribute$, castingTime, HitSound, EmitterName$, EmitterTex, IsResist)
 End Function
 
+Function Spell_SlowPoison()
+    Player = Actor()
+    Target = ContextActor()
+    If Target = 0 Then Target = Player
+    SpellCost = 4
+    ResourceName$ = "Spirit"
+    SpellName$ = "Slow Poison"
+    EffectName$ = SpellName$
+    EffectAttribute$ = "Poison"
+    CastingLevel = FindCastingLevel(Attribute(Player, "Divine Casting"), ActorLevel(Player))
+    EffectValue = 2 + CastingLevel
+    EffectDuration = 180
+    EffectTexID = Parameter(2)
+    SkillName$ = "Divine Casting"
+    GoverningAttribute$ = "Wisdom"
+    castingTime = 5
+    HitSound = 29
+    EmitterName$ = "BuffGreen"
+    EmitterTex = 337
+    IsResist = 1
+    ModifyAttributeSpell(Player, Target, SpellCost, ResourceName$, SpellName$, EffectName$, EffectAttribute$, EffectValue, EffectDuration, EffectTexID, SkillName$, GoverningAttribute$, castingTime, HitSound, EmitterName$, EmitterTex, IsResist)
+End Function
+
 Function Spell_Haste()
     Player = Actor()
     Target = ContextActor()

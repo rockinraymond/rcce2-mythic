@@ -385,29 +385,6 @@ Function Spell_CureDisease()
     EndIf
 End Function
 
-Function Spell_SlowPoison()
-    Player = Actor()
-    Target = ContextActor()
-    If Target = 0 Then Target = Player
-    SpellCost = 4
-    SpellName$ = "Slow Poison"
-    If BeginDivineUtility(Player, Target, SpellCost, SpellName$) < 1 Then Return
-    If ActorHasEffect(Target, "Poisoned")
-        DeleteActorEffect(Target, "Poisoned")
-        AddActorEffect(Target, "Poison Slowed", "", 0, 600, Parameter(2))
-        CreateEmitter(Target, "healBurst", 373, 3000)
-        If Target = Player
-            Output(Player, "The poison in your system is slowed.", 150, 255, 150)
-        Else
-            Output(Player, "The poison in " + Name(Target) + "'s system is slowed.", 150, 255, 150)
-            Output(Target, "The poison in your system is slowed.", 150, 255, 150)
-        EndIf
-    ElseIf ActorHasEffect(Target, "Poison Slowed")
-        Output(Player, Name(Target) + "'s poison is already slowed.", 200, 200, 150)
-    Else
-        Output(Player, Name(Target) + " has no active poison to slow.", 255, 180, 100)
-    EndIf
-End Function
 
 Function Spell_RemoveCurse()
     Player = Actor()
