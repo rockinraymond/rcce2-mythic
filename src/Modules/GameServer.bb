@@ -259,9 +259,12 @@ Function ActorAttack(A1.ActorInstance, A2.ActorInstance)
 	; Check faction ratings
 	If A1\FactionRatings[A2\HomeFaction] > 150 Then Return False
 
-	;Check for effects that prevent attacking (casting spell/stunned/etc.)
+	;Check for effects that prevent attacking (casting, stunned, held, sleeping, or turned)
 	If ActorHasEffect(A1, "Casting") = 1 Then Return False
 	If ActorHasEffect(A1, "Stunned") = 1 Then Return False
+	If ActorHasEffect(A1, "Held") = 1 Then Return False
+	If ActorHasEffect(A1, "Sleeping") = 1 Then Return False
+	If ActorHasEffect(A1, "Turned") = 1 Then Return False
 
 
 	;Range Check

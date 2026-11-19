@@ -16,7 +16,7 @@ Function ModifyAttributeSpell(Player, Target, SpellCost, ResourceName$, SpellNam
         CastingEmitter$ = "divineCasting"
     EndIf
 
-    SuccessChance = 10 + GetSkillModifier(Attribute(Player,SkillName$))
+    SuccessChance = 20 + Attribute(Player,SkillName$)
 
     FinalEffectValue = EffectValue
 
@@ -27,19 +27,24 @@ Function ModifyAttributeSpell(Player, Target, SpellCost, ResourceName$, SpellNam
         FinalEffectValue = FinalEffectValue + AbilityBonus(Attribute(Player,GoverningAttribute$))
     EndIf
 
-    If FinalEffectValue < 0
+    If SuccessChance < 5 Then SuccessChance = 5
+    If SuccessChance > 95 Then SuccessChance = 95
+
+    If EffectValue < 0 And FinalEffectValue > -1
+        FinalEffectValue = -1
+    ElseIf EffectValue > 0 And FinalEffectValue < 1
         FinalEffectValue = 1
     EndIf
 
     If CastingChecks(Player, Target, SkillName$) < 1
-        Return
+        Return 0
     EndIf
 
     ;Player vs Player Check
     If EffectValue < 0
         If ActorIsHuman(Target) > 0
             Output(Player, "Cannot target player, PVP not enabled!",255, 50, 50)
-            Return
+            Return 0
         EndIf
     EndIf
 
@@ -47,7 +52,7 @@ Function ModifyAttributeSpell(Player, Target, SpellCost, ResourceName$, SpellNam
     ResourceAmt = Attribute(Player, ResourceName$)
     If(ResourceAmt < SpellCost)
         Output(Player, "Not enough " + ResourceName$, 255, 0, 0)
-        Return
+        Return 0
     EndIf
     SetAttribute(Player, ResourceName$, ResourceAmt - SpellCost)
 
@@ -85,20 +90,43 @@ Function ModifyAttributeSpell(Player, Target, SpellCost, ResourceName$, SpellNam
     
     SpellSuccess = Rand(1,100)
 
-    If SpellSuccess < SuccessChance
-        
-        If Target = Player
-            Output(Target,  "You successfully cast " + SpellName$ + " on yourself!", 100, 255, 150)
+    If SpellSuccess <= SuccessChance
+        If isResist > 0 And EffectAttribute$ <> "Armor Bonus"
+            If EffectValue < 0
+                Outcome$ = TargetName$ + " becomes vulnerable to " + EffectAttribute$ + " damage."
+            Else
+                Outcome$ = TargetName$ + " gains resistance to " + EffectAttribute$ + " damage."
+            EndIf
+        ElseIf EffectAttribute$ = "Movement"
+            If EffectValue < 0
+                Outcome$ = TargetName$ + " is slowed."
+            Else
+                Outcome$ = TargetName$ + " moves faster."
+            EndIf
+        ElseIf EffectAttribute$ = "Stealth Mod"
+            Outcome$ = TargetName$ + " fades from sight."
+        ElseIf EffectAttribute$ = "Strength"
+            Outcome$ = TargetName$ + " feels stronger."
+        ElseIf EffectAttribute$ = "Damage Bonus"
+            Outcome$ = TargetName$ + "'s strikes hit harder."
+        ElseIf EffectAttribute$ = "Armor Bonus"
+            Outcome$ = TargetName$ + " is protected by a magical shield."
+        ElseIf EffectAttribute$ = "Attack Bonus"
+            Outcome$ = TargetName$ + "'s attacks become more accurate."
+        ElseIf EffectAttribute$ = "Carry Weight Mod"
+            Outcome$ = TargetName$ + " can carry more weight."
         Else
-            Output(Player, "You successfully cast " + SpellName$ + " on " + TargetName$ + "!",100, 255, 150)
-            Output(Target, PlayerName$ + " successfully cast " + SpellName$ + " on you!", 100, 255, 150)
+            Outcome$ = SpellName$ + " takes effect on " + TargetName$ + "."
         EndIf
+        Output(Player, Outcome$, 100, 255, 150)
+        If Target <> Player Then Output(Target, PlayerName$ + " casts " + SpellName$ + " on you.", 100, 255, 150)
         
         ;visuals and effect
         CreateEmitter(Target, EmitterName$, EmitterTex, 4000)
         PlaySound(Player, HitSound, 0)
         PlaySound(Target, HitSound, 0)
 	    AddActorEffect(Target, EffectName$, EffectAttribute$, FinalEffectValue, EffectDuration, EffectTexID, isResist)
+        
     Else
          If Target = Player
             Output(Target,  "Your " + SpellName$ + " spell has failed!", 255, 100, 100)
@@ -107,8 +135,7 @@ Function ModifyAttributeSpell(Player, Target, SpellCost, ResourceName$, SpellNam
             Output(Target, PlayerName$ + "'s " + SpellName$ + " has missed you!", 255, 100, 100)
         EndIf
     EndIf
-
-    Return
+    Return 0
 
 End Function
 
@@ -116,6 +143,10 @@ Function CastingChecks(Player,Target,SpellSchool$)
     ;is player dead?
     If(Attribute(Player, "Health") < 0)
         Output(Player, "You cannot cast spells when you are dead",255, 255, 0)
+        Return 0
+    EndIf
+    If ActorHasEffect(Player, "Silenced")
+        Output(Player, "You cannot cast spells while silenced", 255, 100, 100)
         Return 0
     EndIf
 
@@ -126,9 +157,9 @@ Function CastingChecks(Player,Target,SpellSchool$)
     EndIf
 
     ;NPC Check
-    If (Actoraggressiveness(Target) = 3)
-	    Output(Player, "No Valid Target Selected", 255, 50, 50)
-	    Return 0
+    If ActorIsHuman(Target) = 0 And Actoraggressiveness(Target) = 3
+        Output(Player, "You cannot target non-combat NPCs with spells", 255, 50, 50)
+        Return 0
     EndIf
 
     ;Check if the target is correct?
@@ -303,15 +334,15 @@ Function Spell_Shield()
     If Target = 0
         Target = Player
     EndIf
-    SpellCost = Parameter(1)
-    SpellLevel = Parameter(3)
+    SpellCost = 4
+    CastingLevel = FindCastingLevel(Attribute(Player, "Arcane Casting"), ActorLevel(Player))
     ResourceName$ = "Mana"
     SpellName$ = "Shield"
     castingTime = 5
     EffectName$ = "Shield"
     EffectAttribute$ = "Armor Bonus"
-    EffectValue = SpellLevel
-    EffectDuration = 600
+    EffectValue = 2 + CastingLevel
+    EffectDuration = 180
     EffectTexID = Parameter(2)
     SkillName$ = "Arcane Casting"
     GoverningAttribute$ = "Intelligence"
@@ -320,7 +351,7 @@ Function Spell_Shield()
     EmitterName$ = "BuffBlue"
     EmitterTex = 337
 
-    ModifyAttributeSpell(Player, Target, SpellCost, ResourceName$, SpellName$, EffectName$, EffectAttribute$, EffectValue, EffectDuration, EffectTexID, SkillName$, GoverningAttribute$, castingTime,CastingSound, EmitterName$,EmitterTex, 1)
+    ModifyAttributeSpell(Player, Target, SpellCost, ResourceName$, SpellName$, EffectName$, EffectAttribute$, EffectValue, EffectDuration, EffectTexID, SkillName$, GoverningAttribute$, castingTime,CastingSound, EmitterName$,EmitterTex)
    
 End Function
 
@@ -330,15 +361,15 @@ Function Spell_Focus()
     If Target = 0
         Target = Player
     EndIf
-    SpellCost = Parameter(1)
-    SpellLevel = Parameter(3)
+    SpellCost = 4
+    CastingLevel = FindCastingLevel(Attribute(Player, "Arcane Casting"), ActorLevel(Player))
     ResourceName$ = "Mana"
     SpellName$ = "Focus"
     castingTime = 5
     EffectName$ = "Focus"
     EffectAttribute$ = "Attack Bonus"
-    EffectValue = SpellLevel
-    EffectDuration = 600
+    EffectValue = 2 + CastingLevel
+    EffectDuration = 300
     EffectTexID = Parameter(2)
     SkillName$ = "Arcane Casting"
     GoverningAttribute$ = "Intelligence"
@@ -357,14 +388,14 @@ Function Spell_FeatherWeight()
     If Target = 0
         Target = Player
     EndIf
-    SpellCost = Parameter(1)
-    SpellLevel = Parameter(3)
+    SpellCost = 2
+    CastingLevel = FindCastingLevel(Attribute(Player, "Arcane Casting"), ActorLevel(Player))
     ResourceName$ = "Mana"
     SpellName$ = "Feather Weight"
     castingTime = 5
     EffectName$ = "Feather Weight"
     EffectAttribute$ = "Carry Weight Mod"
-    EffectValue = 30 * SpellLevel
+    EffectValue = 30 * CastingLevel
     EffectDuration = 1800
     EffectTexID = Parameter(2)
     SkillName$ = "Arcane Casting"
@@ -384,23 +415,24 @@ Function Spell_ResistSlash()
     If Target = 0
         Target = Player
     EndIf
-    SpellCost = Parameter(1)
-    SpellLevel = Parameter(3)
+    SpellCost = 4
+    CastingLevel = FindCastingLevel(Attribute(Player, "Arcane Casting"), ActorLevel(Player))
     ResourceName$ = "Mana"
     SpellName$ = "Resist Slashing"
     castingTime = 5
     EffectName$ = SpellName$
     EffectAttribute$ = "Edged"
-    EffectValue = SpellLevel
-    EffectDuration = 600
+    EffectValue = 2 + CastingLevel
+    EffectDuration = 300
     EffectTexID = Parameter(2)
     SkillName$ = "Arcane Casting"
     GoverningAttribute$ = "Intelligence"
     CastingSound = 29
     EmitterName$ = "BuffBlue"
     EmitterTex = 337
+    IsResist = 1
 
-    ModifyAttributeSpell(Player, Target, SpellCost, ResourceName$, SpellName$, EffectName$, EffectAttribute$, EffectValue, EffectDuration, EffectTexID, SkillName$, GoverningAttribute$, castingTime,CastingSound, EmitterName$,EmitterTex, 1)
+    ModifyAttributeSpell(Player, Target, SpellCost, ResourceName$, SpellName$, EffectName$, EffectAttribute$, EffectValue, EffectDuration, EffectTexID, SkillName$, GoverningAttribute$, castingTime,CastingSound, EmitterName$,EmitterTex, IsResist)
     
 End Function
 
@@ -410,23 +442,24 @@ Function Spell_ResistBlunt()
     If Target = 0
         Target = Player
     EndIf
-    SpellCost = Parameter(1)
-    SpellLevel = Parameter(3)
+    SpellCost = 4
+    CastingLevel = FindCastingLevel(Attribute(Player, "Arcane Casting"), ActorLevel(Player))
     ResourceName$ = "Mana"
     SpellName$ = "Resist Bludgeon"
     castingTime = 5
     EffectName$ = SpellName$
     EffectAttribute$ = "Blunt"
-    EffectValue = SpellLevel
-    EffectDuration = 600
+    EffectValue = 2 + CastingLevel
+    EffectDuration = 300
     EffectTexID = Parameter(2)
     SkillName$ = "Arcane Casting"
     GoverningAttribute$ = "Intelligence"
     CastingSound = 29
     EmitterName$ = "BuffBlue"
     EmitterTex = 337
+    IsResist = 1
 
-    ModifyAttributeSpell(Player, Target, SpellCost, ResourceName$, SpellName$, EffectName$, EffectAttribute$, EffectValue, EffectDuration, EffectTexID, SkillName$, GoverningAttribute$, castingTime,CastingSound, EmitterName$,EmitterTex, 1)
+    ModifyAttributeSpell(Player, Target, SpellCost, ResourceName$, SpellName$, EffectName$, EffectAttribute$, EffectValue, EffectDuration, EffectTexID, SkillName$, GoverningAttribute$, castingTime,CastingSound, EmitterName$,EmitterTex, IsResist)
  
  End Function   
 
@@ -436,23 +469,24 @@ Function Spell_WeaknessMagic()
     If Target = 0
         Target = Player
     EndIf
-    SpellCost = Parameter(1)
-    SpellLevel = Parameter(3)
+    SpellCost = 7
+    CastingLevel = FindCastingLevel(Attribute(Player, "Arcane Casting"), ActorLevel(Player))
     ResourceName$ = "Mana"
     SpellName$ = "Weakness to Magic"
     castingTime = 5
     EffectName$ = SpellName$
     EffectAttribute$ = "Magical"
-    EffectValue = -1 * SpellLevel
-    EffectDuration = 300
+    EffectValue = -2 - CastingLevel
+    EffectDuration = 120
     EffectTexID = Parameter(2)
     SkillName$ = "Arcane Casting"
     GoverningAttribute$ = "Intelligence"
     CastingSound = 31
     EmitterName$ = "BuffPurple"
     EmitterTex = 338
+    IsResist = 1
 
-    ModifyAttributeSpell(Player, Target, SpellCost, ResourceName$, SpellName$, EffectName$, EffectAttribute$, EffectValue, EffectDuration, EffectTexID, SkillName$, GoverningAttribute$, castingTime,CastingSound, EmitterName$,EmitterTex, 1)
+    ModifyAttributeSpell(Player, Target, SpellCost, ResourceName$, SpellName$, EffectName$, EffectAttribute$, EffectValue, EffectDuration, EffectTexID, SkillName$, GoverningAttribute$, castingTime,CastingSound, EmitterName$,EmitterTex, IsResist)
     
 End Function
 
@@ -462,23 +496,51 @@ Function Spell_ProtectEvil()
     If Target = 0
         Target = Player
     EndIf
-    SpellCost = Parameter(1)
-    SpellLevel = Parameter(3)
+    SpellCost = 4
+    CastingLevel = FindCastingLevel(Attribute(Player, "Divine Casting"), ActorLevel(Player))
     ResourceName$ = "Spirit"
     SpellName$ = "Protect from Evil"
     castingTime = 5
     EffectName$ = SpellName$
     EffectAttribute$ = "Unholy"
-    EffectValue = SpellLevel
-    EffectDuration = 300
+    EffectValue = 2 + CastingLevel
+    EffectDuration = 60 * 3 * CastingLevel
+    If EffectDuration > 180 Then EffectDuration = 180
     EffectTexID = Parameter(2)
     SkillName$ = "Divine Casting"
     GoverningAttribute$ = "Wisdom"
     CastingSound = 30
     EmitterName$ = "BuffRed"
     EmitterTex = 337
+    IsResist = 1
 
-    ModifyAttributeSpell(Player, Target, SpellCost, ResourceName$, SpellName$, EffectName$, EffectAttribute$, EffectValue, EffectDuration, EffectTexID, SkillName$, GoverningAttribute$, castingTime,CastingSound, EmitterName$,EmitterTex, 1)
+    ModifyAttributeSpell(Player, Target, SpellCost, ResourceName$, SpellName$, EffectName$, EffectAttribute$, EffectValue, EffectDuration, EffectTexID, SkillName$, GoverningAttribute$, castingTime,CastingSound, EmitterName$,EmitterTex, IsResist)
+End Function
+
+Function Spell_Condemn()
+    Player = Actor()
+    Target = ContextActor()
+    If Target = 0 Then Target = Player
+
+    SpellCost = 5
+    ResourceName$ = "Spirit"
+    SpellName$ = "Condemn"
+    EffectName$ = "Condemn"
+    EffectAttribute$ = "Holy"
+    CastingLevel = FindCastingLevel(Attribute(Player, "Divine Casting"), ActorLevel(Player))
+    EffectValue = -2 - CastingLevel
+    If EffectValue > -1 Then EffectValue = -1
+    EffectDuration = 60 * 3 * CastingLevel
+    If EffectDuration > 180 Then EffectDuration = 180
+    EffectTexID = Parameter(2)
+    SkillName$ = "Divine Casting"
+    GoverningAttribute$ = "Wisdom"
+    castingTime = 5
+    HitSound = 31
+    EmitterName$ = "BuffPurple"
+    EmitterTex = 338
+    IsResist = 1
+    ModifyAttributeSpell(Player, Target, SpellCost, ResourceName$, SpellName$, EffectName$, EffectAttribute$, EffectValue, EffectDuration, EffectTexID, SkillName$, GoverningAttribute$, castingTime, HitSound, EmitterName$, EmitterTex, IsResist)
 End Function
 
 Function GetSkillModifier(SkillValue)
@@ -565,4 +627,434 @@ Function AbilityBonus(SkillLevel%)
     default 
     return 0
     End Select
+End Function
+
+Function FindCastingLevel(CastingSkill,CharLevel)
+
+	If CastingSkill >= 100 And CharLevel >= 11
+		Return 6
+	ElseIf CastingSkill >= 85 And CharLevel >= 9
+		Return 5
+	ElseIf CastingSkill >= 70 And CharLevel >= 7
+		Return 4
+	ElseIf CastingSkill >= 55 And CharLevel >= 5
+		Return 3
+	ElseIf CastingSkill >= 40 And CharLevel >= 3
+		Return 2
+	Else
+		Return 1
+	EndIf
+
+End Function
+
+Function Spell_Bless()
+    Player = Actor()
+    Target = ContextActor()
+    If Target = 0 Then Target = Player
+    SpellCost = 3
+    ResourceName$ = "Spirit"
+    SpellName$ = "Bless"
+    EffectName$ = "Bless"
+    EffectAttribute$ = "Attack Bonus"
+    CastingLevel = FindCastingLevel(Attribute(Player, "Divine Casting"), ActorLevel(Player))
+    EffectValue = 2 + CastingLevel
+    EffectDuration = CastingLevel * 60
+    EffectTexID = Parameter(2)
+    SkillName$ = "Divine Casting"
+    GoverningAttribute$ = "Wisdom"
+    castingTime = 5
+    HitSound = 30
+    EmitterName$ = "BuffBlue"
+    EmitterTex = 337
+    ModifyAttributeSpell(Player, Target, SpellCost, ResourceName$, SpellName$, EffectName$, EffectAttribute$, EffectValue, EffectDuration, EffectTexID, SkillName$, GoverningAttribute$, castingTime, HitSound, EmitterName$, EmitterTex)
+End Function
+
+Function Spell_BestowCourage()
+    Player = Actor()
+    Target = ContextActor()
+    If Target = 0 Then Target = Player
+    If CastingChecks(Player, Target, "Divine Casting") < 1
+        Return
+    EndIf
+    SpellCost = 2
+    If Attribute(Player, "Spirit") < SpellCost
+        Output(Player, "Not enough Spirit", 255, 0, 0)
+        Return
+    EndIf
+    SetAttribute(Player, "Spirit", Attribute(Player, "Spirit") - SpellCost)
+    ZZRUNABILITYCOOLDOWN(Player, "Bestow Courage")
+    ZZADDSKILLXP(Player, "Divine Casting", SpellCost * 10)
+    AnimateActor(Player, "Cast Magic", 0.05, 1)
+    AddActorEffect(Player, "Casting", "Movement", -100, 2, 0)
+    CreateEmitter(Player, "divineCasting", 356, 3000)
+    Output(Player, "Casting Bestow Courage", 200, 0, 255)
+    Bar = CreateProgressBar(Player,200,255,200,.4,.8,.2,.04,20,0,"Bestow Courage")
+    i = 0
+    Repeat
+        UpdateProgressBar(Player, Bar, i)
+        DoEvents(100)
+        i = i + 1
+        If Attribute(Player, "Health") <= 0
+            DeleteProgressBar(Player, Bar)
+            Return
+        EndIf
+    Until i >= 20
+    DeleteProgressBar(Player, Bar)
+    If ActorHasEffect(Target, "Fear")
+        DeleteActorEffect(Target, "Fear")
+        CreateEmitter(Target, "BuffBlue", 337, 3000)
+        Output(Player, Name(Target) + " is no longer afraid.", 150, 255, 150)
+        If Target <> Player Then Output(Target, "Your fear is gone.", 150, 255, 150)
+    Else
+        Output(Player, Name(Target) + " is not afraid; Bestow Courage has no effect.", 255, 180, 100)
+    EndIf
+End Function
+
+Function Spell_StrengthenAnimal()
+    Player = Actor()
+    Target = ContextActor()
+    If Target = 0
+        Output(Player, "No valid target selected", 255, 50, 50)
+        Return
+    EndIf
+    If Upper(Class(Target)) <> "ANIMAL"
+        Output(Player, "Strengthen Animal can only target animals", 255, 100, 100)
+        Return
+    EndIf
+    SpellCost = 5
+    ResourceName$ = "Spirit"
+    SpellName$ = "Strengthen Animal"
+    EffectName$ = "Strengthened"
+    EffectAttribute$ = "Strength"
+    CastingLevel = FindCastingLevel(Attribute(Player, "Divine Casting"), ActorLevel(Player))
+    EffectValue = 2 + CastingLevel
+    EffectDuration = 300
+    EffectTexID = Parameter(2)
+    SkillName$ = "Divine Casting"
+    GoverningAttribute$ = "Wisdom"
+    castingTime = 5
+    HitSound = 30
+    EmitterName$ = "BuffBlue"
+    EmitterTex = 337
+    ModifyAttributeSpell(Player, Target, SpellCost, ResourceName$, SpellName$, EffectName$, EffectAttribute$, EffectValue, EffectDuration, EffectTexID, SkillName$, GoverningAttribute$, castingTime, HitSound, EmitterName$, EmitterTex)
+End Function
+
+Function Spell_Striking()
+    Player = Actor()
+    Target = ContextActor()
+    If Target = 0 Then Target = Player
+    SpellCost = 4
+    ResourceName$ = "Spirit"
+    SpellName$ = "Striking"
+    EffectName$ = "Striking"
+    EffectAttribute$ = "Damage Bonus"
+    CastingLevel = FindCastingLevel(Attribute(Player, "Divine Casting"), ActorLevel(Player))
+    EffectValue = 2 + CastingLevel
+    EffectDuration = 300
+    EffectTexID = Parameter(2)
+    SkillName$ = "Divine Casting"
+    GoverningAttribute$ = "Wisdom"
+    castingTime = 5
+    HitSound = 30
+    EmitterName$ = "BuffBlue"
+    EmitterTex = 337
+    ModifyAttributeSpell(Player, Target, SpellCost, ResourceName$, SpellName$, EffectName$, EffectAttribute$, EffectValue, EffectDuration, EffectTexID, SkillName$, GoverningAttribute$, castingTime, HitSound, EmitterName$, EmitterTex)
+End Function
+
+Function Spell_ResistCold()
+    Player = Actor()
+    Target = ContextActor()
+    If Target = 0 Then Target = Player
+    SpellCost = 4
+    ResourceName$ = "Spirit"
+    SpellName$ = "Resist Cold"
+    EffectName$ = SpellName$
+    EffectAttribute$ = "Frost"
+    CastingLevel = FindCastingLevel(Attribute(Player, "Divine Casting"), ActorLevel(Player))
+    EffectValue = 2 + CastingLevel
+    EffectDuration = 180
+    EffectTexID = Parameter(2)
+    SkillName$ = "Divine Casting"
+    GoverningAttribute$ = "Wisdom"
+    castingTime = 5
+    HitSound = 29
+    EmitterName$ = "BuffBlue"
+    EmitterTex = 337
+    IsResist = 1
+    ModifyAttributeSpell(Player, Target, SpellCost, ResourceName$, SpellName$, EffectName$, EffectAttribute$, EffectValue, EffectDuration, EffectTexID, SkillName$, GoverningAttribute$, castingTime, HitSound, EmitterName$, EmitterTex, IsResist)
+End Function
+
+Function Spell_ResistFire()
+    Player = Actor()
+    Target = ContextActor()
+    If Target = 0 Then Target = Player
+    SpellCost = 4
+    ResourceName$ = "Spirit"
+    SpellName$ = "Resist Fire"
+    EffectName$ = SpellName$
+    EffectAttribute$ = "Fire"
+    CastingLevel = FindCastingLevel(Attribute(Player, "Divine Casting"), ActorLevel(Player))
+    EffectValue = 2 + CastingLevel
+    EffectDuration = 180
+    EffectTexID = Parameter(2)
+    SkillName$ = "Divine Casting"
+    GoverningAttribute$ = "Wisdom"
+    castingTime = 5
+    HitSound = 29
+    EmitterName$ = "BuffRed"
+    EmitterTex = 337
+    IsResist = 1
+    ModifyAttributeSpell(Player, Target, SpellCost, ResourceName$, SpellName$, EffectName$, EffectAttribute$, EffectValue, EffectDuration, EffectTexID, SkillName$, GoverningAttribute$, castingTime, HitSound, EmitterName$, EmitterTex, IsResist)
+End Function
+
+Function Spell_ResistLightning()
+    Player = Actor()
+    Target = ContextActor()
+    If Target = 0 Then Target = Player
+    SpellCost = 4
+    ResourceName$ = "Spirit"
+    SpellName$ = "Resist Lightning"
+    EffectName$ = SpellName$
+    EffectAttribute$ = "Lightning"
+    CastingLevel = FindCastingLevel(Attribute(Player, "Divine Casting"), ActorLevel(Player))
+    EffectValue = 2 + CastingLevel
+    EffectDuration = 180
+    EffectTexID = Parameter(2)
+    SkillName$ = "Divine Casting"
+    GoverningAttribute$ = "Wisdom"
+    castingTime = 5
+    HitSound = 29
+    EmitterName$ = "BuffBlue"
+    EmitterTex = 337
+    IsResist = 1
+    ModifyAttributeSpell(Player, Target, SpellCost, ResourceName$, SpellName$, EffectName$, EffectAttribute$, EffectValue, EffectDuration, EffectTexID, SkillName$, GoverningAttribute$, castingTime, HitSound, EmitterName$, EmitterTex, IsResist)
+End Function
+
+Function Spell_Haste()
+    Player = Actor()
+    Target = ContextActor()
+    If Target = 0 Then Target = Player
+    SpellCost = 6
+    ResourceName$ = "Mana"
+    SpellName$ = "Haste"
+    EffectName$ = "Haste"
+    EffectAttribute$ = "ATK Speed Bonus"
+    CastingLevel = FindCastingLevel(Attribute(Player, "Arcane Casting"), ActorLevel(Player))
+    EffectValue = 2 + CastingLevel
+    EffectDuration = 60
+    EffectTexID = Parameter(2)
+    SkillName$ = "Arcane Casting"
+    GoverningAttribute$ = "Intelligence"
+    castingTime = 5
+    HitSound = 28
+    EmitterName$ = "BuffBlue"
+    EmitterTex = 337
+    ModifyAttributeSpell(Player, Target, SpellCost, ResourceName$, SpellName$, EffectName$, EffectAttribute$, EffectValue, EffectDuration, EffectTexID, SkillName$, GoverningAttribute$, castingTime, HitSound, EmitterName$, EmitterTex)
+End Function
+
+Function Spell_Slow()
+    Player = Actor()
+    Target = ContextActor()
+    SpellCost = 6
+    ResourceName$ = "Mana"
+    SpellName$ = "Slow"
+    EffectName$ = "Slow"
+    EffectAttribute$ = "ATK Speed Bonus"
+    CastingLevel = FindCastingLevel(Attribute(Player, "Arcane Casting"), ActorLevel(Player))
+    EffectValue = -2 - CastingLevel
+    EffectDuration = 60
+    EffectTexID = Parameter(2)
+    SkillName$ = "Arcane Casting"
+    GoverningAttribute$ = "Intelligence"
+    castingTime = 5
+    HitSound = 31
+    EmitterName$ = "BuffPurple"
+    EmitterTex = 338
+    IsResist = 0
+    ModifyAttributeSpell(Player, Target, SpellCost, ResourceName$, SpellName$, EffectName$, EffectAttribute$, EffectValue, EffectDuration, EffectTexID, SkillName$, GoverningAttribute$, castingTime, HitSound, EmitterName$, EmitterTex, IsResist)
+End Function
+
+Function Spell_WeaknessCold()
+    Player = Actor()
+    Target = ContextActor()
+    SpellCost = 4
+    ResourceName$ = "Mana"
+    SpellName$ = "Weakness to Cold"
+    EffectName$ = SpellName$
+    EffectAttribute$ = "Frost"
+    CastingLevel = FindCastingLevel(Attribute(Player, "Arcane Casting"), ActorLevel(Player))
+    EffectValue = -2 - CastingLevel
+    EffectDuration = 180
+    EffectTexID = Parameter(2)
+    SkillName$ = "Arcane Casting"
+    GoverningAttribute$ = "Intelligence"
+    castingTime = 5
+    HitSound = 31
+    EmitterName$ = "BuffPurple"
+    EmitterTex = 338
+    IsResist = 1
+    ModifyAttributeSpell(Player, Target, SpellCost, ResourceName$, SpellName$, EffectName$, EffectAttribute$, EffectValue, EffectDuration, EffectTexID, SkillName$, GoverningAttribute$, castingTime, HitSound, EmitterName$, EmitterTex, IsResist)
+End Function
+
+Function Spell_WeaknessFire()
+    Player = Actor()
+    Target = ContextActor()
+    SpellCost = 5
+    ResourceName$ = "Mana"
+    SpellName$ = "Weakness to Fire"
+    EffectName$ = SpellName$
+    EffectAttribute$ = "Fire"
+    CastingLevel = FindCastingLevel(Attribute(Player, "Arcane Casting"), ActorLevel(Player))
+    EffectValue = -2 - CastingLevel
+    EffectDuration = 180
+    EffectTexID = Parameter(2)
+    SkillName$ = "Arcane Casting"
+    GoverningAttribute$ = "Intelligence"
+    castingTime = 5
+    HitSound = 31
+    EmitterName$ = "BuffPurple"
+    EmitterTex = 338
+    IsResist = 1
+    ModifyAttributeSpell(Player, Target, SpellCost, ResourceName$, SpellName$, EffectName$, EffectAttribute$, EffectValue, EffectDuration, EffectTexID, SkillName$, GoverningAttribute$, castingTime, HitSound, EmitterName$, EmitterTex, IsResist)
+End Function
+
+Function Spell_WeaknessLightning()
+    Player = Actor()
+    Target = ContextActor()
+    SpellCost = 5
+    ResourceName$ = "Mana"
+    SpellName$ = "Weakness to Lightning"
+    EffectName$ = SpellName$
+    EffectAttribute$ = "Lightning"
+    CastingLevel = FindCastingLevel(Attribute(Player, "Arcane Casting"), ActorLevel(Player))
+    EffectValue = -2 - CastingLevel
+    EffectDuration = 180
+    EffectTexID = Parameter(2)
+    SkillName$ = "Arcane Casting"
+    GoverningAttribute$ = "Intelligence"
+    castingTime = 5
+    HitSound = 31
+    EmitterName$ = "BuffPurple"
+    EmitterTex = 338
+    IsResist = 1
+    ModifyAttributeSpell(Player, Target, SpellCost, ResourceName$, SpellName$, EffectName$, EffectAttribute$, EffectValue, EffectDuration, EffectTexID, SkillName$, GoverningAttribute$, castingTime, HitSound, EmitterName$, EmitterTex, IsResist)
+End Function
+
+Function Spell_Invisibility()
+    Player = Actor()
+    Target = ContextActor()
+    If Target = 0 Then Target = Player
+    SpellCost = 8
+    ResourceName$ = "Mana"
+    SpellName$ = "Invisibility"
+    EffectName$ = "Invisible"
+    EffectAttribute$ = "Stealth Mod"
+    CastingLevel = FindCastingLevel(Attribute(Player, "Arcane Casting"), ActorLevel(Player))
+    EffectValue = 102 + CastingLevel
+    EffectDuration = 600
+    EffectTexID = Parameter(2)
+    SkillName$ = "Arcane Casting"
+    GoverningAttribute$ = "Intelligence"
+    castingTime = 5
+    HitSound = 28
+    EmitterName$ = "BuffBlue"
+    EmitterTex = 337
+    ModifyAttributeSpell(Player, Target, SpellCost, ResourceName$, SpellName$, EffectName$, EffectAttribute$, EffectValue, EffectDuration, EffectTexID, SkillName$, GoverningAttribute$, castingTime, HitSound, EmitterName$, EmitterTex)
+End Function
+
+Function ApplyPartyAttributeSpell(Player, SpellCost, SpellName$, EffectName$, EffectAttribute$, EffectValue, EffectDuration, EffectTexID, EmitterName$, EmitterTex)
+    If Attribute(Player, "Health") <= 0
+        Output(Player, "You cannot cast spells when you are dead", 255, 255, 0)
+        Return 0
+    EndIf
+    If ActorHasEffect(Player, "Casting")
+        Output(Player, "You are already casting a spell", 255, 0, 255)
+        Return 0
+    EndIf
+    If Attribute(Player, "Mana") < SpellCost
+        Output(Player, "Not enough Mana", 255, 0, 0)
+        Return 0
+    EndIf
+    If ArcaneEquipmentCheck(Player) < 1
+        Output(Player, "You cannot cast Arcane spells with your current equipment", 255, 50, 50)
+        Return 0
+    EndIf
+
+    CastingTime = 5
+    SetAttribute(Player, "Mana", Attribute(Player, "Mana") - SpellCost)
+    ZZRUNABILITYCOOLDOWN(Player, SpellName$)
+    ZZADDSKILLXP(Player, "Arcane Casting", SpellCost * 10)
+    AnimateActor(Player, "Cast Magic", 0.005, 1)
+    Output(Player, "Casting " + SpellName$, 200, 0, 255)
+    AddActorEffect(Player, "Casting", "Movement", -100, CastingTime, 0)
+    PlaySound(Player, 28, 0)
+    CreateEmitter(Player, "arcaneCasting", 356, 5000)
+
+    Bar = CreateProgressBar(Player,200,0,225,.4,.8,.2,.04,CastingTime * 10,0,SpellName$)
+    i = 0
+    Repeat
+        UpdateProgressBar(Player, Bar, i)
+        DoEvents(100)
+        i = i + 1
+        If Attribute(Player, "Health") <= 0
+            DeleteProgressBar(Player, Bar)
+            Return 0
+        EndIf
+    Until i >= CastingTime * 10
+    DeleteProgressBar(Player, Bar)
+
+    FinalEffectValue = EffectValue + AbilityBonus(Attribute(Player, "Intelligence"))
+    If EffectValue < 0 And FinalEffectValue > -1 Then FinalEffectValue = -1
+    If EffectValue > 0 And FinalEffectValue < 1 Then FinalEffectValue = 1
+
+    Members = CountPartyMembers(Player)
+    Count = 1
+    Repeat
+        Member = PartyMember(Player, Count)
+        If Member > 0
+            AddActorEffect(Member, EffectName$, EffectAttribute$, FinalEffectValue, EffectDuration, EffectTexID)
+            CreateEmitter(Member, EmitterName$, EmitterTex, 4000)
+        EndIf
+        Count = Count + 1
+    Until Count > Members
+
+    AddActorEffect(Player, EffectName$, EffectAttribute$, FinalEffectValue, EffectDuration, EffectTexID)
+    CreateEmitter(Player, EmitterName$, EmitterTex, 4000)
+    If SpellName$ = "Group Shield"
+        Output(Player, "A magical shield surrounds your party.", 150, 255, 150)
+    Else
+        Output(Player, "Your party fades from sight.", 150, 255, 150)
+    EndIf
+    Return 1
+End Function
+
+Function Spell_GroupShield()
+    Player = Actor()
+    SpellCost = 12
+    SpellName$ = "Group Shield"
+    EffectName$ = "Group Shield"
+    EffectAttribute$ = "Armor Bonus"
+    CastingLevel = FindCastingLevel(Attribute(Player, "Arcane Casting"), ActorLevel(Player))
+    EffectValue = 2 + CastingLevel
+    If EffectValue < 3 Then EffectValue = 3
+    EffectDuration = 300
+    EffectTexID = Parameter(2)
+    EmitterName$ = "BuffBlue"
+    EmitterTex = 337
+    ApplyPartyAttributeSpell(Player, SpellCost, SpellName$, EffectName$, EffectAttribute$, EffectValue, EffectDuration, EffectTexID, EmitterName$, EmitterTex)
+End Function
+
+Function Spell_GroupInvisibility()
+    Player = Actor()
+    SpellCost = 15
+    SpellName$ = "Group Invisibility"
+    EffectName$ = "Invisible"
+    EffectAttribute$ = "Stealth Mod"
+    CastingLevel = FindCastingLevel(Attribute(Player, "Arcane Casting"), ActorLevel(Player))
+    EffectValue = 102 + CastingLevel
+    EffectDuration = 600
+    EffectTexID = Parameter(2)
+    EmitterName$ = "BuffBlue"
+    EmitterTex = 337
+    ApplyPartyAttributeSpell(Player, SpellCost, SpellName$, EffectName$, EffectAttribute$, EffectValue, EffectDuration, EffectTexID, EmitterName$, EmitterTex)
 End Function

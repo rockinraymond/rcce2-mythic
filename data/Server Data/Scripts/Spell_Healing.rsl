@@ -13,7 +13,9 @@ Function TouchHealSpell(Player, Target, SpellCost, ResourceName$, SpellName$, Ba
     EmitterTex = 373
     EmitterName$ = "healBurst"
 
-    SuccessChance = GetSkillModifier(Attribute(Player,SkillName$)) + 10
+    SuccessChance = 4 + (Attribute(Player,SkillName$) * 0.2)
+    If SuccessChance < 1 Then SuccessChance = 1
+    If SuccessChance > 19 Then SuccessChance = 19
 
     If CastingChecks(Player, Target, SkillName$) < 1
         Return
@@ -31,15 +33,25 @@ Function TouchHealSpell(Player, Target, SpellCost, ResourceName$, SpellName$, Ba
     ;Particles and casting animation
     AnimateActor(Player, "Cast Magic", 0.05, 1)
     Output(Player, "Casting " + SpellName$, 200, 0, 255) 
-	;AddActorEffect(Player, "Casting", "Movement", -100, castingTime,0)
-    
-    ;create progress bar
+	AddActorEffect(Player, "Casting", "Movement", -100, 2,0)
+    Bar = CreateProgressBar(Player,200,255,200,.4,.8,.2,.04,20,0,SpellName$)
+    i = 0
+    Repeat
+        UpdateProgressBar(Player, Bar, i)
+        DoEvents(100)
+        i = i + 1
+        If Attribute(Player, "Health") <= 0
+            DeleteProgressBar(Player, Bar)
+            Return
+        EndIf
+    Until i >= 20
+    DeleteProgressBar(Player, Bar)
 	
     ZZADDSKILLXP(Player, SkillName$, (SpellCost * 10))
     
     SpellSuccess = Rand(1,20)
 
-    If SpellSuccess < SuccessChance
+    If SpellSuccess <= SuccessChance
 
         If Target = Player
             Output(Target,  "You successfully cast " + SpellName$ + " on yourself!", 100, 255, 150)
@@ -52,14 +64,11 @@ Function TouchHealSpell(Player, Target, SpellCost, ResourceName$, SpellName$, Ba
         CreateEmitter(Target, EmitterName$, EmitterTex, 1000)
 
         
-        NewHealth = Attribute(Target, "Health") + BaseHeal
-
-        If Target = Player
-            Output(Player, "You heal your own health by " + BaseHeal +"!")
-        Else
-            Output(Player, "You healed " + TargetName$ + "'s health for " + BaseHeal + "!",150, 255, 150)
-            Output(Target, PlayerName$ + " heals you your health by " + BaseHeal + " damage!", 150, 255, 150)
-        EndIf
+        OldHealth = Attribute(Target, "Health")
+        NewHealth = OldHealth + BaseHeal
+        MaxHealth = MaxAttribute(Target, "Health")
+        If NewHealth > MaxHealth Then NewHealth = MaxHealth
+        ActualHeal = NewHealth - OldHealth
 
         PlaySound(Player, HealSound, 0)
         PlaySound(Target, HealSound, 0)
@@ -68,6 +77,16 @@ Function TouchHealSpell(Player, Target, SpellCost, ResourceName$, SpellName$, Ba
             KillActor(Target,Player)
         EndIf
         SetAttribute(Target, "Health", NewHealth)
+        If ActualHeal > 0
+            If Target = Player
+                Output(Player, "Your wounds close; you recover " + ActualHeal + " health.", 150, 255, 150)
+            Else
+                Output(Player, TargetName$ + " recovers " + ActualHeal + " health from your spell.", 150, 255, 150)
+                Output(Target, "Your wounds close; you recover " + ActualHeal + " health.", 150, 255, 150)
+            EndIf
+        Else
+            Output(Player, TargetName$ + " is already at full health; no healing was needed.", 255, 180, 100)
+        EndIf
 	    ZZADDSKILLXP(Player, SkillName$, TargetValue)
     Else
          If Target = Player
@@ -82,10 +101,59 @@ Function TouchHealSpell(Player, Target, SpellCost, ResourceName$, SpellName$, Ba
 
 End Function
 
+Function FindCastingLevel(CastingSkill, CharLevel)
+    If CastingSkill >= 100 And CharLevel >= 11
+        Return 6
+    ElseIf CastingSkill >= 85 And CharLevel >= 9
+        Return 5
+    ElseIf CastingSkill >= 70 And CharLevel >= 7
+        Return 4
+    ElseIf CastingSkill >= 55 And CharLevel >= 5
+        Return 3
+    ElseIf CastingSkill >= 40 And CharLevel >= 3
+        Return 2
+    Else
+        Return 1
+    EndIf
+End Function
+
+Function BeginDivineUtility(Player, Target, SpellCost, SpellName$)
+    If CastingChecks(Player, Target, "Divine Casting") < 1
+        Return 0
+    EndIf
+    If Attribute(Player, "Spirit") < SpellCost
+        Output(Player, "Not enough Spirit", 255, 0, 0)
+        Return 0
+    EndIf
+    SetAttribute(Player, "Spirit", Attribute(Player, "Spirit") - SpellCost)
+    ZZRUNABILITYCOOLDOWN(Player, SpellName$)
+    ZZADDSKILLXP(Player, "Divine Casting", SpellCost * 10)
+    AnimateActor(Player, "Cast Magic", 0.05, 1)
+    AddActorEffect(Player, "Casting", "Movement", -100, 2, 0)
+    Output(Player, "Casting " + SpellName$, 200, 0, 255)
+    Bar = CreateProgressBar(Player,200,255,200,.4,.8,.2,.04,20,0,SpellName$)
+    i = 0
+    Repeat
+        UpdateProgressBar(Player, Bar, i)
+        DoEvents(100)
+        i = i + 1
+        If Attribute(Player, "Health") <= 0
+            DeleteProgressBar(Player, Bar)
+            Return 0
+        EndIf
+    Until i >= 20
+    DeleteProgressBar(Player, Bar)
+    Return 1
+End Function
+
 Function CastingChecks(Player,Target,SpellSchool$)
     ;is player dead?
     If(Attribute(Player, "Health") < 0)
         Output(Player, "You cannot cast spells when you are dead!",255, 255, 0)
+        Return 0
+    EndIf
+    If ActorHasEffect(Player, "Silenced")
+        Output(Player, "You cannot cast spells while silenced", 255, 100, 100)
         Return 0
     EndIf
 
@@ -101,9 +169,9 @@ Function CastingChecks(Player,Target,SpellSchool$)
     EndIf
 
     ;NPC Check
-    If (Actoraggressiveness(Target) = 3)
-	    Output(Player, "No Valid Target Selected", 255, 50, 50)
-	    Return 0
+    If ActorIsHuman(Target) = 0 And Actoraggressiveness(Target) = 3
+        Output(Player, "You cannot target non-combat NPCs with spells", 255, 50, 50)
+        Return 0
     EndIf
 
 
@@ -149,17 +217,241 @@ Function Spell_CureLightWounds()
         Target = Player
     EndIf
    
-    SpellCost = Parameter(1)
+    SpellCost = 3
     ResourceName$ = "Spirit"
     SpellName$ = "Cure Light Wounds"
     SkillName$ = "Divine Casting"
     GoverningAttribute$ = "Wisdom"
 
-    BaseHeal = Rand(1,4) + AbilityBonus(Attribute(Player,GoverningAttribute$))
+    BaseHeal = Rand(1,6) + 1 + AbilityBonus(Attribute(Player,GoverningAttribute$))
 
     HealSound = 17
 
     TouchHealSpell(Player, Target, SpellCost, ResourceName$, SpellName$, BaseHeal, SkillName$, GoverningAttribute$, HealSound)
+End Function
+
+Function Spell_CureWounds()
+    Player = Actor()
+    Target = ContextActor()
+    If Target = 0 Then Target = Player
+    SpellCost = 3
+    SpellName$ = "Cure Light Wounds"
+    ResourceName$ = "Spirit"
+    SkillName$ = "Divine Casting"
+    GoverningAttribute$ = "Wisdom"
+    BaseHeal = Rand(1,6) + 1 + AbilityBonus(Attribute(Player,GoverningAttribute$))
+    HealSound = 17
+    TouchHealSpell(Player, Target, SpellCost, ResourceName$, SpellName$, BaseHeal, SkillName$, GoverningAttribute$, HealSound)
+End Function
+
+Function Spell_CureManyWounds()
+    Player = Actor()
+
+    If Attribute(Player, "Health") <= 0
+        Output(Player, "You cannot cast spells when you are dead", 255, 255, 0)
+        Return
+    EndIf
+    If ActorHasEffect(Player, "Silenced")
+        Output(Player, "You cannot cast spells while silenced", 255, 100, 100)
+        Return
+    EndIf
+    If ActorHasEffect(Player, "Casting")
+        Output(Player, "You are already casting a spell", 255, 0, 255)
+        Return
+    EndIf
+    If ClericEquipmentCheck(Player) < 1
+        Output(Player, "You cannot cast Divine spells with your current weapon", 255, 50, 50)
+        Return
+    EndIf
+
+    SpellCost = 12
+    If Attribute(Player, "Spirit") < SpellCost
+        Output(Player, "Not enough Spirit", 255, 0, 0)
+        Return
+    EndIf
+
+    SetAttribute(Player, "Spirit", Attribute(Player, "Spirit") - SpellCost)
+    ZZRUNABILITYCOOLDOWN(Player, "Cure Many Wounds")
+    ZZADDSKILLXP(Player, "Divine Casting", SpellCost * 10)
+    AnimateActor(Player, "Cast Magic", 0.05, 1)
+    AddActorEffect(Player, "Casting", "Movement", -100, 5, 0)
+    CreateEmitter(Player, "divineCasting", 356, 3000)
+    Output(Player, "Casting Cure Many Wounds", 200, 0, 255)
+
+    Bar = CreateProgressBar(Player,200,255,200,.4,.8,.2,.04,50,0,"Cure Many Wounds")
+    i = 0
+    Repeat
+        UpdateProgressBar(Player, Bar, i)
+        DoEvents(100)
+        i = i + 1
+        If Attribute(Player, "Health") <= 0
+            DeleteProgressBar(Player, Bar)
+            Return
+        EndIf
+    Until i = 50
+    DeleteProgressBar(Player, Bar)
+
+    CastingLevel = FindCastingLevel(Attribute(Player, "Divine Casting"), ActorLevel(Player))
+    BaseHeal = Rand(1,6) + CastingLevel + AbilityBonus(Attribute(Player, "Wisdom"))
+    If BaseHeal < 1 Then BaseHeal = 1
+
+    Members = CountPartyMembers(Player)
+    TotalHealing = 0
+    Count = 1
+    Repeat
+        Member = PartyMember(Player, Count)
+        If Member > 0
+            If Attribute(Member, "Health") > 0
+                OldHealth = Attribute(Member, "Health")
+                NewHealth = OldHealth + BaseHeal
+                MaxHealth = MaxAttribute(Member, "Health")
+                If NewHealth > MaxHealth Then NewHealth = MaxHealth
+                ActualHeal = NewHealth - OldHealth
+                SetAttribute(Member, "Health", NewHealth)
+                TotalHealing = TotalHealing + ActualHeal
+                If ActualHeal > 0
+                    CreateEmitter(Member, "healBurst", 373, 3000)
+                    Output(Member, "Cure Many Wounds restores " + ActualHeal + " health", 150, 255, 150)
+                EndIf
+            EndIf
+        EndIf
+        Count = Count + 1
+    Until Count > Members
+
+    OldHealth = Attribute(Player, "Health")
+    NewHealth = OldHealth + BaseHeal
+    MaxHealth = MaxAttribute(Player, "Health")
+    If NewHealth > MaxHealth Then NewHealth = MaxHealth
+    ActualHeal = NewHealth - OldHealth
+    SetAttribute(Player, "Health", NewHealth)
+    TotalHealing = TotalHealing + ActualHeal
+    If ActualHeal > 0
+        CreateEmitter(Player, "healBurst", 373, 3000)
+        Output(Player, "Cure Many Wounds restores " + TotalHealing + " health across your party.", 150, 255, 150)
+    ElseIf TotalHealing = 0
+        Output(Player, "Your party is already at full health; Cure Many Wounds restores nothing.", 255, 180, 100)
+    Else
+        Output(Player, "Cure Many Wounds restores " + TotalHealing + " health across your party.", 150, 255, 150)
+    EndIf
+End Function
+
+Function Spell_CureBlindness()
+    Player = Actor()
+    Target = ContextActor()
+    If Target = 0 Then Target = Player
+    SpellCost = 5
+    SpellName$ = "Cure Blindness"
+    If BeginDivineUtility(Player, Target, SpellCost, SpellName$) < 1 Then Return
+    HadBlindness = 0
+    If ActorHasEffect(Target, "Blindness") Then HadBlindness = 1
+    If ActorHasEffect(Target, "Blinded") Then HadBlindness = 1
+    DeleteActorEffect(Target, "Blindness")
+    DeleteActorEffect(Target, "Blinded")
+    If HadBlindness > 0
+        CreateEmitter(Target, "healBurst", 373, 3000)
+        If Target = Player
+            Output(Player, "Your sight is restored.", 150, 255, 150)
+        Else
+            Output(Player, Name(Target) + "'s sight is restored.", 150, 255, 150)
+            Output(Target, "Your sight is restored.", 150, 255, 150)
+        EndIf
+    Else
+        Output(Player, Name(Target) + " is not blinded; Cure Blindness has no effect.", 255, 180, 100)
+    EndIf
+End Function
+
+Function Spell_CureDisease()
+    Player = Actor()
+    Target = ContextActor()
+    If Target = 0 Then Target = Player
+    SpellCost = 6
+    SpellName$ = "Cure Disease"
+    If BeginDivineUtility(Player, Target, SpellCost, SpellName$) < 1 Then Return
+    HadDisease = 0
+    If ActorHasEffect(Target, "Disease") Then HadDisease = 1
+    If ActorHasEffect(Target, "Cause Disease") Then HadDisease = 1
+    DeleteActorEffect(Target, "Disease")
+    DeleteActorEffect(Target, "Cause Disease")
+    If HadDisease > 0
+        CreateEmitter(Target, "healBurst", 373, 3000)
+        If Target = Player
+            Output(Player, "Disease and parasites leave your body.", 150, 255, 150)
+        Else
+            Output(Player, "Disease and parasites leave " + Name(Target) + "'s body.", 150, 255, 150)
+            Output(Target, "Disease and parasites leave your body.", 150, 255, 150)
+        EndIf
+    Else
+        Output(Player, Name(Target) + " has no disease for Cure Disease to remove.", 255, 180, 100)
+    EndIf
+End Function
+
+Function Spell_SlowPoison()
+    Player = Actor()
+    Target = ContextActor()
+    If Target = 0 Then Target = Player
+    SpellCost = 4
+    SpellName$ = "Slow Poison"
+    If BeginDivineUtility(Player, Target, SpellCost, SpellName$) < 1 Then Return
+    If ActorHasEffect(Target, "Poisoned")
+        DeleteActorEffect(Target, "Poisoned")
+        AddActorEffect(Target, "Poison Slowed", "", 0, 600, Parameter(2))
+        CreateEmitter(Target, "healBurst", 373, 3000)
+        If Target = Player
+            Output(Player, "The poison in your system is slowed.", 150, 255, 150)
+        Else
+            Output(Player, "The poison in " + Name(Target) + "'s system is slowed.", 150, 255, 150)
+            Output(Target, "The poison in your system is slowed.", 150, 255, 150)
+        EndIf
+    ElseIf ActorHasEffect(Target, "Poison Slowed")
+        Output(Player, Name(Target) + "'s poison is already slowed.", 200, 200, 150)
+    Else
+        Output(Player, Name(Target) + " has no active poison to slow.", 255, 180, 100)
+    EndIf
+End Function
+
+Function Spell_RemoveCurse()
+    Player = Actor()
+    Target = ContextActor()
+    If Target = 0 Then Target = Player
+    SpellCost = 7
+    SpellName$ = "Remove Curse"
+    If BeginDivineUtility(Player, Target, SpellCost, SpellName$) < 1 Then Return
+    HadCurse = 0
+    If ActorHasEffect(Target, "Curse") Then HadCurse = 1
+    If ActorHasEffect(Target, "Weakness") Then HadCurse = 1
+    DeleteActorEffect(Target, "Curse")
+    DeleteActorEffect(Target, "Weakness")
+    If HadCurse > 0
+        CreateEmitter(Target, "healBurst", 373, 3000)
+        If Target = Player
+            Output(Player, "Ordinary curses affecting you are removed.", 150, 255, 150)
+        Else
+            Output(Player, "Ordinary curses affecting " + Name(Target) + " are removed.", 150, 255, 150)
+            Output(Target, "Ordinary curses affecting you are removed.", 150, 255, 150)
+        EndIf
+    Else
+        Output(Player, Name(Target) + " has no ordinary curse for Remove Curse to remove.", 255, 180, 100)
+    EndIf
+End Function
+
+Function Spell_PurifyFoodAndWater()
+    Player = Actor()
+    Target = ContextActor()
+    If Target = 0 Then Target = Player
+    SpellCost = 2
+    SpellName$ = "Purify Food and Water"
+    If BeginDivineUtility(Player, Target, SpellCost, SpellName$) < 1 Then Return
+    HadContamination = 0
+    If ActorHasEffect(Target, "Poisoned") Then HadContamination = 1
+    If ActorHasEffect(Target, "Disease") Then HadContamination = 1
+    DeleteActorEffect(Target, "Poisoned")
+    DeleteActorEffect(Target, "Disease")
+    If HadContamination > 0
+        CreateEmitter(Target, "healBurst", 373, 3000)
+        Output(Player, "Poison and disease are purged from " + Name(Target) + ".", 150, 255, 150)
+    Else
+        Output(Player, "No poison or disease was found to purify for " + Name(Target) + ".", 255, 180, 100)
+    EndIf
 End Function
 
 Function AbilityBonus(SkillLevel%)

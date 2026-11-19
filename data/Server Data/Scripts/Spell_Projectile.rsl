@@ -2,7 +2,23 @@ Using "RC_Core.rcm"
 Function Main()
 End Function
 
-Function ProjectileSpell(Player, Target, SpellCost, ResourceName$, SpellName$, ProjectileName$, SkillName$, castingTime)
+Function FindCastingLevel(CastingSkill, CharLevel)
+    If CastingSkill >= 100 And CharLevel >= 11
+        Return 6
+    ElseIf CastingSkill >= 85 And CharLevel >= 9
+        Return 5
+    ElseIf CastingSkill >= 70 And CharLevel >= 7
+        Return 4
+    ElseIf CastingSkill >= 55 And CharLevel >= 5
+        Return 3
+    ElseIf CastingSkill >= 40 And CharLevel >= 3
+        Return 2
+    Else
+        Return 1
+    EndIf
+End Function
+
+Function ProjectileSpell(Player, Target, SpellCost, ResourceName$, SpellName$, ProjectileName$, SkillName$, castingTime, MissileCount% = 1, ScaledDice% = 0, DamageType$ = "")
 
     PlayerName$ = Name(Player)
     TargetName$ = Name(Target)
@@ -55,8 +71,39 @@ Function ProjectileSpell(Player, Target, SpellCost, ResourceName$, SpellName$, P
     TargetIsHit = FireProjectile(Player, Target, ProjectileName$)
 
     If TargetIsHit > 0
-        Output(Player, "Your " + SpellName$ + " hit " + TargetName$ + "!",150, 100, 255)
+        Output(Player, "Your " + SpellName$ + " strikes " + TargetName$ + "!",150, 100, 255)
         Output(Target, PlayerName$ + "'s " + SpellName$ + " hit you!", 255, 100, 150)
+
+        CastingLevel = FindCastingLevel(Attribute(Player, SkillName$), ActorLevel(Player))
+        If ScaledDice > 0 Then CastingLevel = ActorLevel(Player)
+
+        If MissileCount > 1
+            ExtraMissiles = MissileCount - 1
+            Count = 1
+            Repeat
+                ExtraDamage = Rand(1, 6) + 1
+                ExtraHealth = Attribute(Target, "Health") - ExtraDamage
+                If ExtraHealth < 0 Then ExtraHealth = 0
+                SetAttribute(Target, "Health", ExtraHealth)
+                Count = Count + 1
+            Until Count > ExtraMissiles
+        EndIf
+
+        If ScaledDice > 0
+            ScaledDamage = 0
+            Count = 1
+            Repeat
+                ScaledDamage = ScaledDamage + Rand(1, 6)
+                Count = Count + 1
+            Until Count > CastingLevel
+            ScaledDamage = ScaledDamage - Resistance(Target, DamageType$)
+            If ScaledDamage < 1 Then ScaledDamage = 1
+            ExtraHealth = Attribute(Target, "Health") - ScaledDamage
+            If ExtraHealth < 0 Then ExtraHealth = 0
+            SetAttribute(Target, "Health", ExtraHealth)
+            If ExtraHealth <= 0 Then KillActor(Target, Player)
+            Output(Player, "Scaled " + DamageType$ + " damage dealt " + ScaledDamage + " damage", 255, 220, 100)
+        EndIf
     Else
         Output(Player, "Your " + SpellName$ + " has missed " + TargetName$ + "!",255, 255, 100)
         Output(Target, PlayerName$ + "'s " + SpellName$ + " has missed you!", 255, 255, 100)
@@ -71,6 +118,10 @@ Function CastingChecks(Player,Target,SpellSchool$)
         Output(Player, "You cannot cast spells when you are dead",255, 255, 0)
         Return 0
     EndIf
+    If ActorHasEffect(Player, "Silenced")
+        Output(Player, "You cannot cast spells while silenced", 255, 100, 100)
+        Return 0
+    EndIf
 
     ;Casting Check
     If ActorHasEffect(Player, "Casting")
@@ -79,9 +130,9 @@ Function CastingChecks(Player,Target,SpellSchool$)
     EndIf
 
     ;NPC Check
-    If (Actoraggressiveness(Target) = 3)
-	    Output(Player, "No Valid Target Selected", 255, 50, 50)
-	    Return 0
+    If ActorIsHuman(Target) = 0 And Actoraggressiveness(Target) = 3
+        Output(Player, "You cannot target non-combat NPCs with spells", 255, 50, 50)
+        Return 0
     EndIf
 
     ;Check if the target is correct?
@@ -261,7 +312,7 @@ Function Spell_MagicMissle()
     Player = Actor()
     Target = ContextActor()
 
-    SpellCost = 1
+    SpellCost = 3
     ResourceName$ = "Mana"
     SpellName$ = "Magic Missile I"
     ProjectileName$ = "Magic Missile"
@@ -269,5 +320,92 @@ Function Spell_MagicMissle()
     castingTime = 2
 
     ProjectileSpell(Player, Target, SpellCost, ResourceName$, SpellName$, ProjectileName$, SkillName$, castingTime)
+End Function
+
+Function Spell_MagicMissile()
+    Player = Actor()
+    Target = ContextActor()
+    If Target = 0 Then Return
+    CastingLevel = ActorLevel(Player)
+    MissileCount = 1
+    If CastingLevel >= 4 Then MissileCount = 2
+    If CastingLevel >= 7 Then MissileCount = 3
+    If CastingLevel >= 10 Then MissileCount = 4
+    If CastingLevel >= 13 Then MissileCount = 5
+
+    SpellCost = 3
+    ResourceName$ = "Mana"
+    SpellName$ = "Magic Missile"
+    ProjectileName$ = "Magic Missile"
+    SkillName$ = "Arcane Casting"
+    castingTime = 2
+    ScaledDice = 0
+    DamageType$ = ""
+
+    ProjectileSpell(Player, Target, SpellCost, ResourceName$, SpellName$, ProjectileName$, SkillName$, castingTime, MissileCount, ScaledDice, DamageType$)
+End Function
+
+Function Spell_Icicle()
+    Player = Actor()
+    Target = ContextActor()
+    If Target = 0 Then Return
+    SpellCost = 4
+    ResourceName$ = "Mana"
+    SpellName$ = "Icicle"
+    ProjectileName$ = "Icicle"
+    SkillName$ = "Arcane Casting"
+    castingTime = 3
+    MissileCount = 1
+    ScaledDice = 0
+    DamageType$ = ""
+    ProjectileSpell(Player, Target, SpellCost, ResourceName$, SpellName$, ProjectileName$, SkillName$, castingTime, MissileCount, ScaledDice, DamageType$)
+End Function
+
+Function Spell_Fireball()
+    Player = Actor()
+    Target = ContextActor()
+    If Target = 0 Then Return
+    SpellCost = 8
+    ResourceName$ = "Mana"
+    SpellName$ = "Fireball"
+    ProjectileName$ = "Fireball"
+    SkillName$ = "Arcane Casting"
+    castingTime = 5
+    MissileCount = 1
+    ScaledDice = 1
+    DamageType$ = "Fire"
+    ProjectileSpell(Player, Target, SpellCost, ResourceName$, SpellName$, ProjectileName$, SkillName$, castingTime, MissileCount, ScaledDice, DamageType$)
+End Function
+
+Function Spell_LightningBolt()
+    Player = Actor()
+    Target = ContextActor()
+    If Target = 0 Then Return
+    SpellCost = 8
+    ResourceName$ = "Mana"
+    SpellName$ = "Lightning Bolt"
+    ProjectileName$ = "Lightning Bolt"
+    SkillName$ = "Arcane Casting"
+    castingTime = 5
+    MissileCount = 1
+    ScaledDice = 1
+    DamageType$ = "Lightning"
+    ProjectileSpell(Player, Target, SpellCost, ResourceName$, SpellName$, ProjectileName$, SkillName$, castingTime, MissileCount, ScaledDice, DamageType$)
+End Function
+
+Function Spell_SpiritualHammer()
+    Player = Actor()
+    Target = ContextActor()
+    If Target = 0 Then Return
+    SpellCost = 4
+    ResourceName$ = "Spirit"
+    SpellName$ = "Spiritual Hammer"
+    ProjectileName$ = "Spiritual Hammer"
+    SkillName$ = "Divine Casting"
+    castingTime = 4
+    MissileCount = 1
+    ScaledDice = 0
+    DamageType$ = ""
+    ProjectileSpell(Player, Target, SpellCost, ResourceName$, SpellName$, ProjectileName$, SkillName$, castingTime, MissileCount, ScaledDice, DamageType$)
 End Function
 

@@ -16,11 +16,11 @@ Function Main()
 
     ;Check the mana
     ManaLevel = Attribute(Player, "Mana")
-    If(ManaLevel < 1)
+    If(ManaLevel < 8)
         Output(Player, "Not enough Mana")
         Return
     EndIf
-        SetAttribute(Player, "Mana", ManaLevel -1)
+        SetAttribute(Player, "Mana", ManaLevel -8)
 
 
     ;Particles and casting animation
@@ -32,6 +32,7 @@ Function Main()
     hp = Attribute(Target, "Health")
     damage = Rand(30,60)
     SetAttribute(Target, "Health", hp-damage)
+    Output(Player, "Your Fireball hits " + Name(Target) + " for " + damage + " damage.", 255, 220, 100)
 
 	;If (hp-Damage)<1
 	;KillActor(Target, Player)

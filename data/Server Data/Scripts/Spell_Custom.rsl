@@ -1,0 +1,705 @@
+Using "RC_Core.rcm"
+
+Function BeginSpell(Player, Target, ResourceName$, SpellCost, SpellName$, SchoolName$, SpellRange, castingTime = 2)
+    If Attribute(Player, "Health") < 0
+        Output(Player, "You cannot cast spells when you are dead", 255, 255, 0)
+        Return 0
+    EndIf
+    If ActorHasEffect(Player, "Silenced")
+        Output(Player, "You cannot cast spells while silenced", 255, 100, 100)
+        Return 0
+    EndIf
+    If Target = 0
+        Output(Player, "No valid target selected", 255, 50, 50)
+        Return 0
+    EndIf
+    If ActorIsHuman(Target) = 0 And ActorAggressiveness(Target) = 3
+        Output(Player, "You cannot target non-combat NPCs with spells", 255, 50, 50)
+        Return 0
+    EndIf
+    If ActorDistance(Player, Target) > SpellRange
+        Output(Player, "You are too far away from target", 255, 255, 0)
+        Return 0
+    EndIf
+    If ActorHasEffect(Player, "Casting")
+        Output(Player, "You are already casting a spell", 255, 0, 255)
+        Return 0
+    EndIf
+    If Attribute(Player, ResourceName$) < SpellCost
+        Output(Player, "Not enough " + ResourceName$, 255, 0, 0)
+        Return 0
+    EndIf
+    If SchoolName$ = "Arcane Casting"
+        If ArcaneEquipmentCheck(Player) < 1
+            Output(Player, "You cannot cast Arcane spells with your current equipment", 255, 50, 50)
+            Return 0
+        EndIf
+    ElseIf SchoolName$ = "Divine Casting"
+        If ClericEquipmentCheck(Player) < 1
+            Output(Player, "You cannot cast Divine spells with your current weapon", 255, 50, 50)
+            Return 0
+        EndIf
+    EndIf
+
+    SetAttribute(Player, ResourceName$, Attribute(Player, ResourceName$) - SpellCost)
+    ZZRUNABILITYCOOLDOWN(Player, SpellName$)
+    ZZADDSKILLXP(Player, SchoolName$, SpellCost * 10)
+    AnimateActor(Player, "Cast Magic", 0.05, 1)
+    Output(Player, "Casting " + SpellName$, 200, 0, 255)
+    AddActorEffect(Player, "Casting", "Movement", -100, castingTime, 0)
+    PlaySound(Player, 1, 0)
+    CreateEmitter(Player, "arcaneCasting", 356, 2000)
+    If SchoolName$ = "Divine Casting" Then CreateEmitter(Player, "divineCasting", 356, 2000)
+
+    bar = CreateProgressBar(Player,200,0,225,.4,.8,.2,.04,castingTime * 10,0,SpellName$)
+    i = 0
+    Repeat
+        UpdateProgressBar(Player, bar, i)
+        DoEvents(100)
+        i = i + 1
+        If Attribute(Player, "Health") <= 0
+            DeleteProgressBar(Player, bar)
+            Return 0
+        EndIf
+    Until i >= castingTime * 10
+    DeleteProgressBar(Player, bar)
+    Return 1
+End Function
+
+Function ArcaneEquipmentCheck(Player)
+    If ActorShield(Player) > 0 Then Return 0
+    Weapon = ActorWeapon(Player)
+    If Weapon > 0
+        WeaponClass = ZZITEMWEAPONCLASS(Weapon)
+        If WeaponClass = 1 Or WeaponClass = 2 Or (WeaponClass > 2 And WeaponClass < 7) Then Return 0
+    EndIf
+    Return 1
+End Function
+
+Function ClericEquipmentCheck(Player)
+    Weapon = ActorWeapon(Player)
+    If Weapon > 0
+        WeaponClass = ZZITEMWEAPONCLASS(Weapon)
+        If WeaponClass = 1 Or WeaponClass = 2 Or WeaponClass = 4 Or WeaponClass = 5 Or WeaponClass = 6 Or WeaponClass = 8 Then Return 0
+    EndIf
+    Return 1
+End Function
+
+Function SavingThrow(Player, Target, SaveValue, SkillName$)
+    Chance = 20 + Attribute(Player, SkillName$) - Resistance(Target, "Spells") - SaveValue
+    If Chance < 5 Then Chance = 5
+    If Chance > 95 Then Chance = 95
+    Roll = Rand(1, 100)
+    Return Roll <= Chance
+End Function
+
+Function GetCasterLevel(Player)
+    ArcaneLevel = 1
+    DivineLevel = 1
+    ArcaneLevel = FindCastingLevel(Attribute(Player, "Arcane Casting"), ActorLevel(Player))
+    DivineLevel = FindCastingLevel(Attribute(Player, "Divine Casting"), ActorLevel(Player))
+    If DivineLevel > ArcaneLevel Then Return DivineLevel
+    Return ArcaneLevel
+End Function
+
+Function FindCastingLevel(CastingSkill, CharLevel)
+    If CastingSkill >= 100 And CharLevel >= 11
+        Return 6
+    ElseIf CastingSkill >= 85 And CharLevel >= 9
+        Return 5
+    ElseIf CastingSkill >= 70 And CharLevel >= 7
+        Return 4
+    ElseIf CastingSkill >= 55 And CharLevel >= 5
+        Return 3
+    ElseIf CastingSkill >= 40 And CharLevel >= 3
+        Return 2
+    Else
+        Return 1
+    EndIf
+End Function
+
+Function ApplySpellDamage(Target, Damage)
+    NewHealth = Attribute(Target, "Health") - Damage
+    If NewHealth < 0 Then NewHealth = 0
+    SetAttribute(Target, "Health", NewHealth)
+    Return NewHealth
+End Function
+
+Function CharmAnimal()
+    Player = Actor()
+    Target = ContextActor()
+    If Target > 0
+        If Upper(Class(Target)) <> "ANIMAL"
+            Output(Player, "Charm Animal can only target animals", 255, 100, 100)
+            Return
+        EndIf
+    EndIf
+    ResourceName$ = "Spirit"
+    SpellCost = 6
+    SpellName$ = "Charm Animal"
+    SchoolName$ = "Divine Casting"
+    SpellRange = 60
+    SaveValue = 0
+    If BeginSpell(Player, Target, ResourceName$, SpellCost, SpellName$, SchoolName$, SpellRange) < 1 Then Return
+    If SavingThrow(Player, Target, SaveValue, SchoolName$) = 0
+        Output(Player, Name(Target) + " resists your Charm Animal spell.", 255, 100, 100)
+        If Target <> Player Then Output(Target, "You resist the charm attempt.", 255, 100, 100)
+        Return
+    EndIf
+    CastingLevel = FindCastingLevel(Attribute(Player, "Divine Casting"), ActorLevel(Player))
+    Duration = 60 + (CastingLevel * 30)
+    If Duration > 300 Then Duration = 300
+    AddActorEffect(Target, "Charmed", "", 0, Duration, Parameter(2))
+    SetLeader(Target, Player)
+    SetActorTarget(Target, 0)
+    Output(Player, Name(Target) + " is charmed and follows you.", 150, 255, 150)
+    If Target <> Player Then Output(Target, "You are charmed and follow the caster.", 150, 255, 150)
+End Function
+
+Function CharmPerson()
+    Player = Actor()
+    Target = ContextActor()
+    If Target > 0
+        TargetRace$ = Upper(Race(Target))
+        If TargetRace$ <> "HUMAN" And TargetRace$ <> "DWARF" And TargetRace$ <> "ELF" And TargetRace$ <> "HALF ELF" And TargetRace$ <> "GNOME" And TargetRace$ <> "HALFLING" And TargetRace$ <> "HALF ORC"
+            Output(Player, "Charm Person can only target playable races", 255, 100, 100)
+            Return
+        EndIf
+    EndIf
+    ResourceName$ = "Mana"
+    SpellCost = 6
+    SpellName$ = "Charm Person"
+    SchoolName$ = "Arcane Casting"
+    SpellRange = 30
+    SaveValue = 5
+    If BeginSpell(Player, Target, ResourceName$, SpellCost, SpellName$, SchoolName$, SpellRange) < 1 Then Return
+    If ActorTarget(Target) <> 0 Then
+        If SavingThrow(Player, Target, SaveValue, SchoolName$) = 0
+            Output(Player, Name(Target) + " resists your Charm Person spell.", 255, 100, 100)
+            If Target <> Player Then Output(Target, "You resist the charm.", 255, 100, 100)
+            Return
+        EndIf
+    EndIf
+    CastingLevel = FindCastingLevel(Attribute(Player, "Arcane Casting"), ActorLevel(Player))
+    AddActorEffect(Target, "Charmed", "", 0, 300, Parameter(2))
+    SetLeader(Target, Player)
+    SetActorTarget(Target, 0)
+    Output(Player, Name(Target) + " is charmed by your spell.", 150, 255, 150)
+    If Target <> Player Then Output(Target, "You are charmed by the spell.", 150, 255, 150)
+End Function
+
+Function TurnUndead()
+    Player = Actor()
+    Target = ContextActor()
+    If Target > 0
+        If Upper(Class(Target)) <> "UNDEAD"
+            Output(Player, "Turn Undead can only target undead", 255, 100, 100)
+            Return
+        EndIf
+    EndIf
+    ResourceName$ = "Spirit"
+    SpellCost = 4
+    SpellName$ = "Turn Undead"
+    SchoolName$ = "Divine Casting"
+    SpellRange = 100
+    SaveValue = 0
+    If BeginSpell(Player, Target, ResourceName$, SpellCost, SpellName$, SchoolName$, SpellRange) < 1 Then Return
+    If SavingThrow(Player, Target, SaveValue, SchoolName$) = 0
+        Output(Player, Name(Target) + " resists your attempt to turn it.", 255, 100, 100)
+        If Target <> Player Then Output(Target, "You resist the turning.", 255, 100, 100)
+        Return
+    EndIf
+    TargetX# = ActorX(Target)
+    TargetZ# = ActorZ(Target)
+    AwayX# = TargetX - ActorX(Player)
+    AwayZ# = TargetZ - ActorZ(Player)
+    Distance# = Sqrt((AwayX * AwayX) + (AwayZ * AwayZ))
+    If Distance > 0
+        AwayX = AwayX / Distance
+        AwayZ = AwayZ / Distance
+    Else
+        AwayX = 1
+        AwayZ = 0
+    EndIf
+    SetActorTarget(Target, 0)
+    SetActorDestination(Target, TargetX + AwayX * 100, TargetZ + AwayZ * 100)
+    SetActorAIState(Target, 2)
+    CastingLevel = FindCastingLevel(Attribute(Player, "Divine Casting"), ActorLevel(Player))
+    AddActorEffect(Target, "Turned", "Movement", -50, 60, Parameter(2))
+    CreateEmitter(Target, "healBurst", 373, 3000)
+    Output(Player, Name(Target) + " flees from your holy power.", 255, 220, 100)
+    If Target <> Player Then Output(Target, "You flee from the holy power.", 255, 220, 100)
+End Function
+
+Function FindTraps()
+    Player = Actor()
+    ResourceName$ = "Spirit"
+    SpellCost = 2
+    SpellName$ = "Find Traps"
+    SchoolName$ = "Divine Casting"
+    SpellRange = 75
+    If BeginSpell(Player, Player, ResourceName$, SpellCost, SpellName$, SchoolName$, SpellRange) < 1 Then Return
+    CastingLevel = FindCastingLevel(Attribute(Player, "Divine Casting"), ActorLevel(Player))
+    AddActorEffect(Player, "Find Traps", "Stealth", 0, 180, Parameter(2))
+
+    TrappedCount = 0
+    First = FirstActorInZone(ActorZone(Player), ActorZoneInstance(Player))
+    If First > 0
+        Current = First
+        Repeat
+            If Lower(Name(Current)) = "chest"
+                If ActorDistance(Player, Current) <= 75
+                    ChestTrap = Attribute(Current, "Attack Bonus")
+                    If ChestTrap > 0
+                        SetAttribute(Current, "Stealth Mod", 1)
+                        TrappedCount = TrappedCount + 1
+                    EndIf
+                EndIf
+            EndIf
+            Current = NextActorInZone(Current)
+        Until Current = First
+    EndIf
+
+    If TrappedCount > 0
+        Output(Player, "Detected " + TrappedCount + " trapped chest(s) within 75 units", 255, 180, 100)
+    Else
+        Output(Player, "No trapped chests detected within 75 units", 150, 255, 150)
+    EndIf
+End Function
+
+Function DisarmTrap()
+    Player = Actor()
+    Target = ContextActor()
+    ResourceName$ = "Mana"
+    SpellCost = 6
+    SpellName$ = "Disarm Traps"
+    SchoolName$ = "Arcane Casting"
+    SpellRange = 100
+    If BeginSpell(Player, Target, ResourceName$, SpellCost, SpellName$, SchoolName$, SpellRange) < 1 Then Return
+    CastingLevel = FindCastingLevel(Attribute(Player, "Arcane Casting"), ActorLevel(Player))
+    ChestTrap = Attribute(Target, "Attack Bonus")
+    If ChestTrap > 0
+        SetAttribute(Target, "Stealth Mod", 1)
+        SetAttribute(Target, "Attack Bonus", -1)
+        ZZADDSKILLXP(Player, "Trap Disarming", 10 * CastingLevel)
+        Output(Player, "The selected chest trap is disarmed", 175, 255, 175)
+    ElseIf ChestTrap < 0
+        Output(Player, "The selected chest trap is already disarmed", 175, 255, 175)
+    Else
+        Output(Player, "The selected chest has no trap to disarm", 150, 255, 150)
+    EndIf
+End Function
+
+Function HoldPerson()
+    Player = Actor()
+    Target = ContextActor()
+    ResourceName$ = "Spirit"
+    SpellCost = 6
+    SpellName$ = "Hold Person"
+    SchoolName$ = "Divine Casting"
+    SpellRange = 180
+    SaveValue = 0
+    If BeginSpell(Player, Target, ResourceName$, SpellCost, SpellName$, SchoolName$, SpellRange) < 1 Then Return
+    If SavingThrow(Player, Target, SaveValue, SchoolName$) = 0
+        Output(Player, Name(Target) + " resists your Hold Person spell.", 255, 100, 100)
+        If Target <> Player Then Output(Target, "You resist the hold spell.", 255, 100, 100)
+        Return
+    EndIf
+    CastingLevel = FindCastingLevel(Attribute(Player, "Divine Casting"), ActorLevel(Player))
+    Duration = 30 + (CastingLevel * 15)
+    If Duration > 120 Then Duration = 120
+    AddActorEffect(Target, "Held", "Movement", -100, Duration, Parameter(2))
+    SetActorAIState(Target, 0)
+    Output(Player, Name(Target) + " is held in place.", 255, 220, 100)
+    If Target <> Player Then Output(Target, "You are held in place.", 255, 220, 100)
+End Function
+
+Function Silence()
+    Player = Actor()
+    Target = ContextActor()
+    ResourceName$ = "Spirit"
+    SpellCost = 6
+    SpellName$ = "Silence"
+    SchoolName$ = "Divine Casting"
+    SpellRange = 360
+    SaveValue = 0
+    If BeginSpell(Player, Target, ResourceName$, SpellCost, SpellName$, SchoolName$, SpellRange) < 1 Then Return
+    If SavingThrow(Player, Target, SaveValue, SchoolName$) = 0
+        Output(Player, Name(Target) + " resists your Silence spell.", 255, 100, 100)
+        If Target <> Player Then Output(Target, "You resist the silence spell.", 255, 100, 100)
+        Return
+    EndIf
+    CastingLevel = FindCastingLevel(Attribute(Player, "Divine Casting"), ActorLevel(Player))
+    Duration = 60
+    If CastingLevel >= 4 Then Duration = 120
+    AddActorEffect(Target, "Silenced", "", 0, Duration, Parameter(2))
+    Output(Player, Name(Target) + " is silenced and cannot cast spells.", 255, 220, 100)
+    If Target <> Player Then Output(Target, "You are surrounded by silence and cannot cast spells.", 255, 220, 100)
+End Function
+
+Function DetectEvil()
+    Player = Actor()
+    ResourceName$ = "Spirit"
+    SpellCost = 2
+    SpellName$ = "Detect Evil"
+    SchoolName$ = "Divine Casting"
+    SpellRange = 100
+    If BeginSpell(Player, Player, ResourceName$, SpellCost, SpellName$, SchoolName$, SpellRange) < 1 Then Return
+    AddActorEffect(Player, "Detect Evil", "", 0, 60, Parameter(2))
+
+    HostileCount = 0
+    First = FirstActorInZone(ActorZone(Player), ActorZoneInstance(Player))
+    If First > 0
+        Current = First
+        Repeat
+            If ActorIsHuman(Current) = 0
+                Aggressiveness = ActorAggressiveness(Current)
+                If Aggressiveness = 1 Or Aggressiveness = 2
+                    If ActorDistance(Player, Current) <= 100
+                        HostileCount = HostileCount + 1
+                    EndIf
+                EndIf
+            EndIf
+            Current = NextActorInZone(Current)
+        Until Current = First
+    EndIf
+    Output(Player, "Detected " + HostileCount + " hostile monster(s) within 100 units", 255, 180, 150)
+End Function
+
+Function DetectMagic()
+    Player = Actor()
+    Target = ContextActor()
+    If Target = 0 Then Target = Player
+    ResourceName$ = "Mana"
+    SpellCost = 2
+    SpellName$ = "Detect Magic"
+    SchoolName$ = "Arcane Casting"
+    SpellRange = 100
+    If BeginSpell(Player, Target, ResourceName$, SpellCost, SpellName$, SchoolName$, SpellRange) < 1 Then Return
+    AddActorEffect(Player, "Detect Magic", "", 0, 60, Parameter(2))
+
+    FoundEffect = 0
+    If ActorHasEffect(Target, "Bless") FoundEffect = 1 : Output(Player, "Active effect: Bless", 200, 150, 255)
+    If ActorHasEffect(Target, "Courage") FoundEffect = 1 : Output(Player, "Active effect: Courage", 200, 150, 255)
+    If ActorHasEffect(Target, "Shield") FoundEffect = 1 : Output(Player, "Active effect: Shield", 200, 150, 255)
+    If ActorHasEffect(Target, "Feather Weight") FoundEffect = 1 : Output(Player, "Active effect: Feather Weight", 200, 150, 255)
+    If ActorHasEffect(Target, "Resist Slashing") FoundEffect = 1 : Output(Player, "Active effect: Resist Slashing", 200, 150, 255)
+    If ActorHasEffect(Target, "Resist Bludgeon") FoundEffect = 1 : Output(Player, "Active effect: Resist Bludgeon", 200, 150, 255)
+    If ActorHasEffect(Target, "Protect from Evil") FoundEffect = 1 : Output(Player, "Active effect: Protect from Evil", 200, 150, 255)
+    If ActorHasEffect(Target, "Weakness to Magic") FoundEffect = 1 : Output(Player, "Active effect: Weakness to Magic", 200, 150, 255)
+    If ActorHasEffect(Target, "Condemn") FoundEffect = 1 : Output(Player, "Active effect: Condemn", 200, 150, 255)
+    If ActorHasEffect(Target, "Resist Cold") FoundEffect = 1 : Output(Player, "Active effect: Resist Cold", 200, 150, 255)
+    If ActorHasEffect(Target, "Resist Fire") FoundEffect = 1 : Output(Player, "Active effect: Resist Fire", 200, 150, 255)
+    If ActorHasEffect(Target, "Resist Lightning") FoundEffect = 1 : Output(Player, "Active effect: Resist Lightning", 200, 150, 255)
+    If ActorHasEffect(Target, "Haste") FoundEffect = 1 : Output(Player, "Active effect: Haste", 200, 150, 255)
+    If ActorHasEffect(Target, "Slow") FoundEffect = 1 : Output(Player, "Active effect: Slow", 200, 150, 255)
+    If ActorHasEffect(Target, "Invisible") FoundEffect = 1 : Output(Player, "Active effect: Invisibility", 200, 150, 255)
+    If ActorHasEffect(Target, "Mirror Image") FoundEffect = 1 : Output(Player, "Active effect: Mirror Image", 200, 150, 255)
+    If ActorHasEffect(Target, "Webbed") FoundEffect = 1 : Output(Player, "Active effect: Web", 200, 150, 255)
+    If ActorHasEffect(Target, "Held") FoundEffect = 1 : Output(Player, "Active effect: Hold Person", 200, 150, 255)
+    If ActorHasEffect(Target, "Silenced") FoundEffect = 1 : Output(Player, "Active effect: Silence", 200, 150, 255)
+    If ActorHasEffect(Target, "Sleeping") FoundEffect = 1 : Output(Player, "Active effect: Sleep", 200, 150, 255)
+    If ActorHasEffect(Target, "Blindness") FoundEffect = 1 : Output(Player, "Active effect: Blindness", 200, 150, 255)
+    If ActorHasEffect(Target, "Charmed") FoundEffect = 1 : Output(Player, "Active effect: Charmed", 200, 150, 255)
+    If ActorHasEffect(Target, "Poison Slowed") FoundEffect = 1 : Output(Player, "Active effect: Slow Poison", 200, 150, 255)
+    If ActorHasEffect(Target, "Turned") FoundEffect = 1 : Output(Player, "Active effect: Turn Undead", 200, 150, 255)
+    If ActorHasEffect(Target, "Striking") FoundEffect = 1 : Output(Player, "Active effect: Striking", 200, 150, 255)
+    If ActorHasEffect(Target, "Strengthened") FoundEffect = 1 : Output(Player, "Active effect: Strengthen Animal", 200, 150, 255)
+    If ActorHasEffect(Target, "Weakness to Cold") FoundEffect = 1 : Output(Player, "Active effect: Weakness to Cold", 200, 150, 255)
+    If ActorHasEffect(Target, "Weakness to Fire") FoundEffect = 1 : Output(Player, "Active effect: Weakness to Fire", 200, 150, 255)
+    If ActorHasEffect(Target, "Weakness to Lightning") FoundEffect = 1 : Output(Player, "Active effect: Weakness to Lightning", 200, 150, 255)
+    If ActorHasEffect(Target, "Group Shield") FoundEffect = 1 : Output(Player, "Active effect: Group Shield", 200, 150, 255)
+    If FoundEffect = 0
+        Output(Player, "No active magical effects detected", 200, 150, 255)
+    EndIf
+End Function
+
+Function BlindingLight()
+    Player = Actor()
+    Target = ContextActor()
+    ResourceName$ = "Mana"
+    SpellCost = 4
+    SpellName$ = "Blinding Light"
+    SchoolName$ = "Arcane Casting"
+    SpellRange = 100
+    SaveValue = 0
+    If BeginSpell(Player, Target, ResourceName$, SpellCost, SpellName$, SchoolName$, SpellRange) < 1 Then Return
+    If SavingThrow(Player, Target, SaveValue, SchoolName$) = 0
+        Output(Player, Name(Target) + " resists the blinding light.", 255, 100, 100)
+        If Target <> Player Then Output(Target, "You avert your eyes from the blinding light.", 255, 100, 100)
+        Return
+    EndIf
+    AddActorEffect(Target, "Blindness", "Attack Bonus", -4, 60, Parameter(2))
+    CreateEmitter(Target, "flameBurst", 373, 3000)
+    Output(Player, Name(Target) + " is blinded by a flash of light.", 255, 220, 100)
+    If Target <> Player Then Output(Target, "A blinding light strikes you.", 255, 220, 100)
+End Function
+
+Function Sleep()
+    Player = Actor()
+    Target = ContextActor()
+    ResourceName$ = "Mana"
+    SpellCost = 4
+    SpellName$ = "Sleep"
+    SchoolName$ = "Arcane Casting"
+    SpellRange = 90
+    SaveValue = 0
+    If BeginSpell(Player, Target, ResourceName$, SpellCost, SpellName$, SchoolName$, SpellRange) < 1 Then Return
+    If SavingThrow(Player, Target, SaveValue, SchoolName$) = 0
+        Output(Player, Name(Target) + " resists your Sleep spell.", 255, 100, 100)
+        If Target <> Player Then Output(Target, "You resist the sleep spell.", 255, 100, 100)
+        Return
+    EndIf
+    CastingLevel = FindCastingLevel(Attribute(Player, "Arcane Casting"), ActorLevel(Player))
+    Duration = 60
+    If CastingLevel >= 3 Then Duration = 120
+    AddActorEffect(Target, "Sleeping", "Movement", -100, Duration, Parameter(2))
+    SetActorAIState(Target, 0)
+    Output(Player, Name(Target) + " falls into a magical sleep.", 180, 180, 255)
+    If Target <> Player Then Output(Target, "You fall into a magical sleep.", 180, 180, 255)
+End Function
+
+Function OpenLock()
+    Player = Actor()
+    Target = ContextActor()
+    ResourceName$ = "Mana"
+    SpellCost = 3
+    SpellName$ = "Open Lock"
+    SchoolName$ = "Arcane Casting"
+    SpellRange = 100
+    If BeginSpell(Player, Target, ResourceName$, SpellCost, SpellName$, SchoolName$, SpellRange) < 1 Then Return
+    CastingLevel = FindCastingLevel(Attribute(Player, "Arcane Casting"), ActorLevel(Player))
+    ChestLock = Attribute(Target, "Armor Bonus")
+    If ChestLock > 0
+        SetAttribute(Target, "Armor Bonus", 0)
+        ZZADDSKILLXP(Player, "Lockpicking", 10 * CastingLevel)
+        Output(Player, "The selected lock opens", 200, 150, 255)
+    Else
+        Output(Player, "The selected chest is not locked", 150, 255, 150)
+    EndIf
+End Function
+
+Function MirrorImage()
+    Player = Actor()
+    If ActorHasEffect(Player, "Mirror Image")
+        Output(Player, "Your Mirror Image clones are still active.", 255, 180, 100)
+        Return
+    EndIf
+    ResourceName$ = "Mana"
+    SpellCost = 6
+    SpellName$ = "Mirror Image"
+    SchoolName$ = "Arcane Casting"
+    SpellRange = 0
+    If BeginSpell(Player, Player, ResourceName$, SpellCost, SpellName$, SchoolName$, SpellRange) < 1 Then Return
+    CastingLevel = FindCastingLevel(Attribute(Player, "Arcane Casting"), ActorLevel(Player))
+    Images = 1 + Rand(1, 4) + CastingLevel
+    If Images > 8 Then Images = 8
+    Duration = 60 + (CastingLevel * 30)
+    If Duration > 300 Then Duration = 300
+
+    CasterActorID = ActorIDFromInstance(Player)
+    Clone1 = 0
+    Clone2 = 0
+    Clone3 = 0
+    Clone4 = 0
+    Clone5 = 0
+    Clone6 = 0
+    Clone7 = 0
+    Clone8 = 0
+    SpawnedImages = 0
+    Count = 1
+    Repeat
+        Clone = Spawn(CasterActorID, ActorZone(Player), ActorX(Player) + Rand(-4, 4), ActorY(Player), ActorZ(Player) + Rand(-4, 4), "", "", ActorZoneInstance(Player))
+        If Clone > 0
+            SetMaxAttribute(Clone, "Health", 1)
+            SetAttribute(Clone, "Health", 1)
+            SetAttribute(Clone, "Attack Bonus", -1000)
+            SetAttribute(Clone, "Damage Bonus", -1000)
+            SetLeader(Clone, Player)
+            SpawnedImages = SpawnedImages + 1
+            If SpawnedImages = 1 Then Clone1 = Clone
+            If SpawnedImages = 2 Then Clone2 = Clone
+            If SpawnedImages = 3 Then Clone3 = Clone
+            If SpawnedImages = 4 Then Clone4 = Clone
+            If SpawnedImages = 5 Then Clone5 = Clone
+            If SpawnedImages = 6 Then Clone6 = Clone
+            If SpawnedImages = 7 Then Clone7 = Clone
+            If SpawnedImages = 8 Then Clone8 = Clone
+        EndIf
+        Count = Count + 1
+    Until Count > Images
+
+    If SpawnedImages = 0
+        Output(Player, "Mirror Image failed to create any clones.", 255, 100, 100)
+        Return
+    EndIf
+
+    AddActorEffect(Player, "Mirror Image", "Movement", 0, Duration, Parameter(2))
+    Output(Player, "You summon " + SpawnedImages + " mirror images.", 200, 150, 255)
+
+    Elapsed = 0
+    Repeat
+        DoEvents(1000)
+        Elapsed = Elapsed + 1
+    Until Elapsed >= Duration Or ActorHasEffect(Player, "Mirror Image") = 0
+
+    If Clone1 > 0 And ActorLeader(Clone1) = Player And ActorIDFromInstance(Clone1) = CasterActorID And Attribute(Clone1, "Health") > 0 Then KillActor(Clone1, 0)
+    If Clone2 > 0 And ActorLeader(Clone2) = Player And ActorIDFromInstance(Clone2) = CasterActorID And Attribute(Clone2, "Health") > 0 Then KillActor(Clone2, 0)
+    If Clone3 > 0 And ActorLeader(Clone3) = Player And ActorIDFromInstance(Clone3) = CasterActorID And Attribute(Clone3, "Health") > 0 Then KillActor(Clone3, 0)
+    If Clone4 > 0 And ActorLeader(Clone4) = Player And ActorIDFromInstance(Clone4) = CasterActorID And Attribute(Clone4, "Health") > 0 Then KillActor(Clone4, 0)
+    If Clone5 > 0 And ActorLeader(Clone5) = Player And ActorIDFromInstance(Clone5) = CasterActorID And Attribute(Clone5, "Health") > 0 Then KillActor(Clone5, 0)
+    If Clone6 > 0 And ActorLeader(Clone6) = Player And ActorIDFromInstance(Clone6) = CasterActorID And Attribute(Clone6, "Health") > 0 Then KillActor(Clone6, 0)
+    If Clone7 > 0 And ActorLeader(Clone7) = Player And ActorIDFromInstance(Clone7) = CasterActorID And Attribute(Clone7, "Health") > 0 Then KillActor(Clone7, 0)
+    If Clone8 > 0 And ActorLeader(Clone8) = Player And ActorIDFromInstance(Clone8) = CasterActorID And Attribute(Clone8, "Health") > 0 Then KillActor(Clone8, 0)
+End Function
+
+Function Web()
+    Player = Actor()
+    Target = ContextActor()
+    ResourceName$ = "Mana"
+    SpellCost = 5
+    SpellName$ = "Web"
+    SchoolName$ = "Arcane Casting"
+    SpellRange = 100
+    SaveValue = 0
+    If BeginSpell(Player, Target, ResourceName$, SpellCost, SpellName$, SchoolName$, SpellRange) < 1 Then Return
+    If SavingThrow(Player, Target, SaveValue, SchoolName$) = 0
+        Output(Player, Name(Target) + " resists your Web spell.", 255, 100, 100)
+        If Target <> Player Then Output(Target, "You burst through the web.", 255, 100, 100)
+        Return
+    EndIf
+    CastingLevel = FindCastingLevel(Attribute(Player, "Arcane Casting"), ActorLevel(Player))
+    Duration = 30 + (CastingLevel * 15)
+    If Duration > 120 Then Duration = 120
+    AddActorEffect(Target, "Webbed", "Movement", -80, Duration, Parameter(2))
+    SetActorAIState(Target, 0)
+    Output(Player, Name(Target) + " is entangled in your web.", 255, 220, 100)
+    If Target <> Player Then Output(Target, "You are entangled in a web.", 255, 220, 100)
+End Function
+
+Function DispelMagic()
+    Player = Actor()
+    Target = ContextActor()
+    If Target = 0 Then Target = Player
+    ResourceName$ = "Mana"
+    SpellCost = 10
+    SpellName$ = "Dispel Magic"
+    SchoolName$ = "Arcane Casting"
+    SpellRange = 120
+    If BeginSpell(Player, Target, ResourceName$, SpellCost, SpellName$, SchoolName$, SpellRange) < 1 Then Return
+    HadMagic = 0
+    If ActorHasEffect(Target, "Haste") Then HadMagic = 1
+    If ActorHasEffect(Target, "Slow") Then HadMagic = 1
+    If ActorHasEffect(Target, "Invisibility") Then HadMagic = 1
+    If ActorHasEffect(Target, "Invisible") Then HadMagic = 1
+    If ActorHasEffect(Target, "Mirror Image") Then HadMagic = 1
+    If ActorHasEffect(Target, "Webbed") Then HadMagic = 1
+    If ActorHasEffect(Target, "Held") Then HadMagic = 1
+    If ActorHasEffect(Target, "Sleeping") Then HadMagic = 1
+    If ActorHasEffect(Target, "Silenced") Then HadMagic = 1
+    If ActorHasEffect(Target, "Bless") Then HadMagic = 1
+    If ActorHasEffect(Target, "Shield") Then HadMagic = 1
+    DeleteActorEffect(Target, "Haste")
+    DeleteActorEffect(Target, "Slow")
+    DeleteActorEffect(Target, "Invisibility")
+    DeleteActorEffect(Target, "Invisible")
+    DeleteActorEffect(Target, "Mirror Image")
+    DeleteActorEffect(Target, "Webbed")
+    DeleteActorEffect(Target, "Held")
+    DeleteActorEffect(Target, "Sleeping")
+    DeleteActorEffect(Target, "Silenced")
+    DeleteActorEffect(Target, "Bless")
+    DeleteActorEffect(Target, "Shield")
+    If HadMagic > 0
+        CreateEmitter(Target, "BuffPurple", 338, 3000)
+        Output(Player, "Your Dispel Magic removes ongoing effects from " + Name(Target) + ".", 200, 150, 255)
+    Else
+        Output(Player, "No dispellable magical effects were found on " + Name(Target) + ".", 255, 180, 100)
+    EndIf
+End Function
+
+Function AbilityBonus(SkillLevel%)
+    Select SkillLevel
+    case 3
+    return -3
+    case 4
+    return -2
+    case 5
+    return -2
+    case 6
+    return -1
+    case 7 
+    return -1
+    case 8
+    return -1
+    case 13 
+    return 1
+    case 14
+    return 1
+    case 15
+    return 1
+    case 16
+    return 2
+    case 17
+    return 2
+    case 18
+    return 3
+    Case 19
+    Return 3
+    Case 20
+    Return 4
+    Case 21
+    Return 4
+    Case 22
+    Return 4
+    Case 23
+    Return 4
+    Case 24
+    Return 4
+    Case 25
+    Return 5
+    default 
+    return 0
+    End Select
+End Function
+
+Function GetSkillModifier(SkillValue)
+	
+	TargetSkillVal = SkillValue
+
+	If TargetSkillVal < 0 Then TargetSkillVal = 0
+	
+	If TargetSkillVal = 100
+		Return 10
+	ElseIf TargetSkillVal > 97
+		Return 9
+	ElseIf TargetSkillVal > 90
+		Return 8
+	ElseIf TargetSkillVal > 83
+		Return 7
+	ElseIf TargetSkillVal > 76
+		Return 6
+	Else If TargetSkillVal > 69
+		Return 5
+	ElseIf TargetSkillVal > 62
+		Return 4
+	ElseIf TargetSkillVal > 55
+		Return 3
+	ElseIf TargetSkillVal > 48
+		Return 2
+	ElseIf TargetSkillVal > 41
+		Return 1
+	ElseIf TargetSkillVal > 34
+		Return 0
+	ElseIf TargetSkillVal > 27
+		Return -1
+	ElseIf TargetSkillVal > 20
+		Return -2
+	ElseIf TargetSkillVal > 15
+		Return -3
+	ElseIf TargetSkillVal > 10
+		Return -4
+	Else
+		Return -5
+	EndIf
+End Function

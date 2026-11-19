@@ -22,7 +22,9 @@ Function ModifyTouchSpell(Player, Target, SpellCost, ResourceName$, SpellName$, 
         EmitterName$ = "shockBurst"
     End Select
 
-    SuccessChance = 10 + GetSkillModifier(Attribute(Player,SkillName$)) - (Resistance(Target, SaveType$))
+    SuccessChance = 4 + (Attribute(Player,SkillName$) * 0.2) - Resistance(Target, SaveType$)
+    If SuccessChance < 1 Then SuccessChance = 1
+    If SuccessChance > 19 Then SuccessChance = 19
 
     If CastingChecks(Player, Target, SkillName$) < 1
         Return
@@ -55,14 +57,20 @@ Function ModifyTouchSpell(Player, Target, SpellCost, ResourceName$, SpellName$, 
         SetActorAIState(Target, 3)
     EndIf
 
-    If SpellSuccess < SuccessChance
+    If SpellSuccess <= SuccessChance
         Output(Player, "You successfully cast " + SpellName$ + " on " + TargetName$ + "!",100, 255, 150)
         Output(Target, PlayerName$ + " successfully cast " + SpellName$ + " on you!", 100, 255, 150)
         
         ;visuals and effect
         CreateEmitter(Target, EmitterName$, EmitterTex, 1000)
 
-        FinalDamage = Rand(1,BaseDamage + AbilityBonus(Attribute(Player,GoverningAttribute$))) - Resistance(Target, DamageType$)
+        CastingLevel = 1
+        If SkillName$ = "Arcane Casting"
+            CastingLevel = FindCastingLevel(Attribute(Player, "Arcane Casting"), ActorLevel(Player))
+        ElseIf SkillName$ = "Divine Casting"
+            CastingLevel = FindCastingLevel(Attribute(Player, "Divine Casting"), ActorLevel(Player))
+        EndIf
+        FinalDamage = Rand(1,BaseDamage + AbilityBonus(Attribute(Player,GoverningAttribute$)) + CastingLevel) - Resistance(Target, DamageType$)
         NewHealth = Attribute(Target, "Health") - FinalDamage
 
         Output(Player, "You hit " + TargetName$ + " for " + FinalDamage + " " + DamageType$ + " damage!",100, 255, 150)
@@ -95,6 +103,10 @@ Function CastingChecks(Player,Target,SpellSchool$)
         Output(Player, "You cannot cast spells when you are dead!",255, 255, 0)
         Return 0
     EndIf
+    If ActorHasEffect(Player, "Silenced")
+        Output(Player, "You cannot cast spells while silenced", 255, 100, 100)
+        Return 0
+    EndIf
 
     If (ActorDistance(Player, Target) > 10.0)
         Output(Player, "You are too far away from target!",255, 255, 0)
@@ -108,9 +120,9 @@ Function CastingChecks(Player,Target,SpellSchool$)
     EndIf
 
     ;NPC Check
-    If (Actoraggressiveness(Target) = 3)
-	    Output(Player, "No Valid Target Selected", 255, 50, 50)
-	    Return 0
+    If ActorIsHuman(Target) = 0 And Actoraggressiveness(Target) = 3
+        Output(Player, "You cannot target non-combat NPCs with spells", 255, 50, 50)
+        Return 0
     EndIf
 
     ;Player Check
@@ -280,12 +292,28 @@ Function ArcaneEquipmentCheck(Player)
 
 End Function
 
+Function FindCastingLevel(CastingSkill, CharLevel)
+    If CastingSkill >= 100 And CharLevel >= 11
+        Return 6
+    ElseIf CastingSkill >= 85 And CharLevel >= 9
+        Return 5
+    ElseIf CastingSkill >= 70 And CharLevel >= 7
+        Return 4
+    ElseIf CastingSkill >= 55 And CharLevel >= 5
+        Return 3
+    ElseIf CastingSkill >= 40 And CharLevel >= 3
+        Return 2
+    Else
+        Return 1
+    EndIf
+End Function
+
 
 Function Spell_BurningHands()
     Player = Actor()
     Target = ContextActor()
    
-    SpellCost = Parameter(1)
+    SpellCost = 4
     ResourceName$ = "Mana"
     SpellName$ = "Burning Hands"
     
@@ -304,7 +332,7 @@ Function Spell_FrostBite()
     Player = Actor()
     Target = ContextActor()
    
-    SpellCost = Parameter(1)
+    SpellCost = 4
     ResourceName$ = "Mana"
     SpellName$ = "Frozen Grasp"
     
@@ -323,7 +351,7 @@ Function Spell_ShockingTouch()
     Player = Actor()
     Target = ContextActor()
    
-    SpellCost = Parameter(1)
+    SpellCost = 4
     ResourceName$ = "Mana"
     SpellName$ = "Shocking Touch"
     
@@ -334,6 +362,23 @@ Function Spell_ShockingTouch()
     GoverningAttribute$ = "Intelligence"
 
     HitSound = 27
+
+    ModifyTouchSpell(Player, Target, SpellCost, ResourceName$, SpellName$, DamageType$, BaseDamage, SkillName$, GoverningAttribute$, HitSound)
+End Function
+
+Function Spell_Smite()
+    Player = Actor()
+    Target = ContextActor()
+
+    SpellCost = 4
+    ResourceName$ = "Spirit"
+    SpellName$ = "Smite"
+    DamageType$ = "Holy"
+    BaseDamage = 4
+
+    SkillName$ = "Divine Casting"
+    GoverningAttribute$ = "Wisdom"
+    HitSound = 30
 
     ModifyTouchSpell(Player, Target, SpellCost, ResourceName$, SpellName$, DamageType$, BaseDamage, SkillName$, GoverningAttribute$, HitSound)
 End Function
