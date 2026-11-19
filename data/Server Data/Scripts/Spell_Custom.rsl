@@ -376,7 +376,7 @@ Function DetectMagic()
     SchoolName$ = "Arcane Casting"
     SpellRange = 100
     If BeginSpell(Player, Target, ResourceName$, SpellCost, SpellName$, SchoolName$, SpellRange) < 1 Then Return
-    AddActorEffect(Player, "Detect Magic", "", 0, 60, Parameter(2))
+    ;AddActorEffect(Player, "Detect Magic", "", 0, 60, Parameter(2))
 
     FoundEffect = 0
     If ActorHasEffect(Target, "Bless") FoundEffect = 1 : Output(Player, "Active effect: Bless", 200, 150, 255)

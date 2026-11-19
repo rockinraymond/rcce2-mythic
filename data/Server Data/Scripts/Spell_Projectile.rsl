@@ -67,7 +67,7 @@ Function ProjectileSpell(Player, Target, SpellCost, ResourceName$, SpellName$, P
 	Until i = castingTime * 10
 	DeleteProgressBar(Player,Bar)
     ZZADDSKILLXP(Player, SkillName$, SpellCost * 10)
-    
+
     TargetIsHit = FireProjectile(Player, Target, ProjectileName$)
 
     If TargetIsHit > 0

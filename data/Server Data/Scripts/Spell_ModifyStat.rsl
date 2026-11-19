@@ -16,19 +16,19 @@ Function ModifyAttributeSpell(Player, Target, SpellCost, ResourceName$, SpellNam
         CastingEmitter$ = "divineCasting"
     EndIf
 
-    SuccessChance = 20 + Attribute(Player,SkillName$)
+    SuccessChance = 10 + GetSkillModifier(Attribute(Player,SkillName$))
 
     FinalEffectValue = EffectValue
 
     If EffectValue < 0
-        SuccessChance = SuccessChance - (Resistance(Target, SaveType$))
+        SuccessChance = SuccessChance  - Resistance(Target, SaveType$)
         FinalEffectValue = FinalEffectValue - AbilityBonus(Attribute(Player,GoverningAttribute$))
     Else
         FinalEffectValue = FinalEffectValue + AbilityBonus(Attribute(Player,GoverningAttribute$))
     EndIf
 
-    If SuccessChance < 5 Then SuccessChance = 5
-    If SuccessChance > 95 Then SuccessChance = 95
+    If SuccessChance < 1 Then SuccessChance = 1
+    If SuccessChance > 19 Then SuccessChance = 19
 
     If EffectValue < 0 And FinalEffectValue > -1
         FinalEffectValue = -1
@@ -88,7 +88,7 @@ Function ModifyAttributeSpell(Player, Target, SpellCost, ResourceName$, SpellNam
 
     ZZADDSKILLXP(Player, SkillName$, SpellCost * 10)
     
-    SpellSuccess = Rand(1,100)
+    SpellSuccess = Rand(1,20)
 
     If SpellSuccess <= SuccessChance
         If isResist > 0 And EffectAttribute$ <> "Armor Bonus"
@@ -102,6 +102,12 @@ Function ModifyAttributeSpell(Player, Target, SpellCost, ResourceName$, SpellNam
                 Outcome$ = TargetName$ + " is slowed."
             Else
                 Outcome$ = TargetName$ + " moves faster."
+            EndIf
+        ElseIf EffectAttribute$ = "ATK Speed Mod"
+            If EffectValue < 0
+                Outcome$ = TargetName$ + " attacks slower."
+            Else
+                Outcome$ = TargetName$ + " attacks faster."
             EndIf
         ElseIf EffectAttribute$ = "Stealth Mod"
             Outcome$ = TargetName$ + " fades from sight."

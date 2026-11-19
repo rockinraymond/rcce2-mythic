@@ -22,10 +22,9 @@ Function ModifyTouchSpell(Player, Target, SpellCost, ResourceName$, SpellName$, 
         EmitterName$ = "shockBurst"
     End Select
 
-    SuccessChance = 4 + (Attribute(Player,SkillName$) * 0.2) - Resistance(Target, SaveType$)
+    SuccessChance = 10 + GetSkillModifier(Attribute(Player,SkillName$)) - Resistance(Target, SaveType$)
     If SuccessChance < 1 Then SuccessChance = 1
     If SuccessChance > 19 Then SuccessChance = 19
-
     If CastingChecks(Player, Target, SkillName$) < 1
         Return
     EndIf
@@ -49,6 +48,9 @@ Function ModifyTouchSpell(Player, Target, SpellCost, ResourceName$, SpellName$, 
     ZZADDSKILLXP(Player, SkillName$, (SpellCost * 10))
     
     SpellSuccess = Rand(1,20)
+    ;Output(PLayer, "Target Res: " +  Resistance(Target, SaveType$))
+    ;Output(Player, "Success Chance: " + SuccessChance)
+    ;Output(PLayer, "Spell Roll: " + SpellSuccess)
 
     ;Aggression
     
