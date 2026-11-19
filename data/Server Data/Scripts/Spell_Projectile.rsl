@@ -307,21 +307,6 @@ Function ArcaneEquipmentCheck(Player)
 
 End Function
 
-Function Spell_MagicMissle()
-
-    Player = Actor()
-    Target = ContextActor()
-
-    SpellCost = 3
-    ResourceName$ = "Mana"
-    SpellName$ = "Magic Missile I"
-    ProjectileName$ = "Magic Missile"
-    SkillName$ = "Arcane Casting"
-    castingTime = 2
-
-    ProjectileSpell(Player, Target, SpellCost, ResourceName$, SpellName$, ProjectileName$, SkillName$, castingTime)
-End Function
-
 Function Spell_MagicMissile()
     Player = Actor()
     Target = ContextActor()
