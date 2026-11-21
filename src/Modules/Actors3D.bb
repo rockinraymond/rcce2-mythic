@@ -717,6 +717,9 @@ End Function
 ; Plays an actor speech sound
 Function PlayActorSound(A.ActorInstance, Speech)
 
+		If A = Null Then Return
+		If Speech < 0 Or Speech > 15 Then Return
+
 		Result = 65535
 		If A\Gender = 0
 			If A\Actor\MSpeechIDs[Speech] < 65535 Then Result = A\Actor\MSpeechIDs[Speech]
@@ -726,9 +729,8 @@ Function PlayActorSound(A.ActorInstance, Speech)
 		If Result < 65535
 			EN = FindChild(A\EN, "Head")
 			If EN = 0 Then EN = A\EN
-			If A <> Null
-				EmitSound(GetSound(Result), EN)
-			EndIf
+			If EN = 0 Then Return
+			PlaySoundGuarded(GetSound(Result), EN)
 		EndIf
 
 End Function

@@ -7,8 +7,38 @@ Dim LoadedMeshZ#(65534)
 Dim LoadedMeshShaders(65534)
 Dim LoadedSounds(65534)
 Dim TextureFlags(65534)
+Const GuardedSoundChannelLimit = 8
+Dim GuardedSoundChannels(GuardedSoundChannelLimit - 1)
 Global LockedMeshes = 0, LockedTextures = 0, LockedSounds = 0, LockedMusic = 0
 Global DefaultVolume# = 1.0
+
+; Plays a non-looping sound while keeping the number of guarded active voices bounded
+Function PlaySoundGuarded(Sound, EN = 0)
+
+	If Sound <= 0 Then Return 0
+
+	FreeSlot = -1
+	For i = 0 To GuardedSoundChannelLimit - 1
+		If GuardedSoundChannels(i) = 0
+			FreeSlot = i
+			Exit
+		ElseIf ChannelPlaying(GuardedSoundChannels(i)) = False
+			GuardedSoundChannels(i) = 0
+			FreeSlot = i
+			Exit
+		EndIf
+	Next
+	If FreeSlot = -1 Then Return 0
+
+	If EN > 0
+		Channel = EmitSound(Sound, EN)
+	Else
+		Channel = PlaySound(Sound)
+	EndIf
+	If Channel <> 0 Then GuardedSoundChannels(FreeSlot) = Channel
+	Return Channel
+
+End Function
 
 Type LoadedMediaData
 	Field ID, DataAddress, Name$, ExtraData, Shader

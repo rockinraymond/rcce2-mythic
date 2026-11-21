@@ -272,6 +272,8 @@ End Function
 
 Function PlayActorWeaponSound(Attacker.ActorInstance,Target.ActorInstance)
 
+		If Attacker = Null Or Target = Null Then Return
+
 		WeaponType = 0
 		If Attacker\Inventory\Items[SlotI_Weapon] <> Null
 			WeaponType = Attacker\Inventory\Items[SlotI_Weapon]\Item\WeaponClass
@@ -301,7 +303,6 @@ Function PlayActorWeaponSound(Attacker.ActorInstance,Target.ActorInstance)
 		
 		EN = FindChild(Target\EN, "Head")
 		If EN = 0 Then EN = Target\EN
-		If Target <> Null
-			EmitSound(GetSound(Result), EN)
-		EndIf
+		If EN = 0 Then Return
+		PlaySoundGuarded(GetSound(Result), EN)
 End Function

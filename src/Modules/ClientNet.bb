@@ -680,11 +680,13 @@ Function UpdateNetwork()
 				If Asc(Right$(Name$, 1)) = True
 					AI.ActorInstance = RuntimeIDList(RCE_IntFromStr(Mid$(M\MessageData$, 3, 2)))
 					If AI <> Null
-						Channel = EmitSound(S, AI\CollisionEN)
-						If Channel <> 0 Then ChannelVolume(Channel, DefaultVolume#)
+						If AI\CollisionEN <> 0
+							Channel = PlaySoundGuarded(S, AI\CollisionEN)
+							If Channel <> 0 Then ChannelVolume(Channel, DefaultVolume#)
+						EndIf
 					EndIf
 				Else
-					Channel = PlaySound(S)
+					Channel = PlaySoundGuarded(S)
 					If Channel <> 0 Then ChannelVolume(Channel, DefaultVolume#)
 				EndIf
 
@@ -1022,7 +1024,7 @@ Function UpdateNetwork()
 								AttackSound = 53
 							EndIf
 						EndIf
-						PlaySound(GetSound(AttackSound))
+						PlaySoundGuarded(GetSound(AttackSound))
 						Damage = RCE_IntFromStr(Mid$(M\MessageData$, 4, 2)) - 1
 						DType$ = DamageTypes$(RCE_IntFromStr(Mid$(M\MessageData$, 6, 1)))
 						; And hit them
@@ -1060,7 +1062,7 @@ Function UpdateNetwork()
 									AttackSound = 53
 								EndIf
 							EndIf
-							PlaySound(GetSound(AttackSound))
+							PlaySoundGuarded(GetSound(AttackSound))
 						EndIf
 						If Damage > 0
 							CombatDamageOutput(A, -Damage, DType$)
