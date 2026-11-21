@@ -44,13 +44,17 @@ Function BeginSpell(Player, Target, ResourceName$, SpellCost, SpellName$, School
     SetAttribute(Player, ResourceName$, Attribute(Player, ResourceName$) - SpellCost)
     ZZRUNABILITYCOOLDOWN(Player, SpellName$)
     ZZADDSKILLXP(Player, SchoolName$, SpellCost * 10)
+    
     AnimateActor(Player, "Cast Magic", 0.05, 1)
     Output(Player, "Casting " + SpellName$, 200, 0, 255)
-    AddActorEffect(Player, "Casting", "Movement", -100, castingTime, 0)
+    If castingTime > 0 Then AddActorEffect(Player, "Casting", "Movement", -100, castingTime, 0)
     PlaySound(Player, 1, 0)
-    CreateEmitter(Player, "arcaneCasting", 356, 2000)
-    If SchoolName$ = "Divine Casting" Then CreateEmitter(Player, "divineCasting", 356, 2000)
-
+    If SchoolName$ = "Divine Casting" 
+        CreateEmitter(Player, "divineCasting", 356, 2000)
+    Else
+        CreateEmitter(Player, "arcaneCasting", 356, 2000)
+    EndIf
+     If castingTime <= 0 Then Return 1
     bar = CreateProgressBar(Player,200,0,225,.4,.8,.2,.04,castingTime * 10,0,SpellName$)
     i = 0
     Repeat
@@ -204,7 +208,7 @@ Function TurnUndead()
     SchoolName$ = "Divine Casting"
     SpellRange = 100
     SaveValue = 0
-    If BeginSpell(Player, Target, ResourceName$, SpellCost, SpellName$, SchoolName$, SpellRange) < 1 Then Return
+    If BeginSpell(Player, Target, ResourceName$, SpellCost, SpellName$, SchoolName$, SpellRange, 0) < 1 Then Return
     If SavingThrow(Player, Target, SaveValue, SchoolName$) = 0
         Output(Player, Name(Target) + " resists your attempt to turn it.", 255, 100, 100)
         If Target <> Player Then Output(Target, "You resist the turning.", 255, 100, 100)

@@ -270,7 +270,7 @@ Function ChooseSoundDialog(SoundType = SoundDialog_All, InitialFolder$ = "", XPo
 						Name$ = SoundNames$(FUI_SendMessage(FUI_SendMessage(LSoundDialog, M_GETINDEX), M_GETDATA))
 						If Len(Name$) > 1
 							Sound = LoadSound("Data\Sounds\" + Left$(Name$, Len(Name$) - 1))
-							Chan = PlaySound(Sound)
+							Chan = PlaySoundGuarded(Sound)
 						EndIf
 					EndIf
 				; Selected sound changed

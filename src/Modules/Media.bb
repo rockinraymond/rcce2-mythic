@@ -7,12 +7,15 @@ Dim LoadedMeshZ#(65534)
 Dim LoadedMeshShaders(65534)
 Dim LoadedSounds(65534)
 Dim TextureFlags(65534)
-Const GuardedSoundChannelLimit = 8
+Const GuardedSoundChannelLimit = 4
+Const GuardedSoundStartLimit = 4
+Const GuardedSoundWindowMS = 100
 Dim GuardedSoundChannels(GuardedSoundChannelLimit - 1)
 Global LockedMeshes = 0, LockedTextures = 0, LockedSounds = 0, LockedMusic = 0
+Global GuardedSoundWindowStart, GuardedSoundStarts
 Global DefaultVolume# = 1.0
 
-; Plays a non-looping sound while keeping the number of guarded active voices bounded
+; Plays a one-shot sound while limiting both active voices and rapid starts
 Function PlaySoundGuarded(Sound, EN = 0)
 
 	If Sound <= 0 Then Return 0
@@ -29,6 +32,14 @@ Function PlaySoundGuarded(Sound, EN = 0)
 		EndIf
 	Next
 	If FreeSlot = -1 Then Return 0
+
+	Now = MilliSecs()
+	If GuardedSoundWindowStart = 0 Or Now < GuardedSoundWindowStart Or Now - GuardedSoundWindowStart >= GuardedSoundWindowMS
+		GuardedSoundWindowStart = Now
+		GuardedSoundStarts = 0
+	EndIf
+	If GuardedSoundStarts >= GuardedSoundStartLimit Then Return 0
+	GuardedSoundStarts = GuardedSoundStarts + 1
 
 	If EN > 0
 		Channel = EmitSound(Sound, EN)

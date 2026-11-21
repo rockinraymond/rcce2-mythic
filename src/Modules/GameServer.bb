@@ -1205,7 +1205,7 @@ End Function
 
 ; Makes aggressive NPCs look for and target other actors
 Function AILookForTargets(AI.ActorInstance)
-
+	If ActorHasEffect(AI, "Turned") = 1 Then Return
 	If AI\Aggressiveness = 2
 		AInstance.AreaInstance = Object.AreaInstance(AI\ServerArea)
 		A2.ActorInstance = AInstance\FirstInZone

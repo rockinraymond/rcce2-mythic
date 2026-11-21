@@ -4670,7 +4670,7 @@ If KeyHit(79) > 0
 							EndIf
 							If B\Toggle = False Then B\State = True
 						ElseIf GY_HeldGadget = G
-							PlaySound(GY_SClick)
+							PlaySoundGuarded(GY_SClick)
 
 							; If it's toggling, change the down state
 							If B\Toggle = True Then B\State = Not B\State Else B\State = False
@@ -4734,7 +4734,7 @@ If KeyHit(79) > 0
 							EntityTexture(G\EN, CB\UpTex)
 							If CB\Toggle = False Then CB\State = True
 						ElseIf GY_HeldGadget = G
-							PlaySound(GY_SClick)
+							PlaySoundGuarded(GY_SClick)
 
 							; If it's toggling, change the down state
 							If CB\Toggle = True Then CB\State = Not CB\State Else CB\State = False

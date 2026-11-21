@@ -1316,7 +1316,7 @@ Function UpdateInterface()
 				For i = 0 To Slots_Inventory
 					If Me\Inventory\Items[i] <> Null
 						If Me\Inventory\Items[i]\Item\ID = ActionBarSlots(Slot)
-							PlaySound(GY_SBeep)
+							PlaySoundGuarded(GY_SBeep)
 							UseItem(i, 1)
 							Exit
 						EndIf
@@ -1621,7 +1621,7 @@ Function UpdateInterface()
 			Next
 			; Option selected!
 			If GY_LeftClick And Opt > 0 And GY_WindowActive(D\Win)
-				PlaySound(GY_SClick)
+				PlaySoundGuarded(GY_SClick)
 				RCE_Send(Connection, PeerToHost, P_Dialog, "O" + RCE_StrFromInt$(D\ScriptHandle, 4) + RCE_StrFromInt$(Opt, 1), True)
 				For i = 0 To 13 : D\OptionNum[i] = 0 : Next
 				D\TotalOptions = 0
@@ -3164,7 +3164,7 @@ EndIf
 	EndIf
 	If (KeyHit(48) And ChatEntry\Alpha# < 0.5 And First TextInput = Null) Or GY_WindowClosed(WInventory) ;Changed keybindings to B
 		GY_SetButtonState(BInventory, Not InventoryVisible)
-		PlaySound(GY_SBeep)
+		PlaySoundGuarded(GY_SBeep)
 	EndIf
 	If GY_ButtonDown(BInventory) <> InventoryVisible
 		GY_FreeGadget(WContextMenu)
@@ -3261,7 +3261,7 @@ EndIf
 	EndIf
 	If (KeyHit(38) And ChatEntry\Alpha# < 0.5 And First TextInput = Null) Or GY_WindowClosed(WQuestLog) ; Changed keybinding to L
 		GY_SetButtonState(BQuestLog, Not QuestLogVisible)
-		PlaySound(GY_SBeep)
+		PlaySoundGuarded(GY_SBeep)
 	EndIf
 	If GY_ButtonDown(BQuestLog) <> QuestLogVisible
 		GY_FreeGadget(WContextMenu)
@@ -3288,7 +3288,7 @@ EndIf
 	EndIf
 	If (KeyHit(25) And ChatEntry\Alpha# < 0.5 And First TextInput = Null) Or GY_WindowClosed(WParty)
 		GY_SetButtonState(BParty, Not PartyVisible)
-		PlaySound(GY_SBeep)
+		PlaySoundGuarded(GY_SBeep)
 	EndIf
 	If (KeyHit(41)) ; ` key deselects current target
 		DestroyCharInteractionWindow()
@@ -3341,7 +3341,7 @@ EndIf
 	EndIf
 	If (KeyHit(46) And ChatEntry\Alpha# < 0.5 And First TextInput = Null) Or GY_WindowClosed(WCharStats)
 		GY_SetButtonState(BCharStats, Not CharStatsVisible)
-		PlaySound(GY_SBeep)
+		PlaySoundGuarded(GY_SBeep)
 	EndIf
 	If GY_ButtonDown(BCharStats) <> CharStatsVisible
 		GY_FreeGadget(WContextMenu)
@@ -3369,7 +3369,7 @@ EndIf
 	EndIf
 	If (KeyHit(37) And ChatEntry\Alpha# < 0.5 And First TextInput = Null) Or GY_WindowClosed(WSpells) ;Changed keybinding to K
 		GY_SetButtonState(BSpells, Not SpellsVisible)
-		PlaySound(GY_SBeep)
+		PlaySoundGuarded(GY_SBeep)
 		
 	EndIf
 	If GY_ButtonDown(BSpells) <> SpellsVisible
@@ -3425,7 +3425,7 @@ EndIf
 	
 	If EscapeHit Or GY_WindowClosed(WMenu)
 		GY_SetButtonState(BMenu, Not MenuVisible)
-		PlaySound(GY_SBeep)
+		PlaySoundGuarded(GY_SBeep)
 	EndIf
 	
 	If GY_ButtonDown(BMenu) <> MenuVisible
@@ -3456,7 +3456,7 @@ EndIf
 	EndIf
 	If GY_WindowClosed(WHelp)
 		GY_SetButtonState(BHelp, Not HelpVisible)
-		PlaySound(GY_SBeep)
+		PlaySoundGuarded(GY_SBeep)
 	EndIf
 	If GY_ButtonDown(BHelp) <> HelpVisible
 		If GY_Modal = False
@@ -3479,7 +3479,7 @@ EndIf
 	EndIf
 	If (KeyHit(50) And ChatEntry\Alpha# < 0.5 And First TextInput = Null) ;Or GY_WindowClosed(WLargeMap)
 		GY_SetButtonState(BMap, Not MapVisible)
-		PlaySound(GY_SBeep)
+		PlaySoundGuarded(GY_SBeep)
 	EndIf
 	If GY_ButtonDown(BMap) <> MapVisible
 		GY_FreeGadget(WContextMenu)

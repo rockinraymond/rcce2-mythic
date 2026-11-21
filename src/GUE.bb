@@ -6796,7 +6796,7 @@ Cls
 				If MType = 3
 					S = GetSound(MediaPreviewSoundID)
 					SoundVolume(S, FUI_SendMessage(SMediaPreviewVolume, M_GETVALUE))
-					MediaPreviewChannel = PlaySound(S)
+					MediaPreviewChannel = PlaySoundGuarded(S)
 				ElseIf MType = 4
 					Loaded = LoadSound("Data\Music\" + MusicNames$(MediaPreviewSoundID), False)
 					LoopSound Loaded

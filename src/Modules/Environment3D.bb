@@ -322,7 +322,7 @@ Next
 		ElseIf Rand(1, 50) = 1
 			LightningToDo = LightningToDo - 1
 			ScreenFlash(255, 255, 255, 65535, Rand(200, 1000), 0.9)
-			If LightningToDo = 0 Then PlaySound(Snd_Thunder(Rand(0, 2)))
+			If LightningToDo = 0 Then PlaySoundGuarded(Snd_Thunder(Rand(0, 2)))
 		EndIf
 	EndIf
 

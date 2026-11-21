@@ -687,7 +687,7 @@ Function UpdateActorInstances()
 										Snd = GetSound(AI\Actor\FSpeechIDs[Speech_FootstepDry])
 									EndIf
 								EndIf
-								EmitSound(Snd, AI\EN)
+								PlaySoundGuarded(Snd, AI\EN)
 								AI\FootstepPlayedThisCycle = True
 							EndIf
 						Else
@@ -973,9 +973,9 @@ Function PlaySoundZone(SZ.SoundZone)
 
 	If SZ\SoundID <> 65535
 		If SZ\Is3D = True
-			SZ\Channel = EmitSound(SZ\LoadedSound, SZ\EN)
+			SZ\Channel = PlaySoundGuarded(SZ\LoadedSound, SZ\EN)
 		Else
-			SZ\Channel = PlaySound(SZ\LoadedSound)
+			SZ\Channel = PlaySoundGuarded(SZ\LoadedSound)
 		EndIf
 	Else
 		Loaded = LoadSound(SZ\MusicFilename$, False)
