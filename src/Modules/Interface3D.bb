@@ -1147,17 +1147,19 @@ Function UpdateInterface()
 			If MouseSlotSource = -1
 				; Spell
 				If ActionBarSlots(Slot) < 0
-					If RequireMemorise
+					If ActionBarSlots(Slot) > -20
 						Num = ActionBarSlots(Slot) + 10
 						RechargeTime = SpellsList(Me\KnownSpells[Me\MemorisedSpells[Num]])\RechargeTime
 						Pa$ = RCE_StrFromInt$(Me\KnownSpells[Me\MemorisedSpells[Num]], 2)
+						CurrentSpellCharge = Me\MemorisedSpellCharge[Num]
 					Else
 						Num = ActionBarSlots(Slot) + 1000
 						RechargeTime = SpellsList(Me\KnownSpells[Num])\RechargeTime
 						Pa$ = RCE_StrFromInt$(Me\KnownSpells[Num], 2)
+						CurrentSpellCharge = Me\SpellCharge[Num]
 					EndIf
 					; Recharged
-					If Me\SpellCharge[Num] <= 0
+					If CurrentSpellCharge <= 0
 						If PlayerTarget > 0
 							AI.ActorInstance = Object.ActorInstance(PlayerTarget)
 							Pa$ = Pa$ + RCE_StrFromInt$(AI\RuntimeID, 2)
@@ -1225,12 +1227,16 @@ Function UpdateInterface()
 			; Add spell to this slot
 			ElseIf MouseSlotSource = -2
 				; Update slot
-				If RequireMemorise
-					ActionBarSlots(Slot) = MouseSlotAmount - 10
-					Sp.Spell = SpellsList(Me\KnownSpells[Me\MemorisedSpells[MouseSlotAmount]])
+				Sp.Spell = SpellsList(Me\KnownSpells[MouseSlotAmount])
+				If RequireMemorise And SpellNeedsMemorisation(Sp)
+					For j = 0 To 9
+						If Me\MemorisedSpells[j] = MouseSlotAmount
+							ActionBarSlots(Slot) = j - 10
+							Exit
+						EndIf
+					Next
 				Else
 					ActionBarSlots(Slot) = MouseSlotAmount - 1000
-					Sp.Spell = SpellsList(Me\KnownSpells[MouseSlotAmount])
 				EndIf
 				GYG.GY_Gadget = Object.GY_Gadget(BActionBar(i))
 				EntityTexture(GYG\EN, GetTexture(Sp\ThumbnailTexID))
@@ -1270,17 +1276,19 @@ Function UpdateInterface()
 			EndIf
 			; Spell
 			If ActionBarSlots(Slot) < 0
-				If RequireMemorise
+				If ActionBarSlots(Slot) > -20
 					Num = ActionBarSlots(Slot) + 10
 					RechargeTime = SpellsList(Me\KnownSpells[Me\MemorisedSpells[Num]])\RechargeTime
 					Pa$ = RCE_StrFromInt$(Me\KnownSpells[Me\MemorisedSpells[Num]], 2)
+					CurrentSpellCharge = Me\MemorisedSpellCharge[Num]
 				Else
 					Num = ActionBarSlots(Slot) + 1000
 					RechargeTime = SpellsList(Me\KnownSpells[Num])\RechargeTime
 					Pa$ = RCE_StrFromInt$(Me\KnownSpells[Num], 2)
+					CurrentSpellCharge = Me\SpellCharge[Num]
 				EndIf
 				; Recharged
-				If Me\SpellCharge[Num] <= 0
+				If CurrentSpellCharge <= 0
 					If PlayerTarget > 0
 						AI.ActorInstance = Object.ActorInstance(PlayerTarget)
 						Pa$ = Pa$ + RCE_StrFromInt$(AI\RuntimeID, 2)
@@ -1369,36 +1377,26 @@ Function UpdateInterface()
 
 	; Recharge spells
 	If MilliSecs() - LastSpellRecharge > 100
-		If RequireMemorise
-			For i = 0 To 9
-				If Me\SpellCharge[i] > 0 Then Me\SpellCharge[i] = Me\SpellCharge[i] - 100
-				If Me\SpellCharge[i] <= 0 Then UpdateActionBarIcons()
-			Next
-		Else
-			For i = 0 To 999
-				If Me\SpellCharge[i] > 0 Then Me\SpellCharge[i] = Me\SpellCharge[i] - 100
-				If Me\SpellCharge[i] <= 0 Then UpdateActionBarIcons()
-			Next
-		EndIf
+		For i = 0 To 999
+			If Me\SpellCharge[i] > 0 Then Me\SpellCharge[i] = Me\SpellCharge[i] - 100
+			If Me\SpellCharge[i] <= 0 Then UpdateActionBarIcons()
+		Next
+		For i = 0 To 9
+			If Me\MemorisedSpellCharge[i] > 0 Then Me\MemorisedSpellCharge[i] = Me\MemorisedSpellCharge[i] - 100
+			If Me\MemorisedSpellCharge[i] <= 0 Then UpdateActionBarIcons()
+		Next
 		LastSpellRecharge = MilliSecs()
 	EndIf
 
 	; Update spells window
-	If GY_ButtonHit(BNextSpells)
-		If FirstSpell < 0 
-			FirstSpell = 0
-		ElseIf KnownSpellArrayByType(FirstSpell + 10,SpellView) > 0
+	If GY_ButtonHit(BNextSpells) And SpellView <> S_Memorised
+		If KnownSpellArrayByType(FirstSpell + 10,SpellView) > 0
 			FirstSpell = FirstSpell + 10
 		EndIf
 		UpdateSpellbook()
-	ElseIf GY_ButtonHit(BPrevSpells) And FirstSpell > -1
+	ElseIf GY_ButtonHit(BPrevSpells) And SpellView <> S_Memorised
 		; Adjust to new page
-		FirstSpell = FirstSpell - 10
-		If RequireMemorise
-			If FirstSpell < 0 Then FirstSpell = -1
-		Else
-			If FirstSpell < 0 Then FirstSpell = 0
-		EndIf
+		If FirstSpell > 0 Then FirstSpell = FirstSpell - 10
 		UpdateSpellbook()
 	EndIf
 	If GY_ButtonHit(BShowSpells)
@@ -1415,6 +1413,10 @@ Function UpdateInterface()
 		UpdateSpellbook()
 	ElseIf GY_ButtonHit(BShowUtils)
 		SpellView = S_Spirit
+		FirstSpell = 0
+		UpdateSpellbook()
+	ElseIf GY_ButtonHit(BShowMemorised) And RequireMemorise
+		SpellView = S_Memorised
 		FirstSpell = 0
 		UpdateSpellbook()
 	EndIf
@@ -1434,6 +1436,7 @@ Function UpdateInterface()
 		Next
 		; Remove it
 		Me\MemorisedSpells[SpellRemoveNum] = 5000
+		Me\MemorisedSpellCharge[SpellRemoveNum] = 0
 		UpdateSpellbook()
 		; Hide the confirmation window
 		GY_LockGadget(WSpellRemove, True)
@@ -1466,13 +1469,14 @@ Function UpdateInterface()
 				GY_FreeGadget(LMemorising) : LMemorising = 0
 				GY_FreeGadget(SMemorising) : SMemorising = 0
 				Me\MemorisedSpells[MemoriseSlot] = MemoriseSpell
+				Me\MemorisedSpellCharge[MemoriseSlot] = 0
 				If SpellsVisible = True Then UpdateSpellbook()
 			EndIf
 		EndIf
 	EndIf
 
 	; Check for memorised spell buttons being clicked
-	If FirstSpell < 0 And MouseSlotSource = -1
+	If SpellView = S_Memorised And MouseSlotSource = -1
 		For i = 0 To 9
 			; Right click (un-memorise)
 			If GY_ButtonRightHit(BSpellImgs(i))
@@ -1491,20 +1495,22 @@ Function UpdateInterface()
 					Sp.Spell = SpellsList(Me\KnownSpells[Me\MemorisedSpells[i]])
 					ShowEntity(MouseSlotEN)
 					EntityTexture(MouseSlotEN, GetTexture(Sp\ThumbnailTexID))
-					MouseSlotAmount = i
+					MouseSlotAmount = Me\MemorisedSpells[i]
 					MouseSlotSource = -2
 				EndIf
 			EndIf
 		Next
 	EndIf
 	; Check for known spell buttons being clicked
-	If SMemorising = 0 And FirstSpell >= 0
+	If SMemorising = 0 And FirstSpell >= 0 And SpellView <> S_Memorised
 		For i = 0 To 9
 			; Memorise if required
-			If RequireMemorise
+			Sp.Spell = Null
+			If KnownSpellArrayByType(FirstSpell + i, SpellView) > 0 Then Sp = FindKnownSpellByType(Me, SpellView, FirstSpell + i)
+			If RequireMemorise And SpellNeedsMemorisation(Sp)
 				If GY_ButtonRightHit(BSpellImgs(i)) Or GY_ButtonHit(BSpellImgs(i))
 					; Find known spell number
-					MemoriseSpell = KnownSpellSort(FirstSpell + i) - 1
+					MemoriseSpell = KnownSpellArrayByType(FirstSpell + i, SpellView) - 1
 					; Check it's not already memorised
 					Found = False
 					For j = 0 To 9
@@ -1565,7 +1571,6 @@ Function UpdateInterface()
 						HideEntity(MouseSlotEN) : MouseSlotAmount = 0 : MouseSlotSource = -1
 					; Otherwise put this in the mouse slot
 					Else		
-						Sp.Spell = FindKnownSpellByType(Me, SpellView,FirstSpell + i)		
 						ShowEntity(MouseSlotEN)
 						EntityTexture(MouseSlotEN, GetTexture(Sp\ThumbnailTexID))
 						MouseSlotAmount = KnownSpellArrayByType(FirstSpell + i,SpellView) - 1
@@ -1862,7 +1867,7 @@ EndIf
          For i = 0 To 11
             If GY_MouseHovering(BActionBar(i))
                If ActionBarSlots(i + Offset) < 0 And ActionBarSlots(i + Offset) <> 0
-                  If RequireMemorise
+                  If ActionBarSlots(i + Offset) > -20
                      Num = ActionBarSlots(i + Offset) + 10
                      Sp.Spell = SpellsList(Me\KnownSpells[Me\MemorisedSpells[Num]])
                   Else
@@ -2480,7 +2485,7 @@ EndIf
 			For i = 0 To 9
 				If GY_MouseHovering(BSpellImgs(i)) = True
 					Sp.Spell = Null
-					If FirstSpell = -1
+					If SpellView = S_Memorised
 						If Me\MemorisedSpells[i] <> 5000
 							Sp = SpellsList(Me\KnownSpells[Me\MemorisedSpells[i]])
 						EndIf
@@ -2501,7 +2506,7 @@ EndIf
 						If Desc$ = "" Then Desc$ = LanguageString$(LS_NoDescription)
 						Y# = 0.01
 						; If it's a memorised spell, add extra text
-						If FirstSpell = -1
+						If SpellView = S_Memorised
 							Y# = 0.29
 							;GY_CreateLabel(WTooltip, 0.02, 0.01, LanguageString$(LS_MemorisedYouMust), 255, 0, 0)
 							;GY_CreateLabel(WTooltip, 0.02, 0.15, LanguageString$(LS_MoveItToActionBar), 255, 0, 0)
@@ -3710,7 +3715,7 @@ Function UpdateSpellbook()
 	Next
 
 	; Memorised spells
-	If FirstSpell = -1
+	If SpellView = S_Memorised
 		GY_UpdateLabel(LSpellsPage, LanguageString$(LS_MemorisedAbilities))
 		For i = 0 To 9
 			; Assign memorised spell if there is one
@@ -3775,9 +3780,9 @@ Function UpdateSpellbook()
 							GY_LockGadget(BSpellImgs(Count), False)
 							GY_GadgetAlpha(BSpellImgs(Count), 0.85, True)
 							; Change text colour if it's memorised
-							If RequireMemorise
+							If RequireMemorise And SpellNeedsMemorisation(Sp)
 								For i = 0 To 9
-									If Me\MemorisedSpells[i] = KnownSpellSort(Spell) - 1 Then GY_UpdateLabel(LSpellNames(Count), Sp\Name$, 255, 50, 0) : Exit
+									If Me\MemorisedSpells[i] = KnownSpellArrayByType(Spell, SpellView) - 1 Then GY_UpdateLabel(LSpellNames(Count), Sp\Name$, 255, 50, 0) : Exit
 								Next
 							EndIf
 							Count = Count + 1
@@ -3803,6 +3808,8 @@ Function UpdateSpellbook()
 		Case S_Talent
 			CastLvlStr$ = ""
 			GY_UpdateLabel(LSpellsCastingLevel, CastLvlStr$)
+		Case S_Memorised
+			GY_UpdateLabel(LSpellsCastingLevel, "")
 	End Select
 End Function
 
@@ -4226,16 +4233,23 @@ Function CreateInterface()
 	Next
 
 	; Spells (abilities) window
-	If RequireMemorise = 0 Then FirstSpell = 0
+	If RequireMemorise = 0
+		FirstSpell = 0
+	Else
+		SpellView = S_Memorised
+		FirstSpell = 0
+	EndIf
 	WSpells = GY_CreateWindow(LanguageString$(LS_Abilities), 0.1, 0.1, 0.6, 0.5, True, True, False, LoadTexture("Data\Textures\GUI\AbilitiesBG.png"))
 	BPrevSpells = GY_CreateButton(WSpells, 0.01, 0.94, 0.05, 0.05, "<<")
 	BNextSpells = GY_CreateButton(WSpells, 0.94, 0.94, 0.05, 0.05, ">>")
 	LSpellsPage = GY_CreateLabel(WSpells, 0.5, 0.96, Upper$(LanguageString$(LS_MemorisedAbilities)), 255, 255, 255, Justify_Centre)
 	LSpellsCastingLevel = GY_CreateLabel(WSpells, 0.5, 0.93, "Casting Level: 0", 255, 255, 255, Justify_Centre)
-	BShowSpells = GY_CreateButton(WSpells, 0, 0, 0.25, 0.05, "Arcane Spells")
-	BShowTalents = GY_CreateButton(WSpells, 0.75, 0, 0.25, 0.05, "Masteries")
-	BShowCombats = GY_CreateButton(WSpells, 0.5, 0, 0.25, 0.05, "Thief Skills")
-	BShowUtils = GY_CreateButton(WSpells, 0.25, 0, 0.25, 0.05, "Divine Spells")
+	BShowSpells = GY_CreateButton(WSpells, 0.2, 0, 0.2, 0.05, "Arcane Spells")
+	BShowUtils = GY_CreateButton(WSpells, 0.4, 0, 0.2, 0.05, "Divine Spells")
+	BShowCombats = GY_CreateButton(WSpells, 0.6, 0, 0.2, 0.05, "Thief Skills")
+	BShowTalents = GY_CreateButton(WSpells, 0.8, 0, 0.2, 0.05, "Masteries")
+	BShowMemorised = GY_CreateButton(WSpells, 0, 0, 0.2, 0.05, "Memorised Spells")
+	If RequireMemorise = 0 Then GY_LockGadget(BShowMemorised, True)
 	X# = 0.01
 	Y# = 0.05
 	ButtonTex = CreateTexture(2, 2)
@@ -4812,10 +4826,10 @@ Function UpdateActionBarIcons()
       ; Spell
       If ActionBarSlots(i + Offset) < 0 And ActionBarSlots(i + Offset) <> 0   
          CurrentSpellCharge = 0
-		 If RequireMemorise
+		 If ActionBarSlots(i + Offset) > -20
             Num = ActionBarSlots(i + Offset) + 10
             Sp.Spell = SpellsList(Me\KnownSpells[Me\MemorisedSpells[Num]])
-			CurrentSpellCharge = Me\SpellCharge[Num]
+			CurrentSpellCharge = Me\MemorisedSpellCharge[Num]
          Else
             Num = ActionBarSlots(i + Offset) + 1000
 			Sp.Spell = SpellsList(Me\KnownSpells[Num])

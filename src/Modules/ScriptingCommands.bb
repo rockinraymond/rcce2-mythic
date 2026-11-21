@@ -1511,7 +1511,16 @@ Function BVM_ZZRUNABILITYCOOLDOWN(Param1%, Param2$)
 			If Actor\SpellRanks[i] > 0
 				If Upper$(SpellsList(Actor\KnownSpells[i])\Name$) = SpellName$ 
 					Sp.Spell = SpellsList(Actor\KnownSpells[i])
-					Actor\SpellCharge[i] = Sp\RechargeTime
+					If RequireMemorise And SpellNeedsMemorisation(Sp)
+						For j = 0 To 9
+							If Actor\MemorisedSpells[j] = i
+								Actor\MemorisedSpellCharge[j] = Sp\RechargeTime
+								Exit
+							EndIf
+						Next
+					Else
+						Actor\SpellCharge[i] = Sp\RechargeTime
+					EndIf
 					If Actor\RNID > 0
 						Pa$ = Sp\Name$
 						RCE_Send(Host, Actor\RNID, P_KnownSpellUpdate, "C" + Pa$, True)

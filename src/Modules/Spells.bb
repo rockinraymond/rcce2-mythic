@@ -4,6 +4,7 @@ Const S_Spell     = 1 ; Ability types
 Const S_Talent    = 2
 Const S_Combat    = 3
 Const S_Spirit     = 4
+Const S_Memorised = 5
 
 ; Describes a spell
 Dim SpellsList.Spell(65534)
@@ -19,6 +20,12 @@ Type Spell
 	Field SpellType
 	Field SpellLevel
 End Type
+
+Function SpellNeedsMemorisation(Sp.Spell)
+	If Sp = Null Then Return False
+	If Sp\SpellType = S_Spell Or Sp\SpellType = S_Spirit Then Return True
+	Return False
+End Function
 
 ; A spell which is waiting for memorisation (server side)
 Type MemorisingSpell

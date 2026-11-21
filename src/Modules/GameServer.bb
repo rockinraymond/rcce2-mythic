@@ -568,15 +568,12 @@ Function UpdateActorInstances(Broadcast)
 
 			; Recharge spells
 			If Recharge = True
-				If RequireMemorise
-					For i = 0 To 9
-						If AI\SpellCharge[i] > 0 Then AI\SpellCharge[i] = AI\SpellCharge[i] - 100
-					Next
-				Else
-					For i = 0 To 999
-						If AI\SpellCharge[i] > 0 Then AI\SpellCharge[i] = AI\SpellCharge[i] - 100
-					Next
-				EndIf
+				For i = 0 To 999
+					If AI\SpellCharge[i] > 0 Then AI\SpellCharge[i] = AI\SpellCharge[i] - 100
+				Next
+				For i = 0 To 9
+					If AI\MemorisedSpellCharge[i] > 0 Then AI\MemorisedSpellCharge[i] = AI\MemorisedSpellCharge[i] - 100
+				Next
 			EndIf
 
 			; Move (except mounts)

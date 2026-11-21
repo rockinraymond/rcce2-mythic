@@ -111,6 +111,7 @@ Type ActorInstance
 	Field SpellRanks[999]
 	Field MemorisedSpells[9]
 	Field SpellCharge[999] ; How long until the spell is usable
+	Field MemorisedSpellCharge[9]
 	Field IsTrading ; 0 for not trading, 1 for trading with NPC, 2 for trading with pet, 3 for trading with player, 4/5 for accepted trading with player
 	Field TradingActor.ActorInstance
 	Field TradeResult$
@@ -907,7 +908,11 @@ Function DeleteSpell(AI.ActorInstance, ID)
 	AI\KnownSpells[ID] = 0
 	AI\SpellRanks[ID] = 0
 	For i = 0 To 9
-		If AI\MemorisedSpells[i] = ID Then AI\MemorisedSpells[i] = 5000 : Exit
+		If AI\MemorisedSpells[i] = ID
+			AI\MemorisedSpells[i] = 5000
+			AI\MemorisedSpellCharge[i] = 0
+			Exit
+		EndIf
 	Next
 
 	; If they are a player in game, tell them

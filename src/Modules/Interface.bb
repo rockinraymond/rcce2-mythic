@@ -139,7 +139,7 @@ Dim LResistanceVals(49)
 ; Spells (abilities) window
 Global WSpells, SpellsVisible = False
 Global BNextSpells, BPrevSpells
-Global BShowSpells, BShowTalents, BShowCombats, BShowUtils
+Global BShowSpells, BShowTalents, BShowCombats, BShowUtils, BShowMemorised
 Global LSpellsPage, LSpellsCastingLevel
 Global WSpellRemove, BSpellRemoveOK, BSpellRemoveCancel, SpellRemoveNum = -1
 Global WSpellError, BSpellError
@@ -149,7 +149,7 @@ Dim LSpellNames(9) ; Ability name text
 Dim LSpellRanks(9) ; Ability level text
 Dim LSpellDesc(9) ; Ability Description
 ;Dim LSpellDesc2(9) ; Ability Description line 2
-Global FirstSpell = -1 ; -1 means we are looking at memorised spells rather than the longer list of known spells
+Global FirstSpell = 0
 Global LastSpellRecharge
 Global SpellView = S_Spell
 

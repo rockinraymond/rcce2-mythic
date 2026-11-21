@@ -912,7 +912,11 @@ Function UpdateNetwork()
 							If RequireMemorise
 								Num = RCE_IntFromStr(Mid$(M\MessageData$, 2, 2))
 								For i = 0 To 9
-									If AI\MemorisedSpells[i] = Num Then AI\MemorisedSpells[i] = 5000 : Exit
+									If AI\MemorisedSpells[i] = Num
+										AI\MemorisedSpells[i] = 5000
+										AI\MemorisedSpellCharge[i] = 0
+										Exit
+									EndIf
 								Next
 							EndIf
 						; Player is memorising a spell
@@ -922,7 +926,14 @@ Function UpdateNetwork()
 								MS\AI = AI
 								MS\KnownNum = RCE_IntFromStr(Mid$(M\MessageData$, 2, 2))
 								MS\CreatedTime = MilliSecs()
-								If MS\KnownNum < 0 Or MS\KnownNum > 999 Then Delete MS
+								If MS\KnownNum < 0 Or MS\KnownNum > 999
+									Delete MS
+								ElseIf AI\SpellRanks[MS\KnownNum] <= 0
+									Delete MS
+								Else
+									Sp.Spell = SpellsList(AI\KnownSpells[MS\KnownNum])
+									If SpellNeedsMemorisation(Sp) = False Then Delete MS
+								EndIf
 							EndIf
 						; Player is firing a spell
 						Case "F"
@@ -943,12 +954,12 @@ Function UpdateNetwork()
 								EndIf
 							Next
 							If Found = True
-								; Spell must be memorised to fire
-								If RequireMemorise
+								Sp.Spell = SpellsList(AI\KnownSpells[Num])
+								; Arcane and divine spells must be memorised to fire
+								If RequireMemorise And SpellNeedsMemorisation(Sp)
 									For i = 0 To 9
 										If AI\MemorisedSpells[i] = Num
-											Sp.Spell = SpellsList(AI\KnownSpells[Num])
-											If AI\SpellCharge[i] <= 0
+											If AI\MemorisedSpellCharge[i] <= 0
 												Params$ = AI\SpellRanks[Num] + "," + Sp\ThumbnailTexID + "," + Sp\SpellLevel
 												ThreadScript(Sp\Script$, Sp\SMethod$, Handle(AI), Handle(Context), Params$)
 												;AI\SpellCharge[i] = Sp\RechargeTime

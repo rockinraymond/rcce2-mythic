@@ -44,29 +44,24 @@ Function Connect()
 							; Ability
 							If Left$(Slot$, 1) = "S"
 								SpellName$ = Mid$(Slot$, 2)
-								; Must be memorised
-								If RequireMemorise
-									For j = 0 To 9
-										If Me\MemorisedSpells[j] <> 5000
-											Sp.Spell = SpellsList(Me\KnownSpells[Me\MemorisedSpells[j]])
-											If Sp\Name$ = SpellName$
-												ActionBarSlots(SlotNum) = j - 10
-												Exit
-											EndIf
-										EndIf
-									Next
-								; Must be known
-								Else
-									For j = 0 To 999
-										If Me\SpellRanks[j] > 0
-											Sp.Spell = SpellsList(Me\KnownSpells[j])
-											If Sp\Name$ = SpellName$
+								For j = 0 To 999
+									If Me\SpellRanks[j] > 0
+										Sp.Spell = SpellsList(Me\KnownSpells[j])
+										If Sp\Name$ = SpellName$
+											If RequireMemorise And SpellNeedsMemorisation(Sp)
+												For k = 0 To 9
+													If Me\MemorisedSpells[k] = j
+														ActionBarSlots(SlotNum) = k - 10
+														Exit
+													EndIf
+												Next
+											Else
 												ActionBarSlots(SlotNum) = j - 1000
-												Exit
 											EndIf
+											Exit
 										EndIf
-									Next
-								EndIf
+									EndIf
+								Next
 							; Item
 							ElseIf Left$(Slot$, 1) = "I"
 								ActionBarSlots(SlotNum) = RCE_IntFromStr(Mid$(Slot$, 2))
@@ -765,7 +760,7 @@ Function UpdateNetwork()
 					For i = 0 To 11
 						slot = i + offset
 						If ActionBarSlots(slot) < 0
-							If RequireMemorise
+							If ActionBarSlots(slot) > -20
 								Num = ActionBarSlots(slot) + 10
 								If Upper$(SpellsList(Me\KnownSpells[Me\MemorisedSpells[Num]])\Name$) = Name$
 									found = True
@@ -789,7 +784,10 @@ Function UpdateNetwork()
 					; Remove memorised
 					For i = 0 To 9
 						If Me\MemorisedSpells[i] <> 5000
-							If Upper$(SpellsList(Me\KnownSpells[Me\MemorisedSpells[i]])\Name$) = Name$ Then Me\MemorisedSpells[i] = 5000
+							If Upper$(SpellsList(Me\KnownSpells[Me\MemorisedSpells[i]])\Name$) = Name$
+								Me\MemorisedSpells[i] = 5000
+								Me\MemorisedSpellCharge[i] = 0
+							EndIf
 						EndIf
 					Next
 					; Remove known
@@ -817,8 +815,17 @@ Function UpdateNetwork()
 					Name$ = Upper$(Mid$(M\MessageData$, 2))
 					For i = 0 To 999
 						If Me\SpellRanks[i] > 0
-							If Upper$(SpellsList(Me\KnownSpells[i])\Name$) = Name$ 
-								Me\SpellCharge[i] = SpellsList(Me\KnownSpells[i])\RechargeTime
+							If Upper$(SpellsList(Me\KnownSpells[i])\Name$) = Name$
+								Sp.Spell = SpellsList(Me\KnownSpells[i])
+								If RequireMemorise And SpellNeedsMemorisation(Sp)
+									For j = 0 To 9
+										If Me\MemorisedSpells[j] = i
+											Me\MemorisedSpellCharge[j] = Sp\RechargeTime
+										EndIf
+									Next
+								Else
+									Me\SpellCharge[i] = Sp\RechargeTime
+								EndIf
 								UpdateActionBarIcons()
 							EndIf
 						EndIf
