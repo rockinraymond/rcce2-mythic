@@ -72,7 +72,7 @@ Function ModifyTouchSpell(Player, Target, SpellCost, ResourceName$, SpellName$, 
         ElseIf SkillName$ = "Divine Casting"
             CastingLevel = FindCastingLevel(Attribute(Player, "Divine Casting"), ActorLevel(Player))
         EndIf
-        FinalDamage = Rand(1,BaseDamage + AbilityBonus(Attribute(Player,GoverningAttribute$)) + CastingLevel) - Resistance(Target, DamageType$)
+        FinalDamage = Rand(1,BaseDamage)  + AbilityBonus(Attribute(Player,GoverningAttribute$)) + CastingLevel - Resistance(Target, DamageType$)
         NewHealth = Attribute(Target, "Health") - FinalDamage
 
         Output(Player, "You hit " + TargetName$ + " for " + FinalDamage + " " + DamageType$ + " damage!",100, 255, 150)

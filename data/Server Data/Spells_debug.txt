@@ -209,7 +209,7 @@ SpellType: 1
 SpellLevel: 2
 
 Spell ID: 42
-Spell Name: Mirrior Image
+Spell Name: Mirror Image
 SpellType: 1
 SpellLevel: 2
 

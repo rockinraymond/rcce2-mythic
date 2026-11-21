@@ -86,20 +86,9 @@ Function ClericEquipmentCheck(Player)
 End Function
 
 Function SavingThrow(Player, Target, SaveValue, SkillName$)
-    Chance = 20 + Attribute(Player, SkillName$) - Resistance(Target, "Spells") - SaveValue
-    If Chance < 5 Then Chance = 5
-    If Chance > 95 Then Chance = 95
-    Roll = Rand(1, 100)
+    Chance = 10 + GetSkillModifier(Attribute(Player, SkillName$)) - Resistance(Target, "Spells") - SaveValue
+    Roll = Rand(1, 20)
     Return Roll <= Chance
-End Function
-
-Function GetCasterLevel(Player)
-    ArcaneLevel = 1
-    DivineLevel = 1
-    ArcaneLevel = FindCastingLevel(Attribute(Player, "Arcane Casting"), ActorLevel(Player))
-    DivineLevel = FindCastingLevel(Attribute(Player, "Divine Casting"), ActorLevel(Player))
-    If DivineLevel > ArcaneLevel Then Return DivineLevel
-    Return ArcaneLevel
 End Function
 
 Function FindCastingLevel(CastingSkill, CharLevel)
@@ -129,8 +118,12 @@ Function CharmAnimal()
     Player = Actor()
     Target = ContextActor()
     If Target > 0
-        If Upper(Class(Target)) <> "ANIMAL"
+        If Upper(Class(Target)) <> "Animal"
             Output(Player, "Charm Animal can only target animals", 255, 100, 100)
+            Return
+        EndIf
+        If ActorLevel(Player) < ActorLevel(Target)
+            Output(Player, "This animal is too powerful for your charm", 255, 100, 100)
             Return
         EndIf
     EndIf
@@ -161,8 +154,12 @@ Function CharmPerson()
     Target = ContextActor()
     If Target > 0
         TargetRace$ = Upper(Race(Target))
-        If TargetRace$ <> "HUMAN" And TargetRace$ <> "DWARF" And TargetRace$ <> "ELF" And TargetRace$ <> "HALF ELF" And TargetRace$ <> "GNOME" And TargetRace$ <> "HALFLING" And TargetRace$ <> "HALF ORC"
-            Output(Player, "Charm Person can only target playable races", 255, 100, 100)
+        If TargetRace$ <> "Human" And TargetRace$ <> "Dwarf" And TargetRace$ <> "Elf" And TargetRace$ <> "Half Elf" And TargetRace$ <> "Gnome" And TargetRace$ <> "Halfling" And TargetRace$ <> "Half Orc"
+            Output(Player, "Charm Person can only target civilized humanoid races", 255, 100, 100)
+            Return
+        EndIf    
+        If ActorLevel(Player) < ActorLevel(Target)
+            Output(Player, "This person is too powerful for your charm", 255, 100, 100)
             Return
         EndIf
     EndIf
@@ -193,7 +190,11 @@ Function TurnUndead()
     Target = ContextActor()
     If Target > 0
         If Upper(Class(Target)) <> "UNDEAD"
-            Output(Player, "Turn Undead can only target undead", 255, 100, 100)
+            Output(Player, "Only the undead can be turned", 255, 100, 100)
+            Return
+        EndIf
+        If ActorLevel(Player) < ActorLevel(Target)
+            Output(Player, "This undead foe is too powerful for you to turn", 255, 100, 100)
             Return
         EndIf
     EndIf
@@ -225,7 +226,7 @@ Function TurnUndead()
     SetActorDestination(Target, TargetX + AwayX * 100, TargetZ + AwayZ * 100)
     SetActorAIState(Target, 2)
     CastingLevel = FindCastingLevel(Attribute(Player, "Divine Casting"), ActorLevel(Player))
-    AddActorEffect(Target, "Turned", "Movement", -50, 60, Parameter(2))
+    AddActorEffect(Target, "Turned", "Movement", -5, 60, Parameter(2))
     CreateEmitter(Target, "healBurst", 373, 3000)
     Output(Player, Name(Target) + " flees from your holy power.", 255, 220, 100)
     If Target <> Player Then Output(Target, "You flee from the holy power.", 255, 220, 100)
@@ -492,8 +493,8 @@ Function MirrorImage()
     SpellRange = 0
     If BeginSpell(Player, Player, ResourceName$, SpellCost, SpellName$, SchoolName$, SpellRange) < 1 Then Return
     CastingLevel = FindCastingLevel(Attribute(Player, "Arcane Casting"), ActorLevel(Player))
-    Images = 1 + Rand(1, 4) + CastingLevel
-    If Images > 8 Then Images = 8
+    Images = CastingLevel - 1
+    If Images > 5 Then Images = 5
     Duration = 60 + (CastingLevel * 30)
     If Duration > 300 Then Duration = 300
 
@@ -503,18 +504,19 @@ Function MirrorImage()
     Clone3 = 0
     Clone4 = 0
     Clone5 = 0
-    Clone6 = 0
-    Clone7 = 0
-    Clone8 = 0
+
     SpawnedImages = 0
     Count = 1
     Repeat
         Clone = Spawn(CasterActorID, ActorZone(Player), ActorX(Player) + Rand(-4, 4), ActorY(Player), ActorZ(Player) + Rand(-4, 4), "", "", ActorZoneInstance(Player))
+        SetName(Clone,Name(Player))
         If Clone > 0
             SetMaxAttribute(Clone, "Health", 1)
             SetAttribute(Clone, "Health", 1)
             SetAttribute(Clone, "Attack Bonus", -1000)
             SetAttribute(Clone, "Damage Bonus", -1000)
+            SetAttribute(Clone, "Armor Bonus", 5)
+
             SetLeader(Clone, Player)
             SpawnedImages = SpawnedImages + 1
             If SpawnedImages = 1 Then Clone1 = Clone
@@ -522,9 +524,6 @@ Function MirrorImage()
             If SpawnedImages = 3 Then Clone3 = Clone
             If SpawnedImages = 4 Then Clone4 = Clone
             If SpawnedImages = 5 Then Clone5 = Clone
-            If SpawnedImages = 6 Then Clone6 = Clone
-            If SpawnedImages = 7 Then Clone7 = Clone
-            If SpawnedImages = 8 Then Clone8 = Clone
         EndIf
         Count = Count + 1
     Until Count > Images
@@ -534,6 +533,7 @@ Function MirrorImage()
         Return
     EndIf
 
+    RedirectNearbyAggroToMirrorImages(Player, Clone1, Clone2, Clone3, Clone4, Clone5)
     AddActorEffect(Player, "Mirror Image", "Movement", 0, Duration, Parameter(2))
     Output(Player, "You summon " + SpawnedImages + " mirror images.", 200, 150, 255)
 
@@ -541,6 +541,7 @@ Function MirrorImage()
     Repeat
         DoEvents(1000)
         Elapsed = Elapsed + 1
+        ;RedirectNearbyAggroToMirrorImages(Player, Clone1, Clone2, Clone3, Clone4, Clone5)
     Until Elapsed >= Duration Or ActorHasEffect(Player, "Mirror Image") = 0
 
     If Clone1 > 0 And ActorLeader(Clone1) = Player And ActorIDFromInstance(Clone1) = CasterActorID And Attribute(Clone1, "Health") > 0 Then KillActor(Clone1, 0)
@@ -548,9 +549,66 @@ Function MirrorImage()
     If Clone3 > 0 And ActorLeader(Clone3) = Player And ActorIDFromInstance(Clone3) = CasterActorID And Attribute(Clone3, "Health") > 0 Then KillActor(Clone3, 0)
     If Clone4 > 0 And ActorLeader(Clone4) = Player And ActorIDFromInstance(Clone4) = CasterActorID And Attribute(Clone4, "Health") > 0 Then KillActor(Clone4, 0)
     If Clone5 > 0 And ActorLeader(Clone5) = Player And ActorIDFromInstance(Clone5) = CasterActorID And Attribute(Clone5, "Health") > 0 Then KillActor(Clone5, 0)
-    If Clone6 > 0 And ActorLeader(Clone6) = Player And ActorIDFromInstance(Clone6) = CasterActorID And Attribute(Clone6, "Health") > 0 Then KillActor(Clone6, 0)
-    If Clone7 > 0 And ActorLeader(Clone7) = Player And ActorIDFromInstance(Clone7) = CasterActorID And Attribute(Clone7, "Health") > 0 Then KillActor(Clone7, 0)
-    If Clone8 > 0 And ActorLeader(Clone8) = Player And ActorIDFromInstance(Clone8) = CasterActorID And Attribute(Clone8, "Health") > 0 Then KillActor(Clone8, 0)
+End Function
+
+Function RedirectNearbyAggroToMirrorImages(Player, Clone1, Clone2, Clone3, Clone4, Clone5)
+    First = FirstActorInZone(ActorZone(Player), ActorZoneInstance(Player))
+    If First > 0
+        Current = First
+        Repeat
+            If ActorIsHuman(Current) = 0
+                Aggressiveness = ActorAggressiveness(Current)
+                If Aggressiveness = 1 Or Aggressiveness = 2
+                    If ActorDistance(Player, Current) <= 100
+                        NearestClone = 0
+                        NearestDistance = 1000000
+
+                        If Clone1 > 0 And Attribute(Clone1, "Health") > 0
+                            CloneDistance = ActorDistance(Current, Clone1)
+                            If CloneDistance < NearestDistance
+                                NearestClone = Clone1
+                                NearestDistance = CloneDistance
+                            EndIf
+                        EndIf
+                        If Clone2 > 0 And Attribute(Clone2, "Health") > 0
+                            CloneDistance = ActorDistance(Current, Clone2)
+                            If CloneDistance < NearestDistance
+                                NearestClone = Clone2
+                                NearestDistance = CloneDistance
+                            EndIf
+                        EndIf
+                        If Clone3 > 0 And Attribute(Clone3, "Health") > 0
+                            CloneDistance = ActorDistance(Current, Clone3)
+                            If CloneDistance < NearestDistance
+                                NearestClone = Clone3
+                                NearestDistance = CloneDistance
+                            EndIf
+                        EndIf
+                        If Clone4 > 0 And Attribute(Clone4, "Health") > 0
+                            CloneDistance = ActorDistance(Current, Clone4)
+                            If CloneDistance < NearestDistance
+                                NearestClone = Clone4
+                                NearestDistance = CloneDistance
+                            EndIf
+                        EndIf
+                        If Clone5 > 0 And Attribute(Clone5, "Health") > 0
+                            CloneDistance = ActorDistance(Current, Clone5)
+                            If CloneDistance < NearestDistance
+                                NearestClone = Clone5
+                                NearestDistance = CloneDistance
+                            EndIf
+                        EndIf
+
+                        If NearestClone > 0
+                            SetActorTarget(Current, NearestClone)
+                            SetActorAIState(Current, 3)
+                        EndIf
+                    EndIf
+                EndIf
+            EndIf
+            Current = NextActorInZone(Current)
+        Until Current = First
+    EndIf
 End Function
 
 Function Web()

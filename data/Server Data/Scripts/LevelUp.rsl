@@ -9,7 +9,7 @@ Function Main()
 	Player = Actor()
 	CurrentLevel = ActorLevel(Player)
 	
-	If(CurrentLevel < 5) ;Max level check
+	If(CurrentLevel < 6) ;Max level check
 		XP = ActorXP(Player)
 		ActorRace$ = Race(Player)
 		NextXp = 1000 * (2 ^ CurrentLevel)
@@ -57,14 +57,14 @@ Function Main()
 
 			ManaPerLvl = 4 + AbilityBonus(Attribute(Player, "Intelligence", 1))
 			If ManaPerLvl < 1 Then ManaPerLvl = 1
-			NewMana = (Lvl * ManaPerLvl)  
+			NewMana = (Lvl * ManaPerLvl)  * 5
 			SETMaXATTRIBUTE(Player, "Mana", NewMana)
 			SETATTRIBUTE(Player, "Mana", Attribute(Player, "Mana") + ManaPerLvl)
 			Output(Player, "Your total Mana has increased by " + ManaPerLvl + "!",255,255,0)
 
 			SpiritPerLvl = 3 + AbilityBonus(Attribute(Player, "Wisdom", 1))
 			If SpiritPerLvl < 1 Then SpiritPerLvl = 1
-			NewSpirit = (Lvl * SpiritPerLvl)  
+			NewSpirit = (Lvl * SpiritPerLvl)  * 5
 			SETMaXATTRIBUTE(Player, "Spirit", NewSpirit)
 			SETATTRIBUTE(Player, "Spirit", Attribute(Player, "Spirit") + SpiritPerLvl)
 			Output(Player, "Your total Spirit has increased by " + SpiritPerLvl + "!",255,255,0)
