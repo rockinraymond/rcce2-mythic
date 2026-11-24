@@ -1,0 +1,67 @@
+Function EnterLevel1()
+
+	Player = Actor()
+
+	D = OpenDialog(Player, ContextActor(), "Door")
+        PlaySound(Player, 98, 0)
+	DialogOutput(Player, D, "You open the door and see a stairway leading down into the darkness...", 255, 255, 255)
+	
+	Result = DialogInput(Player, D, "Enter|Leave", "|")
+			
+		If Result = 1
+			DialogOutput(Player, D, "You descend down the steps...", 255, 255, 0)
+			PlaySound(Player, 100, 0)
+			DoEvents(1000)
+			CloseDialog(Player, D)
+			Warp(Player, "OldIsleFort_Lvl1", "entrance")
+		ElseIf Result = 2
+			PlaySound(Player, 97, 0)
+			CloseDialog(Player, D)
+		EndIf
+
+	Return
+
+End Function
+
+Function EnterLevel2()
+
+	
+	Return
+
+End Function
+
+Function LeaveLevel2()
+
+	Player = Actor()
+
+	
+
+	Return
+
+End Function
+
+Function LeaveDungeon()
+
+	Player = Actor()
+
+	D = OpenDialog(Player, ContextActor(), "Door")
+        PlaySound(Player, 98, 0)
+
+	DialogOutput(Player, D, "You open the door and see a stairway leading up towards the surface...", 255, 255, 255)
+	
+	Result = DialogInput(Player, D, "Enter|Leave", "|")
+			
+		If Result = 1
+			DialogOutput(Player, D, "You begin to walk up the steps...", 255, 255, 0)
+			PlaySound(Player, 99, 0)
+			DoEvents(1000)
+			CloseDialog(Player, D)
+			Warp(Player, "OldIsleFort", "LeaveDungeon")
+		ElseIf Result = 2
+			PlaySound(Player, 97, 0)
+			CloseDialog(Player, D)
+		EndIf
+
+	Return
+
+End Function
