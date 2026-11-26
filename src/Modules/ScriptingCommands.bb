@@ -2542,7 +2542,10 @@ Function BVM_GIVEITEM(Param1%, Param2$, Param3%=1)
 				SlotDisabled = 0
 				If Amount > 0
 					; Check if Actor can use this slot
-					If( ActorHasSlot(Actor, It\SlotType, It ) = False) Then SlotDisabled = 1
+					EquipSlot = It\SlotType - 1
+					If It\ItemType = I_Weapon Then EquipSlot = SlotI_Weapon
+					If It\ItemType = I_Ring And It\SlotType = Slot_Amulet Then EquipSlot = SlotI_Amulet1
+					If( ActorHasSlot(Actor, EquipSlot, It ) = False) Then SlotDisabled = 1
 						; Human
 						If Actor\RNID > 0
 							; Create the item

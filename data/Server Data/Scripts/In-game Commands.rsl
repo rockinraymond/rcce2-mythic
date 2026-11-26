@@ -21,6 +21,63 @@ GiveItem(Actor(), "Scarred Shield", 1)
 
 End Function
 
+Function TargetItems()
+
+	Player = Actor()
+	If (PlayerIsGM(Player))
+		Target = ActorTarget(Player)
+		If Target < 1
+			Output(Player, "You must target an actor first.")
+			Return
+		EndIf
+
+		Items$ = ""
+
+		Item = ActorWeapon(Target)
+		If Item > 0 Then Items$ = Items$ + "Weapon: " + ItemName(Item) + " x1, "
+		Item = ActorShield(Target)
+		If Item > 0 Then Items$ = Items$ + ItemName(Item) + " x1, "
+		Item = ActorHat(Target)
+		If Item > 0 Then Items$ = Items$ + ItemName(Item) + " x1, "
+		Item = ActorChest(Target)
+		If Item > 0 Then Items$ = Items$ + ItemName(Item) + " x1, "
+		Item = ActorHands(Target)
+		If Item > 0 Then Items$ = Items$ + ItemName(Item) + " x1, "
+		Item = ActorBelt(Target)
+		If Item > 0 Then Items$ = Items$ + ItemName(Item) + " x1, "
+		Item = ActorLegs(Target)
+		If Item > 0 Then Items$ = Items$ + ItemName(Item) + " x1, "
+		Item = ActorFeet(Target)
+		If Item > 0 Then Items$ = Items$ + ItemName(Item) + " x1, "
+
+		For Slot = 1 To 4
+			Item = ActorRing(Target, Slot)
+			If Item > 0 Then Items$ = Items$ + ItemName(Item) + " x1, "
+		Next
+
+		For Slot = 1 To 2
+			Item = ActorAmulet(Target, Slot)
+			If Item > 0 Then Items$ = Items$ + ItemName(Item) + " x1, "
+		Next
+
+		For Slot = 1 To 32
+			Item = ActorBackpack(Target, Slot)
+			If Item > 0
+				Items$ = Items$ + ItemName(Item) + " x" + BackpackCount(Target, Slot) + ", "
+			EndIf
+		Next
+
+		If Items$ = ""
+			Output(Player, Name(Target) + " is not carrying any items.")
+		Else
+			Items$ = Left(Items$, Len(Items$) - 2)
+			Output(Player, "Items held by " + Name(Target) + ": " + Items$)
+		EndIf
+	EndIf
+	Return
+
+End Function
+
 Function Assist()
 
 	Player = Actor()
