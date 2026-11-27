@@ -417,6 +417,7 @@ FoamTextureDX#=0
 	RCE_CreateMessages()
 	
 	UpdateNetwork()
+	FlushCombatSoundRequests()
 	Until QuitComplete = True
 	
 ; Close client

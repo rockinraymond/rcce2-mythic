@@ -301,8 +301,9 @@ Function PlayActorWeaponSound(Attacker.ActorInstance,Target.ActorInstance)
 				Result = Rand(58,59)
 		End Select
 		
+		If Target\EN = 0 Then Return
 		EN = FindChild(Target\EN, "Head")
 		If EN = 0 Then EN = Target\EN
 		If EN = 0 Then Return
-		PlaySoundGuarded(GetSound(Result), EN)
+		QueueCombatSound(Result, Target\RuntimeID)
 End Function

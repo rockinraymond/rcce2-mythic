@@ -29,54 +29,54 @@ Function Main()
 
 
 
-    If Race(Actor()) = "Orc"
-        giveitem(actor(),"Long Sword",1)
-    ElseIf Race(Actor()) = "Goblin"
-        giveitem(actor(),"dagger",1)
-    ElseIf Race(Actor()) = "Hobgoblin"
-        giveitem(actor(),"short sword",1)
-    ElseIf Race(Actor()) = "Gnoll"
-        giveitem(actor(),"morning star",1)
-    ElseIf Race(Actor()) = "Bugbear"
-        giveitem(actor(),"morning star",1)
-    ElseIf Race(Actor()) = "Dwarf"
-        SETATTRIBUTE(Actor(), "Strength", 12)
-        SETATTRIBUTE(Actor(), "Toughness", 14)
-        SETATTRIBUTE(Actor(), "Agility", 10)
-        SETATTRIBUTE(Actor(), "Dexterity", 9)
+    If Race(Mob) = "Orc"
+        GiveItem(Mob, "Long Sword", 1)
+    ElseIf Race(Mob) = "Goblin"
+        GiveItem(Mob, "Short Spear", 1)
+    ElseIf Race(Mob) = "Hobgoblin"
+        GiveItem(Mob, "Short Sword", 1)
+    ElseIf Race(Mob) = "Gnoll"
+        GiveItem(Mob, "Battle Axe", 1)
+    ElseIf Race(Mob) = "Bugbear"
+        GiveItem(Mob, "Morning Star", 1)
+    ElseIf Race(Mob) = "Dwarf"
+        SETATTRIBUTE(Mob, "Strength", 12)
+        SETATTRIBUTE(Mob, "Toughness", 14)
+        SETATTRIBUTE(Mob, "Agility", 10)
+        SETATTRIBUTE(Mob, "Dexterity", 9)
 
-        giveitem(actor(),"battle axe",1)
-        giveitem(actor(), "chainmail armor", 1)
-        giveitem(actor(), "round shield", 1)
-    ElseIf Race(Actor()) = "Human"
-        SETATTRIBUTE(Actor(), "Strength", 11)
-        SETATTRIBUTE(Actor(), "Toughness", 11)
-        SETATTRIBUTE(Actor(), "Agility", 11)
-        SETATTRIBUTE(Actor(), "Dexterity", 1)
+        GiveItem(Mob, "Battle Axe", 1)
+        GiveItem(Mob, "Chainmail Armor", 1)
+        GiveItem(Mob, "Round Shield", 1)
+    ElseIf Race(Mob) = "Human"
+        SETATTRIBUTE(Mob, "Strength", 11)
+        SETATTRIBUTE(Mob, "Toughness", 11)
+        SETATTRIBUTE(Mob, "Agility", 11)
+        SETATTRIBUTE(Mob, "Dexterity", 1)
 
-        giveitem(actor(),"mace",1)
-        giveitem(actor(), "chainmail armor", 1)
-        giveitem(actor(), "round shield", 1)
+        GiveItem(Mob, "Mace", 1)
+        GiveItem(Mob, "Chainmail Armor", 1)
+        GiveItem(Mob, "Round Shield", 1)
     
-    ElseIf Race(Actor()) = "Elf"
-        SETATTRIBUTE(Actor(), "Strength", 9)
-        SETATTRIBUTE(Actor(), "Toughness", 10)
-        SETATTRIBUTE(Actor(), "Agility", 12)
-        SETATTRIBUTE(Actor(), "Dexterity", 10)
+    ElseIf Race(Mob) = "Elf"
+        SETATTRIBUTE(Mob, "Strength", 9)
+        SETATTRIBUTE(Mob, "Toughness", 10)
+        SETATTRIBUTE(Mob, "Agility", 12)
+        SETATTRIBUTE(Mob, "Dexterity", 10)
 
-        giveitem(actor(),"short bow",1)
-        giveitem(actor(), "leather armor", 1)
-        giveitem(actor(), "arrow", 100)
+        GiveItem(Mob, "Short Bow", 1)
+        GiveItem(Mob, "Leather Armor", 1)
+        GiveItem(Mob, "Arrow", 100)
 
     
-    ElseIf Race(Actor()) = "Halfling"
-        SETATTRIBUTE(Actor(), "Strength", 9)
-        SETATTRIBUTE(Actor(), "Toughness", 10)
-        SETATTRIBUTE(Actor(), "Agility", 12)
-        SETATTRIBUTE(Actor(), "Dexterity", 10)
+    ElseIf Race(Mob) = "Halfling"
+        SETATTRIBUTE(Mob, "Strength", 9)
+        SETATTRIBUTE(Mob, "Toughness", 10)
+        SETATTRIBUTE(Mob, "Agility", 12)
+        SETATTRIBUTE(Mob, "Dexterity", 10)
 
-        giveitem(actor(),"short sword",1)
-        giveitem(actor(), "leather armor", 1)
+        GiveItem(Mob, "Short Sword", 1)
+        GiveItem(Mob, "Leather Armor", 1)
         
     EndIf
 

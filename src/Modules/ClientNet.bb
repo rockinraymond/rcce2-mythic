@@ -1031,7 +1031,7 @@ Function UpdateNetwork()
 								AttackSound = 53
 							EndIf
 						EndIf
-						PlaySoundGuarded(GetSound(AttackSound))
+						QueueCombatSound(AttackSound)
 						Damage = RCE_IntFromStr(Mid$(M\MessageData$, 4, 2)) - 1
 						DType$ = DamageTypes$(RCE_IntFromStr(Mid$(M\MessageData$, 6, 1)))
 						; And hit them
@@ -1069,7 +1069,7 @@ Function UpdateNetwork()
 									AttackSound = 53
 								EndIf
 							EndIf
-							PlaySoundGuarded(GetSound(AttackSound))
+							QueueCombatSound(AttackSound)
 						EndIf
 						If Damage > 0
 							CombatDamageOutput(A, -Damage, DType$)

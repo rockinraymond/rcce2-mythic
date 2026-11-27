@@ -7,17 +7,21 @@ Dim LoadedMeshZ#(65534)
 Dim LoadedMeshShaders(65534)
 Dim LoadedSounds(65534)
 Dim TextureFlags(65534)
-Const GuardedSoundChannelLimit = 4
-Const GuardedSoundStartLimit = 4
-Const GuardedSoundWindowMS = 100
+Const GuardedSoundChannelLimit = 1
+Const GuardedSoundStartLimit = 1
+Const GuardedSoundWindowMS = 500
 Dim GuardedSoundChannels(GuardedSoundChannelLimit - 1)
 Global LockedMeshes = 0, LockedTextures = 0, LockedSounds = 0, LockedMusic = 0
 Global GuardedSoundWindowStart, GuardedSoundStarts
+Global GuardedSoundPlaybackEnabled = True
+Global GuardedSound3DPlaybackEnabled = False
+Global PendingCombatSoundID, PendingCombatRuntimeID, PendingCombatSoundCount
 Global DefaultVolume# = 1.0
 
 ; Plays a one-shot sound while limiting both active voices and rapid starts
 Function PlaySoundGuarded(Sound, EN = 0)
 
+	If GuardedSoundPlaybackEnabled = False Then Return 0
 	If Sound <= 0 Then Return 0
 
 	FreeSlot = -1
@@ -41,13 +45,27 @@ Function PlaySoundGuarded(Sound, EN = 0)
 	If GuardedSoundStarts >= GuardedSoundStartLimit Then Return 0
 	GuardedSoundStarts = GuardedSoundStarts + 1
 
-	If EN > 0
+	If EN > 0 And GuardedSound3DPlaybackEnabled
 		Channel = EmitSound(Sound, EN)
 	Else
 		Channel = PlaySound(Sound)
 	EndIf
 	If Channel <> 0 Then GuardedSoundChannels(FreeSlot) = Channel
 	Return Channel
+
+End Function
+
+; Reservoir-sample one combat sound so each request in this frame has equal odds
+Function QueueCombatSound(SoundID, SourceRuntimeID = -1)
+
+	If GuardedSoundPlaybackEnabled = False Then Return
+	If SoundID < 0 Or SoundID > 65534 Then Return
+
+	PendingCombatSoundCount = PendingCombatSoundCount + 1
+	If PendingCombatSoundCount = 1 Or Rand(1, PendingCombatSoundCount) = 1
+		PendingCombatSoundID = SoundID
+		PendingCombatRuntimeID = SourceRuntimeID
+	EndIf
 
 End Function
 

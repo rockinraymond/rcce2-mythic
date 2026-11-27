@@ -727,10 +727,43 @@ Function PlayActorSound(A.ActorInstance, Speech)
 			If A\Actor\FSpeechIDs[Speech] < 65535 Then Result = A\Actor\FSpeechIDs[Speech]
 		EndIf
 		If Result < 65535
+			If A\EN = 0 Then Return
 			EN = FindChild(A\EN, "Head")
 			If EN = 0 Then EN = A\EN
 			If EN = 0 Then Return
-			PlaySoundGuarded(GetSound(Result), EN)
+			If Speech = Speech_Attack1 Or Speech = Speech_Attack2 Or Speech = Speech_Hit1 Or Speech = Speech_Hit2 Or Speech = Speech_Death
+				QueueCombatSound(Result, A\RuntimeID)
+			Else
+				PlaySoundGuarded(GetSound(Result), EN)
+			EndIf
 		EndIf
+
+End Function
+
+; Plays the sampled combat sound when the guarded voice is available
+Function FlushCombatSoundRequests()
+
+	If PendingCombatSoundCount = 0 Then Return
+	If GuardedSoundPlaybackEnabled
+		EN = 0
+		PlayRequest = True
+		If PendingCombatRuntimeID >= 0
+			If PendingCombatRuntimeID <= 65534
+				A.ActorInstance = RuntimeIDList(PendingCombatRuntimeID)
+				If A <> Null And A\EN <> 0
+					EN = FindChild(A\EN, "Head")
+					If EN = 0 Then EN = A\EN
+				Else
+					PlayRequest = False
+				EndIf
+			Else
+				PlayRequest = False
+			EndIf
+		EndIf
+		If PlayRequest Then PlaySoundGuarded(GetSound(PendingCombatSoundID), EN)
+	EndIf
+	PendingCombatSoundCount = 0
+	PendingCombatSoundID = 0
+	PendingCombatRuntimeID = -1
 
 End Function

@@ -330,10 +330,12 @@ Function UpdateShadows% (camera%, tween#=1.0)
 	Else
 		If Shadow\texture<>0 Then
 			oldBuffer = TextureBuffer(Shadow\texture)
-			If oldBuffer <> Null Then SetBuffer oldBuffer
-			Color 255, 255, 255
-			Rect 0, 0, Shadow\texSize, Shadow\texSize, 1
-			SetBuffer oldBuffer
+			If oldBuffer <> Null Then
+				SetBuffer oldBuffer
+				Color 255, 255, 255
+				Rect 0, 0, Shadow\texSize, Shadow\texSize, 1
+				SetBuffer BackBuffer()
+			EndIf
 		EndIf
 	EndIf
 End Function
