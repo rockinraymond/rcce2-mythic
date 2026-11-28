@@ -8,9 +8,9 @@ Function Main()
     PlayerInt = Attribute(Player, "Intelligence")
     PlayerWis = Attribute(Player, "Wisdom")
 
-    StartingHealth = (10 + AbilityBonus(PlayerCon)) * 6
-    StartingMana = (4 + AbilityBonus(PlayerInt)) * 5
-    StartingSpirit = (3 + AbilityBonus(PlayerWis)) * 5
+    StartingHealth = (12 + AbilityBonus(PlayerCon))
+    StartingMana = (4 + AbilityBonus(PlayerInt)) 
+    StartingSpirit = (3 + AbilityBonus(PlayerWis)) 
 
     SETMaXATTRIBUTE(Player, "Health", StartingHealth)
     SETATTRIBUTE(Player, "Health", StartingHealth)
@@ -20,10 +20,6 @@ Function Main()
 
     SETMaXATTRIBUTE(Player, "Spirit", StartingSpirit)
     SETATTRIBUTE(Player, "Spirit", StartingSpirit)
-
-
-
-
 
 End Function
 

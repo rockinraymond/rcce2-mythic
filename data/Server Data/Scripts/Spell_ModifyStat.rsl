@@ -340,7 +340,7 @@ Function Spell_Shield()
     If Target = 0
         Target = Player
     EndIf
-    SpellCost = 4
+    SpellCost = 1
     CastingLevel = FindCastingLevel(Attribute(Player, "Arcane Casting"), ActorLevel(Player))
     ResourceName$ = "Mana"
     SpellName$ = "Shield"
@@ -367,7 +367,7 @@ Function Spell_Focus()
     If Target = 0
         Target = Player
     EndIf
-    SpellCost = 4
+    SpellCost = 1
     CastingLevel = FindCastingLevel(Attribute(Player, "Arcane Casting"), ActorLevel(Player))
     ResourceName$ = "Mana"
     SpellName$ = "Focus"
@@ -394,7 +394,7 @@ Function Spell_FeatherWeight()
     If Target = 0
         Target = Player
     EndIf
-    SpellCost = 2
+    SpellCost = 1
     CastingLevel = FindCastingLevel(Attribute(Player, "Arcane Casting"), ActorLevel(Player))
     ResourceName$ = "Mana"
     SpellName$ = "Feather Weight"
@@ -421,7 +421,7 @@ Function Spell_ResistSlash()
     If Target = 0
         Target = Player
     EndIf
-    SpellCost = 4
+    SpellCost = 1
     CastingLevel = FindCastingLevel(Attribute(Player, "Arcane Casting"), ActorLevel(Player))
     ResourceName$ = "Mana"
     SpellName$ = "Resist Slashing"
@@ -448,7 +448,7 @@ Function Spell_ResistBlunt()
     If Target = 0
         Target = Player
     EndIf
-    SpellCost = 4
+    SpellCost = 1
     CastingLevel = FindCastingLevel(Attribute(Player, "Arcane Casting"), ActorLevel(Player))
     ResourceName$ = "Mana"
     SpellName$ = "Resist Bludgeon"
@@ -475,7 +475,7 @@ Function Spell_WeaknessMagic()
     If Target = 0
         Target = Player
     EndIf
-    SpellCost = 7
+    SpellCost = 3
     CastingLevel = FindCastingLevel(Attribute(Player, "Arcane Casting"), ActorLevel(Player))
     ResourceName$ = "Mana"
     SpellName$ = "Weakness to Magic"
@@ -502,7 +502,7 @@ Function Spell_ProtectEvil()
     If Target = 0
         Target = Player
     EndIf
-    SpellCost = 4
+    SpellCost = 1
     CastingLevel = FindCastingLevel(Attribute(Player, "Divine Casting"), ActorLevel(Player))
     ResourceName$ = "Spirit"
     SpellName$ = "Protect from Evil"
@@ -528,7 +528,7 @@ Function Spell_Condemn()
     Target = ContextActor()
     If Target = 0 Then Target = Player
 
-    SpellCost = 5
+    SpellCost = 3
     ResourceName$ = "Spirit"
     SpellName$ = "Condemn"
     EffectName$ = "Condemn"
@@ -657,7 +657,7 @@ Function Spell_Bless()
     Player = Actor()
     Target = ContextActor()
     If Target = 0 Then Target = Player
-    SpellCost = 3
+    SpellCost = 2
     ResourceName$ = "Spirit"
     SpellName$ = "Bless"
     EffectName$ = "Bless"
@@ -682,7 +682,7 @@ Function Spell_BestowCourage()
     If CastingChecks(Player, Target, "Divine Casting") < 1
         Return
     EndIf
-    SpellCost = 2
+    SpellCost = 1
     If Attribute(Player, "Spirit") < SpellCost
         Output(Player, "Not enough Spirit", 255, 0, 0)
         Return
@@ -727,7 +727,7 @@ Function Spell_StrengthenAnimal()
         Output(Player, "Strengthen Animal can only target animals", 255, 100, 100)
         Return
     EndIf
-    SpellCost = 5
+    SpellCost = 3
     ResourceName$ = "Spirit"
     SpellName$ = "Strengthen Animal"
     EffectName$ = "Strengthened"
@@ -749,7 +749,7 @@ Function Spell_Striking()
     Player = Actor()
     Target = ContextActor()
     If Target = 0 Then Target = Player
-    SpellCost = 4
+    SpellCost = 3
     ResourceName$ = "Spirit"
     SpellName$ = "Striking"
     EffectName$ = "Striking"
@@ -771,7 +771,7 @@ Function Spell_ResistCold()
     Player = Actor()
     Target = ContextActor()
     If Target = 0 Then Target = Player
-    SpellCost = 4
+    SpellCost = 1
     ResourceName$ = "Spirit"
     SpellName$ = "Resist Cold"
     EffectName$ = SpellName$
@@ -794,7 +794,7 @@ Function Spell_ResistFire()
     Player = Actor()
     Target = ContextActor()
     If Target = 0 Then Target = Player
-    SpellCost = 4
+    SpellCost = 2
     ResourceName$ = "Spirit"
     SpellName$ = "Resist Fire"
     EffectName$ = SpellName$
@@ -817,7 +817,7 @@ Function Spell_ResistLightning()
     Player = Actor()
     Target = ContextActor()
     If Target = 0 Then Target = Player
-    SpellCost = 4
+    SpellCost = 2
     ResourceName$ = "Spirit"
     SpellName$ = "Resist Lightning"
     EffectName$ = SpellName$
@@ -840,7 +840,7 @@ Function Spell_SlowPoison()
     Player = Actor()
     Target = ContextActor()
     If Target = 0 Then Target = Player
-    SpellCost = 4
+    SpellCost = 3
     ResourceName$ = "Spirit"
     SpellName$ = "Slow Poison"
     EffectName$ = SpellName$
@@ -863,7 +863,7 @@ Function Spell_Haste()
     Player = Actor()
     Target = ContextActor()
     If Target = 0 Then Target = Player
-    SpellCost = 6
+    SpellCost = 3
     ResourceName$ = "Mana"
     SpellName$ = "Haste"
     EffectName$ = "Haste"
@@ -884,7 +884,7 @@ End Function
 Function Spell_Slow()
     Player = Actor()
     Target = ContextActor()
-    SpellCost = 6
+    SpellCost = 3
     ResourceName$ = "Mana"
     SpellName$ = "Slow"
     EffectName$ = "Slow"
@@ -906,7 +906,7 @@ End Function
 Function Spell_WeaknessCold()
     Player = Actor()
     Target = ContextActor()
-    SpellCost = 4
+    SpellCost = 1
     ResourceName$ = "Mana"
     SpellName$ = "Weakness to Cold"
     EffectName$ = SpellName$
@@ -928,7 +928,7 @@ End Function
 Function Spell_WeaknessFire()
     Player = Actor()
     Target = ContextActor()
-    SpellCost = 5
+    SpellCost = 2
     ResourceName$ = "Mana"
     SpellName$ = "Weakness to Fire"
     EffectName$ = SpellName$
@@ -950,7 +950,7 @@ End Function
 Function Spell_WeaknessLightning()
     Player = Actor()
     Target = ContextActor()
-    SpellCost = 5
+    SpellCost = 2
     ResourceName$ = "Mana"
     SpellName$ = "Weakness to Lightning"
     EffectName$ = SpellName$
@@ -973,7 +973,7 @@ Function Spell_Invisibility()
     Player = Actor()
     Target = ContextActor()
     If Target = 0 Then Target = Player
-    SpellCost = 8
+    SpellCost = 2
     ResourceName$ = "Mana"
     SpellName$ = "Invisibility"
     EffectName$ = "Invisible"
@@ -1059,7 +1059,7 @@ End Function
 
 Function Spell_GroupShield()
     Player = Actor()
-    SpellCost = 12
+    SpellCost = 3
     SpellName$ = "Group Shield"
     EffectName$ = "Group Shield"
     EffectAttribute$ = "Armor Bonus"
@@ -1075,7 +1075,7 @@ End Function
 
 Function Spell_GroupInvisibility()
     Player = Actor()
-    SpellCost = 15
+    SpellCost = 3
     SpellName$ = "Group Invisibility"
     EffectName$ = "Invisible"
     EffectAttribute$ = "Stealth Mod"

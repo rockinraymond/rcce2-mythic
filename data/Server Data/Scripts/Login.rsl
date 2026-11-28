@@ -8,7 +8,7 @@ Dim Score$(1000,1)
 ; There is no context actor for this script
 Function Main()
 
-;   Check to see if this is a 'NEW' player and if so set their ActorGlobal for League
+;   Check to see if this is a 'NEW' player
 	Player = Actor()
    ;Run inventoryScript
    ThreadExecute("InventoryUpdate", "Main", Player, 0)
@@ -16,39 +16,38 @@ Function Main()
 	If Len(ActorGlobal(Player, 8)) < 10
 		SetActorGlobal(Player, 8, "0,0,1,0,0,0,0,0,0,0")
 	EndIf
-	League% = 0
+	; League% = 0
 	CurrentDate$ = RealDate()
 	FirstLogin$ = PullGlobal$(Player, 8, 1, ",")
 	If Len(FirstLogin$) < 5
+		GiveFirstTimeItems(Player)
 		PushGlobal(Player, 8, 1, CurrentDate$, ",", 10)
-		PushGlobal(Player, 8, 2, "1", ",", 10)
-		League = 1
-	Else
-		League = Int(PullGlobal$(Player, 8, 2, ","))
-		Result = CheckDate%(PullGlobal$(Player, 8, 1, ","), 182)
+		; PushGlobal(Player, 8, 2, "1", ",", 10)
+		; League = 1
 	EndIf
-	If League = 1
-		Result = CheckDate%(PullGlobal$(Player, 8, 1, ","), 182)
-		If Result = 0
-			PushGlobal(Player, 8, 2, "2", ",", 10)
-			League = 2
-		EndIf
-	ElseIf League = 2
-		If Result = 0
-			If Int(PullGlobal$(Player, 8, 4, ",")) > 0
-				PushGlobal(Player, 8, 2, "3", ",", 10)
-				League = 3
-			EndIf
-		EndIf
-	EndIf
-	PlayerName$ = Name(Player)
-	FileName$ = "League" + Chr(48 + League)
-	If League = 1 or League = 2
-		MyScore$ = PullGlobal$(Player, 8, 3, ",")
-	ElseIf League = 3
-		MyScore$ = PullGlobal$(Player, 8, 4, ",")
-	EndIf
-	LoadLeagueScores(Filename$, MyScore$, PlayerName$)
+	; League progression and score loading are temporarily disabled.
+	; If League = 1
+	;     Result = CheckDate%(PullGlobal$(Player, 8, 1, ","), 182)
+	;     If Result = 0
+	;         PushGlobal(Player, 8, 2, "2", ",", 10)
+	;         League = 2
+	;     EndIf
+	; ElseIf League = 2
+	;     If Result = 0
+	;         If Int(PullGlobal$(Player, 8, 4, ",")) > 0
+	;             PushGlobal(Player, 8, 2, "3", ",", 10)
+	;             League = 3
+	;         EndIf
+	;     EndIf
+	; EndIf
+	; PlayerName$ = Name(Player)
+	; FileName$ = "League" + Chr(48 + League)
+	; If League = 1 or League = 2
+	;     MyScore$ = PullGlobal$(Player, 8, 3, ",")
+	; ElseIf League = 3
+	;     MyScore$ = PullGlobal$(Player, 8, 4, ",")
+	; EndIf
+	; LoadLeagueScores(Filename$, MyScore$, PlayerName$)
 End Function
 
 ; Sort Scores
@@ -269,5 +268,97 @@ Function Checkdate%(StartDateValue$, Range%)
       Return(1)
    EndIf
 
+End Function
+
+Function GiveFirstTimeItems(Player)
+; Grant starter items when a skill is 10 above its race's starting value
+    PlayerRace$ = Race(Player)
+
+    If (PlayerRace$ = "Halfling") Or (PlayerRace$ = "Gnome")
+        GrantSkillReward(Player, PlayerRace$, "Swords", "Short Sword", 1)
+        GrantSkillReward(Player, PlayerRace$, "Axes", "Hand Axe", 1)
+        GrantSkillReward(Player, PlayerRace$, "Blunt Weapons", "Warhammer", 1)
+    Else
+        GrantSkillReward(Player, PlayerRace$, "Swords", "Long Sword", 1)
+        GrantSkillReward(Player, PlayerRace$, "Axes", "Battle Axe", 1)
+        GrantSkillReward(Player, PlayerRace$, "Blunt Weapons", "Mace", 1)
+    End If
+
+    GrantSkillReward(Player, PlayerRace$, "Daggers", "Dagger", 1)
+    GrantSkillReward(Player, PlayerRace$, "Polearms/Spears", "Short Spear", 1)
+    GrantSkillReward(Player, PlayerRace$, "Bows", "Short Bow", 1)
+    GrantSkillReward(Player, PlayerRace$, "Staves", "Quarter Staff", 1)
+    GrantSkillReward(Player, PlayerRace$, "Light Armor", "Leather Armor", 1)
+    GrantSkillReward(Player, PlayerRace$, "Medium Armor", "Chainmail Armor", 1)
+    GrantSkillReward(Player, PlayerRace$, "Heavy Armor", "Platemail Armor", 1)
+    GrantSkillReward(Player, PlayerRace$, "Block", "Round Shield", 1)
+    GrantSkillReward(Player, PlayerRace$, "Arcane Casting", "Magic Missile Tome", 1)
+    GrantSkillReward(Player, PlayerRace$, "Divine Casting", "Cure Light Wounds Tome", 1)
+    GrantSkillReward(Player, PlayerRace$, "Trap Disarming", "Trap Disarming Kit", 5)
+    GrantSkillReward(Player, PlayerRace$, "Lockpicking", "Lockpick", 10)
+    GrantSkillReward(Player, PlayerRace$, "Armorer", "Repair Hammer", 5)
+
+End Function
+
+Function GrantSkillReward(Player, PlayerRace$, SkillName$, ItemName$, ItemQuantity)
+    If Attribute(Player, SkillName$) >= RaceStartingSkill(PlayerRace$, SkillName$) + 10
+        GiveItem(Player, ItemName$, ItemQuantity)
+    End If
+End Function
+
+Function RaceStartingSkill(PlayerRace$, SkillName$)
+    ; Skills not listed for a race start at 25 in Actors.dat.
+    StartingSkill = 25
+
+    Select PlayerRace$
+        Case "Elf"
+            If SkillName$ = "Swords" Or SkillName$ = "Daggers" Or SkillName$ = "Bows" Or SkillName$ = "Light Armor"
+                StartingSkill = 30
+            ElseIf SkillName$ = "Axes" Or SkillName$ = "Blunt Weapons" Or SkillName$ = "Heavy Armor" Or SkillName$ = "Divine Casting" Or SkillName$ = "Trap Disarming"
+                StartingSkill = 20
+            ElseIf SkillName$ = "Arcane Casting"
+                StartingSkill = 35
+            End If
+        Case "Dwarf"
+            If SkillName$ = "Axes" Or SkillName$ = "Blunt Weapons" Or SkillName$ = "Medium Armor" Or SkillName$ = "Heavy Armor" Or SkillName$ = "Block"
+                StartingSkill = 30
+            ElseIf SkillName$ = "Daggers" Or SkillName$ = "Polearms/Spears" Or SkillName$ = "Bows"
+                StartingSkill = 20
+            ElseIf SkillName$ = "Arcane Casting"
+                StartingSkill = 15
+            ElseIf SkillName$ = "Trap Disarming" Or SkillName$ = "Armorer"
+                StartingSkill = 35
+            End If
+        Case "Halfling"
+            If SkillName$ = "Swords" Or SkillName$ = "Polearms/Spears" Or SkillName$ = "Heavy Armor" Or SkillName$ = "Arcane Casting"
+                StartingSkill = 20
+            ElseIf SkillName$ = "Bows"
+                StartingSkill = 35
+            ElseIf SkillName$ = "Light Armor" Or SkillName$ = "Lockpicking"
+                StartingSkill = 30
+            End If
+        Case "Half Orc"
+            If SkillName$ = "Swords" Or SkillName$ = "Axes" Or SkillName$ = "Blunt Weapons" Or SkillName$ = "Medium Armor" Or SkillName$ = "Heavy Armor" Or SkillName$ = "Lockpicking" Or SkillName$ = "Armorer"
+                StartingSkill = 30
+            ElseIf SkillName$ = "Arcane Casting"
+                StartingSkill = 15
+            ElseIf SkillName$ = "Divine Casting"
+                StartingSkill = 20
+            End If
+        Case "Gnome"
+            If SkillName$ = "Swords" Or SkillName$ = "Polearms/Spears" Or SkillName$ = "Bows" Or SkillName$ = "Heavy Armor"
+                StartingSkill = 20
+            ElseIf SkillName$ = "Light Armor" Or SkillName$ = "Arcane Casting" Or SkillName$ = "Trap Disarming" Or SkillName$ = "Lockpicking"
+                StartingSkill = 30
+            End If
+        Case "Half Elf"
+            If SkillName$ = "Axes" Or SkillName$ = "Blunt Weapons"
+                StartingSkill = 20
+            ElseIf SkillName$ = "Bows" Or SkillName$ = "Light Armor" Or SkillName$ = "Arcane Casting"
+                StartingSkill = 30
+            End If
+    End Select
+
+    Return StartingSkill
 End Function
 

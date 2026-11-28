@@ -48,23 +48,23 @@ Function Main()
 			SetActorLevel(Player, Lvl)
 			Output(Player, "Congratulations, you have advanced to level " + Lvl + "!",255,255,0)
 			
-			HpPerLvl = 6 + AbilityBonus(Attribute(Player, "Constitution", 1))
+			HpPerLvl = 8 + AbilityBonus(Attribute(Player, "Constitution", 1))
 			If HpPerLvl < 1 Then HpPerLvl = 1
-			NewHp =( 4 + (Lvl * HpPerLvl) ) * 6
+			NewHp =( 4 + (Lvl * HpPerLvl) )
 			SETMaXATTRIBUTE(Player, "Health", NewHp)
 			SETATTRIBUTE(Player, "Health", Attribute(Player, "Health") + HpPerLvl)
 			Output(Player, "Your total Health has increased by " + HpPerLvl + "!",255,255,0)
 
 			ManaPerLvl = 4 + AbilityBonus(Attribute(Player, "Intelligence", 1))
 			If ManaPerLvl < 1 Then ManaPerLvl = 1
-			NewMana = (Lvl * ManaPerLvl)  * 5
+			NewMana = (Lvl * ManaPerLvl) 
 			SETMaXATTRIBUTE(Player, "Mana", NewMana)
 			SETATTRIBUTE(Player, "Mana", Attribute(Player, "Mana") + ManaPerLvl)
 			Output(Player, "Your total Mana has increased by " + ManaPerLvl + "!",255,255,0)
 
 			SpiritPerLvl = 3 + AbilityBonus(Attribute(Player, "Wisdom", 1))
 			If SpiritPerLvl < 1 Then SpiritPerLvl = 1
-			NewSpirit = (Lvl * SpiritPerLvl)  * 5
+			NewSpirit = (Lvl * SpiritPerLvl) 
 			SETMaXATTRIBUTE(Player, "Spirit", NewSpirit)
 			SETATTRIBUTE(Player, "Spirit", Attribute(Player, "Spirit") + SpiritPerLvl)
 			Output(Player, "Your total Spirit has increased by " + SpiritPerLvl + "!",255,255,0)

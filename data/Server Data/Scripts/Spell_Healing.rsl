@@ -217,7 +217,7 @@ Function Spell_CureLightWounds()
         Target = Player
     EndIf
    
-    SpellCost = 3
+    SpellCost = 1
     ResourceName$ = "Spirit"
     SpellName$ = "Cure Light Wounds"
     SkillName$ = "Divine Casting"
@@ -234,7 +234,7 @@ Function Spell_CureWounds()
     Player = Actor()
     Target = ContextActor()
     If Target = 0 Then Target = Player
-    SpellCost = 3
+    SpellCost = 1
     SpellName$ = "Cure Light Wounds"
     ResourceName$ = "Spirit"
     SkillName$ = "Divine Casting"
@@ -264,7 +264,7 @@ Function Spell_CureManyWounds()
         Return
     EndIf
 
-    SpellCost = 12
+    SpellCost = 3
     If Attribute(Player, "Spirit") < SpellCost
         Output(Player, "Not enough Spirit", 255, 0, 0)
         Return
@@ -339,7 +339,7 @@ Function Spell_CureBlindness()
     Player = Actor()
     Target = ContextActor()
     If Target = 0 Then Target = Player
-    SpellCost = 5
+    SpellCost = 3
     SpellName$ = "Cure Blindness"
     If BeginDivineUtility(Player, Target, SpellCost, SpellName$) < 1 Then Return
     HadBlindness = 0
@@ -364,7 +364,7 @@ Function Spell_CureDisease()
     Player = Actor()
     Target = ContextActor()
     If Target = 0 Then Target = Player
-    SpellCost = 6
+    SpellCost = 3
     SpellName$ = "Cure Disease"
     If BeginDivineUtility(Player, Target, SpellCost, SpellName$) < 1 Then Return
     HadDisease = 0
@@ -390,7 +390,7 @@ Function Spell_RemoveCurse()
     Player = Actor()
     Target = ContextActor()
     If Target = 0 Then Target = Player
-    SpellCost = 7
+    SpellCost = 3
     SpellName$ = "Remove Curse"
     If BeginDivineUtility(Player, Target, SpellCost, SpellName$) < 1 Then Return
     HadCurse = 0
@@ -415,7 +415,7 @@ Function Spell_PurifyFoodAndWater()
     Player = Actor()
     Target = ContextActor()
     If Target = 0 Then Target = Player
-    SpellCost = 2
+    SpellCost = 1
     SpellName$ = "Purify Food and Water"
     If BeginDivineUtility(Player, Target, SpellCost, SpellName$) < 1 Then Return
     HadContamination = 0

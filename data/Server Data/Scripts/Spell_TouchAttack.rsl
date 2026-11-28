@@ -315,7 +315,7 @@ Function Spell_BurningHands()
     Player = Actor()
     Target = ContextActor()
    
-    SpellCost = 4
+    SpellCost = 2
     ResourceName$ = "Mana"
     SpellName$ = "Burning Hands"
     
@@ -334,7 +334,7 @@ Function Spell_FrostBite()
     Player = Actor()
     Target = ContextActor()
    
-    SpellCost = 4
+    SpellCost = 1
     ResourceName$ = "Mana"
     SpellName$ = "Frozen Grasp"
     
@@ -353,7 +353,7 @@ Function Spell_ShockingTouch()
     Player = Actor()
     Target = ContextActor()
    
-    SpellCost = 4
+    SpellCost = 2
     ResourceName$ = "Mana"
     SpellName$ = "Shocking Touch"
     
@@ -372,7 +372,7 @@ Function Spell_Smite()
     Player = Actor()
     Target = ContextActor()
 
-    SpellCost = 4
+    SpellCost = 1
     ResourceName$ = "Spirit"
     SpellName$ = "Smite"
     DamageType$ = "Holy"

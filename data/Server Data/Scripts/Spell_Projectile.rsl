@@ -288,7 +288,7 @@ Function Spell_MagicMissile()
     Target = ContextActor()
     If Target = 0 Then Return
    
-    SpellCost = 3
+    SpellCost = 1
     ResourceName$ = "Mana"
     SpellName$ = "Magic Missile"
     ProjectileName$ = "Magic Missile"
@@ -304,7 +304,7 @@ Function Spell_Icicle()
     Player = Actor()
     Target = ContextActor()
     If Target = 0 Then Return
-    SpellCost = 4
+    SpellCost = 2
     ResourceName$ = "Mana"
     SpellName$ = "Icicle"
     ProjectileName$ = "Icicle"
@@ -320,7 +320,7 @@ Function Spell_Fireball()
     Player = Actor()
     Target = ContextActor()
     If Target = 0 Then Return
-    SpellCost = 8
+    SpellCost = 3
     ResourceName$ = "Mana"
     SpellName$ = "Fireball"
     ProjectileName$ = "Fireball"
@@ -336,7 +336,7 @@ Function Spell_LightningBolt()
     Player = Actor()
     Target = ContextActor()
     If Target = 0 Then Return
-    SpellCost = 8
+    SpellCost = 3
     ResourceName$ = "Mana"
     SpellName$ = "Lightning Bolt"
     ProjectileName$ = "Lightning Bolt"
@@ -352,7 +352,7 @@ Function Spell_SpiritualHammer()
     Player = Actor()
     Target = ContextActor()
     If Target = 0 Then Return
-    SpellCost = 4
+    SpellCost = 2
     ResourceName$ = "Spirit"
     SpellName$ = "Spiritual Hammer"
     ProjectileName$ = "Spiritual Hammer"

@@ -132,7 +132,7 @@ Function CharmAnimal()
         EndIf
     EndIf
     ResourceName$ = "Spirit"
-    SpellCost = 6
+    SpellCost = 2
     SpellName$ = "Charm Animal"
     SchoolName$ = "Divine Casting"
     SpellRange = 60
@@ -168,7 +168,7 @@ Function CharmPerson()
         EndIf
     EndIf
     ResourceName$ = "Mana"
-    SpellCost = 6
+    SpellCost = 1
     SpellName$ = "Charm Person"
     SchoolName$ = "Arcane Casting"
     SpellRange = 30
@@ -203,7 +203,7 @@ Function TurnUndead()
         EndIf
     EndIf
     ResourceName$ = "Spirit"
-    SpellCost = 4
+    SpellCost = 1
     SpellName$ = "Turn Undead"
     SchoolName$ = "Divine Casting"
     SpellRange = 100
@@ -276,7 +276,7 @@ Function DisarmTrap()
     Player = Actor()
     Target = ContextActor()
     ResourceName$ = "Mana"
-    SpellCost = 6
+    SpellCost = 3
     SpellName$ = "Disarm Traps"
     SchoolName$ = "Arcane Casting"
     SpellRange = 100
@@ -299,7 +299,7 @@ Function HoldPerson()
     Player = Actor()
     Target = ContextActor()
     ResourceName$ = "Spirit"
-    SpellCost = 6
+    SpellCost = 2
     SpellName$ = "Hold Person"
     SchoolName$ = "Divine Casting"
     SpellRange = 180
@@ -323,7 +323,7 @@ Function Silence()
     Player = Actor()
     Target = ContextActor()
     ResourceName$ = "Spirit"
-    SpellCost = 6
+    SpellCost = 2
     SpellName$ = "Silence"
     SchoolName$ = "Divine Casting"
     SpellRange = 360
@@ -345,7 +345,7 @@ End Function
 Function DetectEvil()
     Player = Actor()
     ResourceName$ = "Spirit"
-    SpellCost = 2
+    SpellCost = 1
     SpellName$ = "Detect Evil"
     SchoolName$ = "Divine Casting"
     SpellRange = 100
@@ -376,7 +376,7 @@ Function DetectMagic()
     Target = ContextActor()
     If Target = 0 Then Target = Player
     ResourceName$ = "Mana"
-    SpellCost = 2
+    SpellCost = 1
     SpellName$ = "Detect Magic"
     SchoolName$ = "Arcane Casting"
     SpellRange = 100
@@ -423,7 +423,7 @@ Function BlindingLight()
     Player = Actor()
     Target = ContextActor()
     ResourceName$ = "Mana"
-    SpellCost = 4
+    SpellCost = 1
     SpellName$ = "Blinding Light"
     SchoolName$ = "Arcane Casting"
     SpellRange = 100
@@ -444,7 +444,7 @@ Function Sleep()
     Player = Actor()
     Target = ContextActor()
     ResourceName$ = "Mana"
-    SpellCost = 4
+    SpellCost = 1
     SpellName$ = "Sleep"
     SchoolName$ = "Arcane Casting"
     SpellRange = 90
@@ -468,7 +468,7 @@ Function OpenLock()
     Player = Actor()
     Target = ContextActor()
     ResourceName$ = "Mana"
-    SpellCost = 3
+    SpellCost = 2
     SpellName$ = "Open Lock"
     SchoolName$ = "Arcane Casting"
     SpellRange = 100
@@ -491,7 +491,7 @@ Function MirrorImage()
         Return
     EndIf
     ResourceName$ = "Mana"
-    SpellCost = 6
+    SpellCost = 2
     SpellName$ = "Mirror Image"
     SchoolName$ = "Arcane Casting"
     SpellRange = 0
@@ -619,7 +619,7 @@ Function Web()
     Player = Actor()
     Target = ContextActor()
     ResourceName$ = "Mana"
-    SpellCost = 5
+    SpellCost = 2
     SpellName$ = "Web"
     SchoolName$ = "Arcane Casting"
     SpellRange = 100
@@ -644,7 +644,7 @@ Function DispelMagic()
     Target = ContextActor()
     If Target = 0 Then Target = Player
     ResourceName$ = "Mana"
-    SpellCost = 10
+    SpellCost = 3
     SpellName$ = "Dispel Magic"
     SchoolName$ = "Arcane Casting"
     SpellRange = 120

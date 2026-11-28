@@ -14,18 +14,8 @@ Function Main()
         MobHp = Rand(1,4)
     EndIf
 
-    HpMod = 4
-    If (MobLevel > 2)
-        HpMod = 5
-    ElseIf (MobLevel > 6)
-        HpMod = 6
-    ElseIf (MobLevel > 10)
-        HpMod = 8
-    EndIf
-
-
-    SETMaXATTRIBUTE(Mob, "Health", MobHP * HpMod)
-    SETATTRIBUTE(Mob, "Health", MobHP * HpMod)
+    SETMaXATTRIBUTE(Mob, "Health", MobHP )
+    SETATTRIBUTE(Mob, "Health", MobHP )
 
 
 
